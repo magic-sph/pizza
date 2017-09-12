@@ -6,7 +6,7 @@
 
 * **pizza** uses Chebyshev polynomials in the radial direction and Fourier decomposition in the azimuthal direction. The time-stepping scheme relies on a semi-implicit [Crank-Nicolson]( https://en.wikipedia.org/wiki/Crank–Nicolson_method) for the linear terms of the equations and a [Adams-Bashforth](https://en.wikipedia.org/wiki/Linear_multistep_method) scheme for the non-linear terms and the Coriolis force.  
 
-* **pizza** is written in Fortran and designed to be used on supercomputing clusters. It requires [CMake](https://cmake.org) [MPI](http://www.open-mpi.org/), [FFTW](http://www.fftw.org) and [LAPACK](http://www.netlib.org/lapack/) to be compiled and executed. Postprocessing functions written in python (requiring [matplotlib](http://matplotlib.org/) and [scipy](http://www.scipy.org/) are also provided to allow a useful data analysis.  
+* **pizza** is written in Fortran and designed to be used on supercomputing clusters. It requires [CMake](https://cmake.org) [MPI](http://www.open-mpi.org/), [FFTW](http://www.fftw.org) and [LAPACK](http://www.netlib.org/lapack/) to be compiled and executed. Postprocessing functions written in python (requiring [matplotlib](http://matplotlib.org/) and [scipy](http://www.scipy.org/)) are also provided to allow a useful data analysis.  
 
 * **pizza** is a free software. It can be used, modified and redistributed under the terms of the [GNU GPL v3 licence](http://www.gnu.org/licenses/gpl-3.0.en.html).
 
