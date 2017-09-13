@@ -166,7 +166,7 @@ contains
 
       if ( l_vphi_bal_write ) then
          vp_bal%n_calls = vp_bal%n_calls+1
-         call write_vphi_balance(time)
+         call write_vphi_balance(time, up_Mloc)
       end if
 
       if ( l_frame ) then
@@ -362,17 +362,23 @@ contains
 
    end subroutine get_time_series
 !------------------------------------------------------------------------------
-   subroutine write_vphi_balance(time)
+   subroutine write_vphi_balance(time, up_Mloc)
 
       !-- Input variables
-      real(cp), intent(in) :: time
+      real(cp),    intent(in) :: time
+      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Local variable
+      integer :: idx_m0
 
       if ( l_rank_has_m0 ) then
+         idx_m0 = m2idx(0)
          if ( vp_bal%n_calls == 1 ) then
             write(n_vphi_bal_file) ra, ek, pr, radratio, raxi, sc
             write(n_vphi_bal_file) r
          end if
          write(n_vphi_bal_file) time
+         write(n_vphi_bal_file) real(up_Mloc(idx_m0,:))
          write(n_vphi_bal_file) vp_bal%dvpdt
          write(n_vphi_bal_file) vp_bal%rey_stress
          write(n_vphi_bal_file) vp_bal%pump
@@ -404,7 +410,7 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
          do n_r=1,n_r_max
-            ekin(n_r)     =cc2real(us_Mloc(n_m,n_r),m)+&
+            ekin(n_r)     =cc2real(us_Mloc(n_m,n_r),m) +  &
             &              cc2real(up_Mloc(n_m,n_r),m)
             enst(n_r)     =cc2real(om_Mloc(n_m,n_r),m)
             ekin(n_r)     =ekin(n_r)*r(n_r)*height(n_r)
