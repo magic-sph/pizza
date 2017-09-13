@@ -40,6 +40,43 @@ def scanDir(pattern, tfix=None):
         out = [i[1] for i in dat]
     return out
 
+def symmetrize(data, ms, reversed=False):
+    """
+    Symmetrise an array which is defined only with an azimuthal symmetry minc=ms
+
+    :param data: the input array
+    :type data: numpy.ndarray
+    :param ms: the azimuthal symmetry
+    :type ms: int
+    :param reversed: set to True, in case the array is reversed (i.e. n_phi is the last column)
+    :type reversed: bool
+    :returns: an output array of dimension (data.shape[0]*ms+1)
+    :rtype: numpy.ndarray
+    """
+    if reversed:
+        nphi = data.shape[-1]*ms+1
+        size = [nphi]
+        size.insert(0,data.shape[-2])
+        if len(data.shape) == 3:
+            size.insert(0,data.shape[-3])
+        out = np.zeros(size, dtype=data.dtype)
+        for i in range(ms):
+            out[..., i*data.shape[-1]:(i+1)*data.shape[-1]] = data
+        out[..., -1] = out[..., 0]
+    else:
+        nphi = data.shape[0]*ms +1
+        size = [nphi]
+        if len(data.shape) >= 2:
+            size.append(data.shape[1])
+        if len(data.shape) == 3:
+            size.append(data.shape[2])
+        out = np.zeros(size, dtype=data.dtype)
+        for i in range(ms):
+            out[i*data.shape[0]:(i+1)*data.shape[0], ...] = data
+        out[-1, ...] = out[0, ...]
+    return out
+
+
 def fast_read(file, skiplines=0, binary=False, precision='Float64'):
     """
     This function reads an input ascii table

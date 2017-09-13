@@ -1,8 +1,8 @@
 import os
 from .npfile import *
 import numpy as np
-from magic import symmetrize, equatContour
-from .libpizza import spec_spat
+from .plotlib import equatContour
+from .libpizza import spec_spat, symmetrize
 
 
 class Frame:
