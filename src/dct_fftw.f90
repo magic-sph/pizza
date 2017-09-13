@@ -40,28 +40,31 @@ contains
       logical, optional, intent(in) :: no_work_array
 
       !--Local variables
-      integer :: inembed, istride, idist
-      integer :: onembed, ostride, odist
+      integer :: inembed(1), istride, idist, plan_size(1)
+      integer :: onembed(1), ostride, odist
+      integer(C_INT) :: plan_type(1)
       real(cp) :: array_in(1:2*(nMstop-nMstart+1), n_r_max)
       real(cp) :: array_out(1:2*(nMstop-nMstart+1), n_r_max)
       real(cp) :: array_in_1d(n_r_max)
       real(cp) :: array_out_1d(n_r_max)
       logical :: l_work_array
 
-      inembed = 0
-      onembed = 0
+      inembed(1) = 0
+      onembed(1) = 0
+      plan_size(1) = n_r_max
+      plan_type(1) = FFTW_REDFT00
       istride = 2*(nMstop-nMstart+1)
       ostride = 2*(nMstop-nMstart+1)
       idist   = 1
       odist   = 1
 
-      this%plan = fftw_plan_many_r2r(1, [n_r_max], 2*nM_per_rank, array_in, &
-                  &                  [inembed], istride, idist, array_out,  &
-                  &                  [onembed], ostride, odist,             &
-                  &                  [FFTW_REDFT00], fftw_plan_flag)
+      this%plan = fftw_plan_many_r2r(1, plan_size, 2*nM_per_rank, array_in, &
+                  &                  inembed, istride, idist, array_out,    &
+                  &                  onembed, ostride, odist,               &
+                  &                  plan_type, fftw_plan_flag)
 
-      this%plan_1d = fftw_plan_r2r(1, [n_r_max], array_in_1d, array_out_1d, &
-                     &             [FFTW_REDFT00], fftw_plan_flag)
+      this%plan_1d = fftw_plan_r2r(1, plan_size, array_in_1d, array_out_1d, &
+                     &             plan_type, fftw_plan_flag)
 
       this%cheb_fac = sqrt(half/(n_r_max-1))
 
