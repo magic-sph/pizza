@@ -7,15 +7,15 @@ module step_time
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
        &             dom_Mloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc,              &
-       &                 dtempdt_Mloc, dpsidt_Rloc, dpsidt_Mloc, &
        &                 dtempdtLast_Mloc, dpsidtLast_Mloc,      &
        &                 dVsT_Rloc, dVsT_Mloc, dVsOm_Rloc,       &
-       &                 dVsOm_Mloc
+       &                 dVsOm_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc, &
+       &                 dpsi_imp_Mloc, dpsi_exp_Mloc
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
-   use update_temperature, only: update_temp, get_rhs_temp
-   use update_psi, only: update_om, get_rhs_om
+   use update_temperature, only: update_temp
+   use update_psi, only: update_om, get_buo_term
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_start_file,  &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
@@ -23,6 +23,7 @@ module step_time
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1
    use outputs, only: n_log_file, write_outputs, vp_bal
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
+   use time_scheme, only: type_tscheme
    use parallel_mod
    use precision_mod
 
@@ -30,6 +31,7 @@ module step_time
 
    private
 
+   type(type_tscheme) :: tscheme
    public :: time_loop
 
 contains
@@ -42,7 +44,7 @@ contains
       real(cp), intent(inout) :: dtNew
 
       !-- Local variables
-      real(cp) :: coex, w1, w2, w2New, timeLast
+      real(cp) :: w1, timeLast
       integer :: n_time_step, n_time_steps_go, n_time_steps_run
       integer :: nPercent
       real(cp) :: tenth_n_time_steps
@@ -71,10 +73,13 @@ contains
       logical :: lMat
       logical :: l_complete_rhs
 
+      call tscheme%initialize()
+      tscheme%dt(1)=dtNew
+      tscheme%dt(2)=dt
+      call tscheme%set_weights()
+
       tenth_n_time_steps=real(n_time_steps,kind=cp)/10.0_cp
       nPercent = 9
-      w2New       =-half*dtNew/dt
-
 
       l_new_dt        =.true.
       l_new_dtNext    =.true.
@@ -167,8 +172,8 @@ contains
          !-- MPI transpositions from r-distributed to m-distributed
          !------------------
          runStart = MPI_Wtime()
-         call transp_r2m(r2m_fields, dtempdt_Rloc, dtempdt_Mloc)
-         call transp_r2m(r2m_fields, dpsidt_Rloc, dpsidt_Mloc)
+         call transp_r2m(r2m_fields, dtempdt_Rloc, dtemp_exp_Mloc(1,:,:))
+         call transp_r2m(r2m_fields, dpsidt_Rloc, dpsi_exp_Mloc(1,:,:))
          call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
          call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
          runStop = MPI_Wtime()
@@ -216,8 +221,6 @@ contains
 
          !---- Time-step check and change if needed (l_new_dtNext=.true.)
          dt          =dtNew      ! Update to new time step
-         w2          =w2New      ! Weight for time-derivatives of last time step
-         w1          =one-w2     ! Weight for currect time step
          l_new_dt    =l_new_dtNext
          l_new_dtNext=.false.
 
@@ -226,6 +229,10 @@ contains
          !-------------------
          call dt_courant(dtr,dth,l_new_dtNext,dt,dtNew,dtMax, &
               &          dtr_Rloc,dth_Rloc)
+
+         call tscheme%set_weights()
+         call tscheme%set_dt_array(dtNew)
+
          !----- Stop if time step has become too small:
          if ( dtNew < dtMin ) then
             if ( rank == 0 ) then
@@ -240,7 +247,6 @@ contains
          end if
          if ( l_new_dtNext ) then
             !------ Writing info and getting new weights:
-            w2New=-half*dtNew/dt ! Weight I will be using for next update !
             if ( rank == 0 ) then
                write(*,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')  &
                &    " ! Changing time step at time=",(time+dt),          &
@@ -254,12 +260,9 @@ contains
                &    "                      last dt=",dt,                 &
                &    "                       new dt=",dtNew
             end if
-         else
-            w2New=-half ! Normal weight if timestep is not changed !
          end if
 
          !----- Advancing time:
-         coex    =(alpha-one)/w2New
          timeLast=time               ! Time of the previous timestep
          time    =time+dt            ! Update time
 
@@ -283,20 +286,12 @@ contains
          !-- M-loop (update routines)
          !--------------------
          runStart = MPI_Wtime()
-         if ( n_time_step == 1 .and. (.not. l_start_file) ) then
-            call get_rhs_temp(temp_Mloc, dtemp_Mloc, dtempdt_Mloc, &
-                 &            dtempdtLast_Mloc, coex)
-            call get_rhs_om(us_Mloc, up_Mloc, om_Mloc, dom_Mloc, temp_Mloc, &
-                 &          dpsidt_Mloc, dpsidtLast_Mloc, vp_bal, coex,     &
-                 &          l_vphi_bal_calc)
-         end if
-
-         call update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dtempdt_Mloc, &
-              &           dVsT_Mloc, dtempdtLast_Mloc, w1, coex, dt, lMat)
-         call update_om(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,   &
-              &         temp_Mloc, dpsidt_Mloc, dVsOm_Mloc,              &
-              &         dpsidtLast_Mloc, vp_bal, w1, coex, dt, lMat,     &
-              &         l_vphi_bal_calc)
+         call get_buo_term(temp_Mloc, tscheme, dpsi_imp_Mloc)
+         call update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,  &
+              &           dtemp_exp_Mloc, dtemp_imp_Mloc, tscheme, lMat)
+         call update_om(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,       &
+              &         temp_Mloc, dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc, &
+              &         vp_bal, tscheme, lMat, l_vphi_bal_calc)
 
          runStop = MPI_Wtime()
          if ( .not. lMat ) then
