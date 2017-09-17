@@ -1,0 +1,39 @@
+&grid
+   n_r_max    =48,
+   n_cheb_max =48,
+   m_max      =64,
+   minc       =1,
+/
+&control
+   tag        ="test",
+   l_newmap   =.false.,
+ n_time_steps =2000,
+   dtMax      =5d-4,
+   l_non_rot  =.true.,
+n_fft_optim_lev=2,
+/
+ &phys_param
+  ra          =1.0E+04,
+  pr          =1.0E+00,
+  ek          =1.00E-03,
+  radratio    =3.50E-01,
+  g0          =1.00E+00,
+  g1          =0.00E+00,
+  g2          =0.00E+00,
+  ktopt       =1,
+  kbott       =1,
+  ktopv       =2,
+  kbotv       =2,
+ /
+ &start_field
+  l_start_file=.false.,
+  start_file  ="checkpoint_end.testB",
+  init_t      =-1,
+  amp_t       =1.0e-2,
+  init_u      =0,
+  amp_u       =3.0e-4,
+/
+&output_control
+  n_log_step  =100,
+  n_frames    =1,
+/

@@ -11,6 +11,7 @@ import NonRotRa2e3.unitTest
 import RotE1e3EkPump.unitTest
 import TestRestart.unitTest
 import TestChebMap.unitTest
+import TimeStepChange.unitTest
 
 __version__ = '1.0'
 
@@ -181,6 +182,11 @@ def getSuite(startdir, cmd, precision, args):
         # Test restart from a checkpoint and remap to a cheb grid
         suite.addTest(TestChebMap.unitTest.TestChebMap('outputFileDiff',
                                                   '%s/TestChebMap' % startdir, 
+                                                  execCmd=cmd,
+                                                  precision=precision))
+        # Test a timestep change
+        suite.addTest(TimeStepChange.unitTest.TimeStepChange('outputFileDiff',
+                                                  '%s/TimeStepChange' % startdir, 
                                                   execCmd=cmd,
                                                   precision=precision))
 
