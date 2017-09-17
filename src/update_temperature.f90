@@ -79,11 +79,9 @@ contains
 
       !-- Local variables
       real(cp) :: w2            ! weight of second time step
-      real(cp) :: O_dt
       integer :: n_r, n_m, n_r_out, m
 
       w2  =one-w1
-      O_dt=one/dt
 
       if ( lMat ) lTMat(:)=.false.
 
@@ -117,9 +115,9 @@ contains
          rhs(1)      =zero
          rhs(n_r_max)=zero
          do n_r=2,n_r_max-1
-            rhs(n_r)=temp_Mloc(n_m,n_r)*O_dt  + &
-            &        w1*dtempdt_Mloc(n_m,n_r) + &
-            &        w2*dtempdtLast_Mloc(n_m,n_r)
+            rhs(n_r)=temp_Mloc(n_m,n_r)  +         &
+            &        w1*dt*dtempdt_Mloc(n_m,n_r) + &
+            &        w2*dt*dtempdtLast_Mloc(n_m,n_r)
          end do
 
 #ifdef WITH_PRECOND_S
@@ -203,9 +201,8 @@ contains
 
       !-- Local variables
       integer :: nR_out, nR, info
-      real(cp) :: O_dt,dm2
+      real(cp) :: dm2
 
-      O_dt=one/dt
       dm2 = real(m,cp)*real(m,cp)
 
       !----- Boundary coditions:
@@ -237,8 +234,8 @@ contains
       do nR_out=1,n_r_max
          do nR=2,n_r_max-1
             tMat(nR,nR_out)= rscheme%rnorm * (                        &
-            &                          O_dt*rscheme%rMat(nR,nR_out) - &
-            & alpha*opr*     (            rscheme%d2rMat(nR,nR_out) + &
+            &                               rscheme%rMat(nR,nR_out) - &
+            & alpha*dt*opr*  (            rscheme%d2rMat(nR,nR_out) + &
             &          or1(nR)*            rscheme%drMat(nR,nR_out) - &
             &      dm2*or2(nR)*             rscheme%rMat(nR,nR_out) ) )
          end do

@@ -126,9 +126,9 @@ contains
             rhs_m0(1)       = 0.0_cp
             rhs_m0(n_r_max) = 0.0_cp
             do n_r=2,n_r_max-1
-               rhs_m0(n_r)=real(up_Mloc(n_m,n_r),kind=cp)*O_dt  + &
-               &          w1*real(dpsidt_Mloc(n_m,n_r),kind=cp) + &
-               &          w2*real(dpsidtLast_Mloc(n_m,n_r),kind=cp)
+               rhs_m0(n_r)=real(up_Mloc(n_m,n_r),kind=cp)       +    &
+               &          w1*dt*real(dpsidt_Mloc(n_m,n_r),kind=cp) + &
+               &          w2*dt*real(dpsidtLast_Mloc(n_m,n_r),kind=cp)
             end do
 
             if ( l_vphi_bal_calc ) then
@@ -158,10 +158,10 @@ contains
             rhs(n_r_max+1)=zero
             rhs(2*n_r_max)=zero
             do n_r=2,n_r_max-1
-               rhs(n_r)=om_Mloc(n_m,n_r)*O_dt       +  &
-               &        w1*dpsidt_Mloc(n_m,n_r)     +  &
-               &        w2*dpsidtLast_Mloc(n_m,n_r) -  &
-               &        alpha*ra*opr*rgrav(n_r)*       &
+               rhs(n_r)=om_Mloc(n_m,n_r)               +  &
+               &        w1*dt*dpsidt_Mloc(n_m,n_r)     +  &
+               &        w2*dt*dpsidtLast_Mloc(n_m,n_r) -  &
+               &        alpha*dt*ra*opr*rgrav(n_r)*       &
                &        or1(n_r)*ci*real(m,cp)*t_Mloc(n_m,n_r)
                rhs(n_r+n_r_max)=zero
             end do
@@ -331,9 +331,8 @@ contains
 
       !-- Local variables
       integer :: nR_out, nR, nR_psi, nR_out_psi, info
-      real(cp) :: O_dt,dm2
+      real(cp) :: dm2
 
-      O_dt=one/dt
       dm2 = real(m,cp)*real(m,cp)
 
       !----- Boundary conditions:
@@ -390,12 +389,12 @@ contains
             nR_psi=nR+n_r_max
 
             psiMat(nR,nR_out)= rscheme%rnorm * (                      &
-            &                          O_dt*rscheme%rMat(nR,nR_out) - &
-            &          alpha*(            rscheme%d2rMat(nR,nR_out) + &
+            &                               rscheme%rMat(nR,nR_out) - &
+            &          alpha*dt*(         rscheme%d2rMat(nR,nR_out) + &
             &          or1(nR)*            rscheme%drMat(nR,nR_out) - &
             &  (ekpump(nR)+dm2*or2(nR))*    rscheme%rMat(nR,nR_out) ) )
 
-            psiMat(nR,nR_out_psi)=-rscheme%rnorm * alpha* (           &
+            psiMat(nR,nR_out_psi)=-rscheme%rnorm * alpha*dt* (        &
             &    -half*ekpump(nR)*beta(nR)*rscheme%drMat(nR,nR_out)+  &
             &        ( CorFac*beta(nR)*or1(nR)*ci*real(m,cp)          &
             &    -half*ekpump(nR)*beta(nR)*beta(nR)                   &
@@ -465,9 +464,6 @@ contains
 
       !-- Local variables
       integer :: nR_out, nR, info
-      real(cp) :: O_dt
-
-      O_dt=one/dt
 
       !----- Boundary conditions:
       do nR_out=1,rscheme%n_max
@@ -500,8 +496,8 @@ contains
       do nR_out=1,n_r_max
          do nR=2,n_r_max-1
             uphiMat(nR,nR_out)= rscheme%rnorm * (                     &
-            &                          O_dt*rscheme%rMat(nR,nR_out) - &
-            &     alpha*     (            rscheme%d2rMat(nR,nR_out) + &
+            &                               rscheme%rMat(nR,nR_out) - &
+            &     alpha*dt*  (            rscheme%d2rMat(nR,nR_out) + &
             &          or1(nR)*            rscheme%drMat(nR,nR_out) - &
             &   (ekpump(nR)+or2(nR))*       rscheme%rMat(nR,nR_out) ) )
          end do
