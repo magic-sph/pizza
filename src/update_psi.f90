@@ -78,7 +78,7 @@ contains
       complex(cp),       intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
       type(vp_bal_type), intent(inout) :: vp_bal
-      complex(cp),       intent(inout) :: dpsi_exp_Mloc(tscheme%norder_exp,nMstart:nMstop,n_r_max)
+      complex(cp),       intent(inout) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max)
 
@@ -97,7 +97,7 @@ contains
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_Mloc(1,n_m,n_r)=dpsi_exp_Mloc(1,n_m,n_r)-   &
+               dpsi_exp_Mloc(n_m,n_r,1)=dpsi_exp_Mloc(n_m,n_r,1)-   &
                &                    or1(n_r)*work_Mloc(n_m,n_r)
             end if
          end do
@@ -127,14 +127,14 @@ contains
                rhs_m0(n_r)=real(dpsi_imp_Mloc(n_m,n_r),kind=cp)
                do n_o=1,tscheme%norder_exp
                   rhs_m0(n_r)=rhs_m0(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)*&
-                  &           real(dpsi_exp_Mloc(n_o,n_m,n_r),kind=cp)
+                  &           real(dpsi_exp_Mloc(n_m,n_r,n_o),kind=cp)
                end do
             end do
 
             if ( l_vphi_bal_calc ) then
                do n_r=1,n_r_max
                   vp_bal%dvpdt(n_r)     =real(up_Mloc(n_m,n_r))/tscheme%dt(1)
-                  vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(1,n_m,n_r))
+                  vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(n_m,n_r,1))
                end do
             end if
 
@@ -161,7 +161,7 @@ contains
                rhs(n_r)=dpsi_imp_Mloc(n_m,n_r)
                do n_o=1,tscheme%norder_exp
                   rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)* &
-                  &        dpsi_exp_Mloc(n_o,n_m,n_r)
+                  &        dpsi_exp_Mloc(n_m,n_r,n_o)
                end do
                rhs(n_r+n_r_max)=zero
             end do
@@ -234,7 +234,13 @@ contains
       end do
 
       !-- Roll the explicit array before filling again the first block
-      dpsi_exp_Mloc = cshift(dpsi_exp_Mloc, shift=tscheme%norder_exp-1)
+      do n_o=tscheme%norder_exp,2,-1
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               dpsi_exp_Mloc(n_m,n_r,n_o) = dpsi_exp_Mloc(n_m,n_r,n_o-1)
+            end do
+         end do
+      end do
 
    end subroutine update_om
 !------------------------------------------------------------------------------

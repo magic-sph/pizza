@@ -71,8 +71,8 @@ contains
       !-- Output variables
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(inout) :: dtemp_exp_Mloc(tscheme%norder_exp,nMstart:nMstop, n_r_max)
-      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp), intent(inout) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
+      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
@@ -87,7 +87,7 @@ contains
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
-            dtemp_exp_Mloc(1,n_m,n_r)=dtemp_exp_Mloc(1,n_m,n_r)   &
+            dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
             &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
             &                     -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
             &                     tadvz_fac*beta(n_r)*tcond(n_r))
@@ -116,7 +116,7 @@ contains
             rhs(n_r)=dtemp_imp_Mloc(n_m,n_r)
             do n_o=1,tscheme%norder_exp
                rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)* &
-               &        dtemp_exp_Mloc(n_o,n_m,n_r)
+               &        dtemp_exp_Mloc(n_m,n_r,n_o)
             end do
          end do
 
@@ -146,7 +146,13 @@ contains
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Roll the explicit array before filling again the first block
-      dtemp_exp_Mloc = cshift(dtemp_exp_Mloc, shift=tscheme%norder_exp-1)
+      do n_o=tscheme%norder_exp,2,-1
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               dtemp_exp_Mloc(n_m,n_r,n_o) = dtemp_exp_Mloc(n_m,n_r,n_o-1)
+            end do
+         end do
+      end do
 
    end subroutine update_temp
 !------------------------------------------------------------------------------

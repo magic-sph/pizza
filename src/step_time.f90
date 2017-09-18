@@ -162,8 +162,8 @@ contains
          !-- MPI transpositions from r-distributed to m-distributed
          !------------------
          runStart = MPI_Wtime()
-         call transp_r2m(r2m_fields, dtempdt_Rloc, dtemp_exp_Mloc(1,:,:))
-         call transp_r2m(r2m_fields, dpsidt_Rloc, dpsi_exp_Mloc(1,:,:))
+         call transp_r2m(r2m_fields, dtempdt_Rloc, dtemp_exp_Mloc(:,:,1))
+         call transp_r2m(r2m_fields, dpsidt_Rloc, dpsi_exp_Mloc(:,:,1))
          call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
          call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
          runStop = MPI_Wtime()

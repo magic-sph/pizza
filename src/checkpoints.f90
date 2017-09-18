@@ -40,8 +40,8 @@ contains
       complex(cp),        intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: dtemp_exp_Mloc(tscheme%norder_exp,nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: dpsi_exp_Mloc(tscheme%norder_exp,nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
+      complex(cp),        intent(in) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
 
       !-- Local variables
       complex(cp), allocatable :: work(:,:)
@@ -101,7 +101,7 @@ contains
       call gather_from_mloc_to_rank0(up_Mloc, work)
       if ( rank == 0 ) write(n_rst_file) work
       do n_o=2,tscheme%norder_exp
-         call gather_from_mloc_to_rank0(dpsi_exp_Mloc(n_o,:,:), work)
+         call gather_from_mloc_to_rank0(dpsi_exp_Mloc(:,:,n_o), work)
          if ( rank == 0 ) write(n_rst_file) work
       end do
 
@@ -110,7 +110,7 @@ contains
          call gather_from_mloc_to_rank0(t_Mloc, work)
          if ( rank == 0 ) write(n_rst_file) work
          do n_o=2,tscheme%norder_exp
-            call gather_from_mloc_to_rank0(dtemp_exp_Mloc(n_o,:,:), work)
+            call gather_from_mloc_to_rank0(dtemp_exp_Mloc(:,:,n_o), work)
             if ( rank == 0 ) write(n_rst_file) work
          end do
       end if
@@ -146,8 +146,8 @@ contains
       complex(cp), intent(out) :: us_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: up_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(out) :: dpsi_exp_Mloc(tscheme%norder_exp,nMstart:nMstop, n_r_max)
-      complex(cp), intent(out) :: dtemp_exp_Mloc(tscheme%norder_exp,nMstart:nMstop, n_r_max)
+      complex(cp), intent(out) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
+      complex(cp), intent(out) :: dtemp_exp_Mloc(nMstart:nMstop, n_r_max,tscheme%norder_exp)
       real(cp),    intent(out) :: time
 
       !-- Local variables
@@ -297,7 +297,7 @@ contains
                  &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
          end if
          if ( n_o <= tscheme%norder_exp ) then
-            call scatter_from_rank0_to_mloc(work, dpsi_exp_Mloc(n_o,:,:))
+            call scatter_from_rank0_to_mloc(work, dpsi_exp_Mloc(:,:,n_o))
          end if
       end do
 
@@ -318,7 +318,7 @@ contains
                     &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
             end if
             if ( n_o <= tscheme%norder_exp ) then
-               call scatter_from_rank0_to_mloc(work, dtemp_exp_Mloc(n_o,:,:))
+               call scatter_from_rank0_to_mloc(work, dtemp_exp_Mloc(:,:,n_o))
             end if
          end do
       end if

@@ -39,9 +39,9 @@ contains
       integer, intent(in) :: norder_exp
 
       allocate( dtemp_imp_Mloc(nMStart:nMstop,n_r_max) )
-      allocate( dtemp_exp_Mloc(norder_exp,nMStart:nMstop,n_r_max) )
+      allocate( dtemp_exp_Mloc(nMStart:nMstop,n_r_max,norder_exp) )
       allocate( dpsi_imp_Mloc(nMStart:nMstop,n_r_max) )
-      allocate( dpsi_exp_Mloc(norder_exp,nMStart:nMstop,n_r_max) )
+      allocate( dpsi_exp_Mloc(nMStart:nMstop,n_r_max,norder_exp) )
       allocate( dVsT_Mloc(nMStart:nMstop,n_r_max) )
       allocate( dVsOm_Mloc(nMStart:nMstop,n_r_max) )
       bytes_allocated = bytes_allocated + &
