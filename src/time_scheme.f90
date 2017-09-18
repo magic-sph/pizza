@@ -1,10 +1,12 @@
 module time_scheme
 
    use precision_mod
+   use parallel_mod
    use namelists, only: alpha
    use constants, only: one, half
    use mem_alloc, only: bytes_allocated
    use char_manip, only: capitalize
+   use useful, only: abortRun
 
    implicit none
 
@@ -90,15 +92,58 @@ contains
 
    end subroutine set_weights
 !------------------------------------------------------------------------------
-   subroutine set_dt_array(this, dt_new)
+   subroutine set_dt_array(this, dt_new, dt_min, time, n_log_file,  &
+              &            n_time_step, l_new_dtNext)
 
       class(type_tscheme) :: this
+
+      !-- Input variables
       real(cp), intent(in) :: dt_new
+      real(cp), intent(in) :: dt_min
+      real(cp), intent(in) :: time
+      integer,  intent(in) :: n_log_file
+      integer,  intent(in) :: n_time_step
+      logical,  intent(in) :: l_new_dtNext
+
+      !-- Local variables
+      real(cp) :: dt_old
+
+      dt_old = this%dt(1)
 
       !-- First roll the dt array
       this%dt   =cshift(this%dt,shift=this%norder_exp-1)
       !-- Then overwrite the first element by the new timestep
       this%dt(1)=dt_new
+
+      !----- Stop if time step has become too small:
+      if ( dt_new < dt_min ) then
+         if ( rank == 0 ) then
+            write(*,'(1p,/,A,ES14.4,/,A)')             &
+            &    " ! Time step too small, dt=",dt_new, &
+            &    " ! I thus stop the run !"
+            write(n_log_file,'(1p,/,A,ES14.4,/,A)')    &
+            &    " ! Time step too small, dt=",dt_new, &
+            &    " ! I thus stop the run !"
+         end if
+         call abortRun('Stop run in steptime!')
+      end if
+
+      if ( l_new_dtNext ) then
+         !------ Writing info and getting new weights:
+         if ( rank == 0 ) then
+            write(*,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')    &
+            &    " ! Changing time step at time=",(time+this%dt(1)),    &
+            &    "                 time step no=",n_time_step,          &
+            &    "                      last dt=",dt_old,               &
+            &    "                       new dt=",dt_new
+            write(n_log_file,                                           &
+            &    '(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')       &
+            &    " ! Changing time step at time=",(time+this%dt(1)),    &
+            &    "                 time step no=",n_time_step,          &
+            &    "                      last dt=",dt_old,               &
+            &    "                       new dt=",dt_new
+         end if
+      end if
 
    end subroutine set_dt_array
 !------------------------------------------------------------------------------

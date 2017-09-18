@@ -48,19 +48,17 @@ contains
       character(len=255) :: message
 
       !-- Courant
-      real(cp) :: dtr,dth
+      real(cp) :: dtr,dth,dt_new
       real(cp) :: dtr_Rloc(nRstart:nRstop), dth_Rloc(nRstart:nRstop)
 
       !-- Timings:
       integer :: n_r_loops, n_mpi_comms, n_m_loops, n_m_loops_mat
       integer :: n_io_calls
-      real(cp) :: dtNew, dt
       real(cp) :: run_time_r_loop, run_time_mpi_comms
       real(cp) :: run_time_m_loop, run_time_m_loop_mat
       real(cp) :: run_time_tot, run_time_io, run_time_passed
       real(cp) :: runStart, runStop, runStartT, runStopT
 
-      logical :: l_new_dtNext    ! causes call of matbuild !
       logical :: l_new_dt
       logical :: l_rst
       logical :: l_frame
@@ -73,10 +71,8 @@ contains
 
       tenth_n_time_steps=real(n_time_steps,kind=cp)/10.0_cp
       nPercent = 9
-      dtNew = tscheme%dt(1)
 
       l_new_dt        =.true.
-      l_new_dtNext    =.true.
       l_rst           =.false.
       l_frame         =.false.
       l_spec          =.false.
@@ -213,48 +209,15 @@ contains
 
          if ( l_stop_time ) exit outer
 
-         !---- Time-step check and change if needed (l_new_dtNext=.true.)
-         dt          =dtNew      ! Update to new time step
-         l_new_dt    =l_new_dtNext
-         l_new_dtNext=.false.
-
          !-------------------
-         !------ Checking Courant criteria, l_new_dt and dtNew are output
+         !------ Checking Courant criteria, l_new_dt and dt_new are output
          !-------------------
-         call dt_courant(dtr,dth,l_new_dtNext,tscheme%dt(1),dtNew,dtMax, &
+         call dt_courant(dtr,dth,l_new_dt,tscheme%dt(1),dt_new,dtMax, &
               &          dtr_Rloc,dth_Rloc)
 
+         call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step, &
+              &                    l_new_dt)
          call tscheme%set_weights()
-         call tscheme%set_dt_array(dtNew)
-
-         !----- Stop if time step has become too small:
-         if ( dtNew < dtMin ) then
-            if ( rank == 0 ) then
-               write(*,'(1p,/,A,ES14.4,/,A)')            &
-               &    " ! TIME STEP TOO SMALL, dt=",dtNew, &
-               &    " ! I THUS stop THE RUN !"
-               write(n_log_file,'(1p,/,A,ES14.4,/,A)')     &
-               &    " ! TIME STEP TOO SMALL, dt=",dtNew,   &
-               &    " ! I THUS stop THE RUN !"
-            end if
-            call abortRun('Stop run in steptime!')
-         end if
-         if ( l_new_dtNext ) then
-            !------ Writing info and getting new weights:
-            if ( rank == 0 ) then
-               write(*,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')    &
-               &    " ! Changing time step at time=",(time+tscheme%dt(1)), &
-               &    "                 time step no=",n_time_step+1,        &
-               &    "                      last dt=",tscheme%dt(1),        &
-               &    "                       new dt=",dtNew
-               write(n_log_file,                                           &
-               &    '(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')       &
-               &    " ! Changing time step at time=",(time+tscheme%dt(1)), &
-               &    "                 time step no=",n_time_step+1,        &
-               &    "                      last dt=",tscheme%dt(1),        &
-               &    "                       new dt=",dtNew
-            end if
-         end if
 
          !----- Advancing time:
          timeLast=time               ! Time of the previous timestep
@@ -265,7 +228,7 @@ contains
             !----- Calculate matricies for new time step if dt /= dtLast
             lMat=.true.
             if ( rank == 0 ) then
-               write(*,'(1p,/,'' ! BUILDING MATRICIES AT STEP/TIME:'',   &
+               write(*,'(1p,/,'' ! Building matricies at time step:'',   &
                     &              i8,ES16.6)') n_time_step,time
             end if
          end if

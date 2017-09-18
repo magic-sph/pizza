@@ -135,6 +135,10 @@ contains
               &     " < dt_r=",ES12.4," and dt_h=",ES12.4)') &
               &     dt_fac,dt_fac*dt,dt_r,dt_h
          call logWrite(message,n_log_file)
+
+      else 
+
+         dt_new=dt
     
       end if
     
