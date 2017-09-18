@@ -19,10 +19,8 @@ module fieldsLast
 
    private
 
-   complex(cp), public, allocatable :: dpsidtLast_Mloc(:,:)
    complex(cp), public, allocatable :: dVsT_Mloc(:,:)
    complex(cp), public, allocatable :: dVsOm_Mloc(:,:)
-   complex(cp), public, allocatable :: dtempdtLast_Mloc(:,:)
    complex(cp), public, allocatable :: dtemp_imp_Mloc(:,:)
    complex(cp), public, allocatable :: dtemp_exp_Mloc(:,:,:)
    complex(cp), public, allocatable :: dpsi_imp_Mloc(:,:)
@@ -36,21 +34,20 @@ module fieldsLast
 
 contains
 
-   subroutine initialize_fieldsLast
+   subroutine initialize_fieldsLast(norder_exp)
 
-      allocate( dpsidtLast_Mloc(nMStart:nMstop,n_r_max) )
-      allocate( dtempdtLast_Mloc(nMStart:nMstop,n_r_max) )
+      integer, intent(in) :: norder_exp
+
       allocate( dtemp_imp_Mloc(nMStart:nMstop,n_r_max) )
-      allocate( dtemp_exp_Mloc(1:2,nMStart:nMstop,n_r_max) )
+      allocate( dtemp_exp_Mloc(norder_exp,nMStart:nMstop,n_r_max) )
       allocate( dpsi_imp_Mloc(nMStart:nMstop,n_r_max) )
-      allocate( dpsi_exp_Mloc(1:2,nMStart:nMstop,n_r_max) )
+      allocate( dpsi_exp_Mloc(norder_exp,nMStart:nMstop,n_r_max) )
       allocate( dVsT_Mloc(nMStart:nMstop,n_r_max) )
       allocate( dVsOm_Mloc(nMStart:nMstop,n_r_max) )
       bytes_allocated = bytes_allocated + &
-      &                 6*(nMstop-nMStart+1)*n_r_max*SIZEOF_DEF_COMPLEX
+      &                 (4+norder_exp)*(nMstop-nMStart+1)*n_r_max* &
+      &                 SIZEOF_DEF_COMPLEX
 
-      dpsidtLast_Mloc(:,:) =zero
-      dtempdtLast_Mloc(:,:)=zero
       dtemp_imp_Mloc(:,:)  =zero
       dtemp_exp_Mloc(:,:,:)=zero
       dpsi_imp_Mloc(:,:)   =zero
@@ -76,7 +73,6 @@ contains
 
       deallocate( dVsOm_Rloc, dVsOm_Mloc )
       deallocate( dVsT_Rloc, dVsT_Mloc )
-      deallocate( dpsidtLast_Mloc, dtempdtLast_Mloc )
       deallocate( dtemp_imp_Mloc, dtemp_exp_Mloc )
       deallocate( dpsi_imp_Mloc, dpsi_exp_Mloc )
       deallocate( dpsidt_Rloc, dtempdt_Rloc )

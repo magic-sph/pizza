@@ -289,7 +289,7 @@ contains
       end if
       call scatter_from_rank0_to_mloc(work, up_Mloc)
 
-      !-- dpsidtLast
+      !-- Explicit time step
       do n_o=2,norder_exp_old
          if ( rank == 0 ) then
             read( n_start_file ) work_old
@@ -310,7 +310,7 @@ contains
          end if
          call scatter_from_rank0_to_mloc(work, temp_Mloc)
 
-         !-- dTdtLast
+         !-- Explicit time step
          do n_o=2,norder_exp_old
             if ( rank == 0 ) then
                read( n_start_file ) work_old

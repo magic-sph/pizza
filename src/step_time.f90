@@ -7,7 +7,6 @@ module step_time
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
        &             dom_Mloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc,              &
-       &                 dtempdtLast_Mloc, dpsidtLast_Mloc,      &
        &                 dVsT_Rloc, dVsT_Mloc, dVsOm_Rloc,       &
        &                 dVsOm_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc, &
        &                 dpsi_imp_Mloc, dpsi_exp_Mloc
