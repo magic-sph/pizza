@@ -143,8 +143,8 @@ contains
       complex(cp),        intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: dtemp_exp_Mloc(1:tscheme%norder,nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: dpsi_exp_Mloc(1:tscheme%norder,nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: dtemp_exp_Mloc(tscheme%norder_exp,nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: dpsi_exp_Mloc(tscheme%norder_exp,nMstart:nMstop,n_r_max)
 
       !-- Local variable
       character(len=144) :: frame_name

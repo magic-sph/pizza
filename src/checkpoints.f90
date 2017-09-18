@@ -40,8 +40,8 @@ contains
       complex(cp),        intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: dtemp_exp_Mloc(1:tscheme%norder,nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: dpsi_exp_Mloc(1:tscheme%norder,nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: dtemp_exp_Mloc(tscheme%norder_exp,nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: dpsi_exp_Mloc(tscheme%norder_exp,nMstart:nMstop,n_r_max)
 
       !-- Local variables
       complex(cp), allocatable :: work(:,:)
@@ -64,7 +64,7 @@ contains
          !-- Write the header of the file
          write(n_rst_file) version
          write(n_rst_file) time
-         write(n_rst_file) tscheme%norder, tscheme%norder
+         write(n_rst_file) tscheme%norder_exp, tscheme%norder_imp
          write(n_rst_file) tscheme%dt
          write(n_rst_file) ra,pr,raxi,sc,ek,radratio
          write(n_rst_file) n_r_max,m_max,minc
@@ -100,7 +100,7 @@ contains
       if ( rank == 0 ) write(n_rst_file) work
       call gather_from_mloc_to_rank0(up_Mloc, work)
       if ( rank == 0 ) write(n_rst_file) work
-      do n_o=2,tscheme%norder
+      do n_o=2,tscheme%norder_exp
          call gather_from_mloc_to_rank0(dpsi_exp_Mloc(n_o,:,:), work)
          if ( rank == 0 ) write(n_rst_file) work
       end do
@@ -109,7 +109,7 @@ contains
       if ( l_heat ) then
          call gather_from_mloc_to_rank0(t_Mloc, work)
          if ( rank == 0 ) write(n_rst_file) work
-         do n_o=2,tscheme%norder
+         do n_o=2,tscheme%norder_exp
             call gather_from_mloc_to_rank0(dtemp_exp_Mloc(n_o,:,:), work)
             if ( rank == 0 ) write(n_rst_file) work
          end do
@@ -146,8 +146,8 @@ contains
       complex(cp), intent(out) :: us_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: up_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(out) :: dpsi_exp_Mloc(1:tscheme%norder,nMstart:nMstop, n_r_max)
-      complex(cp), intent(out) :: dtemp_exp_Mloc(1:tscheme%norder,nMstart:nMstop, n_r_max)
+      complex(cp), intent(out) :: dpsi_exp_Mloc(tscheme%norder_exp,nMstart:nMstop, n_r_max)
+      complex(cp), intent(out) :: dtemp_exp_Mloc(tscheme%norder_exp,nMstart:nMstop, n_r_max)
       real(cp),    intent(out) :: time
 
       !-- Local variables
@@ -176,7 +176,7 @@ contains
 
          read(n_start_file) version
          if ( version == 1 ) then ! This was CN/AB2 in the initial version
-            allocate( dt_array_old(max(2,tscheme%norder)) )
+            allocate( dt_array_old(max(2,tscheme%norder_exp)) )
             dt_array_old(:)=0.0_cp
             read(n_start_file) time, dt_array_old(2), dt_array_old(1)
             norder_imp_old = 2
@@ -184,7 +184,7 @@ contains
          else 
             read(n_start_file) time
             read(n_start_file) norder_imp_old, norder_exp_old
-            allocate( dt_array_old(max(norder_exp_old,tscheme%norder) ) )
+            allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp) ) )
             dt_array_old(:)=0.0_cp
             read(n_start_file) dt_array_old(1:norder_exp_old)
          end if
@@ -256,14 +256,14 @@ contains
 
       call MPI_Bcast(time,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(norder_exp_old,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
-      if ( rank /= 0 ) allocate( dt_array_old(max(norder_exp_old,tscheme%norder)) )
+      if ( rank /= 0 ) allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp)) )
       call MPI_Bcast(dt_array_old,2,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(ek_old,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_heat_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_chem_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
 
       !-- Fill the time step array
-      do n_o=1,tscheme%norder
+      do n_o=1,tscheme%norder_exp
          tscheme%dt(n_o)=dt_array_old(n_o)
       end do
 
@@ -296,7 +296,7 @@ contains
             call map_field(work_old, work, r_old, m2idx_old, scale_u, &
                  &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
          end if
-         if ( n_o <= tscheme%norder ) then
+         if ( n_o <= tscheme%norder_exp ) then
             call scatter_from_rank0_to_mloc(work, dpsi_exp_Mloc(n_o,:,:))
          end if
       end do
@@ -317,7 +317,7 @@ contains
                call map_field(work_old, work, r_old, m2idx_old, scale_t, &
                     &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
             end if
-            if ( n_o <= tscheme%norder ) then
+            if ( n_o <= tscheme%norder_exp ) then
                call scatter_from_rank0_to_mloc(work, dtemp_exp_Mloc(n_o,:,:))
             end if
          end do

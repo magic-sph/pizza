@@ -49,7 +49,7 @@ contains
          dtemp_exp_Mloc(:,:,:)=zero
 
          time=0.0_cp
-         do n_o=1,tscheme%norder
+         do n_o=1,tscheme%norder_exp
             tscheme%dt(n_o)=dtMax
          end do
 

@@ -71,7 +71,7 @@ contains
       !-- Output variables
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(inout) :: dtemp_exp_Mloc(1:tscheme%norder,nMstart:nMstop, n_r_max)
+      complex(cp), intent(inout) :: dtemp_exp_Mloc(tscheme%norder_exp,nMstart:nMstop, n_r_max)
       complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
@@ -114,7 +114,7 @@ contains
          rhs(n_r_max)=zero
          do n_r=2,n_r_max-1
             rhs(n_r)=dtemp_imp_Mloc(n_m,n_r)
-            do n_o=1,tscheme%norder
+            do n_o=1,tscheme%norder_exp
                rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)* &
                &        dtemp_exp_Mloc(n_o,n_m,n_r)
             end do
@@ -146,7 +146,7 @@ contains
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Roll the explicit array before filling again the first block
-      dtemp_exp_Mloc = cshift(dtemp_exp_Mloc, shift=tscheme%norder-1)
+      dtemp_exp_Mloc = cshift(dtemp_exp_Mloc, shift=tscheme%norder_exp-1)
 
    end subroutine update_temp
 !------------------------------------------------------------------------------

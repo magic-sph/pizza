@@ -74,7 +74,7 @@ program pizza
 
    local_bytes_used = bytes_allocated
    call initialize_fields()
-   call initialize_fieldsLast(tscheme%norder)
+   call initialize_fieldsLast(tscheme%norder_exp)
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('Fields', local_bytes_used)
    call initialize_radial_functions()

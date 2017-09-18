@@ -11,7 +11,8 @@ module time_scheme
    private
 
    type, public :: type_tscheme
-      integer :: norder
+      integer :: norder_exp
+      integer :: norder_imp
       character(len=4) :: imp_scheme
       character(len=4) :: exp_scheme
       real(cp), allocatable :: dt(:)
@@ -39,23 +40,27 @@ contains
 
       if ( index(imp_scheme, 'CN') /= 0 ) then
          this%imp_scheme = 'CN'
+         this%norder_imp = 2
       else if ( index(imp_scheme, 'BDF2') /= 0 ) then
          this%imp_scheme = 'BDF2'
+         this%norder_imp = 3
       end if
 
       if ( index(exp_scheme, 'AB2') /= 0 ) then
          this%exp_scheme = 'AB2'
+         this%norder_exp = 2
       else if ( index(exp_scheme, 'AB3') /= 0 ) then
          this%exp_scheme = 'AB3'
+         this%norder_exp = 3
       end if
 
-      this%norder = 2
 
-      allocate ( this%dt(this%norder) )
-      allocate ( this%wimp(this%norder) )
-      allocate ( this%wexp(this%norder) )
+      allocate ( this%dt(this%norder_exp) )
+      allocate ( this%wimp(this%norder_imp) )
+      allocate ( this%wexp(this%norder_exp) )
 
-      bytes_allocated = bytes_allocated+3*this%norder*SIZEOF_DEF_REAL
+      bytes_allocated = bytes_allocated+(2*this%norder_exp+this%norder_imp)* &
+      &                 SIZEOF_DEF_REAL
 
    end subroutine initialize
 !------------------------------------------------------------------------------
@@ -90,7 +95,9 @@ contains
       class(type_tscheme) :: this
       real(cp), intent(in) :: dt_new
 
-      this%dt   =cshift(this%dt,shift=this%norder-1)
+      !-- First roll the dt array
+      this%dt   =cshift(this%dt,shift=this%norder_exp-1)
+      !-- Then overwrite the first element by the new timestep
       this%dt(1)=dt_new
 
    end subroutine set_dt_array

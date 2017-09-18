@@ -78,7 +78,7 @@ contains
       complex(cp),       intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
       type(vp_bal_type), intent(inout) :: vp_bal
-      complex(cp),       intent(inout) :: dpsi_exp_Mloc(1:tscheme%norder,nMstart:nMstop,n_r_max)
+      complex(cp),       intent(inout) :: dpsi_exp_Mloc(tscheme%norder_exp,nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max)
 
@@ -125,7 +125,7 @@ contains
             rhs_m0(n_r_max) = 0.0_cp
             do n_r=2,n_r_max-1
                rhs_m0(n_r)=real(dpsi_imp_Mloc(n_m,n_r),kind=cp)
-               do n_o=1,tscheme%norder
+               do n_o=1,tscheme%norder_exp
                   rhs_m0(n_r)=rhs_m0(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)*&
                   &           real(dpsi_exp_Mloc(n_o,n_m,n_r),kind=cp)
                end do
@@ -159,7 +159,7 @@ contains
             rhs(2*n_r_max)=zero
             do n_r=2,n_r_max-1
                rhs(n_r)=dpsi_imp_Mloc(n_m,n_r)
-               do n_o=1,tscheme%norder
+               do n_o=1,tscheme%norder_exp
                   rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)* &
                   &        dpsi_exp_Mloc(n_o,n_m,n_r)
                end do
@@ -234,7 +234,7 @@ contains
       end do
 
       !-- Roll the explicit array before filling again the first block
-      dpsi_exp_Mloc = cshift(dpsi_exp_Mloc, shift=tscheme%norder-1)
+      dpsi_exp_Mloc = cshift(dpsi_exp_Mloc, shift=tscheme%norder_exp-1)
 
    end subroutine update_om
 !------------------------------------------------------------------------------
