@@ -12,8 +12,8 @@ module time_scheme
 
    type, public :: type_tscheme
       integer :: norder
-      character(len=3) :: imp_scheme
-      character(len=3) :: exp_scheme
+      character(len=4) :: imp_scheme
+      character(len=4) :: exp_scheme
       real(cp), allocatable :: dt(:)
       real(cp), allocatable :: wimp(:)
       real(cp), allocatable :: wexp(:)
