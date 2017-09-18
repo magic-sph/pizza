@@ -4,6 +4,7 @@ module time_scheme
    use namelists, only: alpha
    use constants, only: one, half
    use mem_alloc, only: bytes_allocated
+   use char_manip, only: capitalize
 
    implicit none
 
@@ -26,13 +27,29 @@ module time_scheme
 
 contains
 
-   subroutine initialize(this)
+   subroutine initialize(this, imp_scheme, exp_scheme)
 
       class(type_tscheme) :: this
 
+      !-- Input/output variables
+      character(len=72), intent(inout) :: imp_scheme
+      character(len=72), intent(inout) :: exp_scheme
+
+      call capitalize(imp_scheme)
+
+      if ( index(imp_scheme, 'CN') /= 0 ) then
+         this%imp_scheme = 'CN'
+      else if ( index(imp_scheme, 'BDF2') /= 0 ) then
+         this%imp_scheme = 'BDF2'
+      end if
+
+      if ( index(exp_scheme, 'AB2') /= 0 ) then
+         this%exp_scheme = 'AB2'
+      else if ( index(exp_scheme, 'AB3') /= 0 ) then
+         this%exp_scheme = 'AB3'
+      end if
+
       this%norder = 2
-      this%imp_scheme = 'CN'
-      this%exp_scheme = 'AB2'
 
       allocate ( this%dt(this%norder) )
       allocate ( this%wimp(this%norder) )

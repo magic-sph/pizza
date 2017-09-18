@@ -34,6 +34,8 @@ module namelists
    real(cp), public :: alph1  ! Input parameter for non-linear map to define degree of spacing (0.0:2.0)
    real(cp), public :: alph2  ! Input parameter for non-linear map to define central point of different spacing (-1.0:1.0)
    character(len=72), public :: map_function ! Mapping family: either tangent or arcsin
+   character(len=72), public :: imp_scheme ! Implicit scheme
+   character(len=72), public :: exp_scheme ! Implicit scheme
    logical, public :: l_newmap       ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
    real(cp), public :: dtMin           ! Minimum allowed time step
    real(cp), public :: dtMax           ! Maximum allowed time step
@@ -84,7 +86,8 @@ contains
       namelist/grid/n_r_max,n_cheb_max,m_max,minc
       namelist/control/tag,n_time_steps,alpha,l_newmap,map_function,&
       &                alph1,alph2,dtMax,courfac,tEnd,runHours,     &
-      &                runMinutes,runSeconds,l_non_rot,n_fft_optim_lev
+      &                runMinutes,runSeconds,l_non_rot,             &
+      &                n_fft_optim_lev,imp_scheme,exp_scheme
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz
@@ -249,6 +252,8 @@ contains
       n_fft_optim_lev  =1 ! Optimisation level for FFT:
                           ! 0: FFTW_ESTIMATE, 1: FFTW_MEASURE, 2: FFTW_PATIENT
                           ! 3: FFTW_EXHAUSTIVE
+      imp_scheme       ='CN'
+      exp_scheme       ='AB2'
 
       !-- Physcal parameters
       l_non_rot        =.false.
@@ -314,6 +319,10 @@ contains
       length=length_to_blank(tag)
       write(n_out,*) " tag             = """,tag(1:length),""","
       write(n_out,'(''  n_time_steps    ='',i8,'','')') n_time_steps
+      length=length_to_blank(imp_scheme)
+      write(n_out,*) " imp_scheme      = """,imp_scheme(1:length),""","
+      length=length_to_blank(exp_scheme)
+      write(n_out,*) " exp_scheme      = """,exp_scheme(1:length),""","
       write(n_out,'(''  alpha           ='',ES14.6,'','')')   alpha
       write(n_out,'(''  l_newmap        ='',l3,'','')') l_newmap
       length=length_to_blank(map_function)

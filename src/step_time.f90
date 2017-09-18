@@ -31,17 +31,15 @@ module step_time
 
    private
 
-   type(type_tscheme) :: tscheme
    public :: time_loop
 
 contains
 
-   subroutine time_loop(time, dt, dtNew)
+   subroutine time_loop(time, tscheme)
 
       !-- Output variables
-      real(cp), intent(inout) :: time
-      real(cp), intent(inout) :: dt
-      real(cp), intent(inout) :: dtNew
+      real(cp),           intent(inout) :: time
+      type(type_tscheme), intent(inout) :: tscheme
 
       !-- Local variables
       real(cp) :: w1, timeLast
@@ -57,6 +55,7 @@ contains
       !-- Timings:
       integer :: n_r_loops, n_mpi_comms, n_m_loops, n_m_loops_mat
       integer :: n_io_calls
+      real(cp) :: dtNew, dt
       real(cp) :: run_time_r_loop, run_time_mpi_comms
       real(cp) :: run_time_m_loop, run_time_m_loop_mat
       real(cp) :: run_time_tot, run_time_io, run_time_passed
@@ -73,13 +72,9 @@ contains
       logical :: lMat
       logical :: l_complete_rhs
 
-      call tscheme%initialize()
-      tscheme%dt(1)=dtNew
-      tscheme%dt(2)=dt
-      call tscheme%set_weights()
-
       tenth_n_time_steps=real(n_time_steps,kind=cp)/10.0_cp
       nPercent = 9
+      dtNew = tscheme%dt(1)
 
       l_new_dt        =.true.
       l_new_dtNext    =.true.
@@ -207,10 +202,10 @@ contains
          !-------------------
          !-- Get time series
          runStart = MPI_Wtime()
-         call write_outputs(time, dt, dtNew, n_time_step, l_log, l_rst, l_spec,&
+         call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_spec,  &
               &             l_frame, l_vphi_bal_write, l_stop_time, us_Mloc,   &
               &             up_Mloc, om_Mloc, temp_Mloc, dtemp_Mloc,           &
-              &             dtempdtLast_Mloc, dpsidtLast_Mloc)
+              &             dtemp_exp_Mloc, dpsi_exp_Mloc)
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             n_io_calls  =n_io_calls+1
@@ -227,7 +222,7 @@ contains
          !-------------------
          !------ Checking Courant criteria, l_new_dt and dtNew are output
          !-------------------
-         call dt_courant(dtr,dth,l_new_dtNext,dt,dtNew,dtMax, &
+         call dt_courant(dtr,dth,l_new_dtNext,tscheme%dt(1),dtNew,dtMax, &
               &          dtr_Rloc,dth_Rloc)
 
          call tscheme%set_weights()
@@ -248,23 +243,23 @@ contains
          if ( l_new_dtNext ) then
             !------ Writing info and getting new weights:
             if ( rank == 0 ) then
-               write(*,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')  &
-               &    " ! Changing time step at time=",(time+dt),          &
-               &    "                 time step no=",n_time_step+1,      &
-               &    "                      last dt=",dt,                 &
+               write(*,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')    &
+               &    " ! Changing time step at time=",(time+tscheme%dt(1)), &
+               &    "                 time step no=",n_time_step+1,        &
+               &    "                      last dt=",tscheme%dt(1),        &
                &    "                       new dt=",dtNew
-               write(n_log_file,                                         &
-               &    '(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')     &
-               &    " ! Changing time step at time=",(time+dt),          &
-               &    "                 time step no=",n_time_step+1,      &
-               &    "                      last dt=",dt,                 &
+               write(n_log_file,                                           &
+               &    '(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')       &
+               &    " ! Changing time step at time=",(time+tscheme%dt(1)), &
+               &    "                 time step no=",n_time_step+1,        &
+               &    "                      last dt=",tscheme%dt(1),        &
                &    "                       new dt=",dtNew
             end if
          end if
 
          !----- Advancing time:
          timeLast=time               ! Time of the previous timestep
-         time    =time+dt            ! Update time
+         time    =time+tscheme%dt(1) ! Update time
 
          lMat=.false.
          if ( l_new_dt ) then

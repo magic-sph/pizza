@@ -16,6 +16,7 @@ module outputs
    use constants, only: pi, two, four, surf, vol_otc, one
    use checkpoints, only: write_checkpoint
    use output_frames, only: write_snapshot_mloc
+   use time_scheme, only: type_tscheme
 
    implicit none
 
@@ -122,40 +123,39 @@ contains
 
    end subroutine finalize_outputs
 !------------------------------------------------------------------------------
-   subroutine write_outputs(time, dt, dtNew, n_time_step, l_log, l_rst,      &
+   subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst,        &
               &             l_spec, l_frame, l_vphi_bal_write, l_stop_time,  &
               &             us_Mloc, up_Mloc, om_Mloc, temp_Mloc, dtemp_Mloc,&
-              &             dtempdtLast_Mloc, dpsidtLast_Mloc)
+              &             dtemp_exp_Mloc, dpsi_exp_Mloc)
 
       !-- Input variables
-      real(cp),    intent(in) :: dt
-      real(cp),    intent(in) :: dtNew
-      integer,     intent(in) :: n_time_step
-      logical,     intent(in) :: l_log
-      logical,     intent(in) :: l_rst
-      logical,     intent(in) :: l_spec
-      logical,     intent(in) :: l_frame
-      logical,     intent(in) :: l_vphi_bal_write
-      logical,     intent(in) :: l_stop_time
-      real(cp),    intent(in) :: time
-      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: dtempdtLast_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: dpsidtLast_Mloc(nMstart:nMstop,n_r_max)
+      real(cp),           intent(in) :: time
+      type(type_tscheme), intent(in) :: tscheme
+      integer,            intent(in) :: n_time_step
+      logical,            intent(in) :: l_log
+      logical,            intent(in) :: l_rst
+      logical,            intent(in) :: l_spec
+      logical,            intent(in) :: l_frame
+      logical,            intent(in) :: l_vphi_bal_write
+      logical,            intent(in) :: l_stop_time
+      complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: dtemp_exp_Mloc(1:tscheme%norder,nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: dpsi_exp_Mloc(1:tscheme%norder,nMstart:nMstop,n_r_max)
 
       !-- Local variable
       character(len=144) :: frame_name
       character(len=144) :: spec_name
 
-      timeAvg = timeAvg + dt
+      timeAvg = timeAvg + tscheme%dt(1)
 
       if ( l_rst ) then
-         call write_checkpoint(time, dt, dtNew, n_time_step, n_log_file, &
+         call write_checkpoint(time, tscheme, n_time_step, n_log_file, &
               &                l_stop_time, temp_Mloc, us_Mloc, up_Mloc, &
-              &                dtempdtLast_Mloc, dpsidtLast_Mloc)
+              &                dtemp_exp_Mloc, dpsi_exp_Mloc)
       end if
 
       if ( l_spec ) then

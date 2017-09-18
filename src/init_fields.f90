@@ -15,6 +15,7 @@ module init_fields
    use radial_der, only: get_dr
    use fourier, only: fft
    use checkpoints, only: read_checkpoint
+   use time_scheme, only: type_tscheme
    use fields
    use fieldsLast
    use precision_mod
@@ -27,20 +28,19 @@ module init_fields
 
 contains
 
-   subroutine get_start_fields(time, dt, dtNew)
+   subroutine get_start_fields(time, tscheme)
 
       !-- Output variables
-      real(cp), intent(out) :: time
-      real(cp), intent(out) :: dt
-      real(cp), intent(out) :: dtNew
+      real(cp),           intent(out) :: time
+      type(type_tscheme), intent(inout) :: tscheme
 
       !-- Local variables
-      integer :: m, n_r, n_m
+      integer :: m, n_r, n_m, n_o
       character(len=76) :: message
 
       if ( l_start_file ) then
          call read_checkpoint(us_Mloc, up_Mloc, dpsidtLast_Mloc, temp_Mloc, &
-              &               dtempdtLast_Mloc, time, dt, dtNew)
+              &               dtempdtLast_Mloc, time, tscheme)
       else
          temp_Mloc(:,:)       =zero
          us_Mloc(:,:)         =zero
@@ -48,14 +48,17 @@ contains
          dpsidtLast_Mloc(:,:) =zero
          dtempdtLast_Mloc(:,:)=zero
 
-         time =0.0_cp
-         dt   =dtMax
-         dtNew=dtMax
+         time=0.0_cp
+         do n_o=1,tscheme%norder
+            tscheme%dt(n_o)=dtMax
+         end do
 
          if (rank == 0) write(message,'(''! Using dtMax time step:'',ES16.6)') dtMax
          call logWrite(message, n_log_file)
       end if
 
+      !-- Initialize the weights of the time scheme
+      call tscheme%set_weights()
 
       if ( init_t /= 0 ) call initT(temp_Mloc)
 
