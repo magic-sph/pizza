@@ -114,6 +114,10 @@ contains
       call get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2), &
            &                dtemp_imp_Mloc(:,:,1))
 
+      !print*, 'T[n-1]', sum(abs(dtemp_imp_Mloc(:,:,2)))
+      !print*, 'T[n] (from imp)', sum(abs(dtemp_imp_Mloc(:,:,1)))
+      !print*, 'T[n]', sum(abs(temp_Mloc))
+
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
@@ -173,6 +177,8 @@ contains
       if ( l_roll_imp ) then
          call roll(dtemp_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
       end if
+
+      !print*, 'T[n+1]', sum(abs(temp_Mloc))
 
       !-- Assemble second buoyancy part from T^{n+1}
       do n_r=1,n_r_max
@@ -264,7 +270,6 @@ contains
             tMat(n_r_max,nR_out)=0.0_cp
          end do
       end if
-
 
       !----- Other points:
       do nR_out=1,n_r_max

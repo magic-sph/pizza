@@ -67,7 +67,7 @@ contains
       logical :: l_log, l_log_next
       logical :: l_vphi_bal_calc, l_vphi_bal_write
       logical :: l_stop_time
-      logical :: lMat
+      logical :: lMat, lMatNext
       logical :: l_roll_imp
 
       tenth_n_time_steps=real(n_time_steps,kind=cp)/10.0_cp
@@ -83,6 +83,7 @@ contains
       l_vphi_bal_calc =.false.
       l_vphi_bal_write=.false.
       l_roll_imp      =.true.
+      lMatNext        =.true.
 
       !-- Dummy initial timings
       dtr_Rloc(:) = 1e10_cp
@@ -224,8 +225,8 @@ contains
          timeLast=time               ! Time of the previous timestep
          time    =time+tscheme%dt(1) ! Update time
 
-         lMat=.false.
-         if ( l_new_dt ) then
+         lMat=lMatNext
+         if ( l_new_dt .or. lMat ) then
             !----- Calculate matricies for new time step if dt /= dtLast
             lMat=.true.
             if ( rank == 0 ) then
@@ -236,6 +237,7 @@ contains
 
          !-- If the scheme is not Crank-Nicolson we have to use a different scheme
          l_roll_imp = .true.
+         lMatNext = .false.
          if ( .not. l_start_file .and. tscheme%imp_scheme /= 'CN' .and.  &
               n_time_step == 1 ) then
             call get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2),&
@@ -251,6 +253,7 @@ contains
             !-- One does not want to roll the implicit part in that case
             l_roll_imp = .false.
             tscheme%imp_scheme=old_scheme
+            lMatNext = .true.
          end if
 
          if ( l_AB1 .and. n_time_step == 1 ) then
@@ -265,13 +268,21 @@ contains
          !-- M-loop (update routines)
          !--------------------
          runStart = MPI_Wtime()
+         !print*, 'dT[old]', sum(abs(dtemp_imp_Mloc(:,:,2)))
+         !print*, 'old_T', sum(abs(temp_Mloc))
          call update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
               &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
               &           tscheme, lMat, l_roll_imp)
+         !print*, 'new_T', sum(abs(temp_Mloc))
+         !print*, 'dT[old]', sum(abs(dtemp_imp_Mloc(:,:,2)))
+         !print*, 'dom[old]', sum(abs(dpsi_imp_Mloc(:,:,2)))
+         !print*, 'old_om', sum(abs(om_Mloc))
          call update_om(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,  &
               &         dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,       &
               &         buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp,&
               &         l_vphi_bal_calc)
+         !print*, 'new_om', sum(abs(om_Mloc))
+         !print*, 'dom[old]', sum(abs(dpsi_imp_Mloc(:,:,2)))
 
          runStop = MPI_Wtime()
          if ( .not. lMat ) then
