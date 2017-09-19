@@ -5,8 +5,8 @@ module update_psi
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
-   use pre_calculations, only: opr, CorFac
-   use namelists, only: kbotv, ktopv, alpha, ra
+   use pre_calculations, only: CorFac
+   use namelists, only: kbotv, ktopv, alpha
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, &
        &                       ekpump, oheight, r_cmb
    use blocking, only: nMstart, nMstop, l_rank_has_m0
@@ -83,7 +83,7 @@ contains
       complex(cp),       intent(inout) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp)
+      complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
@@ -177,13 +177,14 @@ contains
                      &        dpsi_imp_Mloc(n_m,n_r,n_o)
                   end if
                end do
-               do n_o=1,tscheme%norder_imp
-                  rhs(n_r)=rhs(n_r)+tscheme%wimp_buo(n_o)*buo_imp_Mloc(n_m,n_r,n_o)
-               end do
                do n_o=1,tscheme%norder_exp
                   rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)* &
                   &        dpsi_exp_Mloc(n_m,n_r,n_o)
                end do
+               !-- Add buoyancy
+               rhs(n_r)=rhs(n_r)+buo_imp_Mloc(n_m,n_r)
+
+               !-- Second part is zero (no time-advance in the psi-block
                rhs(n_r+n_r_max)=zero
             end do
 
@@ -259,7 +260,6 @@ contains
       if ( l_roll_imp ) then
          call roll(dpsi_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
       end if
-      call roll(buo_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp)
 
    end subroutine update_om
 !------------------------------------------------------------------------------

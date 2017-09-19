@@ -77,7 +77,7 @@ contains
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(inout) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
       complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp), intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp)
+      complex(cp), intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
@@ -90,8 +90,8 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r,2)=-rgrav(n_r)*or1(n_r)*ra*opr*ci* &
-               &                       real(m,cp)*temp_Mloc(n_m,n_r)
+               buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*or1(n_r) &
+               &                      *ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -179,8 +179,9 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r,1)=-rgrav(n_r)*or1(n_r)*ra*opr*ci* &
-               &                       real(m,cp)*temp_Mloc(n_m,n_r)
+               buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-&
+               &               tscheme%wimp_lin(1)*rgrav(n_r)*or1(n_r) &
+               &               *ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
             end if
          end do
       end do

@@ -20,7 +20,6 @@ module time_scheme
       real(cp), allocatable :: dt(:)
       real(cp), allocatable :: wimp(:)
       real(cp), allocatable :: wimp_lin(:)
-      real(cp), allocatable :: wimp_buo(:)
       real(cp), allocatable :: wexp(:)
 
    contains
@@ -62,7 +61,6 @@ contains
       allocate ( this%dt(this%norder_exp) )
       allocate ( this%wimp(this%norder_imp) )
       allocate ( this%wimp_lin(this%norder_imp) )
-      allocate ( this%wimp_buo(this%norder_imp) )
       allocate ( this%wexp(this%norder_exp) )
 
       bytes_allocated = bytes_allocated+(2*this%norder_exp+3*this%norder_imp)* &
@@ -90,8 +88,6 @@ contains
             this%wimp(2)    =one
             this%wimp_lin(1)=alpha*this%dt(1)
             this%wimp_lin(2)=(1-alpha)*this%dt(1)
-            this%wimp_buo(1)=alpha*this%dt(1)
-            this%wimp_buo(2)=(1-alpha)*this%dt(1)
 
             select case ( this%exp_scheme )
                case ('AB2')
@@ -103,11 +99,6 @@ contains
             this%wimp_lin(1)=(one+delta)/(one+two*delta)*this%dt(1)
             this%wimp_lin(2)=0.0_cp
             this%wimp_lin(3)=0.0_cp
-            this%wimp_buo(1)=(one+delta)/(one+two*delta)*this%dt(1)
-            this%wimp_buo(2)=0.0_cp
-            this%wimp_buo(3)=0.0_cp
-            !this%wimp_buo(2)=-(one+delta)*(one+delta)/(one+two*delta)*this%dt(1)
-            !this%wimp_buo(3)=delta*delta/(one+two*delta)*this%dt(1)
             this%wimp(1)=one
             this%wimp(2)=(one+delta)*(one+delta)/(one+two*delta)
             this%wimp(3)=-delta*delta/(one+two*delta)

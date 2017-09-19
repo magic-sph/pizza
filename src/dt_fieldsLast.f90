@@ -24,7 +24,7 @@ module fieldsLast
    complex(cp), public, allocatable :: dtemp_imp_Mloc(:,:,:)
    complex(cp), public, allocatable :: dtemp_exp_Mloc(:,:,:)
    complex(cp), public, allocatable :: dpsi_imp_Mloc(:,:,:)
-   complex(cp), public, allocatable :: buo_imp_Mloc(:,:,:)
+   complex(cp), public, allocatable :: buo_imp_Mloc(:,:)
    complex(cp), public, allocatable :: dpsi_exp_Mloc(:,:,:)
    complex(cp), public, allocatable :: dpsidt_Rloc(:,:)
    complex(cp), public, allocatable :: dtempdt_Rloc(:,:)
@@ -43,7 +43,7 @@ contains
       allocate( dtemp_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp-1) )
       allocate( dtemp_exp_Mloc(nMStart:nMstop,n_r_max,norder_exp) )
       allocate( dpsi_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp-1) )
-      allocate( buo_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp) )
+      allocate( buo_imp_Mloc(nMStart:nMstop,n_r_max) )
       allocate( dpsi_exp_Mloc(nMStart:nMstop,n_r_max,norder_exp) )
       allocate( dVsT_Mloc(nMStart:nMstop,n_r_max) )
       allocate( dVsOm_Mloc(nMStart:nMstop,n_r_max) )
@@ -54,7 +54,7 @@ contains
       dtemp_imp_Mloc(:,:,:)=zero
       dtemp_exp_Mloc(:,:,:)=zero
       dpsi_imp_Mloc(:,:,:) =zero
-      buo_imp_Mloc(:,:,:)  =zero
+      buo_imp_Mloc(:,:)    =zero
       dpsi_exp_Mloc(:,:,:) =zero
       dVsT_Mloc(:,:)       =zero
       dVsOm_Mloc(:,:)      =zero
