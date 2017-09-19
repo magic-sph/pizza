@@ -68,6 +68,7 @@ module namelists
    logical,  public :: l_heat
    logical,  public :: l_chem
    logical,  public :: l_AB1
+   logical,  public :: l_bridge_step
    real(cp), public :: tadvz_fac
 
    public :: read_namelists, write_namelists
@@ -223,6 +224,7 @@ contains
 
       !-- This is used when 1st order AB is used (i.e. Euler)
       l_AB1 = .false.
+      l_bridge_step = .true.
 
    end subroutine read_namelists
 !--------------------------------------------------------------------------------

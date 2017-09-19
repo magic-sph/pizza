@@ -9,7 +9,8 @@ module checkpoints
        &                     scatter_from_rank0_to_mloc
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
-       &                start_file, scale_u, scale_t, l_heat, l_chem
+       &                start_file, scale_u, scale_t, l_heat, l_chem,     &
+       &                l_bridge_step
    use radial_scheme, only: type_rscheme
    use radial_functions, only: rscheme, r
    use chebyshev, only: type_cheb
@@ -285,8 +286,16 @@ contains
          tscheme%dt(n_o)=dt_array_old(n_o)
       end do
 
-      if ( ek_old /= ek ) then ! If Ekman is different, let's use AB1
+      !-- If new Ekman and old Ekman differ, we use AB1 for the first time step.
+      if ( ek_old /= ek ) then 
          l_AB1 = .true.
+      end if
+
+      !-- If old and new schemes differ in precision, one has to use a bridging step
+      if ( tscheme%norder_imp > norder_imp_old ) then
+         l_bridge_step = .true.
+      else
+         l_bridge_step = .false.
       end if
 
       !-- Read fields with rank0 and scatter them

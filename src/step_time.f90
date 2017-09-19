@@ -16,7 +16,7 @@ module step_time
    use update_temperature, only: update_temp, get_temp_rhs_imp
    use update_psi, only: update_om, get_psi_rhs_imp
    use rLoop, only: radial_loop
-   use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_start_file,  &
+   use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1
@@ -239,8 +239,10 @@ contains
          !-- If the scheme is not Crank-Nicolson we have to use a different scheme
          l_roll_imp = .true.
          lMatNext = .false.
-         if ( .not. l_start_file .and. tscheme%imp_scheme /= 'CN' .and.  &
+         if ( l_bridge_step .and. tscheme%imp_scheme /= 'CN' .and.  &
               n_time_step == 1 ) then
+            if (rank == 0 ) write(*,*) '! Crank-Nicolson for the 1st time-step'
+
             call get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2),&
                  &                dtemp_imp_Mloc(:,:,2))
             call get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,        &
