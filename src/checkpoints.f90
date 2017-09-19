@@ -28,7 +28,8 @@ contains
 
    subroutine write_checkpoint(time, tscheme, n_time_step, n_log_file,   &
               &                l_stop_time, t_Mloc, us_Mloc, up_Mloc,    &
-              &                dtemp_exp_Mloc, dpsi_exp_Mloc)
+              &                dtemp_exp_Mloc, dtemp_imp_Mloc,           &
+              &                dpsi_exp_Mloc, dpsi_imp_Mloc )
 
 
       !-- Input variables
@@ -42,6 +43,8 @@ contains
       complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
       complex(cp),        intent(in) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
+      complex(cp),        intent(in) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp),        intent(in) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
 
       !-- Local variables
       complex(cp), allocatable :: work(:,:)
@@ -100,8 +103,14 @@ contains
       if ( rank == 0 ) write(n_rst_file) work
       call gather_from_mloc_to_rank0(up_Mloc, work)
       if ( rank == 0 ) write(n_rst_file) work
+
       do n_o=2,tscheme%norder_exp
          call gather_from_mloc_to_rank0(dpsi_exp_Mloc(:,:,n_o), work)
+         if ( rank == 0 ) write(n_rst_file) work
+      end do
+
+      do n_o=2,tscheme%norder_imp-1
+         call gather_from_mloc_to_rank0(dpsi_imp_Mloc(:,:,n_o), work)
          if ( rank == 0 ) write(n_rst_file) work
       end do
 
@@ -111,6 +120,11 @@ contains
          if ( rank == 0 ) write(n_rst_file) work
          do n_o=2,tscheme%norder_exp
             call gather_from_mloc_to_rank0(dtemp_exp_Mloc(:,:,n_o), work)
+            if ( rank == 0 ) write(n_rst_file) work
+         end do
+
+         do n_o=2,tscheme%norder_imp-1
+            call gather_from_mloc_to_rank0(dtemp_imp_Mloc(:,:,n_o), work)
             if ( rank == 0 ) write(n_rst_file) work
          end do
       end if
@@ -138,8 +152,9 @@ contains
 
    end subroutine write_checkpoint
 !------------------------------------------------------------------------------
-   subroutine read_checkpoint(us_Mloc, up_Mloc, dpsi_exp_Mloc, temp_Mloc, &
-              &               dtemp_exp_Mloc, time, tscheme)
+   subroutine read_checkpoint(us_Mloc, up_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc, &
+              &               temp_Mloc, dtemp_exp_Mloc, dtemp_imp_Mloc,      &
+              &               time, tscheme)
 
       !-- Output variables
       type(type_tscheme), intent(inout) :: tscheme
@@ -147,7 +162,9 @@ contains
       complex(cp), intent(out) :: up_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
+      complex(cp), intent(out) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
       complex(cp), intent(out) :: dtemp_exp_Mloc(nMstart:nMstop, n_r_max,tscheme%norder_exp)
+      complex(cp), intent(out) :: dtemp_imp_Mloc(nMstart:nMstop, n_r_max,tscheme%norder_imp-1)
       real(cp),    intent(out) :: time
 
       !-- Local variables
@@ -183,7 +200,7 @@ contains
             norder_exp_old = 2
          else 
             read(n_start_file) time
-            read(n_start_file) norder_imp_old, norder_exp_old
+            read(n_start_file) norder_exp_old, norder_imp_old
             allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp) ) )
             dt_array_old(:)=0.0_cp
             read(n_start_file) dt_array_old(1:norder_exp_old)
@@ -256,6 +273,7 @@ contains
 
       call MPI_Bcast(time,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(norder_exp_old,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(norder_imp_old,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
       if ( rank /= 0 ) allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp)) )
       call MPI_Bcast(dt_array_old,2,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(ek_old,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
@@ -301,6 +319,18 @@ contains
          end if
       end do
 
+      !-- Implicit time step
+      do n_o=2,norder_imp_old-1
+         if ( rank == 0 ) then
+            read( n_start_file ) work_old
+            call map_field(work_old, work, r_old, m2idx_old, scale_u, &
+                 &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
+         end if
+         if ( n_o <= tscheme%norder_imp-1 ) then
+            call scatter_from_rank0_to_mloc(work, dpsi_imp_Mloc(:,:,n_o))
+         end if
+      end do
+
       if ( l_heat_old ) then
          !-- Temperature
          if ( rank == 0 ) then
@@ -319,6 +349,18 @@ contains
             end if
             if ( n_o <= tscheme%norder_exp ) then
                call scatter_from_rank0_to_mloc(work, dtemp_exp_Mloc(:,:,n_o))
+            end if
+         end do
+
+         !-- Implicit time step
+         do n_o=2,norder_imp_old-1
+            if ( rank == 0 ) then
+               read( n_start_file ) work_old
+               call map_field(work_old, work, r_old, m2idx_old, scale_t, &
+                    &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
+            end if
+            if ( n_o <= tscheme%norder_imp-1 ) then
+               call scatter_from_rank0_to_mloc(work, dtemp_imp_Mloc(:,:,n_o))
             end if
          end do
       end if

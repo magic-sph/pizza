@@ -202,7 +202,8 @@ contains
          call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_spec,  &
               &             l_frame, l_vphi_bal_write, l_stop_time, us_Mloc,   &
               &             up_Mloc, om_Mloc, temp_Mloc, dtemp_Mloc,           &
-              &             dtemp_exp_Mloc, dpsi_exp_Mloc)
+              &             dtemp_exp_Mloc, dtemp_imp_Mloc, dpsi_exp_Mloc,     &
+              &             dpsi_imp_Mloc)
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             n_io_calls  =n_io_calls+1

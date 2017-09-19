@@ -39,14 +39,17 @@ contains
       character(len=76) :: message
 
       if ( l_start_file ) then
-         call read_checkpoint(us_Mloc, up_Mloc, dpsi_exp_Mloc, temp_Mloc, &
-              &               dtemp_exp_Mloc, time, tscheme)
+         call read_checkpoint(us_Mloc, up_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc, &
+              &               temp_Mloc, dtemp_exp_Mloc, dtemp_imp_Mloc,      &
+              &               time, tscheme)
       else
          temp_Mloc(:,:)       =zero
          us_Mloc(:,:)         =zero
          up_Mloc(:,:)         =zero
          dpsi_exp_Mloc(:,:,:) =zero
          dtemp_exp_Mloc(:,:,:)=zero
+         dpsi_imp_Mloc(:,:,:) =zero
+         dtemp_imp_Mloc(:,:,:)=zero
 
          time=0.0_cp
          do n_o=1,tscheme%norder_exp
