@@ -47,9 +47,8 @@ contains
       allocate( dpsi_exp_Mloc(nMStart:nMstop,n_r_max,norder_exp) )
       allocate( dVsT_Mloc(nMStart:nMstop,n_r_max) )
       allocate( dVsOm_Mloc(nMStart:nMstop,n_r_max) )
-      bytes_allocated = bytes_allocated + &
-      &                 (4+norder_exp)*(nMstop-nMStart+1)*n_r_max* &
-      &                 SIZEOF_DEF_COMPLEX
+      bytes_allocated = bytes_allocated + (3+2*norder_exp+2*(norder_exp-1))*&
+      &                 (nMstop-nMStart+1)*n_r_max*SIZEOF_DEF_COMPLEX
 
       dtemp_imp_Mloc(:,:,:)=zero
       dtemp_exp_Mloc(:,:,:)=zero

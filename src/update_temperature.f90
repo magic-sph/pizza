@@ -64,12 +64,13 @@ contains
 !------------------------------------------------------------------------------
    subroutine update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
               &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
-              &           tscheme, lMat, l_roll_imp)
+              &           tscheme, lMat, l_roll_imp, l_log_next)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
       logical,            intent(in) :: lMat
       logical,            intent(in) :: l_roll_imp
+      logical,            intent(in) :: l_log_next
       complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Output variables
@@ -172,12 +173,6 @@ contains
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Roll the arrays before filling again the first block
-      call roll(dtemp_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
-      if ( l_roll_imp ) then
-         call roll(dtemp_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
-      end if
-
       !print*, 'T[n+1]', sum(abs(temp_Mloc))
 
       !-- Assemble second buoyancy part from T^{n+1}
@@ -191,6 +186,17 @@ contains
             end if
          end do
       end do
+
+      !-- Roll the arrays before filling again the first block
+      call roll(dtemp_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
+      if ( l_roll_imp ) then
+         call roll(dtemp_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
+      end if
+
+      !-- In case log is needed on the next iteration, recalculate dT/dr
+      if ( l_log_next ) then
+         call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, n_r_max, rscheme)
+      end if
 
    end subroutine update_temp
 !------------------------------------------------------------------------------

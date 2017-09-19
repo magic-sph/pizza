@@ -63,7 +63,7 @@ contains
       allocate ( this%wimp_lin(this%norder_imp) )
       allocate ( this%wexp(this%norder_exp) )
 
-      bytes_allocated = bytes_allocated+(2*this%norder_exp+3*this%norder_imp)* &
+      bytes_allocated = bytes_allocated+(2*this%norder_exp+2*this%norder_imp)* &
       &                 SIZEOF_DEF_REAL
 
    end subroutine initialize
@@ -72,7 +72,7 @@ contains
 
       class(type_tscheme) :: this
 
-      deallocate( this%dt, this%wimp, this%wexp )
+      deallocate( this%dt, this%wimp, this%wimp_lin, this%wexp )
 
    end subroutine finalize
 !------------------------------------------------------------------------------
@@ -150,16 +150,16 @@ contains
       if ( l_new_dtNext ) then
          !------ Writing info and getting new weights:
          if ( rank == 0 ) then
-            write(*,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')    &
-            &    " ! Changing time step at time=",(time+this%dt(1)),    &
-            &    "                 time step no=",n_time_step,          &
-            &    "                      last dt=",dt_old,               &
+            write(*,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')  &
+            &    " ! Changing time step at time=",(time+this%dt(1)),  &
+            &    "                 time step no=",n_time_step,        &
+            &    "                      last dt=",dt_old,             &
             &    "                       new dt=",dt_new
-            write(n_log_file,                                           &
-            &    '(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')       &
-            &    " ! Changing time step at time=",(time+this%dt(1)),    &
-            &    "                 time step no=",n_time_step,          &
-            &    "                      last dt=",dt_old,               &
+            write(n_log_file,                                         &
+            &    '(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')     &
+            &    " ! Changing time step at time=",(time+this%dt(1)),  &
+            &    "                 time step no=",n_time_step,        &
+            &    "                      last dt=",dt_old,             &
             &    "                       new dt=",dt_new
          end if
       end if

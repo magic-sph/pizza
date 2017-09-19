@@ -275,7 +275,7 @@ contains
          !print*, 'old_T', sum(abs(temp_Mloc))
          call update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
               &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
-              &           tscheme, lMat, l_roll_imp)
+              &           tscheme, lMat, l_roll_imp, l_log_next)
          !print*, 'new_T', sum(abs(temp_Mloc))
          !print*, 'dT[old]', sum(abs(dtemp_imp_Mloc(:,:,2)))
          !print*, 'dom[old]', sum(abs(dpsi_imp_Mloc(:,:,2)))
