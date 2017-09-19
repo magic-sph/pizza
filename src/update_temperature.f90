@@ -2,16 +2,17 @@ module update_temperature
 
    use precision_mod
    use mem_alloc, only: bytes_allocated
-   use constants, only: one, zero, four
+   use constants, only: one, zero, four, ci
    use pre_calculations, only: opr
-   use namelists, only: kbott, ktopt, tadvz_fac
-   use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta
+   use namelists, only: kbott, ktopt, tadvz_fac, ra
+   use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
+       &                       rgrav
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
    use algebra, only: sgefa, sgesl
-   use useful, only: abortRun
+   use useful, only: abortRun, roll
    use time_scheme, only: type_tscheme
 
    implicit none
@@ -26,7 +27,8 @@ module update_temperature
 #endif
    complex(cp), allocatable :: rhs(:)
 
-   public :: update_temp, initialize_update_temp, finalize_update_temp
+   public :: update_temp, initialize_update_temp, finalize_update_temp, &
+   &         get_temp_rhs_imp
 
 contains
 
@@ -60,25 +62,39 @@ contains
 
    end subroutine finalize_update_temp
 !------------------------------------------------------------------------------
-   subroutine update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,  &
-              &           dtemp_exp_Mloc, dtemp_imp_Mloc, tscheme, lMat)
+   subroutine update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
+              &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
+              &           tscheme, lMat, l_roll_imp)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
       logical,            intent(in) :: lMat
+      logical,            intent(in) :: l_roll_imp
       complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Output variables
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(inout) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp), intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, n_r_out, m, n_o
 
       if ( lMat ) lTMat(:)=.false.
+
+      !-- Assemble first buoyancy part from T^{n}
+      do n_r=1,n_r_max
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m /= 0 ) then
+               buo_imp_Mloc(n_m,n_r,2)=-rgrav(n_r)*or1(n_r)*ra*opr*ci* &
+               &                       real(m,cp)*temp_Mloc(n_m,n_r)
+            end if
+         end do
+      end do
 
       !-- Finish calculation of advection
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
@@ -95,7 +111,8 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme, dtemp_imp_Mloc)
+      call get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2), &
+           &                dtemp_imp_Mloc(:,:,1))
 
       do n_m=nMstart, nMstop
 
@@ -113,7 +130,13 @@ contains
          rhs(1)      =zero
          rhs(n_r_max)=zero
          do n_r=2,n_r_max-1
-            rhs(n_r)=dtemp_imp_Mloc(n_m,n_r)
+            do n_o=1,tscheme%norder_imp-1
+               if ( n_o == 1 ) then
+                  rhs(n_r)=tscheme%wimp(n_o+1)*dtemp_imp_Mloc(n_m,n_r,n_o)
+               else
+                  rhs(n_r)=rhs(n_r)+tscheme%wimp(n_o+1)*dtemp_imp_Mloc(n_m,n_r,n_o)
+               end if
+            end do
             do n_o=1,tscheme%norder_exp
                rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)* &
                &        dtemp_exp_Mloc(n_m,n_r,n_o)
@@ -145,26 +168,34 @@ contains
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Roll the explicit array before filling again the first block
-      do n_o=tscheme%norder_exp,2,-1
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               dtemp_exp_Mloc(n_m,n_r,n_o) = dtemp_exp_Mloc(n_m,n_r,n_o-1)
-            end do
+      !-- Roll the arrays before filling again the first block
+      call roll(dtemp_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
+      if ( l_roll_imp ) then
+         call roll(dtemp_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
+      end if
+
+      !-- Assemble second buoyancy part from T^{n+1}
+      do n_r=1,n_r_max
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m /= 0 ) then
+               buo_imp_Mloc(n_m,n_r,1)=-rgrav(n_r)*or1(n_r)*ra*opr*ci* &
+               &                       real(m,cp)*temp_Mloc(n_m,n_r)
+            end if
          end do
       end do
 
    end subroutine update_temp
 !------------------------------------------------------------------------------
-   subroutine get_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme, dtemp_imp_Mloc)
+   subroutine get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, wimp, dtemp_imp_Mloc_last)
 
       !-- Input variables
-      complex(cp),        intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
-      type(type_tscheme), intent(in) :: tscheme
+      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      real(cp),    intent(in) :: wimp
 
       !-- Output variable
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: dtemp_imp_Mloc_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, m
@@ -177,14 +208,14 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             dm2 = real(m,cp)*real(m,cp)
-            dtemp_imp_Mloc(n_m,n_r)=     temp_Mloc(n_m,n_r)   &
-            &     +tscheme%wimp(2)*opr*( work_Mloc(n_m,n_r)   &
-            &               +or1(n_r)*  dtemp_Mloc(n_m,n_r)   &
-            &           -dm2*or2(n_r)*   temp_Mloc(n_m,n_r) )
+            dtemp_imp_Mloc_last(n_m,n_r)=          temp_Mloc(n_m,n_r) &
+            &                          +wimp*opr*( work_Mloc(n_m,n_r) &
+            &                         +or1(n_r)*  dtemp_Mloc(n_m,n_r) &
+            &                     -dm2*or2(n_r)*   temp_Mloc(n_m,n_r) )
          end do
       end do
 
-   end subroutine get_rhs_imp
+   end subroutine get_temp_rhs_imp
 !------------------------------------------------------------------------------
 #ifdef WITH_PRECOND_S
    subroutine get_tempMat(tscheme, m, tMat, tPivot, tMat_fac)
@@ -239,7 +270,7 @@ contains
          do nR=2,n_r_max-1
             tMat(nR,nR_out)= rscheme%rnorm * (                        &
             &                               rscheme%rMat(nR,nR_out) - &
-            &     tscheme%wimp(1)*opr*  ( rscheme%d2rMat(nR,nR_out) + &
+            &   tscheme%wimp_lin(1)*opr*( rscheme%d2rMat(nR,nR_out) + &
             &          or1(nR)*            rscheme%drMat(nR,nR_out) - &
             &      dm2*or2(nR)*             rscheme%rMat(nR,nR_out) ) )
          end do

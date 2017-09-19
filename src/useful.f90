@@ -9,7 +9,7 @@ module useful
    private
 
    public :: abortRun, logWrite, formatTime, polynomial_interpolation, &
-   &         l_correct_step, round_off, cc2real, cc22real, getMSD2
+   &         l_correct_step, round_off, cc2real, cc22real, getMSD2, roll
 
 contains
 
@@ -291,5 +291,30 @@ contains
       end if
 
    end subroutine getMSD2
+!----------------------------------------------------------------------------
+   subroutine roll(input_Mloc,nMstart,nMstop,n_r_max,n_order)
+      
+      !-- Input variables
+      integer,     intent(in) :: nMstart
+      integer,     intent(in) :: nMstop
+      integer,     intent(in) :: n_r_max
+      integer,     intent(in) :: n_order
+
+      !-- Input/output variable
+      complex(cp), intent(inout) :: input_Mloc(nMstart:nMstop,n_r_max,n_order)
+
+      !-- Local variables
+      integer :: n_o, n_r, n_m
+
+
+      do n_o=n_order,2,-1
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               input_Mloc(n_m,n_r,n_o)=input_Mloc(n_m,n_r,n_o-1)
+            end do
+         end do
+      end do
+
+   end subroutine roll
 !----------------------------------------------------------------------------
 end module useful

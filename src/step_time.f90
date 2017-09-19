@@ -9,12 +9,12 @@ module step_time
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc,              &
        &                 dVsT_Rloc, dVsT_Mloc, dVsOm_Rloc,       &
        &                 dVsOm_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc, &
-       &                 dpsi_imp_Mloc, dpsi_exp_Mloc
+       &                 dpsi_imp_Mloc, dpsi_exp_Mloc, buo_imp_Mloc
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
-   use update_temperature, only: update_temp
-   use update_psi, only: update_om, get_buo_term
+   use update_temperature, only: update_temp, get_temp_rhs_imp
+   use update_psi, only: update_om, get_psi_rhs_imp
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_start_file,  &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
@@ -46,6 +46,7 @@ contains
       integer :: nPercent
       real(cp) :: tenth_n_time_steps
       character(len=255) :: message
+      character(len=4) :: old_scheme
 
       !-- Courant
       real(cp) :: dtr,dth,dt_new
@@ -67,7 +68,7 @@ contains
       logical :: l_vphi_bal_calc, l_vphi_bal_write
       logical :: l_stop_time
       logical :: lMat
-      logical :: l_complete_rhs
+      logical :: l_roll_imp
 
       tenth_n_time_steps=real(n_time_steps,kind=cp)/10.0_cp
       nPercent = 9
@@ -76,12 +77,12 @@ contains
       l_rst           =.false.
       l_frame         =.false.
       l_spec          =.false.
-      l_complete_rhs  =.false.
       l_log           =.false.
       l_log_next      =.true.
       l_stop_time     =.false.
       l_vphi_bal_calc =.false.
       l_vphi_bal_write=.false.
+      l_roll_imp      =.true.
 
       !-- Dummy initial timings
       dtr_Rloc(:) = 1e10_cp
@@ -233,9 +234,30 @@ contains
             end if
          end if
 
+         !-- If the scheme is not Crank-Nicolson we have to use a different scheme
+         l_roll_imp = .true.
+         if ( .not. l_start_file .and. tscheme%imp_scheme /= 'CN' .and.  &
+              n_time_step == 1 ) then
+            call get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2),&
+                 &                dtemp_imp_Mloc(:,:,2))
+            call get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,        &
+                 &               tscheme%wimp_lin(2), dpsi_imp_Mloc(:,:,2),  &
+                 &               vp_bal, l_vphi_bal_calc)
+            old_scheme        =tscheme%imp_scheme
+            tscheme%imp_scheme='CN'
+            call tscheme%set_weights()
+            !-- Since CN has only two coefficients, one has to set the remainings to zero
+            tscheme%wimp(3:size(tscheme%wimp))=0.0_cp
+            !-- One does not want to roll the implicit part in that case
+            l_roll_imp = .false.
+            tscheme%imp_scheme=old_scheme
+         end if
+
          if ( l_AB1 .and. n_time_step == 1 ) then
             if (rank == 0 ) write(*,*) '! 1st order Adams-Bashforth for 1st time step'
             w1 = one
+            tscheme%wexp(1)=one
+            tscheme%wexp(2:tscheme%norder_exp)=0.0_cp
             l_AB1 = .false.
          end if
 
@@ -243,12 +265,13 @@ contains
          !-- M-loop (update routines)
          !--------------------
          runStart = MPI_Wtime()
-         call get_buo_term(temp_Mloc, tscheme, dpsi_imp_Mloc)
-         call update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,  &
-              &           dtemp_exp_Mloc, dtemp_imp_Mloc, tscheme, lMat)
-         call update_om(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,       &
-              &         temp_Mloc, dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc, &
-              &         vp_bal, tscheme, lMat, l_vphi_bal_calc)
+         call update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
+              &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
+              &           tscheme, lMat, l_roll_imp)
+         call update_om(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,  &
+              &         dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,       &
+              &         buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp,&
+              &         l_vphi_bal_calc)
 
          runStop = MPI_Wtime()
          if ( .not. lMat ) then

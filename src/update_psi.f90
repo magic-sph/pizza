@@ -7,7 +7,7 @@ module update_psi
    use outputs, only: vp_bal_type
    use pre_calculations, only: opr, CorFac
    use namelists, only: kbotv, ktopv, alpha, ra
-   use radial_functions, only: rscheme, or1, or2, rgrav, beta, dbeta, &
+   use radial_functions, only: rscheme, or1, or2, beta, dbeta, &
        &                       ekpump, oheight, r_cmb
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -15,7 +15,7 @@ module update_psi
    use fields, only: work_Mloc
    use algebra, only: cgefa, cgesl, sgefa, rgesl
    use time_scheme, only: type_tscheme
-   use useful, only: abortRun
+   use useful, only: abortRun, roll
 
    implicit none
    
@@ -29,7 +29,8 @@ module update_psi
    complex(cp), allocatable :: rhs(:)
    real(cp), allocatable :: rhs_m0(:)
 
-   public :: update_om, initialize_update_om, finalize_update_om, get_buo_term
+   public :: update_om, initialize_update_om, finalize_update_om, &
+   &         get_psi_rhs_imp
 
 contains
 
@@ -62,14 +63,15 @@ contains
    end subroutine finalize_update_om
 !------------------------------------------------------------------------------
    subroutine update_om(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,    &
-              &         t_Mloc, dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc, &
-              &         vp_bal, tscheme, lMat, l_vphi_bal_calc)
+              &         dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,         &
+              &         buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp,  &
+              &         l_vphi_bal_calc)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
       logical,            intent(in) :: lMat
       logical,            intent(in) :: l_vphi_bal_calc
-      complex(cp),        intent(in) :: t_Mloc(nMstart:nMstop, n_r_max)
+      logical,            intent(in) :: l_roll_imp
 
       !-- Output variables
       complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -80,7 +82,8 @@ contains
       type(vp_bal_type), intent(inout) :: vp_bal
       complex(cp),       intent(inout) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp)
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
@@ -104,9 +107,9 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc, t_Mloc, &
-           &           tscheme, dpsi_imp_Mloc, vp_bal, l_vphi_bal_calc)
-
+      call get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,       &
+           &               tscheme%wimp_lin(2), dpsi_imp_Mloc(:,:,1), &
+           &               vp_bal, l_vphi_bal_calc)
 
       if ( lMat ) lPsimat(:)=.false.
 
@@ -124,7 +127,15 @@ contains
             rhs_m0(1)       = 0.0_cp
             rhs_m0(n_r_max) = 0.0_cp
             do n_r=2,n_r_max-1
-               rhs_m0(n_r)=real(dpsi_imp_Mloc(n_m,n_r),kind=cp)
+               do n_o=1,tscheme%norder_imp-1
+                  if ( n_o == 1 ) then
+                     rhs_m0(n_r)=tscheme%wimp(n_o+1)*&
+                     &           real(dpsi_imp_Mloc(n_m,n_r,n_o),kind=cp)
+                  else
+                     rhs_m0(n_r)=rhs_m0(n_r)+tscheme%wimp(n_o+1)*&
+                     &           real(dpsi_imp_Mloc(n_m,n_r,n_o),kind=cp)
+                  end if
+               end do
                do n_o=1,tscheme%norder_exp
                   rhs_m0(n_r)=rhs_m0(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)*&
                   &           real(dpsi_exp_Mloc(n_m,n_r,n_o),kind=cp)
@@ -158,7 +169,17 @@ contains
             rhs(n_r_max+1)=zero
             rhs(2*n_r_max)=zero
             do n_r=2,n_r_max-1
-               rhs(n_r)=dpsi_imp_Mloc(n_m,n_r)
+               do n_o=1,tscheme%norder_imp-1
+                  if ( n_o == 1 ) then
+                     rhs(n_r)=tscheme%wimp(n_o+1)*dpsi_imp_Mloc(n_m,n_r,n_o)
+                  else
+                     rhs(n_r)=rhs(n_r)+tscheme%wimp(n_o+1)*&
+                     &        dpsi_imp_Mloc(n_m,n_r,n_o)
+                  end if
+               end do
+               do n_o=1,tscheme%norder_imp
+                  rhs(n_r)=rhs(n_r)+tscheme%wimp_buo(n_o)*buo_imp_Mloc(n_m,n_r,n_o)
+               end do
                do n_o=1,tscheme%norder_exp
                   rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)* &
                   &        dpsi_exp_Mloc(n_m,n_r,n_o)
@@ -233,55 +254,29 @@ contains
          end do
       end do
 
-      !-- Roll the explicit array before filling again the first block
-      do n_o=tscheme%norder_exp,2,-1
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               dpsi_exp_Mloc(n_m,n_r,n_o) = dpsi_exp_Mloc(n_m,n_r,n_o-1)
-            end do
-         end do
-      end do
+      !-- Roll the explicit arrays before filling again the first block
+      call roll(dpsi_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
+      if ( l_roll_imp ) then
+         call roll(dpsi_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
+      end if
+      call roll(buo_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp)
 
    end subroutine update_om
 !------------------------------------------------------------------------------
-   subroutine get_buo_term(temp_Mloc, tscheme, dpsi_imp_Mloc)
+   subroutine get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc, &
+              &               wimp, dpsi_imp_Mloc_last, vp_bal,    &
+              &               l_vphi_bal_calc)
 
       !-- Input variables
-      complex(cp),        intent(in) :: temp_Mloc(nMstart:nMstop, n_r_max)
-      type(type_tscheme), intent(in) :: tscheme
-
-      !-- Output variable
-      complex(cp), intent(out) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max)
-
-      !-- Local variables
-      integer :: n_r, n_m, m
-
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-               dpsi_imp_Mloc(n_m,n_r)=-tscheme%wimp(2)*rgrav(n_r)*or1(n_r)* &
-               &                       ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-            end if
-         end do
-      end do
-
-   end subroutine get_buo_term
-!------------------------------------------------------------------------------
-   subroutine get_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc, t_Mloc, &
-              &           tscheme, dpsi_imp_Mloc, vp_bal, l_vphi_bal_calc)
-
-      !-- Input variables
-      complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
-      type(type_tscheme), intent(in) :: tscheme
-      logical,            intent(in) :: l_vphi_bal_calc
+      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
+      real(cp),    intent(in) :: wimp
+      logical,     intent(in) :: l_vphi_bal_calc
 
       !-- Output variables
-      complex(cp),       intent(out) :: dom_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: dom_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: dpsi_imp_Mloc_last(nMstart:nMstop,n_r_max)
       type(vp_bal_type), intent(inout) :: vp_bal
 
       !-- Local variables
@@ -305,9 +300,9 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
-               dpsi_imp_Mloc(n_m,n_r)=      up_Mloc(n_m,n_r)+    &
-               &   tscheme%wimp(2)*(            d2uphi0(n_r)+    &
-               &                       or1(n_r)* duphi0(n_r)-    &
+               dpsi_imp_Mloc_last(n_m,n_r)= up_Mloc(n_m,n_r)+   &
+               &                  wimp*(        d2uphi0(n_r)+   &
+               &                       or1(n_r)* duphi0(n_r)-   &
                &       (or2(n_r)+ekpump(n_r))*    uphi0(n_r) )
 
                if ( l_vphi_bal_calc ) then
@@ -317,24 +312,21 @@ contains
                end if
             else
                dm2 = real(m,cp)*real(m,cp)
-               dpsi_imp_Mloc(n_m,n_r)= dpsi_imp_Mloc(n_m,n_r)+      &
-               &                          om_Mloc(n_m,n_r)          &
-               &     +tscheme%wimp(2)*    (     work_Mloc(n_m,n_r)  &
+               dpsi_imp_Mloc_last(n_m,n_r)=       om_Mloc(n_m,n_r)  &
+               &     +             wimp*  (     work_Mloc(n_m,n_r)  &
                &                   +or1(n_r)*    dom_Mloc(n_m,n_r)  &
                & -(ekpump(n_r)+dm2*or2(n_r))*     om_Mloc(n_m,n_r)  &
                & +half*ekpump(n_r)*beta(n_r)*     up_Mloc(n_m,n_r)  &
                & +( CorFac*beta(n_r) +                              &
                &  ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+            &
                &              5.0_cp*r_cmb*oheight(n_r)) )*         &
-               &                                  us_Mloc(n_m,n_r)  &
-               & -rgrav(n_r)*or1(n_r)*ra*opr*ci*real(m,cp)*         &
-               &                                   t_Mloc(n_m,n_r))
+               &                                  us_Mloc(n_m,n_r))
             end if
          end do
       end do
 
 
-   end subroutine get_rhs_imp
+   end subroutine get_psi_rhs_imp
 !------------------------------------------------------------------------------
    subroutine get_psiMat(tscheme, m, psiMat, psiPivot, psiMat_fac)
 
@@ -408,11 +400,11 @@ contains
 
             psiMat(nR,nR_out)= rscheme%rnorm * (                      &
             &                               rscheme%rMat(nR,nR_out) - &
-            &   tscheme%wimp(1)*(         rscheme%d2rMat(nR,nR_out) + &
+            &   tscheme%wimp_lin(1)*(     rscheme%d2rMat(nR,nR_out) + &
             &          or1(nR)*            rscheme%drMat(nR,nR_out) - &
             &  (ekpump(nR)+dm2*or2(nR))*    rscheme%rMat(nR,nR_out) ) )
 
-            psiMat(nR,nR_out_psi)=-rscheme%rnorm*tscheme%wimp(1)* (   &
+            psiMat(nR,nR_out_psi)=-rscheme%rnorm*tscheme%wimp_lin(1)*(&
             &    -half*ekpump(nR)*beta(nR)*rscheme%drMat(nR,nR_out)+  &
             &        ( CorFac*beta(nR)*or1(nR)*ci*real(m,cp)          &
             &    -half*ekpump(nR)*beta(nR)*beta(nR)                   &
@@ -509,13 +501,12 @@ contains
          end do
       end if
 
-
       !----- Other points:
       do nR_out=1,n_r_max
          do nR=2,n_r_max-1
             uphiMat(nR,nR_out)= rscheme%rnorm * (                     &
             &                               rscheme%rMat(nR,nR_out) - &
-            &tscheme%wimp(1)*(            rscheme%d2rMat(nR,nR_out) + &
+            &tscheme%wimp_lin(1)*(        rscheme%d2rMat(nR,nR_out) + &
             &          or1(nR)*            rscheme%drMat(nR,nR_out) - &
             &   (ekpump(nR)+or2(nR))*       rscheme%rMat(nR,nR_out) ) )
          end do

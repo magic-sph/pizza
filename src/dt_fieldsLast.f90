@@ -21,9 +21,10 @@ module fieldsLast
 
    complex(cp), public, allocatable :: dVsT_Mloc(:,:)
    complex(cp), public, allocatable :: dVsOm_Mloc(:,:)
-   complex(cp), public, allocatable :: dtemp_imp_Mloc(:,:)
+   complex(cp), public, allocatable :: dtemp_imp_Mloc(:,:,:)
    complex(cp), public, allocatable :: dtemp_exp_Mloc(:,:,:)
-   complex(cp), public, allocatable :: dpsi_imp_Mloc(:,:)
+   complex(cp), public, allocatable :: dpsi_imp_Mloc(:,:,:)
+   complex(cp), public, allocatable :: buo_imp_Mloc(:,:,:)
    complex(cp), public, allocatable :: dpsi_exp_Mloc(:,:,:)
    complex(cp), public, allocatable :: dpsidt_Rloc(:,:)
    complex(cp), public, allocatable :: dtempdt_Rloc(:,:)
@@ -34,13 +35,15 @@ module fieldsLast
 
 contains
 
-   subroutine initialize_fieldsLast(norder_exp)
+   subroutine initialize_fieldsLast(norder_exp,norder_imp)
 
       integer, intent(in) :: norder_exp
+      integer, intent(in) :: norder_imp
 
-      allocate( dtemp_imp_Mloc(nMStart:nMstop,n_r_max) )
+      allocate( dtemp_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp-1) )
       allocate( dtemp_exp_Mloc(nMStart:nMstop,n_r_max,norder_exp) )
-      allocate( dpsi_imp_Mloc(nMStart:nMstop,n_r_max) )
+      allocate( dpsi_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp-1) )
+      allocate( buo_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp) )
       allocate( dpsi_exp_Mloc(nMStart:nMstop,n_r_max,norder_exp) )
       allocate( dVsT_Mloc(nMStart:nMstop,n_r_max) )
       allocate( dVsOm_Mloc(nMStart:nMstop,n_r_max) )
@@ -48,9 +51,10 @@ contains
       &                 (4+norder_exp)*(nMstop-nMStart+1)*n_r_max* &
       &                 SIZEOF_DEF_COMPLEX
 
-      dtemp_imp_Mloc(:,:)  =zero
+      dtemp_imp_Mloc(:,:,:)=zero
       dtemp_exp_Mloc(:,:,:)=zero
-      dpsi_imp_Mloc(:,:)   =zero
+      dpsi_imp_Mloc(:,:,:) =zero
+      buo_imp_Mloc(:,:,:)  =zero
       dpsi_exp_Mloc(:,:,:) =zero
       dVsT_Mloc(:,:)       =zero
       dVsOm_Mloc(:,:)      =zero
@@ -74,7 +78,7 @@ contains
       deallocate( dVsOm_Rloc, dVsOm_Mloc )
       deallocate( dVsT_Rloc, dVsT_Mloc )
       deallocate( dtemp_imp_Mloc, dtemp_exp_Mloc )
-      deallocate( dpsi_imp_Mloc, dpsi_exp_Mloc )
+      deallocate( dpsi_imp_Mloc, dpsi_exp_Mloc, buo_imp_Mloc )
       deallocate( dpsidt_Rloc, dtempdt_Rloc )
 
    end subroutine finalize_fieldsLast
