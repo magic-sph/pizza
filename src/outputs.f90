@@ -16,7 +16,7 @@ module outputs
    use constants, only: pi, two, four, surf, vol_otc, one
    use checkpoints, only: write_checkpoint
    use output_frames, only: write_snapshot_mloc
-   use time_scheme, only: type_tscheme
+   use time_schemes, only: type_tscheme
 
    implicit none
 

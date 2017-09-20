@@ -21,7 +21,7 @@ program pizza
    use rloop, only: initialize_radial_loop, finalize_radial_loop
    use update_temperature, only: initialize_update_temp, finalize_update_temp
    use update_psi, only: initialize_update_om, finalize_update_om
-   use time_scheme, only: type_tscheme
+   use time_schemes, only: type_tscheme
    use useful, only: formatTime
 
    implicit none

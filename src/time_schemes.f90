@@ -1,4 +1,4 @@
-module time_scheme
+module time_schemes
 
    use precision_mod
    use parallel_mod
@@ -191,4 +191,4 @@ contains
 
    end subroutine set_dt_array
 !------------------------------------------------------------------------------
-end module time_scheme
+end module time_schemes

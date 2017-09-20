@@ -22,7 +22,7 @@ module step_time
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1
    use outputs, only: n_log_file, write_outputs, vp_bal
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
-   use time_scheme, only: type_tscheme
+   use time_schemes, only: type_tscheme
    use parallel_mod
    use precision_mod
 

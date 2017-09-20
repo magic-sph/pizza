@@ -13,7 +13,7 @@ module update_temperature
    use fields, only: work_Mloc
    use algebra, only: sgefa, sgesl
    use useful, only: abortRun, roll
-   use time_scheme, only: type_tscheme
+   use time_schemes, only: type_tscheme
 
    implicit none
    

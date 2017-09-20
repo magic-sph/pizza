@@ -15,7 +15,7 @@ module checkpoints
    use radial_functions, only: rscheme, r
    use chebyshev, only: type_cheb
    use useful, only: abortRun, polynomial_interpolation
-   use time_scheme, only: type_tscheme
+   use time_schemes, only: type_tscheme
 
    implicit none
 

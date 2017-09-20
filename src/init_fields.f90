@@ -15,7 +15,7 @@ module init_fields
    use radial_der, only: get_dr
    use fourier, only: fft
    use checkpoints, only: read_checkpoint
-   use time_scheme, only: type_tscheme
+   use time_schemes, only: type_tscheme
    use fields
    use fieldsLast
    use precision_mod

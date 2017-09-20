@@ -14,7 +14,7 @@ module update_psi
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
    use algebra, only: cgefa, cgesl, sgefa, rgesl
-   use time_scheme, only: type_tscheme
+   use time_schemes, only: type_tscheme
    use useful, only: abortRun, roll
 
    implicit none
