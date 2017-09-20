@@ -46,7 +46,7 @@ contains
       else if ( index(time_scheme, 'BDF2AB2') /= 0 ) then
          this%time_scheme = 'BDF2AB2'
          this%norder_imp = 3
-         this%norder_exp = 3
+         this%norder_exp = 2
       end if
 
       allocate ( this%dt(this%norder_exp) )

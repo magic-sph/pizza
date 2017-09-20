@@ -59,6 +59,7 @@ contains
       real(cp) :: run_time_m_loop, run_time_m_loop_mat
       real(cp) :: run_time_tot, run_time_io, run_time_passed
       real(cp) :: runStart, runStop, runStartT, runStopT
+      real(cp) :: wimp_old
 
       logical :: l_new_dt
       logical :: l_rst
@@ -220,7 +221,12 @@ contains
 
          call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step, &
               &                    l_new_dt)
+         !-- Store the old weight factor of matrices
+         !-- it it changes because of dt factors moving
+         !-- matrix also needs to be rebuilt
+         wimp_old = tscheme%wimp_lin(1)
          call tscheme%set_weights()
+         if ( tscheme%wimp_lin(1) /= wimp_old ) lMatNext = .true.
 
          !----- Advancing time:
          timeLast=time               ! Time of the previous timestep
@@ -231,7 +237,7 @@ contains
             !----- Calculate matricies for new time step if dt /= dtLast
             lMat=.true.
             if ( rank == 0 ) then
-               write(*,'(1p,/,'' ! Building matricies at time step:'',   &
+               write(*,'(1p,'' ! Building matricies at time step:'',   &
                     &              i8,ES16.6)') n_time_step,time
             end if
          end if
