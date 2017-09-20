@@ -7,6 +7,7 @@
 &control
    tag        ="test",
    l_newmap   =.false.,
+   time_scheme="BDF3AB3",
  n_time_steps =2000,
    dtMax      =5d-4,
    l_non_rot  =.true.,
