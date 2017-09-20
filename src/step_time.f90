@@ -246,19 +246,21 @@ contains
          l_roll_imp = .true.
          lMatNext = .false.
          if ( l_bridge_step .and. tscheme%time_scheme /= 'CNAB2' .and.  &
-              n_time_step == 1 ) then
-            if (rank == 0 ) write(*,*) '! Crank-Nicolson for the 1st time-step'
+              n_time_step <= tscheme%norder_imp-2 ) then
+            if (rank == 0 ) write(*,*) '! Crank-Nicolson for this time-step'
 
             call get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2),&
-                 &                dtemp_imp_Mloc(:,:,2))
+                 &         dtemp_imp_Mloc(:,:,tscheme%norder_imp-n_time_step))
             call get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,        &
-                 &               tscheme%wimp_lin(2), dpsi_imp_Mloc(:,:,2),  &
+                 &               tscheme%wimp_lin(2),                        &
+                 &       dpsi_imp_Mloc(:,:,tscheme%norder_imp-n_time_step),  &
                  &               vp_bal, l_vphi_bal_calc)
             old_scheme         =tscheme%time_scheme
             tscheme%time_scheme='CNAB2'
             call tscheme%set_weights()
             !-- Since CN has only two coefficients, one has to set the remainings to zero
             tscheme%wimp(3:size(tscheme%wimp))=0.0_cp
+            tscheme%wexp(3:size(tscheme%wexp))=0.0_cp
             !-- One does not want to roll the implicit part in that case
             l_roll_imp = .false.
             tscheme%time_scheme=old_scheme

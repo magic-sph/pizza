@@ -47,6 +47,10 @@ contains
          this%time_scheme = 'BDF2AB2'
          this%norder_imp = 3
          this%norder_exp = 2
+      else if ( index(time_scheme, 'BDF3AB3') /= 0 ) then
+         this%time_scheme = 'BDF3AB3'
+         this%norder_imp = 4
+         this%norder_exp = 3
       end if
 
       allocate ( this%dt(this%norder_exp) )
@@ -71,7 +75,8 @@ contains
 
       class(type_tscheme) :: this
 
-      real(cp) :: delta
+      real(cp) :: delta, delta_n, delta_n_1
+      real(cp) :: a0, a1, a2, a3, b0, b1, b2 
 
       select case ( this%time_scheme )
          case ('CNAB2') 
@@ -93,6 +98,35 @@ contains
 
             this%wexp(1)=(one+delta)*(one+delta)*this%dt(1)/(one+two*delta)
             this%wexp(2)=-delta*(one+delta)*this%dt(1)/(one+two*delta)
+         case ('BDF3AB3')
+            delta_n   = this%dt(2)/this%dt(1)
+            delta_n_1 = this%dt(3)/this%dt(1)
+            a0 = one+one/(one+delta_n)+one/(one+delta_n+delta_n_1)
+            a1 = (one+delta_n)*(one+delta_n+delta_n_1)/ &
+            &    (delta_n*(delta_n+delta_n_1))
+            a2 = -(one+delta_n+delta_n_1)/(delta_n*delta_n_1* &
+            &    (one+delta_n))
+            a3 = (one+delta_n)/(delta_n_1*(delta_n+delta_n_1)* &
+            &     (one+delta_n+delta_n_1))
+            b0 = (one+delta_n)*(one+delta_n+delta_n_1)/(delta_n* &
+            &    (delta_n+delta_n_1))
+            b1 = -(one+delta_n+delta_n_1)/(delta_n*delta_n_1)
+            b2 = (one+delta_n)/(delta_n_1*(delta_n+delta_n_1))
+
+            this%wimp_lin(1)=one/a0 * this%dt(1)
+            this%wimp_lin(2)=0.0_cp
+            this%wimp_lin(3)=0.0_cp
+            this%wimp_lin(4)=0.0_cp
+
+            this%wimp(1)=one
+            this%wimp(2)=a1/a0
+            this%wimp(3)=a2/a0
+            this%wimp(4)=a3/a0
+
+            this%wexp(1)=b0/a0 * this%dt(1)
+            this%wexp(2)=b1/a0 * this%dt(1)
+            this%wexp(3)=b2/a0 * this%dt(1)
+
       end select
 
    end subroutine set_weights
