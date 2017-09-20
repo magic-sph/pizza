@@ -291,47 +291,61 @@ contains
       real(cp) :: dm2
       integer :: n_r, n_m, m, m0
 
-      call get_ddr(om_Mloc, dom_Mloc, work_Mloc, nMstart, nMstop, &
-           &       n_r_max, rscheme)
-
-      m0 = m2idx(0)
-
-      if ( l_rank_has_m0 ) then
-         do n_r=1,n_r_max
-            uphi0(n_r)=real(up_Mloc(m0, n_r),kind=cp)
-         end do
-         call get_ddr(uphi0, duphi0, d2uphi0, n_r_max, rscheme)
-      end if
-
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
-               dpsi_imp_Mloc_last(n_m,n_r)= up_Mloc(n_m,n_r)+   &
-               &                  wimp*(        d2uphi0(n_r)+   &
-               &                       or1(n_r)* duphi0(n_r)-   &
-               &       (or2(n_r)+ekpump(n_r))*    uphi0(n_r) )
-
-               if ( l_vphi_bal_calc ) then
-                  vp_bal%visc(n_r)=d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
-                  &                or2(n_r)*uphi0(n_r)
-                  vp_bal%pump(n_r)=-ekpump(n_r)*uphi0(n_r)
-               end if
+               dpsi_imp_Mloc_last(n_m,n_r)=up_Mloc(n_m,n_r)
             else
-               dm2 = real(m,cp)*real(m,cp)
-               dpsi_imp_Mloc_last(n_m,n_r)=       om_Mloc(n_m,n_r)  &
-               &     +             wimp*  (     work_Mloc(n_m,n_r)  &
-               &                   +or1(n_r)*    dom_Mloc(n_m,n_r)  &
-               & -(ekpump(n_r)+dm2*or2(n_r))*     om_Mloc(n_m,n_r)  &
-               & +half*ekpump(n_r)*beta(n_r)*     up_Mloc(n_m,n_r)  &
-               & +( CorFac*beta(n_r) +                              &
-               &  ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+            &
-               &              5.0_cp*r_cmb*oheight(n_r)) )*         &
-               &                                  us_Mloc(n_m,n_r))
+               dpsi_imp_Mloc_last(n_m,n_r)=om_Mloc(n_m,n_r)
             end if
          end do
       end do
 
+      if ( wimp /= 0.0_cp .or. l_vphi_bal_calc ) then
+
+         call get_ddr(om_Mloc, dom_Mloc, work_Mloc, nMstart, nMstop, &
+              &       n_r_max, rscheme)
+
+         m0 = m2idx(0)
+
+         if ( l_rank_has_m0 ) then
+            do n_r=1,n_r_max
+               uphi0(n_r)=real(up_Mloc(m0, n_r),kind=cp)
+            end do
+            call get_ddr(uphi0, duphi0, d2uphi0, n_r_max, rscheme)
+         end if
+
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m == 0 ) then
+                  dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r)+ &
+                  &                     wimp*(     d2uphi0(n_r)+           &
+                  &                       or1(n_r)* duphi0(n_r)-           &
+                  &       (or2(n_r)+ekpump(n_r))*    uphi0(n_r) )
+
+                  if ( l_vphi_bal_calc ) then
+                     vp_bal%visc(n_r)=d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
+                     &                or2(n_r)*uphi0(n_r)
+                     vp_bal%pump(n_r)=-ekpump(n_r)*uphi0(n_r)
+                  end if
+               else
+                  dm2 = real(m,cp)*real(m,cp)
+                  dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r)&
+                  &     +             wimp*  (     work_Mloc(n_m,n_r)    &
+                  &                   +or1(n_r)*    dom_Mloc(n_m,n_r)    &
+                  & -(ekpump(n_r)+dm2*or2(n_r))*     om_Mloc(n_m,n_r)    &
+                  & +half*ekpump(n_r)*beta(n_r)*     up_Mloc(n_m,n_r)    &
+                  & +( CorFac*beta(n_r) +                                &
+                  &  ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+              &
+                  &              5.0_cp*r_cmb*oheight(n_r)) )*           &
+                  &                                  us_Mloc(n_m,n_r))
+               end if
+            end do
+         end do
+
+      end if ! if wimp /= .or. l_vphi_bal_calc
 
    end subroutine get_psi_rhs_imp
 !------------------------------------------------------------------------------

@@ -214,19 +214,28 @@ contains
       integer :: n_r, n_m, m
       real(cp) :: dm2
 
-      call get_ddr(temp_Mloc, dtemp_Mloc, work_Mloc, nMstart, nMstop, &
-           &       n_r_max, rscheme)
-
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            dm2 = real(m,cp)*real(m,cp)
-            dtemp_imp_Mloc_last(n_m,n_r)=          temp_Mloc(n_m,n_r) &
-            &                          +wimp*opr*( work_Mloc(n_m,n_r) &
-            &                         +or1(n_r)*  dtemp_Mloc(n_m,n_r) &
-            &                     -dm2*or2(n_r)*   temp_Mloc(n_m,n_r) )
+            dtemp_imp_Mloc_last(n_m,n_r)=temp_Mloc(n_m,n_r)
          end do
       end do
+
+      if ( wimp /= 0.0_cp ) then
+
+         call get_ddr(temp_Mloc, dtemp_Mloc, work_Mloc, nMstart, nMstop, &
+              &       n_r_max, rscheme)
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               dm2 = real(m,cp)*real(m,cp)
+               dtemp_imp_Mloc_last(n_m,n_r)=dtemp_imp_Mloc_last(n_m,n_r) &
+               &                          +wimp*opr*( work_Mloc(n_m,n_r) &
+               &                         +or1(n_r)*  dtemp_Mloc(n_m,n_r) &
+               &                     -dm2*or2(n_r)*   temp_Mloc(n_m,n_r) )
+            end do
+         end do
+
+      end if
 
    end subroutine get_temp_rhs_imp
 !------------------------------------------------------------------------------
