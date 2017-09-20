@@ -10,8 +10,7 @@ program pizza
    use fieldsLast, only: initialize_fieldsLast, finalize_fieldsLast
    use communications, only: initialize_communications, finalize_communications
    use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains
-   use namelists, only: read_namelists, write_namelists, tag, imp_scheme, &
-       &                exp_scheme
+   use namelists, only: read_namelists, write_namelists, tag, time_scheme
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use radial_functions, only: initialize_radial_functions, &
@@ -67,7 +66,7 @@ program pizza
    call initialize_outputs()
 
    !-- Initialize time scheme
-   call tscheme%initialize(imp_scheme, exp_scheme)
+   call tscheme%initialize(time_scheme)
 
    !-- Initialize MPI communicators
    call initialize_communications()
@@ -150,6 +149,7 @@ program pizza
    call finalize_communications()
    call destroy_mpi_domains()
    call finalize_outputs()
+   call tscheme%finalize()
    call finalize_truncation()
 
    !-- Initialize MPI

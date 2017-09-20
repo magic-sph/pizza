@@ -306,7 +306,6 @@ contains
       !-- Local variables
       integer :: n_o, n_r, n_m
 
-
       do n_o=n_order,2,-1
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop

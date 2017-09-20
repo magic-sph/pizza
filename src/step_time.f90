@@ -46,7 +46,7 @@ contains
       integer :: nPercent
       real(cp) :: tenth_n_time_steps
       character(len=255) :: message
-      character(len=4) :: old_scheme
+      character(len=8) :: old_scheme
 
       !-- Courant
       real(cp) :: dtr,dth,dt_new
@@ -239,7 +239,7 @@ contains
          !-- If the scheme is not Crank-Nicolson we have to use a different scheme
          l_roll_imp = .true.
          lMatNext = .false.
-         if ( l_bridge_step .and. tscheme%imp_scheme /= 'CN' .and.  &
+         if ( l_bridge_step .and. tscheme%time_scheme /= 'CNAB2' .and.  &
               n_time_step == 1 ) then
             if (rank == 0 ) write(*,*) '! Crank-Nicolson for the 1st time-step'
 
@@ -248,14 +248,14 @@ contains
             call get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,        &
                  &               tscheme%wimp_lin(2), dpsi_imp_Mloc(:,:,2),  &
                  &               vp_bal, l_vphi_bal_calc)
-            old_scheme        =tscheme%imp_scheme
-            tscheme%imp_scheme='CN'
+            old_scheme         =tscheme%time_scheme
+            tscheme%time_scheme='CNAB2'
             call tscheme%set_weights()
             !-- Since CN has only two coefficients, one has to set the remainings to zero
             tscheme%wimp(3:size(tscheme%wimp))=0.0_cp
             !-- One does not want to roll the implicit part in that case
             l_roll_imp = .false.
-            tscheme%imp_scheme=old_scheme
+            tscheme%time_scheme=old_scheme
             lMatNext = .true.
          end if
 

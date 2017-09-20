@@ -15,8 +15,7 @@ module time_scheme
    type, public :: type_tscheme
       integer :: norder_exp
       integer :: norder_imp
-      character(len=4) :: imp_scheme
-      character(len=4) :: exp_scheme
+      character(len=8) :: time_scheme
       real(cp), allocatable :: dt(:)
       real(cp), allocatable :: wimp(:)
       real(cp), allocatable :: wimp_lin(:)
@@ -31,32 +30,24 @@ module time_scheme
 
 contains
 
-   subroutine initialize(this, imp_scheme, exp_scheme)
+   subroutine initialize(this, time_scheme)
 
       class(type_tscheme) :: this
 
       !-- Input/output variables
-      character(len=72), intent(inout) :: imp_scheme
-      character(len=72), intent(inout) :: exp_scheme
+      character(len=72), intent(inout) :: time_scheme
 
-      call capitalize(imp_scheme)
+      call capitalize(time_scheme)
 
-      if ( index(imp_scheme, 'CN') /= 0 ) then
-         this%imp_scheme = 'CN'
+      if ( index(time_scheme, 'CNAB2') /= 0 ) then
+         this%time_scheme = 'CNAB2'
          this%norder_imp = 2
-      else if ( index(imp_scheme, 'BDF2') /= 0 ) then
-         this%imp_scheme = 'BDF2'
-         this%norder_imp = 3
-      end if
-
-      if ( index(exp_scheme, 'AB2') /= 0 ) then
-         this%exp_scheme = 'AB2'
          this%norder_exp = 2
-      else if ( index(exp_scheme, 'AB3') /= 0 ) then
-         this%exp_scheme = 'AB3'
+      else if ( index(time_scheme, 'BDF2AB2') /= 0 ) then
+         this%time_scheme = 'BDF2AB2'
+         this%norder_imp = 3
          this%norder_exp = 3
       end if
-
 
       allocate ( this%dt(this%norder_exp) )
       allocate ( this%wimp(this%norder_imp) )
@@ -82,19 +73,16 @@ contains
 
       real(cp) :: delta
 
-      select case ( this%imp_scheme )
-         case ('CN') 
+      select case ( this%time_scheme )
+         case ('CNAB2') 
             this%wimp(1)    =one
             this%wimp(2)    =one
             this%wimp_lin(1)=alpha*this%dt(1)
             this%wimp_lin(2)=(1-alpha)*this%dt(1)
 
-            select case ( this%exp_scheme )
-               case ('AB2')
-               this%wexp(2)=-half*this%dt(1)/this%dt(2)
-               this%wexp(1)=one-this%wexp(2)
-            end select
-         case ('BDF2')
+            this%wexp(2)=-half*this%dt(1)/this%dt(2)
+            this%wexp(1)=one-this%wexp(2)
+         case ('BDF2AB2')
             delta = this%dt(1)/this%dt(2)
             this%wimp_lin(1)=(one+delta)/(one+two*delta)*this%dt(1)
             this%wimp_lin(2)=0.0_cp
@@ -102,11 +90,9 @@ contains
             this%wimp(1)=one
             this%wimp(2)=(one+delta)*(one+delta)/(one+two*delta)
             this%wimp(3)=-delta*delta/(one+two*delta)
-            select case ( this%exp_scheme )
-               case ('AB2')
-                  this%wexp(1)=(one+delta)*(one+delta)/(one+two*delta)
-                  this%wexp(2)=-delta*(one+delta)/(one+two*delta)
-            end select
+
+            this%wexp(1)=(one+delta)*(one+delta)/(one+two*delta)
+            this%wexp(2)=-delta*(one+delta)/(one+two*delta)
       end select
 
    end subroutine set_weights
