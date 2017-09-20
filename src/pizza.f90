@@ -14,7 +14,7 @@ program pizza
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use radial_functions, only: initialize_radial_functions, &
-       &                       finalize_radial_functions
+       &                       finalize_radial_functions, test_radial_der
    use truncation, only: initialize_truncation, n_r_max, n_phi_max, & 
        &                 finalize_truncation
    use fourier, only: initialize_fourier, finalize_fourier
@@ -61,6 +61,9 @@ program pizza
 
    !-- Set the domain decomposition
    call set_mpi_domains()
+
+   !-- Test radial derivatives
+   !call test_radial_der(nMstart,nMstop)
 
    !-- Open output files
    call initialize_outputs()

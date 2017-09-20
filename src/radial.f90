@@ -44,7 +44,8 @@ module radial_functions
    !-- Radial scheme
    class(type_rscheme), public, pointer :: rscheme
  
-   public :: initialize_radial_functions, radial, finalize_radial_functions
+   public :: initialize_radial_functions, radial, finalize_radial_functions, &
+   &         test_radial_der
 
 contains
 
@@ -75,6 +76,100 @@ contains
       call rscheme%initialize(n_r_max,n_in,n_in_2)
 
    end subroutine initialize_radial_functions
+!------------------------------------------------------------------------------
+   subroutine test_radial_der(nMstart, nMstop)
+
+      use radial_der, only: get_ddr, initialize_der_arrays, finalize_der_arrays
+
+      !-- Input variables
+      integer, intent(in) :: nMstart
+      integer, intent(in) :: nMstop
+
+      !-- Local variables
+      integer, allocatable :: nrs(:)
+      integer :: n_r, n_r_max_loc, n_in
+      real(cp), allocatable :: r_loc(:), f(:)
+      real(cp), allocatable :: df_num(:), d2f_num(:)
+      real(cp), allocatable :: df_theo(:), d2f_theo(:)
+      real(cp) :: r_cmb, r_icb, err_d1, err_d2
+      integer :: file_handle
+      real(cp) :: eps, amp
+
+      eps = epsilon(1.0_cp)
+
+      if ( l_newmap ) then
+         n_in = 1
+      else
+         n_in = 0
+      end if
+
+      if ( rank == 0 ) then
+         allocate ( type_cheb :: rscheme )
+         r_cmb=one/(one-radratio)
+         r_icb=r_cmb-one
+         nrs = [6, 8, 12, 16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,   &
+         &      144, 160, 180, 200, 220, 256, 320, 400, 512, 640, 768, 1024, &
+         &      1536,  2048]
+         if ( l_newmap ) then
+            open( newunit=file_handle, file='error_drMat_map')
+         else
+            open( newunit=file_handle, file='error_drMat')
+         end if
+
+         do n_r=1,size(nrs)
+            n_r_max_loc = nrs(n_r)
+            allocate( r_loc(n_r_max_loc), f(n_r_max_loc) )
+            allocate( df_num(n_r_max_loc), d2f_num(n_r_max_loc) )
+            allocate( df_theo(n_r_max_loc), d2f_theo(n_r_max_loc) )
+            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in)
+            if ( l_newmap ) then
+               alph1=1.0_cp/cosh(abs(log(eps))/(n_r_max_loc-1))
+               alph2=0.0_cp
+            else
+               alph1=0.0_cp
+               alph2=0.0_cp
+            end if
+            call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
+            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
+            call rscheme%get_der_mat(n_r_max_loc)
+
+            !-- Define a function and its analytical derivatives
+            f(:) = sqrt(r_loc(:))
+            df_theo(:) = 0.5_cp/sqrt(r_loc(:))
+            d2f_theo(:) = -0.25_cp/r_loc(:)**(1.5_cp)
+
+            !amp = 50.0_cp
+            !f(:) = tanh(amp*(r_loc(:)-r_icb))*tanh(amp*(r_cmb-r_loc(:)))
+            !df_theo(:)= amp*((1.0_cp-(tanh(amp*(r_loc(:)-r_icb)))**2.0_cp)*   &
+            !&           tanh(amp*(r_cmb-r_loc(:)))-tanh(amp*(r_loc(:)-r_icb))*&
+            !&           (1.0_cp-(tanh(amp*(r_cmb-r_loc(:))))**2.0_cp))
+            !d2f_theo(:)=amp*amp*(-2.0_cp*tanh(amp*(r_loc(:)-r_icb))*    &
+            !&           (1.0_cp-(tanh(amp*(r_loc(:)-r_icb)))**2.0_cp)*  &
+            !&           tanh(amp*(r_cmb-r_loc(:)))-                     &
+            !&           2.0_cp*tanh(amp*(r_loc(:)-r_icb))*              &
+            !&           tanh(amp*(r_cmb-r_loc(:)))*                     &
+            !&           (1.0_cp-(tanh(amp*(r_cmb-r_loc(:))))**2.0_cp))
+
+            !-- Get the derivatives numerically
+            call get_ddr(f, df_num, d2f_num, n_r_max_loc, rscheme)
+            err_d1 = maxval(abs(df_num(:)-df_theo(:)))
+            err_d2 = maxval(abs(d2f_num(:)-d2f_theo(:)))
+
+            !-- Store it in a file
+            write(file_handle, '(i5,2es20.12)') n_r_max_loc, err_d1, err_d2
+            write(6, '(i5,2es20.12)') n_r_max_loc, err_d1, err_d2
+
+            call finalize_der_arrays()
+            call rscheme%finalize()
+            deallocate( r_loc, f, df_theo, d2f_theo, df_num, d2f_num )
+         end do
+
+         close(file_handle)
+      end if
+
+      stop
+
+   end subroutine test_radial_der
 !------------------------------------------------------------------------------
    subroutine finalize_radial_functions
 
