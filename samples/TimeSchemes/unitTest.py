@@ -9,6 +9,7 @@ import subprocess as sp
 
 def cleanDir(dir):
     for f in glob.glob('%s/*.test' % dir):
+        os.remove(f)
     if os.path.exists('%s/stdout.out' % dir):
         os.remove('%s/stdout.out' % dir)
     for f in glob.glob('%s/*.pyc' % dir):
