@@ -58,6 +58,11 @@ contains
       allocate ( this%wimp_lin(this%norder_imp) )
       allocate ( this%wexp(this%norder_exp) )
 
+      this%dt(:)       = 0.0_cp
+      this%wimp(:)     = 0.0_cp
+      this%wimp_lin(:) = 0.0_cp
+      this%wexp(:)     = 0.0_cp
+
       bytes_allocated = bytes_allocated+(2*this%norder_exp+2*this%norder_imp)* &
       &                 SIZEOF_DEF_REAL
 

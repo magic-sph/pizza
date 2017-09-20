@@ -206,6 +206,7 @@ contains
             dt_array_old(:)=0.0_cp
             read(n_start_file) dt_array_old(1:norder_exp_old)
          end if
+         dt_array_old(norder_exp_old:tscheme%norder_exp)=dt_array_old(norder_exp_old)
          read(n_start_file) ra_old,pr_old,raxi_old,sc_old,ek_old,radratio_old
          read(n_start_file) n_r_max_old,m_max_old,minc_old
 
