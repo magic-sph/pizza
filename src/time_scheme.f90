@@ -80,8 +80,8 @@ contains
             this%wimp_lin(1)=alpha*this%dt(1)
             this%wimp_lin(2)=(1-alpha)*this%dt(1)
 
-            this%wexp(2)=-half*this%dt(1)/this%dt(2)
-            this%wexp(1)=one-this%wexp(2)
+            this%wexp(1)=(one+half*this%dt(1)/this%dt(2))*this%dt(1)
+            this%wexp(2)=-half*this%dt(1)*this%dt(1)/this%dt(2)
          case ('BDF2AB2')
             delta = this%dt(1)/this%dt(2)
             this%wimp_lin(1)=(one+delta)/(one+two*delta)*this%dt(1)
@@ -91,8 +91,8 @@ contains
             this%wimp(2)=(one+delta)*(one+delta)/(one+two*delta)
             this%wimp(3)=-delta*delta/(one+two*delta)
 
-            this%wexp(1)=(one+delta)*(one+delta)/(one+two*delta)
-            this%wexp(2)=-delta*(one+delta)/(one+two*delta)
+            this%wexp(1)=(one+delta)*(one+delta)*this%dt(1)/(one+two*delta)
+            this%wexp(2)=-delta*(one+delta)*this%dt(1)/(one+two*delta)
       end select
 
    end subroutine set_weights

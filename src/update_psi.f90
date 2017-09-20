@@ -142,7 +142,7 @@ contains
                   end if
                end do
                do n_o=1,tscheme%norder_exp
-                  rhs_m0(n_r)=rhs_m0(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)*&
+                  rhs_m0(n_r)=rhs_m0(n_r)+tscheme%wexp(n_o)*         &
                   &           real(dpsi_exp_Mloc(n_m,n_r,n_o),kind=cp)
                end do
             end do
@@ -183,8 +183,7 @@ contains
                   end if
                end do
                do n_o=1,tscheme%norder_exp
-                  rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)* &
-                  &        dpsi_exp_Mloc(n_m,n_r,n_o)
+                  rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*dpsi_exp_Mloc(n_m,n_r,n_o)
                end do
                !-- Add buoyancy
                rhs(n_r)=rhs(n_r)+buo_imp_Mloc(n_m,n_r)

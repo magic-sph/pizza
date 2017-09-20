@@ -143,8 +143,7 @@ contains
                end if
             end do
             do n_o=1,tscheme%norder_exp
-               rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*tscheme%dt(1)* &
-               &        dtemp_exp_Mloc(n_m,n_r,n_o)
+               rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*dtemp_exp_Mloc(n_m,n_r,n_o)
             end do
          end do
 
