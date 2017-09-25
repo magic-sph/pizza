@@ -14,7 +14,7 @@ program pizza
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use radial_functions, only: initialize_radial_functions, &
-       &                       finalize_radial_functions, test_radial_der
+       &                       finalize_radial_functions
    use truncation, only: initialize_truncation, n_r_max, n_phi_max, & 
        &                 finalize_truncation
    use fourier, only: initialize_fourier, finalize_fourier
@@ -23,6 +23,7 @@ program pizza
    use update_psi, only: initialize_update_om, finalize_update_om
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
+   use tests, only: solve_laplacian_collocation, test_radial_der
 
    implicit none
 
@@ -63,6 +64,7 @@ program pizza
    call set_mpi_domains()
 
    !-- Test radial derivatives
+   !call solve_laplacian_collocation(nMstart, nMstop)
    !call test_radial_der(nMstart,nMstop)
 
    !-- Open output files
