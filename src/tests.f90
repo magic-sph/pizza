@@ -2,10 +2,9 @@ module tests
    !
    ! This module contains several testing subroutines
    !
-
    use precision_mod
    use parallel_mod
-   use constants, only: one
+   use constants, only: one, half
    use namelists, only: l_newmap, radratio
    use chebyshev, only: type_cheb
    use radial_functions, only: rscheme
@@ -13,6 +12,10 @@ module tests
    use radial_scheme, only: type_rscheme
    use algebra, only: sgefa, rgesl
    use useful, only: abortRun
+
+   implicit none
+
+   private
 
    public :: solve_laplacian_collocation, test_radial_der
 
@@ -27,7 +30,7 @@ contains
       !-- Local variables
       integer, allocatable :: nrs(:)
       real(cp), allocatable :: r_loc(:), sol(:), sol_theo(:)
-      integer :: file_handle, n_r_max_loc, n_in
+      integer :: file_handle, n_r_max_loc, n_in, n_r
       real(cp) :: r_cmb, r_icb, eps, alph1, alph2, c1, c2, err
 
       eps = epsilon(1.0_cp)
@@ -41,7 +44,7 @@ contains
          allocate ( type_cheb :: rscheme )
          r_cmb=one/(one-radratio)
          r_icb=r_cmb-one
-         nrs = [6, 8, 12, 16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,   &
+         nrs = [10, 12, 16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,   &
          &      144, 160, 180, 200, 220, 256, 320, 400, 512, 640, 768, 1024, &
          &      1536,  2048]
          if ( l_newmap ) then
@@ -74,6 +77,9 @@ contains
 
             call assemble_and_solve_lap(n_r_max_loc, r_loc, rscheme, sol)
 
+            call solve_lap_integ(n_r_max_loc, r_loc, rscheme, sol)
+
+
             err = maxval(abs(sol(:)-sol_theo(:)))
 
             !-- Store it in a file
@@ -92,6 +98,60 @@ contains
       end if
 
    end subroutine solve_laplacian_collocation
+!------------------------------------------------------------------------------
+   subroutine solve_lap_integ(n_r_max, r, rscheme, rhs)
+
+      !-- Input variables
+      integer,             intent(in) :: n_r_max
+      real(cp),            intent(in) :: r(n_r_max)
+      class(type_rscheme), intent(in) :: rscheme
+
+      !-- Output variable
+      real(cp),            intent(out) :: rhs(n_r_max)
+
+      !-- Local variables
+      real(cp), allocatable :: mat(:,:), Bmat(:,:)
+      integer, allocatable :: pivot(:)
+      real(cp) :: a, b
+      integer :: info, n_band, n_r
+
+      allocate ( Bmat(7, n_r_max) )
+      Bmat(:,:)=0.0_cp
+      rhs(:)       = 3.0_cp
+      rhs(1)       = -0.25_cp
+      rhs(n_r_max) = 0.75_cp
+      call rscheme%costf1(rhs, n_r_max)
+      
+      a = half*(r(1)-r(n_r_max))
+      b = half*(r(1)+r(n_r_max))
+
+      do n_r=1,n_r_max
+         if ( n_r > 2 .and. n_r < n_r_max-2 ) Bmat(1,n_r+3)= a**3/8.0_cp/n_r/(n_r-1)
+         if ( n_r > 2 .and. n_r < n_r_max-1 ) Bmat(2,n_r+2)= a**2*b/4.0_cp/n_r/(n_r-1)
+         if ( n_r > 2 .and. n_r < n_r_max ) Bmat(3,n_r+1)= -a**3/8.0_cp/(n_r-1)/(n_r-2)
+         if ( n_r > 2 ) Bmat(4,n_r)= -a**2*b/2.0_cp/(n_r)/(n_r-2)
+         if ( n_r > 2 ) Bmat(5,n_r-1)= -a**3/8.0_cp/(n_r)/(n_r-1)
+         if ( n_r > 2 ) Bmat(6,n_r-2)= a**2*b/4.0_cp/(n_r-1)/(n_r-2)
+         if ( n_r > 3 ) Bmat(7,n_r-3)= a**3/8.0_cp/(n_r-1)/(n_r-2)
+      end do
+
+      do n_r=1,n_r_max
+         do n_band=1,7
+            Bmat(n_band,n_r)=rscheme%rnorm*Bmat(n_band,n_r)
+         end do
+      end do
+
+      print*, Bmat(1,:)/2.
+      print*, Bmat(2,:)/2.
+      print*, Bmat(3,:)/2.
+      print*, Bmat(4,:)/2.
+      print*, Bmat(5,:)/2.
+      print*, Bmat(6,:)/2.
+      print*, Bmat(7,:)/2.
+
+      stop
+
+   end subroutine solve_lap_integ
 !------------------------------------------------------------------------------
    subroutine assemble_and_solve_lap(n_r_max, r, rscheme, rhs)
 
@@ -118,13 +178,6 @@ contains
       rhs(:)       = 3.0_cp
       rhs(1)       = -0.25_cp
       rhs(n_r_max) = 0.75_cp
-
-      !if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
-      !   do nR_out=rscheme%n_max+1,n_r_max
-      !      mat(1,nR_out)      =0.0_cp
-      !      mat(n_r_max,nR_out)=0.0_cp
-      !   end do
-      !end if
 
       !----- Other points:
       do nR_out=1,n_r_max
