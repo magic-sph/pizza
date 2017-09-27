@@ -122,19 +122,26 @@ contains
       real(cp), allocatable :: tmp(:)
       real(cp), allocatable :: Bmat(:,:), A4mat(:,:)
       real(cp), allocatable :: A1mat(:,:), A2mat(:,:), A3mat(:,:)
-      integer :: pivotA1(2)
-      integer, allocatable :: pivotA4(:)
+      integer, allocatable :: pivotA1(:), pivotA4(:)
       real(cp) :: a, b
-      integer :: n_band, n_r, n_bands_Bmat, n_bands_Amat
+      integer :: i_r, klA4, kuA4, klB, kuB, nStart
+      integer :: n_band, n_r, n_bands_Bmat, n_bands_Amat, n_boundaries, lenA4
 
-      n_bands_Bmat = 7
-      !n_bands_Amat = 3
-      n_bands_Amat = 4
+      klA4 = 1
+      kuA4 = 1
+      klB  = 3
+      kuB  = 3
+      n_bands_Bmat = klB+kuB+1
+      !-- Factor 2 in front of klA4 is needed for LU factorisation
+      n_bands_Amat = 2*klA4+kuA4+1
+      n_boundaries = 2
+      lenA4 = n_r_max-n_boundaries
 
-      allocate ( A4mat(n_bands_Amat, n_r_max-2) )
-      allocate ( A1mat(2,2), A2mat(2,n_r_max-2), A3mat(n_r_max-2, 2) )
+      allocate ( A4mat(n_bands_Amat, lenA4) )
+      allocate ( A1mat(n_boundaries,n_boundaries), A2mat(n_boundaries,lenA4) )
+      allocate ( A3mat(lenA4, n_boundaries) )
       allocate ( Bmat(n_bands_Bmat, n_r_max) )
-      allocate ( tmp(n_r_max), pivotA4(n_r_max) )
+      allocate ( tmp(n_r_max), pivotA1(n_boundaries), pivotA4(lenA4) )
       
       !-- Set the matrices to zero
       A1mat(:,:)=0.0_cp
@@ -146,37 +153,41 @@ contains
       a = half*(r(1)-r(n_r_max))
       b = half*(r(1)+r(n_r_max))
 
-      do n_r=1,n_r_max
-         if ( n_r > 2 .and. n_r < n_r_max-2 ) Bmat(1,n_r+3)= a**3/8.0_cp/n_r/(n_r-1)
-         if ( n_r > 2 .and. n_r < n_r_max-1 ) Bmat(2,n_r+2)= a**2*b/4.0_cp/n_r/(n_r-1)
-         if ( n_r > 2 .and. n_r < n_r_max ) then
-            Bmat(3,n_r+1)= -a**3/8.0_cp/(n_r-1)/(n_r-2)
-            A4mat(2,n_r-1)= half*a*(one+one/(n_r-1))
-         end if
-         if ( n_r > 2 ) then
-            Bmat(4,n_r)= -a**2*b/2.0_cp/(n_r)/(n_r-2)
-            A4mat(3,n_r-2)= b
-         end if
-         if ( n_r > 2 ) Bmat(5,n_r-1)= -a**3/8.0_cp/(n_r)/(n_r-1)
-         if ( n_r > 3 ) A4mat(4,n_r-3)= half*a*(one-one/(n_r-1))
-         if ( n_r > 2 ) Bmat(6,n_r-2)= a**2*b/4.0_cp/(n_r-1)/(n_r-2)
-         if ( n_r > 3 ) Bmat(7,n_r-3)= a**3/8.0_cp/(n_r-1)/(n_r-2)
+      !-- Fill A4 banded-block
+      do n_r=1,lenA4
+         i_r = n_r+n_boundaries
+         if ( n_r < lenA4 ) A4mat(klA4+1,n_r+1)= half*a*(one+one/(i_r-1))
+         A4mat(klA4+2,n_r)= b
+         if ( n_r > 1 ) A4mat(klA4+3,n_r-1)= half*a*(one-one/(i_r-1))
       end do
+
+      !-- Fill A3
       A3mat(1,2)=0.25_cp*rscheme%rnorm*a
 
+      !-- Fill right-hand side matrix
+      do n_r=1,lenA4
+         i_r = n_r+n_boundaries
+         if ( i_r < n_r_max-2 ) Bmat(1,i_r+3)= a**3/8.0_cp/i_r/(i_r-1)
+         if ( i_r < n_r_max-1 ) Bmat(2,i_r+2)= a**2*b/4.0_cp/i_r/(i_r-1)
+         if ( i_r < n_r_max ) Bmat(3,i_r+1)= -a**3/8.0_cp/(i_r-1)/(i_r-2)
+         Bmat(4,i_r)= -a**2*b/2.0_cp/(i_r)/(i_r-2)
+         if ( i_r > 1 ) Bmat(5,i_r-1)= -a**3/8.0_cp/(i_r)/(i_r-1)
+         if ( i_r > 2 ) Bmat(6,i_r-2)= a**2*b/4.0_cp/(i_r-1)/(i_r-2)
+         if ( i_r > 3 ) Bmat(7,i_r-3)= a**3/8.0_cp/(i_r-1)/(i_r-2)
+      end do
 
+      do n_r=1,lenA4
+         do n_band=1,n_bands_Amat
+            A4mat(n_band,n_r)=rscheme%rnorm*A4mat(n_band,n_r)
+         end do
+      end do
       do n_r=1,n_r_max
          do n_band=1,n_bands_Bmat
             Bmat(n_band,n_r)=rscheme%rnorm*Bmat(n_band,n_r)
          end do
       end do
-      do n_r=1,n_r_max-2
-         do n_band=1,n_bands_Amat
-            A4mat(n_band,n_r)=rscheme%rnorm*A4mat(n_band,n_r)
-         end do
-      end do
 
-      !-- Add the tau Lines for boundary conditions
+      !-- Add the tau Lines for boundary conditions into A1 and A2
       do n_r=1,n_r_max
          if ( n_r <= 2) then
             A1mat(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
@@ -186,16 +197,17 @@ contains
             A2mat(2,n_r-2)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
          end if
       end do
-      A1mat(1,1)=rscheme%boundary_fac*A1mat(1,1)
-      A1mat(2,1)=rscheme%boundary_fac*A1mat(2,1)
+      A1mat(1,1)        =rscheme%boundary_fac*A1mat(1,1)
+      A1mat(2,1)        =rscheme%boundary_fac*A1mat(2,1)
       A2mat(1,n_r_max-2)=rscheme%boundary_fac*A2mat(1,n_r_max-2)
       A2mat(2,n_r_max-2)=rscheme%boundary_fac*A2mat(2,n_r_max-2)
 
       !-- Assemble right-hand side
       tmp(:)       = 3.0_cp
       call rscheme%costf1(tmp, n_r_max)
-      call dgbmv('N', n_r_max, n_r_max, 3, 3, one, Bmat, n_bands_Bmat, tmp, &
-           &     1, 0.0_cp, rhs, 1)
+      nStart = n_boundaries+1
+      call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
+           &     tmp, 1, 0.0_cp, rhs, 1)
       !-- Boundary conditions
       rhs(1) = -0.25_cp
       rhs(2) = 0.75_cp
