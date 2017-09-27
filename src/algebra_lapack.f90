@@ -1,12 +1,14 @@
 module algebra
 
    use precision_mod, only: cp
+   use constants, only: one
 
    implicit none
 
    private
 
-   public :: cgefa, sgefa, sgesl, cgesl, rgesl
+   public :: cgefa, sgefa, sgesl, cgesl, rgesl, prepare_bordered_mat, &
+   &         solve_bordered_mat
 
 contains
 
@@ -140,5 +142,85 @@ contains
 #endif
 
    end subroutine cgefa
+!-----------------------------------------------------------------------------
+   subroutine prepare_bordered_mat(A1,A2,A3,A4,n_boundaries,lenA4,kl,ku, &
+              &                    pivotA1, pivotA4)
+
+      !-- Input variables
+      integer, intent(in) :: n_boundaries
+      integer, intent(in) :: lenA4
+      integer, intent(in) :: kl
+      integer, intent(in) :: ku
+
+      !-- Output variables
+      real(cp), intent(inout) :: A1(n_boundaries,n_boundaries)
+      real(cp), intent(inout) :: A2(n_boundaries,lenA4)
+      real(cp), intent(inout) :: A3(lenA4,n_boundaries)
+      real(cp), intent(inout) :: A4(2*kl+ku+1,lenA4)
+      integer,  intent(out)   :: pivotA1(n_boundaries)
+      integer,  intent(out)   :: pivotA4(lenA4)
+
+      !-- Local variables
+      integer :: n_bands_A4, info
+
+      n_bands_A4 = 2*kl+ku+1
+
+      !-- LU factorisation for the banded block
+      call dgbtrf(lenA4, lenA4, kl, ku, A4, n_bands_A4, pivotA4, &
+           &      info)
+      !-- Solve A4*v = A3 (on output v = A3
+      call dgbtrs('N', lenA4, kl, ku, n_boundaries, A4, n_bands_A4, pivotA4, &
+           &      A3, lenA4, info)
+
+      !-- Assemble A1 <- A1-A2*v
+      call dgemm('N', 'N', n_boundaries, n_boundaries, lenA4, -one, A2,  &
+           &     n_boundaries, A3, lenA4, one, A1,  n_boundaries)
+      !-- LU factorisation of the small A1 matrix
+      call dgetrf(n_boundaries, n_boundaries, A1, n_boundaries, pivotA1, info)
+
+   end subroutine prepare_bordered_mat
+!-----------------------------------------------------------------------------
+   subroutine solve_bordered_mat(A1, A2, A3, A4, n_boundaries, lenA4, kl, &
+              &                  ku, pivotA1, pivotA4, rhs, lenRhs)
+
+      !-- Input variables
+      integer,  intent(in) :: n_boundaries
+      integer,  intent(in) :: kl
+      integer,  intent(in) :: ku
+      integer,  intent(in) :: lenA4
+      integer,  intent(in) :: lenRhs
+      integer,  intent(in) :: pivotA1(n_boundaries)
+      integer,  intent(in) :: pivotA4(lenA4)
+      real(cp), intent(in) :: A1(n_boundaries,n_boundaries)
+      real(cp), intent(in) :: A2(n_boundaries,lenA4)
+      real(cp), intent(in) :: A3(lenA4,n_boundaries)
+      real(cp), intent(in) :: A4(2*kl+ku+1,lenA4)
+
+      !-- Output variable
+      real(cp), intent(inout) :: rhs(lenRhs)
+
+      !-- Local variables:
+      integer :: nStart, n_bands_A4, info
+
+      nStart = n_boundaries+1
+      n_bands_A4 = 2*kl+ku+1
+
+      !-- Solve A4*w = rhs2
+      call dgbtrs('N', lenA4, kl, ku, 1, A4, n_bands_A4, pivotA4, &
+           &      rhs(nStart:), lenA4, info)
+
+      !-- rhs1 <- rhs1-A2*rhs2
+      call dgemv('N', n_boundaries, lenA4, -one, A2, n_boundaries,  &
+           &     rhs(nStart:), 1, one, rhs(1:n_boundaries), 1)
+
+      !-- Solve A1*y = rhs1
+      call dgetrs('N', n_boundaries, 1, A1, n_boundaries, pivotA1, &
+           &      rhs(1:n_boundaries), n_boundaries, info)
+
+      !-- Assemble rhs2 <- rhs2-A3*rhs1
+      call dgemv('N', lenA4, n_boundaries, -one, A3, lenA4, &
+           &      rhs(1:n_boundaries), 1, one, rhs(nStart:), 1)
+
+   end subroutine solve_bordered_mat
 !-----------------------------------------------------------------------------
 end module algebra

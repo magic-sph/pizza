@@ -10,18 +10,18 @@ module tests
    use radial_functions, only: rscheme
    use radial_der, only: initialize_der_arrays, finalize_der_arrays, get_ddr
    use radial_scheme, only: type_rscheme
-   use algebra, only: sgefa, rgesl
+   use algebra, only: sgefa, rgesl, prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun
 
    implicit none
 
    private
 
-   public :: solve_laplacian_collocation, test_radial_der
+   public :: solve_laplacian, test_radial_der
 
 contains
 
-   subroutine solve_laplacian_collocation(nMstart, nMstop)
+   subroutine solve_laplacian(nMstart, nMstop)
 
       !-- Input variables
       integer, intent(in) :: nMstart
@@ -31,7 +31,9 @@ contains
       integer, allocatable :: nrs(:)
       real(cp), allocatable :: r_loc(:), sol(:), sol_theo(:)
       integer :: file_handle, n_r_max_loc, n_in, n_r
-      real(cp) :: r_cmb, r_icb, eps, alph1, alph2, c1, c2, err
+      real(cp) :: r_cmb, r_icb, eps, alph1, alph2, c1, c2
+      real(cp) :: errColloc, errInteg
+      real(cp) :: tStart, tStop, tColloc, tInteg
 
       eps = epsilon(1.0_cp)
       if ( l_newmap ) then
@@ -75,16 +77,23 @@ contains
             c2 = -0.25_cp-0.75_cp*r_cmb**2-c1*log(r_cmb)
             sol_theo(:)=0.75_cp*r_loc(:)**2+c1*log(r_loc)+c2
 
-            call assemble_and_solve_lap(n_r_max_loc, r_loc, rscheme, sol)
+            tStart = MPI_Wtime()
+            call solve_laplacian_colloc(n_r_max_loc, r_loc, rscheme, sol)
+            tStop = MPI_Wtime()
+            tColloc = tStop-tStart
+            errColloc = maxval(abs(sol(:)-sol_theo(:)))
 
-            call solve_lap_integ(n_r_max_loc, r_loc, rscheme, sol)
-
-
-            err = maxval(abs(sol(:)-sol_theo(:)))
+            tStart = MPI_Wtime()
+            call solve_laplacian_integ(n_r_max_loc, r_loc, rscheme, sol)
+            tStop = MPI_Wtime()
+            tInteg = tStop-tStart
+            errInteg = maxval(abs(sol(:)-sol_theo(:)))
 
             !-- Store it in a file
-            write(file_handle, '(i5,2es20.12)') n_r_max_loc, err
-            write(6, '(i5,2es20.12)') n_r_max_loc, err
+            write(file_handle, '(i5,5es20.12)') n_r_max_loc, errColloc, &
+            &                                   tColloc, errInteg, tInteg
+            write(6, '(i5,5es20.12)') n_r_max_loc, errColloc, tColloc,  &
+                                      errInteg, tInteg
 
 
             call finalize_der_arrays()
@@ -97,9 +106,9 @@ contains
 
       end if
 
-   end subroutine solve_laplacian_collocation
+   end subroutine solve_laplacian
 !------------------------------------------------------------------------------
-   subroutine solve_lap_integ(n_r_max, r, rscheme, rhs)
+   subroutine solve_laplacian_integ(n_r_max, r, rscheme, rhs)
 
       !-- Input variables
       integer,             intent(in) :: n_r_max
@@ -111,13 +120,12 @@ contains
 
       !-- Local variables
       real(cp), allocatable :: tmp(:)
-      real(cp), allocatable :: mat(:,:), Bmat(:,:), A4mat(:,:)
+      real(cp), allocatable :: Bmat(:,:), A4mat(:,:)
       real(cp), allocatable :: A1mat(:,:), A2mat(:,:), A3mat(:,:)
-      real(cp) :: Cmat(2,2), y(2)
       integer :: pivotA1(2)
       integer, allocatable :: pivotA4(:)
       real(cp) :: a, b
-      integer :: info, n_band, n_r, n_bands_Bmat, n_bands_Amat
+      integer :: n_band, n_r, n_bands_Bmat, n_bands_Amat
 
       n_bands_Bmat = 7
       !n_bands_Amat = 3
@@ -192,49 +200,19 @@ contains
       rhs(1) = -0.25_cp
       rhs(2) = 0.75_cp
 
+      call prepare_bordered_mat(A1mat,A2mat,A3mat,A4mat,2,n_r_max-2,1,1, &
+           &                    pivotA1, pivotA4)
 
-      !-- Now we have to solve
-      call dgbtrf(n_r_max-2, n_r_max-2, 1, 1, A4mat, n_bands_Amat, pivotA4, &
-           &      info)
-      call dgbtrs('N', n_r_max-2, 1, 1, 2, A4mat, n_bands_Amat, pivotA4, &
-           &      A3mat, n_r_max-2, info)
-      !-- v = A3
-      call dgbtrs('N', n_r_max-2, 1, 1, 1, A4mat, n_bands_Amat, pivotA4, &
-           &      rhs(3:), n_r_max-2, info)
-      !-- w = rhs(3:)
+      call solve_bordered_mat(A1mat,A2mat,A3mat,A4mat,2,n_r_max-2,1,1,  &
+           &                  pivotA1, pivotA4, rhs, n_r_max)
 
-      call dgemm('N', 'N', 2, 2, n_r_max-2, -one, A2mat, 2, A3mat, n_r_max-2, &
-           &     one, A1mat,  2)
-      !-- A1 has been changed
-      call dgetrf(2, 2, A1mat, 2, pivotA1, info)
+      call rscheme%costf1(rhs, n_r_max)
 
-      call dgemv('N', 2, n_r_max-2, -one, A2mat, 2, rhs(3:), 1, one, rhs(1:2), &
-           &     1)
-      call dgetrs('N', 2, 1, A1mat, 2, pivotA1, rhs(1:2), 2, info)
-      !-- y=rhs(1:2)
-      y = rhs(1:2)
-      print*, A3mat(:,1)
-      print*, A3mat(:,2)
-      print*, ' '
+      deallocate ( A4mat, A1mat, A2mat, A3mat, Bmat, tmp, pivotA4 )
 
-      call dgemv('N', n_r_max-2, 2, -one, A3mat, n_r_max-2, y, 1, one, rhs(3:), 1)
-      rhs(1:2)=y
-      print*, rhs
-
-      ! print*, rhs
-      ! print*, Bmat(1,:)/2.
-      ! print*, Bmat(2,:)/2.
-      ! print*, Bmat(3,:)/2.
-      ! print*, Bmat(4,:)/2.
-      ! print*, Bmat(5,:)/2.
-      ! print*, Bmat(6,:)/2.
-      ! print*, Bmat(7,:)/2.
-
-      stop
-
-   end subroutine solve_lap_integ
+   end subroutine solve_laplacian_integ
 !------------------------------------------------------------------------------
-   subroutine assemble_and_solve_lap(n_r_max, r, rscheme, rhs)
+   subroutine solve_laplacian_colloc(n_r_max, r, rscheme, rhs)
 
       !-- Input variables
       integer,             intent(in) :: n_r_max
@@ -285,7 +263,7 @@ contains
 
       deallocate( mat, pivot )
 
-   end subroutine assemble_and_solve_lap
+   end subroutine solve_laplacian_colloc
 !------------------------------------------------------------------------------
    subroutine test_radial_der(nMstart, nMstop)
 

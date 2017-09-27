@@ -23,7 +23,7 @@ program pizza
    use update_psi, only: initialize_update_om, finalize_update_om
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
-   use tests, only: solve_laplacian_collocation, test_radial_der
+   use tests, only: solve_laplacian, test_radial_der
 
    implicit none
 
@@ -64,7 +64,7 @@ program pizza
    call set_mpi_domains()
 
    !-- Test radial derivatives
-   call solve_laplacian_collocation(nMstart, nMstop)
+   call solve_laplacian(nMstart, nMstop)
    !call test_radial_der(nMstart,nMstop)
 
    !-- Open output files
