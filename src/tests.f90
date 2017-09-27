@@ -34,6 +34,7 @@ contains
       real(cp) :: r_cmb, r_icb, eps, alph1, alph2, c1, c2
       real(cp) :: errColloc, errInteg
       real(cp) :: tStart, tStop, tColloc, tInteg
+      real(cp) :: timeLuColl, timeLuInt, timeSolveColl, timeSolveInt
 
       eps = epsilon(1.0_cp)
       if ( l_newmap ) then
@@ -48,7 +49,7 @@ contains
          r_icb=r_cmb-one
          nrs = [10, 12, 16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,   &
          &      144, 160, 180, 200, 220, 256, 320, 400, 512, 640, 768, 1024, &
-         &      1536,  2048]
+         &      1536,  2048, 3072, 4096]
          if ( l_newmap ) then
             open( newunit=file_handle, file='error_laplacian_map')
          else
@@ -78,22 +79,27 @@ contains
             sol_theo(:)=0.75_cp*r_loc(:)**2+c1*log(r_loc)+c2
 
             tStart = MPI_Wtime()
-            call solve_laplacian_colloc(n_r_max_loc, r_loc, rscheme, sol)
+            call solve_laplacian_colloc(n_r_max_loc, r_loc, rscheme, sol, &
+                 &                      timeLuColl, timeSolveColl)
             tStop = MPI_Wtime()
             tColloc = tStop-tStart
             errColloc = maxval(abs(sol(:)-sol_theo(:)))
 
             tStart = MPI_Wtime()
-            call solve_laplacian_integ(n_r_max_loc, r_loc, rscheme, sol)
+            call solve_laplacian_integ(n_r_max_loc, r_loc, rscheme, sol, &
+                 &                     timeLuInt, timeSolveInt)
             tStop = MPI_Wtime()
             tInteg = tStop-tStart
             errInteg = maxval(abs(sol(:)-sol_theo(:)))
 
             !-- Store it in a file
-            write(file_handle, '(i5,5es20.12)') n_r_max_loc, errColloc, &
-            &                                   tColloc, errInteg, tInteg
-            write(6, '(i5,5es20.12)') n_r_max_loc, errColloc, tColloc,  &
-                                      errInteg, tInteg
+            write(file_handle, '(i5,8es14.6)') n_r_max_loc, errColloc,   &
+            &                                   tColloc, timeLuColl,     &
+            &                                   timeSolveColl, errInteg, &
+            &                                   tInteg, timeLuInt, timeSolveInt
+            write(6, '(i5,8es14.6)') n_r_max_loc, errColloc, tColloc,     &
+            &                        timeLuColl, timeSolveColl, errInteg, &
+            &                        tInteg, timeLuInt, timeSolveInt
 
 
             call finalize_der_arrays()
@@ -108,7 +114,7 @@ contains
 
    end subroutine solve_laplacian
 !------------------------------------------------------------------------------
-   subroutine solve_laplacian_integ(n_r_max, r, rscheme, rhs)
+   subroutine solve_laplacian_integ(n_r_max, r, rscheme, rhs, timeLu, timeSolve)
 
       !-- Input variables
       integer,             intent(in) :: n_r_max
@@ -117,13 +123,15 @@ contains
 
       !-- Output variable
       real(cp),            intent(out) :: rhs(n_r_max)
+      real(cp),            intent(out) :: timeLu
+      real(cp),            intent(out) :: timeSolve
 
       !-- Local variables
       real(cp), allocatable :: tmp(:)
       real(cp), allocatable :: Bmat(:,:), A4mat(:,:)
       real(cp), allocatable :: A1mat(:,:), A2mat(:,:), A3mat(:,:)
       integer, allocatable :: pivotA1(:), pivotA4(:)
-      real(cp) :: a, b
+      real(cp) :: a, b, tStart, tStop
       integer :: i_r, klA4, kuA4, klB, kuB, nStart
       integer :: n_band, n_r, n_bands_Bmat, n_bands_Amat, n_boundaries, lenA4
 
@@ -212,11 +220,17 @@ contains
       rhs(1) = -0.25_cp
       rhs(2) = 0.75_cp
 
+      tStart = MPI_Wtime()
       call prepare_bordered_mat(A1mat,A2mat,A3mat,A4mat,2,n_r_max-2,1,1, &
            &                    pivotA1, pivotA4)
+      tStop = MPI_Wtime()
+      timeLu= tStop-tStart
 
+      tStart = MPI_Wtime()
       call solve_bordered_mat(A1mat,A2mat,A3mat,A4mat,2,n_r_max-2,1,1,  &
            &                  pivotA1, pivotA4, rhs, n_r_max)
+      tStop = MPI_Wtime()
+      timeSolve= tStop-tStart
 
       call rscheme%costf1(rhs, n_r_max)
 
@@ -224,7 +238,8 @@ contains
 
    end subroutine solve_laplacian_integ
 !------------------------------------------------------------------------------
-   subroutine solve_laplacian_colloc(n_r_max, r, rscheme, rhs)
+   subroutine solve_laplacian_colloc(n_r_max, r, rscheme, rhs, timeLu, &
+              &                      timeSolve)
 
       !-- Input variables
       integer,             intent(in) :: n_r_max
@@ -233,9 +248,12 @@ contains
 
       !-- Output variable
       real(cp),            intent(out) :: rhs(n_r_max)
+      real(cp),            intent(out) :: timeLu
+      real(cp),            intent(out) :: timeSolve
 
       !-- Local variables
       real(cp), allocatable :: mat(:,:)
+      real(cp) :: tStart, tStop
       integer, allocatable :: pivot(:)
       integer :: nR_out, nR, info
 
@@ -265,12 +283,18 @@ contains
       end do
 
       !----- LU decomposition:
+      tStart = MPI_Wtime()
       call sgefa(mat,n_r_max,n_r_max,pivot,info)
+      tStop = MPI_Wtime()
+      timeLu = tStop-tStart
       if ( info /= 0 ) then
          call abortRun('Singular matrix mat!')
       end if
 
+      tStart = MPI_Wtime()
       call rgesl(mat, n_r_max, n_r_max, pivot, rhs)
+      tStop = MPI_Wtime()
+      timeSolve = tStop-tStart
       call rscheme%costf1(rhs, n_r_max)
 
       deallocate( mat, pivot )
