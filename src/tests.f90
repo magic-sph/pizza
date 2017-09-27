@@ -110,17 +110,30 @@ contains
       real(cp),            intent(out) :: rhs(n_r_max)
 
       !-- Local variables
-      real(cp), allocatable :: mat(:,:), Bmat(:,:)
-      integer, allocatable :: pivot(:)
+      real(cp), allocatable :: tmp(:)
+      real(cp), allocatable :: mat(:,:), Bmat(:,:), A4mat(:,:)
+      real(cp), allocatable :: A1mat(:,:), A2mat(:,:), A3mat(:,:)
+      real(cp) :: Cmat(2,2), y(2)
+      integer :: pivotA1(2)
+      integer, allocatable :: pivotA4(:)
       real(cp) :: a, b
-      integer :: info, n_band, n_r
+      integer :: info, n_band, n_r, n_bands_Bmat, n_bands_Amat
 
-      allocate ( Bmat(7, n_r_max) )
+      n_bands_Bmat = 7
+      !n_bands_Amat = 3
+      n_bands_Amat = 4
+
+      allocate ( A4mat(n_bands_Amat, n_r_max-2) )
+      allocate ( A1mat(2,2), A2mat(2,n_r_max-2), A3mat(n_r_max-2, 2) )
+      allocate ( Bmat(n_bands_Bmat, n_r_max) )
+      allocate ( tmp(n_r_max), pivotA4(n_r_max) )
+      
+      !-- Set the matrices to zero
+      A1mat(:,:)=0.0_cp
+      A2mat(:,:)=0.0_cp
+      A3mat(:,:)=0.0_cp
+      A4mat(:,:)=0.0_cp
       Bmat(:,:)=0.0_cp
-      rhs(:)       = 3.0_cp
-      rhs(1)       = -0.25_cp
-      rhs(n_r_max) = 0.75_cp
-      call rscheme%costf1(rhs, n_r_max)
       
       a = half*(r(1)-r(n_r_max))
       b = half*(r(1)+r(n_r_max))
@@ -128,26 +141,94 @@ contains
       do n_r=1,n_r_max
          if ( n_r > 2 .and. n_r < n_r_max-2 ) Bmat(1,n_r+3)= a**3/8.0_cp/n_r/(n_r-1)
          if ( n_r > 2 .and. n_r < n_r_max-1 ) Bmat(2,n_r+2)= a**2*b/4.0_cp/n_r/(n_r-1)
-         if ( n_r > 2 .and. n_r < n_r_max ) Bmat(3,n_r+1)= -a**3/8.0_cp/(n_r-1)/(n_r-2)
-         if ( n_r > 2 ) Bmat(4,n_r)= -a**2*b/2.0_cp/(n_r)/(n_r-2)
+         if ( n_r > 2 .and. n_r < n_r_max ) then
+            Bmat(3,n_r+1)= -a**3/8.0_cp/(n_r-1)/(n_r-2)
+            A4mat(2,n_r-1)= half*a*(one+one/(n_r-1))
+         end if
+         if ( n_r > 2 ) then
+            Bmat(4,n_r)= -a**2*b/2.0_cp/(n_r)/(n_r-2)
+            A4mat(3,n_r-2)= b
+         end if
          if ( n_r > 2 ) Bmat(5,n_r-1)= -a**3/8.0_cp/(n_r)/(n_r-1)
+         if ( n_r > 3 ) A4mat(4,n_r-3)= half*a*(one-one/(n_r-1))
          if ( n_r > 2 ) Bmat(6,n_r-2)= a**2*b/4.0_cp/(n_r-1)/(n_r-2)
          if ( n_r > 3 ) Bmat(7,n_r-3)= a**3/8.0_cp/(n_r-1)/(n_r-2)
       end do
+      A3mat(1,2)=0.25_cp*rscheme%rnorm*a
+
 
       do n_r=1,n_r_max
-         do n_band=1,7
+         do n_band=1,n_bands_Bmat
             Bmat(n_band,n_r)=rscheme%rnorm*Bmat(n_band,n_r)
          end do
       end do
+      do n_r=1,n_r_max-2
+         do n_band=1,n_bands_Amat
+            A4mat(n_band,n_r)=rscheme%rnorm*A4mat(n_band,n_r)
+         end do
+      end do
 
-      print*, Bmat(1,:)/2.
-      print*, Bmat(2,:)/2.
-      print*, Bmat(3,:)/2.
-      print*, Bmat(4,:)/2.
-      print*, Bmat(5,:)/2.
-      print*, Bmat(6,:)/2.
-      print*, Bmat(7,:)/2.
+      !-- Add the tau Lines for boundary conditions
+      do n_r=1,n_r_max
+         if ( n_r <= 2) then
+            A1mat(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
+            A1mat(2,n_r)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+         else
+            A2mat(1,n_r-2)=rscheme%rnorm*rscheme%rMat(1,n_r)
+            A2mat(2,n_r-2)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+         end if
+      end do
+      A1mat(1,1)=rscheme%boundary_fac*A1mat(1,1)
+      A1mat(2,1)=rscheme%boundary_fac*A1mat(2,1)
+      A2mat(1,n_r_max-2)=rscheme%boundary_fac*A2mat(1,n_r_max-2)
+      A2mat(2,n_r_max-2)=rscheme%boundary_fac*A2mat(2,n_r_max-2)
+
+      !-- Assemble right-hand side
+      tmp(:)       = 3.0_cp
+      call rscheme%costf1(tmp, n_r_max)
+      call dgbmv('N', n_r_max, n_r_max, 3, 3, one, Bmat, n_bands_Bmat, tmp, &
+           &     1, 0.0_cp, rhs, 1)
+      !-- Boundary conditions
+      rhs(1) = -0.25_cp
+      rhs(2) = 0.75_cp
+
+
+      !-- Now we have to solve
+      call dgbtrf(n_r_max-2, n_r_max-2, 1, 1, A4mat, n_bands_Amat, pivotA4, &
+           &      info)
+      call dgbtrs('N', n_r_max-2, 1, 1, 2, A4mat, n_bands_Amat, pivotA4, &
+           &      A3mat, n_r_max-2, info)
+      !-- v = A3
+      call dgbtrs('N', n_r_max-2, 1, 1, 1, A4mat, n_bands_Amat, pivotA4, &
+           &      rhs(3:), n_r_max-2, info)
+      !-- w = rhs(3:)
+
+      call dgemm('N', 'N', 2, 2, n_r_max-2, -one, A2mat, 2, A3mat, n_r_max-2, &
+           &     one, A1mat,  2)
+      !-- A1 has been changed
+      call dgetrf(2, 2, A1mat, 2, pivotA1, info)
+
+      call dgemv('N', 2, n_r_max-2, -one, A2mat, 2, rhs(3:), 1, one, rhs(1:2), &
+           &     1)
+      call dgetrs('N', 2, 1, A1mat, 2, pivotA1, rhs(1:2), 2, info)
+      !-- y=rhs(1:2)
+      y = rhs(1:2)
+      print*, A3mat(:,1)
+      print*, A3mat(:,2)
+      print*, ' '
+
+      call dgemv('N', n_r_max-2, 2, -one, A3mat, n_r_max-2, y, 1, one, rhs(3:), 1)
+      rhs(1:2)=y
+      print*, rhs
+
+      ! print*, rhs
+      ! print*, Bmat(1,:)/2.
+      ! print*, Bmat(2,:)/2.
+      ! print*, Bmat(3,:)/2.
+      ! print*, Bmat(4,:)/2.
+      ! print*, Bmat(5,:)/2.
+      ! print*, Bmat(6,:)/2.
+      ! print*, Bmat(7,:)/2.
 
       stop
 
