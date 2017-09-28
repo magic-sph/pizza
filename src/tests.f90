@@ -273,12 +273,10 @@ contains
       do n_r=1,n_boundaries
          i_r = n_r+n_boundaries
          stencilA4 = r1(a,b,klA4+kuA4+1)-i1(a,i_r-1,klA4+kuA4+1)
-         !if ( n_r < n_boundaries ) A3mat(n_r,n_r+1)=rscheme%rnorm*stencilA4(3)
-         !if ( n_r < n_boundaries ) A3mat(n_r,n_r+1)=half*rscheme%rnorm*a*&
-         !&                                          (one-one/(i_r-1))
+         !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,klA4
-            if ( n_r+kuA4+1-n_band <= n_boundaries .and. n_r+kuA4+1-n_band >= 1 ) then
-               A3mat(n_r,n_r+1+kuA4-n_band) = rscheme%rnorm*stencilA4(kuA4+1+n_band)
+            if ( n_r <= n_band .and. n_r+n_boundaries-n_band >= 1 ) then
+               A3mat(n_r,n_r+n_boundaries-n_band) = rscheme%rnorm*stencilA4(kuA4+1+n_band)
             end if
          end do
       end do
@@ -514,9 +512,10 @@ contains
          i_r = n_r+n_boundaries
          stencilA4 = eye(klA4+kuA4+1) + two*i2(a,i_r-1,klA4+kuA4+1)+ &
          &           i4(a,i_r-1,klA4+kuA4+1)
+         !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,klA4
-            if ( n_r+kuA4-n_band <= n_boundaries .and. n_r+kuA4-n_band >= 1 ) then
-               A3mat(n_r,n_r+kuA4-n_band) = rscheme%rnorm*stencilA4(kuA4+1+n_band)
+            if ( n_r <= n_band .and. n_r+n_boundaries-n_band >= 1 ) then
+               A3mat(n_r,n_r+n_boundaries-n_band) = rscheme%rnorm*stencilA4(kuA4+1+n_band)
             end if
          end do
       end do
