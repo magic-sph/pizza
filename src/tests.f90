@@ -4,7 +4,7 @@ module tests
    !
    use precision_mod
    use parallel_mod
-   use constants, only: one, half
+   use constants, only: one, half, two, pi
    use namelists, only: l_newmap, radratio
    use chebyshev, only: type_cheb
    use radial_functions, only: rscheme
@@ -17,7 +17,7 @@ module tests
 
    private
 
-   public :: solve_laplacian, test_radial_der
+   public :: solve_laplacian, solve_biharmo, test_radial_der
 
 contains
 
@@ -114,6 +114,97 @@ contains
 
    end subroutine solve_laplacian
 !------------------------------------------------------------------------------
+   subroutine solve_biharmo(nMstart, nMstop)
+
+      !-- Input variables
+      integer, intent(in) :: nMstart
+      integer, intent(in) :: nMstop
+
+      !-- Local variables
+      integer, allocatable :: nrs(:)
+      real(cp), allocatable :: r_loc(:), sol(:), sol_theo(:)
+      integer :: file_handle, n_r_max_loc, n_in, n_r
+      real(cp) :: r_cmb, r_icb, eps, alph1, alph2, c1, c2
+      real(cp) :: errColloc, errInteg
+      real(cp) :: tStart, tStop, tColloc, tInteg
+      real(cp) :: timeLuColl, timeLuInt, timeSolveColl, timeSolveInt
+
+      eps = epsilon(1.0_cp)
+      if ( l_newmap ) then
+         n_in = 1
+      else
+         n_in = 0
+      end if
+
+      if ( rank == 0 ) then
+         allocate ( type_cheb :: rscheme )
+         r_cmb=two*pi
+         r_icb=0.0_cp
+         nrs = [10, 12, 16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,   &
+         &      144, 160, 180, 200, 220, 256, 320, 400, 512, 640, 768, 1024]
+         if ( l_newmap ) then
+            open( newunit=file_handle, file='error_biharmo_map')
+         else
+            open( newunit=file_handle, file='error_biharmo')
+         end if
+
+         do n_r=1,size(nrs)
+            n_r_max_loc = nrs(n_r)
+            allocate( r_loc(n_r_max_loc), sol(n_r_max_loc) )
+            allocate( sol_theo(n_r_max_loc) )
+            ! allocate( df_num(n_r_max_loc), d2f_num(n_r_max_loc) )
+            ! allocate( df_theo(n_r_max_loc), d2f_theo(n_r_max_loc) )
+            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in)
+            if ( l_newmap ) then
+               alph1=1.0_cp/cosh(abs(log(eps))/(n_r_max_loc-1))
+               alph2=0.0_cp
+            else
+               alph1=0.0_cp
+               alph2=0.0_cp
+            end if
+            call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
+            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
+            call rscheme%get_der_mat(n_r_max_loc)
+
+            sol_theo(:)=one/8.0_cp*(two*(r_loc(:)-pi)*sin(r_loc)+ &
+            &           (two*pi-r_loc(:))*r_loc(:)*cos(r_loc))
+
+            tStart = MPI_Wtime()
+            call solve_biharmo_colloc(n_r_max_loc, r_loc, rscheme, sol, &
+                 &                      timeLuColl, timeSolveColl)
+            tStop = MPI_Wtime()
+            tColloc = tStop-tStart
+            errColloc = maxval(abs(sol(:)-sol_theo(:)))
+
+            tStart = MPI_Wtime()
+            call solve_biharmo_integ(n_r_max_loc, r_loc, rscheme, sol, &
+                 &                     timeLuInt, timeSolveInt)
+            tStop = MPI_Wtime()
+            tInteg = tStop-tStart
+            errInteg = maxval(abs(sol(:)-sol_theo(:)))
+
+            !-- Store it in a file
+            write(file_handle, '(i5,8es14.6)') n_r_max_loc, errColloc,   &
+            &                                   tColloc, timeLuColl,     &
+            &                                   timeSolveColl, errInteg, &
+            &                                   tInteg, timeLuInt, timeSolveInt
+            write(6, '(i5,8es14.6)') n_r_max_loc, errColloc, tColloc,     &
+            &                        timeLuColl, timeSolveColl, errInteg, &
+            &                        tInteg, timeLuInt, timeSolveInt
+
+
+            call finalize_der_arrays()
+            call rscheme%finalize()
+            deallocate( r_loc, sol, sol_theo )
+            ! deallocate( r_loc, f, df_theo, d2f_theo, df_num, d2f_num )
+         end do
+
+         close(file_handle)
+
+      end if
+
+   end subroutine solve_biharmo
+!------------------------------------------------------------------------------
    subroutine solve_laplacian_integ(n_r_max, r, rscheme, rhs, timeLu, timeSolve)
 
       !-- Input variables
@@ -197,18 +288,18 @@ contains
 
       !-- Add the tau Lines for boundary conditions into A1 and A2
       do n_r=1,n_r_max
-         if ( n_r <= 2) then
+         if ( n_r <= n_boundaries) then
             A1mat(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
             A1mat(2,n_r)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
          else
-            A2mat(1,n_r-2)=rscheme%rnorm*rscheme%rMat(1,n_r)
-            A2mat(2,n_r-2)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+            A2mat(1,n_r-n_boundaries)=rscheme%rnorm*rscheme%rMat(1,n_r)
+            A2mat(2,n_r-n_boundaries)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
          end if
       end do
-      A1mat(1,1)        =rscheme%boundary_fac*A1mat(1,1)
-      A1mat(2,1)        =rscheme%boundary_fac*A1mat(2,1)
-      A2mat(1,n_r_max-2)=rscheme%boundary_fac*A2mat(1,n_r_max-2)
-      A2mat(2,n_r_max-2)=rscheme%boundary_fac*A2mat(2,n_r_max-2)
+      do n_r=1,n_boundaries
+         A1mat(n_r,1)    =rscheme%boundary_fac*A1mat(n_r,1)
+         A2mat(n_r,lenA4)=rscheme%boundary_fac*A2mat(1,lenA4)
+      end do
 
       !-- Assemble right-hand side
       tmp(:)       = 3.0_cp
@@ -221,14 +312,14 @@ contains
       rhs(2) = 0.75_cp
 
       tStart = MPI_Wtime()
-      call prepare_bordered_mat(A1mat,A2mat,A3mat,A4mat,2,n_r_max-2,1,1, &
-           &                    pivotA1, pivotA4)
+      call prepare_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,lenA4, &
+           &                    klA4,kuA4, pivotA1, pivotA4)
       tStop = MPI_Wtime()
       timeLu= tStop-tStart
 
       tStart = MPI_Wtime()
-      call solve_bordered_mat(A1mat,A2mat,A3mat,A4mat,2,n_r_max-2,1,1,  &
-           &                  pivotA1, pivotA4, rhs, n_r_max)
+      call solve_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,lenA4, &
+           &                  klA4, kuA4, pivotA1, pivotA4, rhs, n_r_max)
       tStop = MPI_Wtime()
       timeSolve= tStop-tStart
 
@@ -300,6 +391,227 @@ contains
       deallocate( mat, pivot )
 
    end subroutine solve_laplacian_colloc
+!------------------------------------------------------------------------------
+   subroutine solve_biharmo_integ(n_r_max, r, rscheme, rhs, timeLu, timeSolve)
+
+      !-- Input variables
+      integer,             intent(in) :: n_r_max
+      real(cp),            intent(in) :: r(n_r_max)
+      class(type_rscheme), intent(in) :: rscheme
+
+      !-- Output variable
+      real(cp),            intent(out) :: rhs(n_r_max)
+      real(cp),            intent(out) :: timeLu
+      real(cp),            intent(out) :: timeSolve
+
+      !-- Local variables
+      real(cp), allocatable :: tmp(:)
+      real(cp), allocatable :: Bmat(:,:), A4mat(:,:)
+      real(cp), allocatable :: A1mat(:,:), A2mat(:,:), A3mat(:,:)
+      integer, allocatable :: pivotA1(:), pivotA4(:)
+      real(cp) :: a, b, tStart, tStop
+      integer :: i_r, klA4, kuA4, klB, kuB, nStart
+      integer :: n_band, n_r, n_bands_Bmat, n_bands_Amat, n_boundaries, lenA4
+
+      klA4 = 4
+      kuA4 = 4
+      klB  = 4
+      kuB  = 4
+      n_boundaries = 4
+      n_bands_Bmat = klB+kuB+1
+      !-- Factor 2 in front of klA4 is needed for LU factorisation
+      n_bands_Amat = 2*klA4+kuA4+1
+      lenA4 = n_r_max-n_boundaries
+
+      allocate ( A4mat(n_bands_Amat, lenA4) )
+      allocate ( A1mat(n_boundaries,n_boundaries), A2mat(n_boundaries,lenA4) )
+      allocate ( A3mat(lenA4, n_boundaries) )
+      allocate ( Bmat(n_bands_Bmat, n_r_max) )
+      allocate ( tmp(n_r_max), pivotA1(n_boundaries), pivotA4(lenA4) )
+      
+      !-- Set the matrices to zero
+      A1mat(:,:)=0.0_cp
+      A2mat(:,:)=0.0_cp
+      A3mat(:,:)=0.0_cp
+      A4mat(:,:)=0.0_cp
+      Bmat(:,:) =0.0_cp
+      
+      a = half*(r(1)-r(n_r_max))
+      b = half*(r(1)+r(n_r_max))
+
+      !-- Fill A4 banded-block
+      do n_r=1,lenA4
+         i_r = n_r+n_boundaries
+         if ( n_r < lenA4-3 ) A4mat(klA4+1,n_r+4)=a**4/16.0_cp/(i_r-1)/i_r/  &
+         &                                      (i_r+1)/(i_r+2)
+         if ( n_r < lenA4-1) A4mat(klA4+3,n_r+2)=-a**4/4.0_cp/(i_r-1)/(i_r-2)/i_r/(i_r+2)+ &
+         &                  a**2/4.0_cp/(i_r-1)/i_r
+         A4mat(klA4+5,n_r)= 3.0_cp*a**4/8.0_cp/(i_r-3)/(i_r-2)/i_r/(i_r+1) &
+         &                  -a**2/(i_r-2)/i_r + 1.0_cp
+         if (n_r > 2) A4mat(klA4+7,n_r-2)=-a**4/4.0_cp/(i_r-1)/(i_r-4)/(i_r-2)/i_r+ &
+         &                  a**2/4.0_cp/(i_r-1)/(i_r-2)
+         if( n_r > 4) A4mat(klA4+9,n_r-4)=a**4/16.0_cp/(i_r-1)/(i_r-4)/(i_r-3)/(i_r-2)
+      end do
+
+      !-- Fill A3
+      A3mat(1,2)=0.25_cp*rscheme%rnorm*a
+
+      !-- Fill right-hand side matrix
+      do n_r=1,lenA4
+         i_r = n_r+n_boundaries
+         if ( i_r < n_r_max-4 ) Bmat(1,i_r+4)=a**4/16.0_cp/(i_r-1)/i_r/&
+         &                                        (i_r+1)/(i_r+2)
+         if ( i_r < n_r_max-2 ) Bmat(3,i_r+2)=-a**4/4.0_cp/(i_r-1)/(i_r-2)/ &
+         &                                                 i_r/(i_r+2)
+         Bmat(5,i_r)= 3.0_cp*a**4/8.0_cp/(i_r-3)/(i_r-2)/i_r/(i_r+1)
+         if ( i_r > 2 ) Bmat(7,i_r-2)=-a**4/4.0_cp/(i_r-1)/(i_r-4)/(i_r-2)/i_r
+         if ( i_r > 4 ) Bmat(9,i_r-4)=a**4/16.0_cp/(i_r-1)/(i_r-4)/(i_r-3)/ &
+         &                                         (i_r-2)
+      end do
+
+      do n_r=1,lenA4
+         do n_band=1,n_bands_Amat
+            A4mat(n_band,n_r)=rscheme%rnorm*A4mat(n_band,n_r)
+         end do
+      end do
+      do n_r=1,n_r_max
+         do n_band=1,n_bands_Bmat
+            Bmat(n_band,n_r)=rscheme%rnorm*Bmat(n_band,n_r)
+         end do
+      end do
+
+      !-- Add the tau Lines for boundary conditions into A1 and A2
+      do n_r=1,n_r_max
+         if ( n_r <= n_boundaries) then
+            A1mat(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
+            A1mat(2,n_r)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+            A1mat(3,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
+            A1mat(4,n_r)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
+         else
+            A2mat(1,n_r-n_boundaries)=rscheme%rnorm*rscheme%rMat(1,n_r)
+            A2mat(2,n_r-n_boundaries)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+            A2mat(3,n_r-n_boundaries)=rscheme%rnorm*rscheme%drMat(1,n_r)
+            A2mat(4,n_r-n_boundaries)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
+         end if
+      end do
+      do n_r=1,n_boundaries
+         A1mat(n_r,1)    =rscheme%boundary_fac*A1mat(n_r,1)
+         A2mat(n_r,lenA4)=rscheme%boundary_fac*A2mat(1,lenA4)
+      end do
+
+      !-- Assemble right-hand side
+      tmp(:) = cos(r)
+      call rscheme%costf1(tmp, n_r_max)
+      nStart = n_boundaries+1
+      call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
+           &     tmp, 1, 0.0_cp, rhs, 1)
+      !-- Boundary conditions
+      rhs(1) = 0.0_cp
+      rhs(2) = 0.0_cp
+      rhs(3) = 0.0_cp
+      rhs(4) = 0.0_cp
+
+      tStart = MPI_Wtime()
+      call prepare_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,lenA4, &
+           &                    klA4,kuA4, pivotA1, pivotA4)
+      tStop = MPI_Wtime()
+      timeLu= tStop-tStart
+
+      tStart = MPI_Wtime()
+      call solve_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,lenA4, &
+           &                  klA4, kuA4, pivotA1, pivotA4, rhs, n_r_max)
+      tStop = MPI_Wtime()
+      timeSolve= tStop-tStart
+
+      call rscheme%costf1(rhs, n_r_max)
+
+      deallocate ( A4mat, A1mat, A2mat, A3mat, Bmat, tmp, pivotA4 )
+
+   end subroutine solve_biharmo_integ
+!------------------------------------------------------------------------------
+   subroutine solve_biharmo_colloc(n_r_max, r, rscheme, rhs, timeLu, &
+              &                    timeSolve)
+
+      !-- Input variables
+      integer,             intent(in) :: n_r_max
+      real(cp),            intent(in) :: r(n_r_max)
+      class(type_rscheme), intent(in) :: rscheme
+
+      !-- Output variable
+      real(cp),            intent(out) :: rhs(n_r_max)
+      real(cp),            intent(out) :: timeLu
+      real(cp),            intent(out) :: timeSolve
+
+      !-- Local variables
+      real(cp), allocatable :: mat(:,:), tmp(:)
+      real(cp) :: tStart, tStop
+      integer, allocatable :: pivot(:)
+      integer :: nR_out, nR, info, nR_out_psi, nR_psi
+
+      allocate( mat(2*n_r_max, 2*n_r_max), tmp(2*n_r_max), pivot(2*n_r_max) )
+      mat(:,:)=0.0_cp
+      tmp(:)=0.0_cp
+
+      !-- Boundary conditions =  fixed values
+      do nR_out=1,rscheme%n_max
+         mat(1,nR_out)      =rscheme%rnorm*rscheme%rMat(1,nR_out)
+         mat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
+         mat(n_r_max+1,nR_out)=rscheme%rnorm*rscheme%drMat(1,nR_out)
+         mat(2*n_r_max,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+      end do
+      tmp(1:n_r_max) = cos(r)
+      tmp(1)         = 0.0_cp
+      tmp(n_r_max)   = 0.0_cp
+      tmp(n_r_max+1) = 0.0_cp
+      tmp(2*n_r_max) = 0.0_cp
+
+      !----- Other points:
+      do nR_out=1,n_r_max
+         nR_out_psi=nR_out+n_r_max
+         do nR=2,n_r_max-1
+            nR_psi=nR+n_r_max
+            mat(nR,nR_out)= rscheme%rnorm * rscheme%rMat(nR,nR_out) 
+            mat(nR,nR_out_psi)= rscheme%rnorm *( rscheme%d2rMat(nR,nR_out)+&
+            &                                  two*rscheme%rMat(nR,nR_out) )
+
+            mat(nR_psi,nR_out) = rscheme%rnorm * rscheme%d2rMat(nR,nR_out)
+            mat(nR_psi,nR_out_psi) = -rscheme%rnorm * rscheme%rMat(nR,nR_out)
+         end do
+      end do
+
+      !----- Factor for highest and lowest cheb:
+      do nR=1,n_r_max
+         nR_psi = nR+n_r_max
+         mat(nR,1)            =rscheme%boundary_fac*mat(nR,1)
+         mat(nR,n_r_max)      =rscheme%boundary_fac*mat(nR,n_r_max)
+         mat(nR,n_r_max+1)    =rscheme%boundary_fac*mat(nR,n_r_max+1)
+         mat(nR,2*n_r_max)    =rscheme%boundary_fac*mat(nR,2*n_r_max)
+         mat(nR_psi,1)        =rscheme%boundary_fac*mat(nR_psi,1)
+         mat(nR_psi,n_r_max)  =rscheme%boundary_fac*mat(nR_psi,n_r_max)
+         mat(nR_psi,n_r_max+1)=rscheme%boundary_fac*mat(nR_psi,n_r_max+1)
+         mat(nR_psi,2*n_r_max)=rscheme%boundary_fac*mat(nR_psi,2*n_r_max)
+      end do
+
+
+      !----- LU decomposition:
+      tStart = MPI_Wtime()
+      call sgefa(mat,2*n_r_max,2*n_r_max,pivot,info)
+      tStop = MPI_Wtime()
+      timeLu = tStop-tStart
+      if ( info /= 0 ) then
+         call abortRun('Singular matrix mat!')
+      end if
+
+      tStart = MPI_Wtime()
+      call rgesl(mat, 2*n_r_max, 2*n_r_max, pivot, tmp)
+      tStop = MPI_Wtime()
+      timeSolve = tStop-tStart
+      rhs(:)=tmp(1:n_r_max)
+      call rscheme%costf1(rhs, n_r_max)
+
+      deallocate( mat, pivot )
+
+   end subroutine solve_biharmo_colloc
 !------------------------------------------------------------------------------
    subroutine test_radial_der(nMstart, nMstop)
 
