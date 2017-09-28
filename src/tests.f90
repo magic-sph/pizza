@@ -249,7 +249,7 @@ contains
       A2mat(:,:)=0.0_cp
       A3mat(:,:)=0.0_cp
       A4mat(:,:)=0.0_cp
-      Bmat(:,:)=0.0_cp
+      Bmat(:,:) =0.0_cp
       
       a = half*(r(1)-r(n_r_max))
       b = half*(r(1)+r(n_r_max))
@@ -257,11 +257,11 @@ contains
       !-- Fill A4 banded-block
       do n_r=1,lenA4
          i_r = n_r+n_boundaries
+         
+         !-- Define the equations
          stencilA4 = r1(a,b,klA4+kuA4+1)-i1(a,i_r-1,klA4+kuA4+1)
-         !if ( n_r < lenA4 ) A4mat(klA4+1,n_r+1)= half*a*(one+one/(i_r-1))
-         !A4mat(klA4+2,n_r)= b
-         !if ( n_r > 1 ) A4mat(klA4+3,n_r-1)= half*a*(one-one/(i_r-1))
 
+         !-- Roll the array for band storage
          do n_band=1,klA4+kuA4+1
             if ( n_r+kuA4+1-n_band <= lenA4 .and. n_r+kuA4+1-n_band >= 1 ) then
                A4mat(klA4+n_band,n_r+kuA4+1-n_band) = rscheme%rnorm*stencilA4(n_band)
@@ -285,40 +285,17 @@ contains
       !-- Fill right-hand side matrix
       do n_r=1,lenA4
          i_r = n_r+n_boundaries
+
+         !-- Define the equations 
          stencilB = i2r1(a,b,i_r-1,klB+kuB+1)
 
+         !-- Roll the arrays for band storage
          do n_band=1,klB+kuB+1
             if ( i_r+kuB+1-n_band <= n_r_max .and. i_r+kuB+1-n_band >= 1 ) then
                Bmat(n_band,i_r+kuB+1-n_band) = rscheme%rnorm*stencilB(n_band)
             end if
          end do
-         !if ( i_r < n_r_max-2 ) Bmat(1,i_r+3)=rscheme%rnorm*stencilB(1)
-         !if ( i_r < n_r_max-1 ) Bmat(2,i_r+2)=rscheme%rnorm*stencilB(2)
-         !if ( i_r < n_r_max ) Bmat(3,i_r+1)=rscheme%rnorm*stencilB(3)
-         !Bmat(4,i_r)=rscheme%rnorm*stencilB(4)
-         !if ( i_r > 1 ) Bmat(5,i_r-1)=rscheme%rnorm*stencilB(5)
-         !if ( i_r > 2 ) Bmat(6,i_r-2)=rscheme%rnorm*stencilB(6)
-         !if ( i_r > 3 ) Bmat(7,i_r-3)=rscheme%rnorm*stencilB(7)
-
-         !if ( i_r < n_r_max-2 ) Bmat(1,i_r+3)= a**3/8.0_cp/i_r/(i_r-1)
-         !if ( i_r < n_r_max-1 ) Bmat(2,i_r+2)= a**2*b/4.0_cp/i_r/(i_r-1)
-         !if ( i_r < n_r_max ) Bmat(3,i_r+1)= -a**3/8.0_cp/(i_r-1)/(i_r-2)
-         !Bmat(4,i_r)= -a**2*b/2.0_cp/(i_r)/(i_r-2)
-         !if ( i_r > 1 ) Bmat(5,i_r-1)= -a**3/8.0_cp/(i_r)/(i_r-1)
-         !if ( i_r > 2 ) Bmat(6,i_r-2)= a**2*b/4.0_cp/(i_r-1)/(i_r-2)
-         !if ( i_r > 3 ) Bmat(7,i_r-3)= a**3/8.0_cp/(i_r-1)/(i_r-2)
       end do
-
-      !do n_r=1,lenA4
-      !   do n_band=1,n_bands_Amat
-      !      A4mat(n_band,n_r)=rscheme%rnorm*A4mat(n_band,n_r)
-      !   end do
-      !end do
-      !do n_r=1,n_r_max
-      !   do n_band=1,n_bands_Bmat
-      !      Bmat(n_band,n_r)=rscheme%rnorm*Bmat(n_band,n_r)
-      !   end do
-      !end do
 
       !-- Add the tau Lines for boundary conditions into A1 and A2
       do n_r=1,n_r_max
@@ -330,6 +307,8 @@ contains
             A2mat(2,n_r-n_boundaries)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
          end if
       end do
+
+      !-- Cheb factor for boundary conditions
       do n_r=1,n_boundaries
          A1mat(n_r,1)    =rscheme%boundary_fac*A1mat(n_r,1)
          A2mat(n_r,lenA4)=rscheme%boundary_fac*A2mat(1,lenA4)
@@ -345,21 +324,25 @@ contains
       rhs(1) = -0.25_cp
       rhs(2) = 0.75_cp
 
+      !-- LU factorisation
       tStart = MPI_Wtime()
       call prepare_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,lenA4, &
            &                    klA4,kuA4, pivotA1, pivotA4)
       tStop = MPI_Wtime()
       timeLu= tStop-tStart
 
+      !-- Solve
       tStart = MPI_Wtime()
       call solve_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,lenA4, &
            &                  klA4, kuA4, pivotA1, pivotA4, rhs, n_r_max)
       tStop = MPI_Wtime()
       timeSolve= tStop-tStart
 
+      !-- Final DCT to bring the solution back to physical space
       call rscheme%costf1(rhs, n_r_max)
 
       deallocate ( A4mat, A1mat, A2mat, A3mat, Bmat, tmp, pivotA4 )
+      deallocate ( stencilA4, stencilB )
 
    end subroutine solve_laplacian_integ
 !------------------------------------------------------------------------------
@@ -477,34 +460,17 @@ contains
       !-- Fill A4 banded-block
       do n_r=1,lenA4
          i_r = n_r+n_boundaries
+
+         !-- Define the equations
          stencilA4 = eye(klA4+kuA4+1) + two*i2(a,i_r-1,klA4+kuA4+1)+ &
          &           i4(a,i_r-1,klA4+kuA4+1)
 
+         !-- Roll the array for band storage
          do n_band=1,klA4+kuA4+1
             if ( n_r+kuA4+1-n_band <= lenA4 .and. n_r+kuA4+1-n_band >= 1 ) then
                A4mat(klA4+n_band,n_r+kuA4+1-n_band) = rscheme%rnorm*stencilA4(n_band)
             end if
          end do
-
-         !if ( n_r < lenA4-3 ) A4mat(klA4+1,n_r+4)=rscheme%rnorm*stencilA4(1)
-         !if ( n_r < lenA4-2 ) A4mat(klA4+2,n_r+3)=rscheme%rnorm*stencilA4(2)
-         !if ( n_r < lenA4-1 ) A4mat(klA4+3,n_r+2)=rscheme%rnorm*stencilA4(3)
-         !if ( n_r < lenA4 ) A4mat(klA4+4,n_r+1)=rscheme%rnorm*stencilA4(4)
-         !A4mat(klA4+5,n_r)=rscheme%rnorm*stencilA4(5)
-         !if ( n_r > 1 ) A4mat(klA4+6,n_r-1)=rscheme%rnorm*stencilA4(6)
-         !if ( n_r > 2 ) A4mat(klA4+7,n_r-2)=rscheme%rnorm*stencilA4(7)
-         !if ( n_r > 3 ) A4mat(klA4+8,n_r-3)=rscheme%rnorm*stencilA4(8)
-         !if ( n_r > 4 ) A4mat(klA4+9,n_r-4)=rscheme%rnorm*stencilA4(9)
-
-      !   if ( n_r < lenA4-3 ) A4mat(klA4+1,n_r+4)=a**4/16.0_cp/(i_r-1)/i_r/  &
-      !   &                                      (i_r+1)/(i_r+2)
-      !   if ( n_r < lenA4-1) A4mat(klA4+3,n_r+2)=-a**4/4.0_cp/(i_r-1)/(i_r-2)/i_r/(i_r+2)+ &
-      !   &                  a**2/2.0_cp/(i_r-1)/i_r
-      !   A4mat(klA4+5,n_r)= 3.0_cp*a**4/8.0_cp/(i_r-3)/(i_r-2)/i_r/(i_r+1) &
-      !   &                  -a**2/(i_r-2)/i_r + 1.0_cp
-      !   if (n_r > 2) A4mat(klA4+7,n_r-2)=-a**4/4.0_cp/(i_r-1)/(i_r-4)/(i_r-2)/i_r+ &
-      !   &                  a**2/2.0_cp/(i_r-1)/(i_r-2)
-      !   if( n_r > 4) A4mat(klA4+9,n_r-4)=a**4/16.0_cp/(i_r-1)/(i_r-4)/(i_r-3)/(i_r-2)
       end do
 
       !-- Fill A3
@@ -520,46 +486,20 @@ contains
          end do
       end do
 
-      !do n_r=1,lenA4
-      !   print*, A3mat(n_r,:)*0.5_cp
-      !end do
-      !stop
-
       !-- Fill right-hand side matrix
       do n_r=1,lenA4
          i_r = n_r+n_boundaries
+
+         !-- Define right-hand side equations
          stencilB = i4(a,i_r-1,klB+kuB+1)
 
+         !-- Roll array for band storage
          do n_band=1,klB+kuB+1
             if ( i_r+kuB+1-n_band <= n_r_max .and. i_r+kuB+1-n_band >= 1 ) then
                Bmat(n_band,i_r+kuB+1-n_band) = rscheme%rnorm*stencilB(n_band)
             end if
          end do
-         !if ( i_r < n_r_max-3 ) Bmat(1,i_r+4)=rscheme%rnorm*stencilB(1)
-         !if ( i_r < n_r_max-2 ) Bmat(2,i_r+3)=rscheme%rnorm*stencilB(2)
-         !if ( i_r < n_r_max-1 ) Bmat(3,i_r+2)=rscheme%rnorm*stencilB(3)
-         !if ( i_r < n_r_max ) Bmat(4,i_r+1)=rscheme%rnorm*stencilB(4)
-         !Bmat(5,i_r)=rscheme%rnorm*stencilB(5)
-         !if ( i_r > 1 ) Bmat(6,i_r-1)=rscheme%rnorm*stencilB(6)
-         !if ( i_r > 2 ) Bmat(7,i_r-2)=rscheme%rnorm*stencilB(7)
-         !if ( i_r > 3 ) Bmat(8,i_r-3)=rscheme%rnorm*stencilB(8)
-         !if ( i_r > 4 ) Bmat(9,i_r-4)=rscheme%rnorm*stencilB(9)
-
-         !if ( i_r < n_r_max-3 ) Bmat(1,i_r+4)=a**4/16.0_cp/(i_r-1)/i_r/&
-         !&                                        (i_r+1)/(i_r+2)
-         !if ( i_r < n_r_max-1 ) Bmat(3,i_r+2)=-a**4/4.0_cp/(i_r-1)/(i_r-2)/ &
-         !&                                                 i_r/(i_r+2)
-         !Bmat(5,i_r)= 3.0_cp*a**4/8.0_cp/(i_r-3)/(i_r-2)/i_r/(i_r+1)
-         !if ( i_r > 2 ) Bmat(7,i_r-2)=-a**4/4.0_cp/(i_r-1)/(i_r-4)/(i_r-2)/i_r
-         !if ( i_r > 4 ) Bmat(9,i_r-4)=a**4/16.0_cp/(i_r-1)/(i_r-4)/(i_r-3)/ &
-         !&                                         (i_r-2)
       end do
-
-      !do n_r=1,lenA4
-      !   do n_band=1,n_bands_Amat
-      !      A4mat(n_band,n_r)=rscheme%rnorm*A4mat(n_band,n_r)
-      !   end do
-      !end do
 
       !-- Add the tau Lines for boundary conditions into A1 and A2
       do n_r=1,n_r_max
@@ -575,6 +515,8 @@ contains
             A2mat(4,n_r-n_boundaries)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
          end if
       end do
+
+      !-- Cheb factors for boundary conditions
       do n_r=1,n_boundaries
          A1mat(n_r,1)    =rscheme%boundary_fac*A1mat(n_r,1)
          A2mat(n_r,lenA4)=rscheme%boundary_fac*A2mat(1,lenA4)
@@ -592,21 +534,25 @@ contains
       rhs(3) = 0.0_cp
       rhs(4) = 0.0_cp
 
+      !-- LU factorisation of A matrix
       tStart = MPI_Wtime()
       call prepare_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,lenA4, &
            &                    klA4,kuA4, pivotA1, pivotA4)
       tStop = MPI_Wtime()
       timeLu= tStop-tStart
 
+      !-- Solve
       tStart = MPI_Wtime()
       call solve_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,lenA4, &
            &                  klA4, kuA4, pivotA1, pivotA4, rhs, n_r_max)
       tStop = MPI_Wtime()
       timeSolve= tStop-tStart
 
+      !-- Final DCT to bring back the data to physical space
       call rscheme%costf1(rhs, n_r_max)
 
       deallocate ( A4mat, A1mat, A2mat, A3mat, Bmat, tmp, pivotA4 )
+      deallocate ( stencilA4, stencilB )
 
    end subroutine solve_biharmo_integ
 !------------------------------------------------------------------------------

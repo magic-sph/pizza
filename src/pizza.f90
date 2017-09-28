@@ -65,7 +65,7 @@ program pizza
 
    !-- Test radial derivatives
    call solve_laplacian(nMstart, nMstop)
-   !call solve_biharmo(nMstart, nMstop)
+   call solve_biharmo(nMstart, nMstop)
    !call test_radial_der(nMstart,nMstop)
 
    !-- Open output files
