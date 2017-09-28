@@ -12,7 +12,8 @@ module tests
    use radial_scheme, only: type_rscheme
    use algebra, only: sgefa, rgesl, prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun
-   use sparselib, only: i2r1, r1, i1, i4, i2, eye
+   use chebsparselib, only: intcheb2rmult1, rmult1, intcheb1, intcheb4, &
+       &                    intcheb2, eye
 
    implicit none
 
@@ -141,8 +142,9 @@ contains
          allocate ( type_cheb :: rscheme )
          r_cmb=two*pi
          r_icb=0.0_cp
-         nrs = [12, 16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,   &
-         &      144, 160, 180, 200, 220, 256, 320, 400, 512, 640, 768, 1024]
+         nrs = [12, 16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,        &
+         &      144, 160, 180, 200, 220, 256, 320, 400, 512, 640, 768, 1024,&
+         &      2048, 4096]
          if ( l_newmap ) then
             open( newunit=file_handle, file='error_biharmo_map')
          else
@@ -259,7 +261,7 @@ contains
          i_r = n_r+n_boundaries
          
          !-- Define the equations
-         stencilA4 = r1(a,b,klA4+kuA4+1)-i1(a,i_r-1,klA4+kuA4+1)
+         stencilA4 = rmult1(a,b,klA4+kuA4+1)-intcheb1(a,i_r-1,klA4+kuA4+1)
 
          !-- Roll the array for band storage
          do n_band=1,klA4+kuA4+1
@@ -272,7 +274,8 @@ contains
       !-- Fill A3
       do n_r=1,n_boundaries
          i_r = n_r+n_boundaries
-         stencilA4 = r1(a,b,klA4+kuA4+1)-i1(a,i_r-1,klA4+kuA4+1)
+         stencilA4 = rmult1(a,b,klA4+kuA4+1)-intcheb1(a,i_r-1,klA4+kuA4+1)
+
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,klA4
             if ( n_r <= n_band .and. n_r+n_boundaries-n_band >= 1 ) then
@@ -281,13 +284,12 @@ contains
          end do
       end do
 
-
       !-- Fill right-hand side matrix
       do n_r=1,lenA4
          i_r = n_r+n_boundaries
 
          !-- Define the equations 
-         stencilB = i2r1(a,b,i_r-1,klB+kuB+1)
+         stencilB = intcheb2rmult1(a,b,i_r-1,klB+kuB+1)
 
          !-- Roll the arrays for band storage
          do n_band=1,klB+kuB+1
@@ -462,8 +464,8 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define the equations
-         stencilA4 = eye(klA4+kuA4+1) + two*i2(a,i_r-1,klA4+kuA4+1)+ &
-         &           i4(a,i_r-1,klA4+kuA4+1)
+         stencilA4 = eye(klA4+kuA4+1) + two*intcheb2(a,i_r-1,klA4+kuA4+1)+ &
+         &           intcheb4(a,i_r-1,klA4+kuA4+1)
 
          !-- Roll the array for band storage
          do n_band=1,klA4+kuA4+1
@@ -476,8 +478,9 @@ contains
       !-- Fill A3
       do n_r=1,n_boundaries
          i_r = n_r+n_boundaries
-         stencilA4 = eye(klA4+kuA4+1) + two*i2(a,i_r-1,klA4+kuA4+1)+ &
-         &           i4(a,i_r-1,klA4+kuA4+1)
+         stencilA4 = eye(klA4+kuA4+1) + two*intcheb2(a,i_r-1,klA4+kuA4+1)+ &
+         &           intcheb4(a,i_r-1,klA4+kuA4+1)
+
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,klA4
             if ( n_r <= n_band .and. n_r+n_boundaries-n_band >= 1 ) then
@@ -491,7 +494,7 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilB = i4(a,i_r-1,klB+kuB+1)
+         stencilB = intcheb4(a,i_r-1,klB+kuB+1)
 
          !-- Roll array for band storage
          do n_band=1,klB+kuB+1

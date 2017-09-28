@@ -20,6 +20,7 @@ program pizza
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop
    use update_temperature, only: initialize_update_temp, finalize_update_temp
+   use update_temp_integ, only: initialize_temp_integ
    use update_psi, only: initialize_update_om, finalize_update_om
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
@@ -64,8 +65,8 @@ program pizza
    call set_mpi_domains()
 
    !-- Test radial derivatives
-   call solve_laplacian(nMstart, nMstop)
-   call solve_biharmo(nMstart, nMstop)
+   !call solve_laplacian(nMstart, nMstop)
+   !call solve_biharmo(nMstart, nMstop)
    !call test_radial_der(nMstart,nMstop)
 
    !-- Open output files
@@ -92,6 +93,7 @@ program pizza
    local_bytes_used = bytes_allocated
    call initialize_update_om()
    call initialize_update_temp()
+   call initialize_temp_integ()
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
 

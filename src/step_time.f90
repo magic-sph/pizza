@@ -14,6 +14,7 @@ module step_time
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
    use update_temperature, only: update_temp, get_temp_rhs_imp
+   use update_temp_integ, only: update_temp_int
    use update_psi, only: update_om, get_psi_rhs_imp
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
@@ -284,6 +285,9 @@ contains
          call update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
               &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
               &           tscheme, lMat, l_roll_imp, l_log_next)
+         !call update_temp_int(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
+         !     &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
+         !     &           tscheme, lMat, l_roll_imp, l_log_next)
          !print*, 'new_T', sum(abs(temp_Mloc))
          !print*, 'dT[old]', sum(abs(dtemp_imp_Mloc(:,:,2)))
          !print*, 'dom[old]', sum(abs(dpsi_imp_Mloc(:,:,2)))
