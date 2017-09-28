@@ -141,7 +141,7 @@ contains
          allocate ( type_cheb :: rscheme )
          r_cmb=two*pi
          r_icb=0.0_cp
-         nrs = [10, 12, 16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,   &
+         nrs = [12, 16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,   &
          &      144, 160, 180, 200, 220, 256, 320, 400, 512, 640, 768, 1024]
          if ( l_newmap ) then
             open( newunit=file_handle, file='error_biharmo_map')
@@ -278,10 +278,11 @@ contains
          !&                                          (one-one/(i_r-1))
          do n_band=1,klA4
             if ( n_r+kuA4+1-n_band <= n_boundaries .and. n_r+kuA4+1-n_band >= 1 ) then
-               A3mat(n_r,n_r+kuA4+1-n_band) = rscheme%rnorm*stencilA4(kuA4+1+n_band)
+               A3mat(n_r,n_r+1+kuA4-n_band) = rscheme%rnorm*stencilA4(kuA4+1+n_band)
             end if
          end do
       end do
+
 
       !-- Fill right-hand side matrix
       do n_r=1,lenA4
@@ -514,11 +515,16 @@ contains
          stencilA4 = eye(klA4+kuA4+1) + two*i2(a,i_r-1,klA4+kuA4+1)+ &
          &           i4(a,i_r-1,klA4+kuA4+1)
          do n_band=1,klA4
-            if ( n_r+kuA4+1-n_band <= n_boundaries .and. n_r+kuA4+1-n_band >= 1 ) then
-               A3mat(n_r,n_r+kuA4+1-n_band) = rscheme%rnorm*stencilA4(kuA4+1+n_band)
+            if ( n_r+kuA4-n_band <= n_boundaries .and. n_r+kuA4-n_band >= 1 ) then
+               A3mat(n_r,n_r+kuA4-n_band) = rscheme%rnorm*stencilA4(kuA4+1+n_band)
             end if
          end do
       end do
+
+      !do n_r=1,lenA4
+      !   print*, A3mat(n_r,:)*0.5_cp
+      !end do
+      !stop
 
       !-- Fill right-hand side matrix
       do n_r=1,lenA4
