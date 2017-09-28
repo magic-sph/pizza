@@ -12,6 +12,7 @@ module tests
    use radial_scheme, only: type_rscheme
    use algebra, only: sgefa, rgesl, prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun
+   use sparselib, only: i2r1, r1, i1
 
    implicit none
 
@@ -124,7 +125,7 @@ contains
       integer, allocatable :: nrs(:)
       real(cp), allocatable :: r_loc(:), sol(:), sol_theo(:)
       integer :: file_handle, n_r_max_loc, n_in, n_r
-      real(cp) :: r_cmb, r_icb, eps, alph1, alph2, c1, c2
+      real(cp) :: r_cmb, r_icb, eps, alph1, alph2
       real(cp) :: errColloc, errInteg
       real(cp) :: tStart, tStop, tColloc, tInteg
       real(cp) :: timeLuColl, timeLuInt, timeSolveColl, timeSolveInt
@@ -218,7 +219,7 @@ contains
       real(cp),            intent(out) :: timeSolve
 
       !-- Local variables
-      real(cp), allocatable :: tmp(:)
+      real(cp), allocatable :: tmp(:), stencilA4(:), stencilB(:)
       real(cp), allocatable :: Bmat(:,:), A4mat(:,:)
       real(cp), allocatable :: A1mat(:,:), A2mat(:,:), A3mat(:,:)
       integer, allocatable :: pivotA1(:), pivotA4(:)
@@ -237,6 +238,7 @@ contains
       lenA4 = n_r_max-n_boundaries
 
       allocate ( A4mat(n_bands_Amat, lenA4) )
+      allocate ( stencilA4(klA4+kuA4+1), stencilB(klB+kuB+1) )
       allocate ( A1mat(n_boundaries,n_boundaries), A2mat(n_boundaries,lenA4) )
       allocate ( A3mat(lenA4, n_boundaries) )
       allocate ( Bmat(n_bands_Bmat, n_r_max) )
@@ -255,24 +257,43 @@ contains
       !-- Fill A4 banded-block
       do n_r=1,lenA4
          i_r = n_r+n_boundaries
-         if ( n_r < lenA4 ) A4mat(klA4+1,n_r+1)= half*a*(one+one/(i_r-1))
-         A4mat(klA4+2,n_r)= b
-         if ( n_r > 1 ) A4mat(klA4+3,n_r-1)= half*a*(one-one/(i_r-1))
+         stencilA4 = r1(a,b,klA4+kuA4+1)-i1(a,i_r-1,klA4+kuA4+1)
+         if ( n_r < lenA4 ) A4mat(klA4+1,n_r+1)=stencilA4(1)
+         A4mat(klA4+2,n_r)  =stencilA4(2)
+         if ( n_r > 1 ) A4mat(klA4+3,n_r-1)=stencilA4(3)
+         !if ( n_r < lenA4 ) A4mat(klA4+1,n_r+1)= half*a*(one+one/(i_r-1))
+         !A4mat(klA4+2,n_r)= b
+         !if ( n_r > 1 ) A4mat(klA4+3,n_r-1)= half*a*(one-one/(i_r-1))
       end do
 
       !-- Fill A3
-      A3mat(1,2)=0.25_cp*rscheme%rnorm*a
+      do n_r=1,n_boundaries
+         i_r = n_r+n_boundaries
+         stencilA4 = r1(a,b,klA4+kuA4+1)-i1(a,i_r-1,klA4+kuA4+1)
+         if ( n_r < n_boundaries ) A3mat(n_r,n_r+1)=rscheme%rnorm*stencilA4(3)
+         !if ( n_r < n_boundaries ) A3mat(n_r,n_r+1)=half*rscheme%rnorm*a*&
+         !&                                          (one-one/(i_r-1))
+      end do
 
       !-- Fill right-hand side matrix
       do n_r=1,lenA4
          i_r = n_r+n_boundaries
-         if ( i_r < n_r_max-2 ) Bmat(1,i_r+3)= a**3/8.0_cp/i_r/(i_r-1)
-         if ( i_r < n_r_max-1 ) Bmat(2,i_r+2)= a**2*b/4.0_cp/i_r/(i_r-1)
-         if ( i_r < n_r_max ) Bmat(3,i_r+1)= -a**3/8.0_cp/(i_r-1)/(i_r-2)
-         Bmat(4,i_r)= -a**2*b/2.0_cp/(i_r)/(i_r-2)
-         if ( i_r > 1 ) Bmat(5,i_r-1)= -a**3/8.0_cp/(i_r)/(i_r-1)
-         if ( i_r > 2 ) Bmat(6,i_r-2)= a**2*b/4.0_cp/(i_r-1)/(i_r-2)
-         if ( i_r > 3 ) Bmat(7,i_r-3)= a**3/8.0_cp/(i_r-1)/(i_r-2)
+         stencilB = i2r1(a,b,i_r-1,klB+kuB+1)
+         if ( i_r < n_r_max-2 ) Bmat(1,i_r+3)=stencilB(1)
+         if ( i_r < n_r_max-1 ) Bmat(2,i_r+2)=stencilB(2)
+         if ( i_r < n_r_max ) Bmat(3,i_r+1)=stencilB(3)
+         Bmat(4,i_r)=stencilB(4)
+         if ( i_r > 1 ) Bmat(5,i_r-1)=stencilB(5)
+         if ( i_r > 2 ) Bmat(6,i_r-2)=stencilB(6)
+         if ( i_r > 3 ) Bmat(7,i_r-3)=stencilB(7)
+
+         !if ( i_r < n_r_max-2 ) Bmat(1,i_r+3)= a**3/8.0_cp/i_r/(i_r-1)
+         !if ( i_r < n_r_max-1 ) Bmat(2,i_r+2)= a**2*b/4.0_cp/i_r/(i_r-1)
+         !if ( i_r < n_r_max ) Bmat(3,i_r+1)= -a**3/8.0_cp/(i_r-1)/(i_r-2)
+         !Bmat(4,i_r)= -a**2*b/2.0_cp/(i_r)/(i_r-2)
+         !if ( i_r > 1 ) Bmat(5,i_r-1)= -a**3/8.0_cp/(i_r)/(i_r-1)
+         !if ( i_r > 2 ) Bmat(6,i_r-2)= a**2*b/4.0_cp/(i_r-1)/(i_r-2)
+         !if ( i_r > 3 ) Bmat(7,i_r-3)= a**3/8.0_cp/(i_r-1)/(i_r-2)
       end do
 
       do n_r=1,lenA4
@@ -454,7 +475,14 @@ contains
       end do
 
       !-- Fill A3
-      A3mat(1,2)=0.25_cp*rscheme%rnorm*a
+      do n_r=1,n_boundaries
+         i_r = n_r+n_boundaries
+         if ( n_r < n_boundaries ) A3mat(n_r,n_r+1)=rscheme%rnorm* ( &
+         &                         -a**4/4.0_cp/(i_r-1)/(i_r-4)/(i_r-2)/i_r+&
+         &                          a**2/4.0_cp/(i_r-1)/(i_r-2) )
+         if( n_r > 1 ) A3mat(n_r,n_r-1)=rscheme%rnorm*(          &
+         &                    a**4/16.0_cp/(i_r-1)/(i_r-4)/(i_r-3)/(i_r-2))
+      end do
 
       !-- Fill right-hand side matrix
       do n_r=1,lenA4
