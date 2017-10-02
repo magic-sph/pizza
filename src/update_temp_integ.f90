@@ -175,7 +175,7 @@ contains
          
          if ( .not. lTmat(n_m) ) then
             call get_lhs_mat(tscheme, m, A1mat(:,:,n_m), A2mat(:,:,n_m), &
-                 &            A3mat(:,:,n_m), A4mat(:,:,n_m),             &
+                 &            A3mat(:,:,n_m), A4mat(:,:,n_m),            &
                  &            pivotA1(:,n_m), pivotA4(:,n_m))
             lTmat(n_m)=.true.
          end if
@@ -197,16 +197,10 @@ contains
             rhsr(n_r)= real(rhs(n_r))
             rhsi(n_r)=aimag(rhs(n_r))
          end do
-         !call rscheme%costf1(rhsr,n_r_max)
-         !call rscheme%costf1(rhsi,n_r_max)
-         !tmp(:)=rhsr(:)
-         !call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
-         !     &     tmp, 1, 0.0_cp, rhsr, 1)
-         !tmp(:)=rhsi(:)
-         !call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
-         !     &     tmp, 1, 0.0_cp, rhsi, 1)
-         !rhsr(1)=0.0_cp
-         !rhsi(2)=0.0_cp
+
+         !if ( n_m == 5 ) then
+         !   print*, 'rhs_glob=', rhsr(:)
+         !end if
 
          call solve_bordered_mat(A1mat(:,:,n_m),A2mat(:,:,n_m),A3mat(:,:,n_m),A4mat(:,:,n_m), &
               &                  n_boundaries,lenA4, klA4, kuA4, pivotA1(:,n_m),   &
@@ -232,8 +226,6 @@ contains
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
-      !print*, 'T[n+1]', sum(abs(temp_Mloc))
-
       !-- Assemble second buoyancy part from T^{n+1}
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
@@ -245,6 +237,9 @@ contains
             end if
          end do
       end do
+
+      !print*, temp_Mloc(5,:)
+      !stop
 
       !-- Roll the arrays before filling again the first block
       call roll(dtemp_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
@@ -339,7 +334,6 @@ contains
          end do
 
          !print*, 'C*T=', work_Mloc(5,:)
-         !stop
 
          !-- Finally assemble the right hand side
          do n_r=1,n_r_max
@@ -444,23 +438,30 @@ contains
       !-- Cheb factor for boundary conditions
       do n_r=1,n_boundaries
          A1(n_r,1)    =rscheme%boundary_fac*A1(n_r,1)
-         A2(n_r,lenA4)=rscheme%boundary_fac*A2(1,lenA4)
+         A2(n_r,lenA4)=rscheme%boundary_fac*A2(n_r,lenA4)
       end do
 
-      !if ( m == 4 ) then
-      !   do n_r=1,lenA4
-      !      print*, 'A3=', A3(n_r,:)
-      !   end do
+      if ( m == 4 ) then
+!         do n_r=1,lenA4
+!            print*, 'A3=', A3(n_r,:)
+!         end do
 !
 !         do n_r=1,2
+!            print*, 'A1=', A1(n_r,:)
 !            print*, 'A2=', A2(n_r,:)
 !         end do
 
- !        print*, 'A4=', A4(5,:)
- !        print*, 'A4=', A4(6,:)
- !        print*, 'A4=', A4(7,:)
-         !stop
-  !    end if
+         !print*, 'A4=', A4(5,:)
+         !print*, 'A4=', A4(6,:)
+         !print*, 'A4=', A4(7,:)
+         !print*, 'A4=', A4(8,:)
+         !print*, 'A4=', A4(9,:)
+         !print*, 'A4=', A4(10,:)
+         !print*, 'A4=', A4(11,:)
+         !print*, 'A4=', A4(12,:)
+         !print*, 'A4=', A4(13,:)
+        !stop
+      end if
 
       !-- LU factorisation
       call prepare_bordered_mat(A1,A2,A3,A4,n_boundaries,lenA4, &

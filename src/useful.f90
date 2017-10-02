@@ -259,7 +259,6 @@ contains
 
    end function cc22real
 !----------------------------------------------------------------------------
-!----------------------------------------------------------------------------
    subroutine getMSD2(mean,SD,x,n,dt,totalTime)
       ! This subroutine computes the mean and standard deviation according 
       ! to a method introduced by Donald Knuth (1962). I rederived his formulas
