@@ -20,7 +20,7 @@ program pizza
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop
    use update_temperature, only: initialize_update_temp, finalize_update_temp
-   use update_temp_integ, only: initialize_temp_integ
+   use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
    use update_psi, only: initialize_update_om, finalize_update_om
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
@@ -67,6 +67,7 @@ program pizza
    !-- Test radial derivatives
    !call solve_laplacian(nMstart, nMstop)
    !call solve_biharmo(nMstart, nMstop)
+   !stop
    !call test_radial_der(nMstart,nMstop)
 
    !-- Open output files
@@ -92,8 +93,7 @@ program pizza
    local_bytes_used = bytes_allocated-local_bytes_used
    local_bytes_used = bytes_allocated
    call initialize_update_om()
-   call initialize_update_temp()
-   call initialize_temp_integ()
+   !call initialize_update_temp()
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
 
@@ -106,6 +106,9 @@ program pizza
 
    !-- Pre calculations
    call preCalc()
+
+   !-- Radius needs to be know!
+   call initialize_temp_integ()
 
    !-- Start fields
    call get_start_fields(time, tscheme)
@@ -146,7 +149,8 @@ program pizza
    end if
 
    !-- Close files
-   call finalize_update_temp()
+   !call finalize_update_temp()
+   call finalize_temp_integ()
    call finalize_update_om()
    call finalize_radial_loop()
    call finalize_fourier()

@@ -272,7 +272,7 @@ contains
       end do
 
       !-- Fill A3
-      do n_r=1,n_boundaries
+      do n_r=1,lenA4
          i_r = n_r+n_boundaries
          stencilA4 = rmult1(a,b,klA4+kuA4+1)-intcheb1(a,i_r-1,klA4+kuA4+1)
 
@@ -313,7 +313,7 @@ contains
       !-- Cheb factor for boundary conditions
       do n_r=1,n_boundaries
          A1mat(n_r,1)    =rscheme%boundary_fac*A1mat(n_r,1)
-         A2mat(n_r,lenA4)=rscheme%boundary_fac*A2mat(1,lenA4)
+         A2mat(n_r,lenA4)=rscheme%boundary_fac*A2mat(n_r,lenA4)
       end do
 
       !-- Assemble right-hand side
@@ -476,7 +476,7 @@ contains
       end do
 
       !-- Fill A3
-      do n_r=1,n_boundaries
+      do n_r=1,lenA4
          i_r = n_r+n_boundaries
          stencilA4 = eye(klA4+kuA4+1) + two*intcheb2(a,i_r-1,klA4+kuA4+1)+ &
          &           intcheb4(a,i_r-1,klA4+kuA4+1)
@@ -522,7 +522,7 @@ contains
       !-- Cheb factors for boundary conditions
       do n_r=1,n_boundaries
          A1mat(n_r,1)    =rscheme%boundary_fac*A1mat(n_r,1)
-         A2mat(n_r,lenA4)=rscheme%boundary_fac*A2mat(1,lenA4)
+         A2mat(n_r,lenA4)=rscheme%boundary_fac*A2mat(n_r,lenA4)
       end do
 
       !-- Assemble right-hand side

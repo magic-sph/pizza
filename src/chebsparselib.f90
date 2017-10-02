@@ -6,7 +6,7 @@ module chebsparselib
    !
 
    use precision_mod
-   use constants, only: half, one
+   use constants, only: half, one, two
 
    implicit none
 
@@ -19,7 +19,7 @@ contains
 
    function eye(len_stencil) result(stencil)
       !
-      ! Identity operator
+      ! Identity operator (validation: OK)
       !
 
       !-- Inputvariable
@@ -41,7 +41,7 @@ contains
 !------------------------------------------------------------------------------
    function rmult1(a, b, len_stencil) result(stencil)
       !
-      ! Multiplication by r operator
+      ! Multiplication by r operator (validation: OK)
       !
 
       !-- Inputvariable
@@ -84,18 +84,18 @@ contains
       ku = (len_stencil-1)/2
 
       stencil(1:ku-2)          =0.0_cp
-      stencil(ku-1)            =a*a/4.0_cp
+      stencil(ku-1)            =0.25_cp*a*a
       stencil(ku)              =a*b ! 1st upper diagonal
-      stencil(ku+1)            =(a*a+2.0_cp*b*b)/2.0_cp ! Diagonal
+      stencil(ku+1)            =half*(a*a+two*b*b) ! Diagonal
       stencil(ku+2)            =a*b ! 1st lower diagonal
-      stencil(ku+3)            =a*a/4.0_cp
+      stencil(ku+3)            =0.25_cp*a*a
       stencil(ku+4:len_stencil)=0.0_cp
 
    end function rmult2
 !------------------------------------------------------------------------------
    function intcheb1(a, idx, len_stencil) result(stencil)
       !
-      ! First integral operator
+      ! First integral operator (validation: OK)
       !
 
       !-- Inputvariable
@@ -121,7 +121,7 @@ contains
 !------------------------------------------------------------------------------
    function intcheb2(a, idx, len_stencil) result(stencil)
       !
-      ! Second integral operator
+      ! Second integral operator (validation: OK)
       !
 
       !-- Inputvariable
@@ -149,7 +149,7 @@ contains
 !------------------------------------------------------------------------------
    function intcheb4(a, idx, len_stencil) result(stencil)
       !
-      ! Fourth-integral opertor
+      ! Fourth-integral opertor (validation: OK)
       !
 
       !-- Inputvariable
@@ -204,18 +204,18 @@ contains
       ku = (len_stencil-1)/2
 
       stencil(1:ku-2)          = 0.0_cp
-      stencil(ku-1)            =-a*a/4.0_cp/real(idx,cp)
-      stencil(ku)              =-a*b/2.0_cp/real(idx,cp)
+      stencil(ku-1)            =-0.25_cp*a*a/real(idx,cp)
+      stencil(ku)              =-half*a*b/real(idx,cp)
       stencil(ku+1)            = 0.0_cp
-      stencil(ku+2)            = a*b/2.0_cp/real(idx,cp)
-      stencil(ku+3)            = a*a/4.0_cp/real(idx,cp)
+      stencil(ku+2)            = half*a*b/real(idx,cp)
+      stencil(ku+3)            = 0.25_cp*a*a/real(idx,cp)
       stencil(ku+4:len_stencil)= 0.0_cp
 
    end function intcheb1rmult1
 !------------------------------------------------------------------------------
    function intcheb2rmult1(a, b, idx, len_stencil) result(stencil)
       !
-      ! Second integral of r operator
+      ! Second integral of r operator (validation: OK)
       !
 
       !-- Inputvariable
