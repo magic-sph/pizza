@@ -14,6 +14,7 @@ module update_temp_integ
    use algebra, only: prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun, roll
    use time_schemes, only: type_tscheme
+   use matrix_types, only: type_bandmat_real
    use chebsparselib, only: intcheb2rmult2, intcheb2rmult2lapl
 
    implicit none
@@ -28,20 +29,19 @@ module update_temp_integ
    integer, parameter :: kuC=2
    integer, parameter :: n_boundaries=2
    integer, parameter :: n_bands_Amat=2*klA4+kuA4+1
-   integer, parameter :: n_bands_Bmat = klB+kuB+1
-   integer, parameter :: n_bands_Cmat = klC+kuC+1
 
    integer :: lenA4
    real(cp), allocatable :: A1mat(:,:,:)
    real(cp), allocatable :: A2mat(:,:,:)
-   real(cp), allocatable :: Bmat(:,:)
-   real(cp), allocatable :: Cmat(:,:,:)
    real(cp), allocatable :: A3mat(:,:,:)
    real(cp), allocatable :: A4mat(:,:,:)
    logical,  allocatable :: lTmat(:)
    integer,  allocatable :: pivotA4(:, :)
    integer,  allocatable :: pivotA1(:, :)
    complex(cp), allocatable :: rhs(:)
+
+   type(type_bandmat_real) :: B_mat
+   type(type_bandmat_real), allocatable :: C_mat(:)
 
    public :: update_temp_int, initialize_temp_integ, finalize_temp_integ, &
    &         get_temp_rhs_imp_int
@@ -58,20 +58,24 @@ contains
       allocate( A2mat(n_boundaries, lenA4, nMstart:nMstop) )
       allocate( A3mat(lenA4, n_boundaries,nMstart:nMstop) )
       allocate( A4mat(n_bands_Amat,lenA4,nMstart:nMstop) )
-      allocate( Bmat(n_bands_Bmat,n_r_max) )
-      allocate( Cmat(n_bands_Cmat,n_r_max,nMstart:nMstop) )
+
+      call B_mat%initialize(klB, kuB, n_r_max)
+
+      allocate( C_mat(nMstart:nMstop) )
+
+      do n_m=nMstart,nMstop
+         call C_mat(n_m)%initialize(klC, kuC, n_r_max)
+      end do
 
       A1mat(:,:,:)=0.0_cp
       A2mat(:,:,:)=0.0_cp
       A3mat(:,:,:)=0.0_cp
       A4mat(:,:,:)=0.0_cp
-      Bmat(:,:)   =0.0_cp
-      Cmat(:,:,:) =0.0_cp
 
-      call get_rhs_exp_mat(Bmat)
+      call get_rhs_exp_mat(B_mat)
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
-         call get_rhs_imp_mat(Cmat(:,:,n_m), m)
+         call get_rhs_imp_mat(C_mat(n_m), m)
       end do
 
       allocate( lTmat(nMstart:nMstop) )
@@ -86,6 +90,14 @@ contains
 !------------------------------------------------------------------------------
    subroutine finalize_temp_integ
 
+      !-- Local variables
+      integer :: n_m
+
+      call B_mat%finalize()
+      do n_m=nMstart,nMstop
+         call C_mat(n_m)%finalize()
+      end do
+      deallocate( C_mat )
       deallocate( rhs )
       deallocate( lTmat)
 
@@ -147,21 +159,15 @@ contains
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
          do n_r=1,n_r_max
-            rhsr(n_r)= real(dtemp_exp_Mloc(n_m,n_r,1))
-            rhsi(n_r)=aimag(dtemp_exp_Mloc(n_m,n_r,1))
+            rhs(n_r)=dtemp_exp_Mloc(n_m,n_r,1)
          end do
-         tmpr(:)=rhsr(:)
-         tmpi(:)=rhsi(:)
-         call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
-              &     tmpr, 1, 0.0_cp, rhsr, 1)
-         call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
-              &     tmpi, 1, 0.0_cp, rhsi, 1)
-         rhsr(1)=0.0_cp
-         rhsr(2)=0.0_cp
-         rhsi(1)=0.0_cp
-         rhsi(2)=0.0_cp
+
+         call B_mat%mat_vec_mul(rhs)
+
+         rhs(1)=zero
+         rhs(2)=zero
          do n_r=1,n_r_max
-            dtemp_exp_Mloc(n_m,n_r,1)=cmplx(rhsr(n_r), rhsi(n_r), kind=cp)
+            dtemp_exp_Mloc(n_m,n_r,1)=rhs(n_r)
          end do
       end do
 
@@ -268,7 +274,6 @@ contains
       complex(cp), intent(out) :: dtemp_imp_Mloc_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      real(cp) :: tmpr(n_r_max), tmpi(n_r_max), rhsr(n_r_max), rhsi(n_r_max)
       integer :: n_r, n_m
 
       do n_r=1,n_r_max
@@ -282,23 +287,20 @@ contains
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
+
          do n_r=1,n_r_max
-            rhsr(n_r)= real(dtemp_imp_Mloc_last(n_m,n_r))
-            rhsi(n_r)=aimag(dtemp_imp_Mloc_last(n_m,n_r))
+            rhs(n_r)= dtemp_imp_Mloc_last(n_m,n_r)
          end do
-         tmpr(:)=rhsr(:)
-         tmpi(:)=rhsi(:)
-         call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
-              &     tmpr, 1, 0.0_cp, rhsr, 1)
-         call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
-              &     tmpi, 1, 0.0_cp, rhsi, 1)
-         rhsr(1)=0.0_cp
-         rhsr(2)=0.0_cp
-         rhsi(1)=0.0_cp
-         rhsi(2)=0.0_cp
+
+         call B_mat%mat_vec_mul(rhs)
+
+         rhs(1)=zero
+         rhs(2)=zero
+
          do n_r=1,n_r_max
-            dtemp_imp_Mloc_last(n_m,n_r)=cmplx(rhsr(n_r), rhsi(n_r), kind=cp)
+            dtemp_imp_Mloc_last(n_m,n_r)=rhs(n_r)
          end do
+
       end do
 
       !print*, 'B*T=', dtemp_imp_Mloc_last(5,:)
@@ -319,21 +321,13 @@ contains
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
             do n_r=1,n_r_max
-               rhsr(n_r)= real(work_Mloc(n_m,n_r))
-               rhsi(n_r)=aimag(work_Mloc(n_m,n_r))
+               rhs(n_r)=work_Mloc(n_m,n_r)
             end do
-            tmpr(:)=rhsr(:)
-            tmpi(:)=rhsi(:)
-            call dgbmv('N', n_r_max, n_r_max, klC, kuC, one, Cmat(:,:,n_m), &
-                 &     n_bands_Cmat, tmpr, 1, 0.0_cp, rhsr, 1)
-            call dgbmv('N', n_r_max, n_r_max, klC, kuC, one, Cmat(:,:,n_m), &
-                 &     n_bands_Cmat, tmpi, 1, 0.0_cp, rhsi, 1)
-            rhsr(1)=0.0_cp
-            rhsr(2)=0.0_cp
-            rhsi(1)=0.0_cp
-            rhsi(2)=0.0_cp
+            call C_mat(n_m)%mat_vec_mul(rhs)
+            rhs(1)=zero
+            rhs(2)=zero
             do n_r=1,n_r_max
-               work_Mloc(n_m,n_r)=cmplx(rhsr(n_r), rhsi(n_r), kind=cp)
+               work_Mloc(n_m,n_r)=rhs(n_r)
             end do
          end do
 
@@ -472,10 +466,10 @@ contains
    subroutine get_rhs_exp_mat(B_mat)
 
       !-- Output variable
-      real(cp), intent(inout) :: B_mat(n_bands_Bmat,n_r_max)
+      type(type_bandmat_real), intent(inout) :: B_mat
 
       !-- Local variables
-      real(cp) :: stencilB(klB+kuB+1)
+      real(cp) :: stencilB(B_mat%nbands)
       real(cp) :: a, b
       integer :: n_band, n_r, i_r
 
@@ -483,16 +477,16 @@ contains
       b = half*(r(1)+r(n_r_max))
 
       !-- Fill right-hand side matrix
-      do n_r=1,lenA4
+      do n_r=1,B_mat%nlines
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilB = intcheb2rmult2(a,b,i_r-1,klB+kuB+1)
+         stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
 
          !-- Roll array for band storage
-         do n_band=1,klB+kuB+1
-            if ( i_r+kuB+1-n_band <= n_r_max .and. i_r+kuB+1-n_band >= 1 ) then
-               B_mat(n_band,i_r+kuB+1-n_band) = rscheme%rnorm*stencilB(n_band)
+         do n_band=1,B_mat%nbands
+            if ( i_r+B_mat%ku+1-n_band <= B_mat%nlines .and. i_r+B_mat%ku+1-n_band >= 1 ) then
+               B_mat%dat(n_band,i_r+B_mat%ku+1-n_band) = rscheme%rnorm*stencilB(n_band)
             end if
          end do
       end do
@@ -505,29 +499,27 @@ contains
       integer, intent(in) :: m
 
       !-- Output variable
-      real(cp), intent(inout) :: Cmat(n_bands_Cmat,n_r_max)
+      type(type_bandmat_real), intent(inout) :: Cmat
 
       !-- Local variables
-      real(cp) :: stencilC(klC+kuC+1)
-      real(cp) :: a, b, dm2
+      real(cp) :: stencilC(Cmat%nbands)
+      real(cp) :: a, b
       integer :: n_band, n_r, i_r
 
       a = half*(r(1)-r(n_r_max))
       b = half*(r(1)+r(n_r_max))
-      dm2 = real(m,kind=cp)*real(m,kind=cp)
-
 
       !-- Fill right-hand side matrix
-      do n_r=1,lenA4
+      do n_r=1,Cmat%nlines
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilC = intcheb2rmult2lapl(a,b,m,i_r-1,klC+kuC+1)
+         stencilC = intcheb2rmult2lapl(a,b,m,i_r-1,Cmat%nbands)
 
          !-- Roll array for band storage
-         do n_band=1,klC+kuC+1
-            if ( i_r+kuC+1-n_band <= n_r_max .and. i_r+kuC+1-n_band >= 1 ) then
-               Cmat(n_band,i_r+kuC+1-n_band) = rscheme%rnorm*stencilC(n_band)
+         do n_band=1,Cmat%nbands
+            if ( i_r+Cmat%ku+1-n_band <= Cmat%nlines .and. i_r+Cmat%ku+1-n_band >= 1 ) then
+               Cmat%dat(n_band,i_r+Cmat%ku+1-n_band) = rscheme%rnorm*stencilC(n_band)
             end if
          end do
       end do
