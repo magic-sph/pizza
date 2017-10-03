@@ -13,7 +13,7 @@ module chebsparselib
    private
 
    public :: rmult1, intcheb1, intcheb2, intcheb4, intcheb2rmult1, eye, &
-   &         rmult2, intcheb2rmult2, intcheb1rmult1
+   &         rmult2, intcheb2rmult2, intcheb1rmult1, intcheb2rmult2lapl
 
 contains
 
@@ -281,5 +281,39 @@ contains
       stencil(ku+6:len_stencil)= 0.0_cp
 
    end function intcheb2rmult2
+!------------------------------------------------------------------------------
+   function intcheb2rmult2lapl(a, b, m, idx, len_stencil) result(stencil)
+      !
+      ! Second integral of r**2*\Delta operator (same as the combination)
+      !
+
+      !-- Inputvariable
+      real(cp), intent(in) :: a
+      real(cp), intent(in) :: b
+      integer,  intent(in) :: m
+      integer,  intent(in) :: idx
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variables
+      integer :: ku
+
+      ku = (len_stencil-1)/2
+
+      stencil(1:ku-2)          = 0.0_cp
+      stencil(ku-1)            =-a*a*real(m-idx-2,cp)*real(m+idx+2,cp)/ &
+      &                          real(4*idx*(idx+1),cp)
+      stencil(ku)              = half*a*b*real(2*idx+3,cp)/real(idx,cp)
+      stencil(ku+1)            = (a*a*real(m*m,cp)+a*a*real(idx*idx,cp)-   &
+      &                          two*a*a+two*b*b*real(idx*idx,cp)-two*b*b)/&
+      &                          real(2*(idx-1)*(idx+1),cp)
+      stencil(ku+2)            = a*b*real(2*idx-3,cp)/real(2*idx,cp)
+      stencil(ku+3)            = -a*a*real(m-idx+2,cp)*real(m+idx-2,cp)/ &
+      &                          real(4*idx*(idx-1),cp)
+      stencil(ku+4:len_stencil)= 0.0_cp
+
+   end function intcheb2rmult2lapl
 !------------------------------------------------------------------------------
 end module chebsparselib

@@ -14,7 +14,7 @@ module update_temp_integ
    use algebra, only: prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun, roll
    use time_schemes, only: type_tscheme
-   use chebsparselib, only: intcheb2, intcheb1rmult1, rmult2, intcheb2rmult2
+   use chebsparselib, only: intcheb2rmult2, intcheb2rmult2lapl
 
    implicit none
    
@@ -382,10 +382,8 @@ contains
 
          !-- Define the equations
          stencilA4 = intcheb2rmult2(a,b,i_r-1,klA4+kuA4+1)-     &
-         &                       tscheme%wimp_lin(1)*opr*(      &
-         &                           rmult2(a,b,klA4+kuA4+1)    &
-         &      -three*intcheb1rmult1(a,b,i_r-1,klA4+kuA4+1)    &
-         &          +(one-dm2)*intcheb2(a,i_r-1,klA4+kuA4+1) )
+         &                       tscheme%wimp_lin(1)*opr*       &
+         &       intcheb2rmult2lapl(a,b,m,i_r-1,klA4+kuA4+1)  
 
          !-- Roll the array for band storage
          do n_band=1,klA4+kuA4+1
@@ -399,10 +397,8 @@ contains
       do n_r=1,lenA4
          i_r = n_r+n_boundaries
          stencilA4 = intcheb2rmult2(a,b,i_r-1,klA4+kuA4+1)-     &
-         &                       tscheme%wimp_lin(1)*opr*(      &
-         &                           rmult2(a,b,klA4+kuA4+1)    &
-         &      -three*intcheb1rmult1(a,b,i_r-1,klA4+kuA4+1)    &
-         &          +(one-dm2)*intcheb2(a,i_r-1,klA4+kuA4+1) )
+         &                       tscheme%wimp_lin(1)*opr*       &
+         &       intcheb2rmult2lapl(a,b,m,i_r-1,klA4+kuA4+1)  
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,klA4
@@ -526,9 +522,7 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilC =                  rmult2(a,b,klC+kuC+1)  &
-         &      -three*intcheb1rmult1(a,b,i_r-1,klC+kuC+1)  &
-         &      +    (one-dm2)*intcheb2(a,i_r-1,klC+kuC+1)
+         stencilC = intcheb2rmult2lapl(a,b,m,i_r-1,klC+kuC+1)
 
          !-- Roll array for band storage
          do n_band=1,klC+kuC+1
