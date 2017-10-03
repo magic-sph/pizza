@@ -180,7 +180,7 @@ contains
             lTmat(n_m)=.true.
          end if
 
-         do n_r=2,n_r_max-1
+         do n_r=1,n_r_max
             do n_o=1,tscheme%norder_imp-1
                if ( n_o == 1 ) then
                   rhs(n_r)=tscheme%wimp(n_o+1)*dtemp_imp_Mloc(n_m,n_r,n_o)
@@ -202,13 +202,17 @@ contains
          !   print*, 'rhs_glob=', rhsr(:)
          !end if
 
-         call solve_bordered_mat(A1mat(:,:,n_m),A2mat(:,:,n_m),A3mat(:,:,n_m),A4mat(:,:,n_m), &
-              &                  n_boundaries,lenA4, klA4, kuA4, pivotA1(:,n_m),   &
-              &                  pivotA4(:,n_m), rhsr, n_r_max)
+         call solve_bordered_mat(A1mat(:,:,n_m), A2mat(:,:,n_m),   &
+              &                  A3mat(:,:,n_m), A4mat(:,:,n_m),   &
+              &                  n_boundaries, lenA4, klA4, kuA4,  &
+              &                  pivotA1(:,n_m), pivotA4(:,n_m),   &
+              &                  rhsr, n_r_max)
 
-         call solve_bordered_mat(A1mat(:,:,n_m),A2mat(:,:,n_m),A3mat(:,:,n_m),A4mat(:,:,n_m), &
-              &                  n_boundaries,lenA4, klA4, kuA4, pivotA1(:,n_m),   &
-              &                  pivotA4(:,n_m), rhsi, n_r_max)
+         call solve_bordered_mat(A1mat(:,:,n_m), A2mat(:,:,n_m),   &
+              &                  A3mat(:,:,n_m), A4mat(:,:,n_m),   &
+              &                  n_boundaries, lenA4, klA4, kuA4,  &
+              &                  pivotA1(:,n_m), pivotA4(:,n_m),   &
+              &                  rhsi, n_r_max)
 
          do n_r_out=1,rscheme%n_max
             temp_Mloc(n_m, n_r_out)=cmplx(rhsr(n_r_out), rhsi(n_r_out), kind=cp)
@@ -339,7 +343,7 @@ contains
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                dtemp_imp_Mloc_last(n_m,n_r)=dtemp_imp_Mloc_last(n_m,n_r) &
-               &                          +wimp*opr*work_Mloc(n_m,n_r) 
+               &                            +wimp*opr*work_Mloc(n_m,n_r) 
             end do
          end do
 
@@ -381,7 +385,7 @@ contains
          &                       tscheme%wimp_lin(1)*opr*(      &
          &                           rmult2(a,b,klA4+kuA4+1)    &
          &      -three*intcheb1rmult1(a,b,i_r-1,klA4+kuA4+1)    &
-         &            +(one-dm2)*intcheb2(a,i_r-1,klA4+kuA4+1) )
+         &          +(one-dm2)*intcheb2(a,i_r-1,klA4+kuA4+1) )
 
          !-- Roll the array for band storage
          do n_band=1,klA4+kuA4+1
@@ -398,7 +402,7 @@ contains
          &                       tscheme%wimp_lin(1)*opr*(      &
          &                           rmult2(a,b,klA4+kuA4+1)    &
          &      -three*intcheb1rmult1(a,b,i_r-1,klA4+kuA4+1)    &
-         &            +(one-dm2)*intcheb2(a,i_r-1,klA4+kuA4+1) )
+         &          +(one-dm2)*intcheb2(a,i_r-1,klA4+kuA4+1) )
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,klA4

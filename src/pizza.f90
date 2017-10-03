@@ -93,7 +93,7 @@ program pizza
    local_bytes_used = bytes_allocated-local_bytes_used
    local_bytes_used = bytes_allocated
    call initialize_update_om()
-   !call initialize_update_temp()
+   call initialize_update_temp()
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
 
@@ -149,7 +149,7 @@ program pizza
    end if
 
    !-- Close files
-   !call finalize_update_temp()
+   call finalize_update_temp()
    call finalize_temp_integ()
    call finalize_update_om()
    call finalize_radial_loop()
