@@ -261,7 +261,7 @@ contains
          i_r = n_r+n_boundaries
          
          !-- Define the equations
-         stencilA4 = rmult1(a,b,klA4+kuA4+1)-intcheb1(a,i_r-1,klA4+kuA4+1)
+         stencilA4 = rmult1(a,b,i_r-1,klA4+kuA4+1)-intcheb1(a,i_r-1,klA4+kuA4+1)
 
          !-- Roll the array for band storage
          do n_band=1,klA4+kuA4+1
@@ -274,7 +274,7 @@ contains
       !-- Fill A3
       do n_r=1,lenA4
          i_r = n_r+n_boundaries
-         stencilA4 = rmult1(a,b,klA4+kuA4+1)-intcheb1(a,i_r-1,klA4+kuA4+1)
+         stencilA4 = rmult1(a,b,i_r-1,klA4+kuA4+1)-intcheb1(a,i_r-1,klA4+kuA4+1)
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,klA4

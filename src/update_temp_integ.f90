@@ -285,6 +285,13 @@ contains
             dtemp_imp_Mloc_last(n_m,n_r)=rhs(n_r)
          end do
 
+         ! if ( n_m == 5 ) then
+            ! do n_r=1,n_r_max
+               ! print*, real(rhs(n_r))
+            ! end do
+            ! stop
+         ! end if
+
       end do
 
       !print*, 'B*T=', dtemp_imp_Mloc_last(5,:)

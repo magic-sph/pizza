@@ -39,20 +39,21 @@ contains
 
    end function eye
 !------------------------------------------------------------------------------
-   function rmult1(a, b, len_stencil) result(stencil)
+   function rmult1(a, b, idx, len_stencil) result(stencil)
       !
       ! Multiplication by r operator (validation: OK)
       !
 
-      !-- Inputvariable
+      !-- Input variables
       real(cp), intent(in) :: a
       real(cp), intent(in) :: b
+      integer,  intent(in) :: idx
       integer,  intent(in) :: len_stencil
 
       !-- Output variable
       real(cp) :: stencil(len_stencil)
 
-      !-- Local variables
+      !-- Local variable
       integer :: ku
 
       ku = (len_stencil-1)/2
@@ -63,22 +64,25 @@ contains
       stencil(ku+2)           =half*a ! 1st lower diagonal
       stencil(ku+3:len_stencil)=0.0_cp
 
+      stencil = mirror_stencil(idx, len_stencil)
+
    end function rmult1
 !------------------------------------------------------------------------------
-   function rmult2(a, b, len_stencil) result(stencil)
+   function rmult2(a, b, idx, len_stencil) result(stencil)
       !
-      ! Multiplication by r operator
+      ! Multiplication by r^2 operator
       !
 
-      !-- Inputvariable
+      !-- Input variables
       real(cp), intent(in) :: a
       real(cp), intent(in) :: b
+      integer,  intent(in) :: idx
       integer,  intent(in) :: len_stencil
 
       !-- Output variable
       real(cp) :: stencil(len_stencil)
 
-      !-- Local variables
+      !-- Local variable
       integer :: ku
 
       ku = (len_stencil-1)/2
@@ -91,6 +95,8 @@ contains
       stencil(ku+3)            =0.25_cp*a*a
       stencil(ku+4:len_stencil)=0.0_cp
 
+      stencil = mirror_stencil(idx, len_stencil)
+
    end function rmult2
 !------------------------------------------------------------------------------
    function intcheb1(a, idx, len_stencil) result(stencil)
@@ -98,7 +104,7 @@ contains
       ! First integral operator (validation: OK)
       !
 
-      !-- Inputvariable
+      !-- Input variables
       real(cp), intent(in) :: a
       integer,  intent(in) :: idx
       integer,  intent(in) :: len_stencil
@@ -106,7 +112,7 @@ contains
       !-- Output variable
       real(cp) :: stencil(len_stencil)
 
-      !-- Local variables
+      !-- Local variable
       integer :: ku
 
       ku = (len_stencil-1)/2
@@ -117,6 +123,8 @@ contains
       stencil(ku+2)            = half*a/real(idx,cp) ! 1st lower diagonal
       stencil(ku+3:len_stencil)= 0.0_cp
 
+      stencil = mirror_stencil(idx, len_stencil)
+
    end function intcheb1
 !------------------------------------------------------------------------------
    function intcheb2(a, idx, len_stencil) result(stencil)
@@ -124,7 +132,7 @@ contains
       ! Second integral operator (validation: OK)
       !
 
-      !-- Inputvariable
+      !-- Input variables
       real(cp), intent(in) :: a
       integer,  intent(in) :: idx
       integer,  intent(in) :: len_stencil
@@ -132,7 +140,7 @@ contains
       !-- Output variable
       real(cp) :: stencil(len_stencil)
 
-      !-- Local variables
+      !-- Local variable
       integer :: ku
 
       ku = (len_stencil-1)/2
@@ -145,6 +153,8 @@ contains
       stencil(ku+3)            = a*a/4.0_cp/real(idx,cp)/real(idx-1,cp)
       stencil(ku+4:len_stencil)= 0.0_cp
 
+      stencil = mirror_stencil(idx, len_stencil)
+
    end function intcheb2
 !------------------------------------------------------------------------------
    function intcheb4(a, idx, len_stencil) result(stencil)
@@ -152,7 +162,7 @@ contains
       ! Fourth-integral opertor (validation: OK)
       !
 
-      !-- Inputvariable
+      !-- Input variables
       real(cp), intent(in) :: a
       integer,  intent(in) :: idx
       integer,  intent(in) :: len_stencil
@@ -160,7 +170,7 @@ contains
       !-- Output variable
       real(cp) :: stencil(len_stencil)
 
-      !-- Local variables
+      !-- Local variable
       integer :: ku
 
       ku = (len_stencil-1)/2
@@ -182,6 +192,8 @@ contains
       &                          real(idx-2,cp)/real(idx-1,cp)
       stencil(ku+6:len_stencil)= 0.0_cp
 
+      stencil = mirror_stencil(idx, len_stencil)
+
    end function intcheb4
 !------------------------------------------------------------------------------
    function intcheb1rmult1(a, b, idx, len_stencil) result(stencil)
@@ -189,7 +201,7 @@ contains
       ! Second integral of r operator
       !
 
-      !-- Inputvariable
+      !-- Input variables
       real(cp), intent(in) :: a
       real(cp), intent(in) :: b
       integer,  intent(in) :: idx
@@ -211,6 +223,8 @@ contains
       stencil(ku+3)            = 0.25_cp*a*a/real(idx,cp)
       stencil(ku+4:len_stencil)= 0.0_cp
 
+      stencil = mirror_stencil(idx, len_stencil)
+
    end function intcheb1rmult1
 !------------------------------------------------------------------------------
    function intcheb2rmult1(a, b, idx, len_stencil) result(stencil)
@@ -218,7 +232,7 @@ contains
       ! Second integral of r operator (validation: OK)
       !
 
-      !-- Inputvariable
+      !-- Input variables
       real(cp), intent(in) :: a
       real(cp), intent(in) :: b
       integer,  intent(in) :: idx
@@ -242,6 +256,8 @@ contains
       stencil(ku+4)            = a*a*a/8.0_cp/real(idx,cp)/real(idx-1,cp)
       stencil(ku+5:len_stencil)= 0.0_cp
 
+      stencil = mirror_stencil(idx, len_stencil)
+
    end function intcheb2rmult1
 !------------------------------------------------------------------------------
    function intcheb2rmult2(a, b, idx, len_stencil) result(stencil)
@@ -249,7 +265,7 @@ contains
       ! Second integral of r operator
       !
 
-      !-- Inputvariable
+      !-- Input variables
       real(cp), intent(in) :: a
       real(cp), intent(in) :: b
       integer,  intent(in) :: idx
@@ -280,6 +296,8 @@ contains
       stencil(ku+5)            = a*a*a*a/16.0_cp/real(idx,cp)/real(idx-1,cp)
       stencil(ku+6:len_stencil)= 0.0_cp
 
+      stencil = mirror_stencil(idx, len_stencil)
+
    end function intcheb2rmult2
 !------------------------------------------------------------------------------
    function intcheb2rmult2lapl(a, b, m, idx, len_stencil) result(stencil)
@@ -287,7 +305,7 @@ contains
       ! Second integral of r**2*\Delta operator (same as the combination)
       !
 
-      !-- Inputvariable
+      !-- Input variables
       real(cp), intent(in) :: a
       real(cp), intent(in) :: b
       integer,  intent(in) :: m
@@ -314,6 +332,33 @@ contains
       &                          real(4*idx*(idx-1),cp)
       stencil(ku+4:len_stencil)= 0.0_cp
 
+      stencil = mirror_stencil(idx, len_stencil)
+
    end function intcheb2rmult2lapl
+!------------------------------------------------------------------------------
+   function mirror_stencil(idx, len_stencil) result(stencil)
+
+      !-- Input variables
+      integer,  intent(in) :: idx
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variable
+      integer :: n, ku
+
+      ku = (len_stencil-1)/2
+
+      if ( idx < ku ) then
+         !print*, 'idx=', idx
+         do n=1,ku-idx
+            !print*, len_stencil-ku+idx-n, '<-', len_stencil-ku+idx-n, '+', len_stencil-ku+idx+n
+            stencil(len_stencil-ku+idx-n) = stencil(len_stencil-ku+idx-n)+ &
+            &                               stencil(len_stencil-ku+idx+n)
+         end do
+      end if
+
+   end function mirror_stencil
 !------------------------------------------------------------------------------
 end module chebsparselib
