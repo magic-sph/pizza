@@ -21,23 +21,15 @@ module update_temp_integ
    
    private
 
-   integer, parameter :: klA4=4
-   integer, parameter :: kuA4=4
+   integer, parameter :: klA=4
+   integer, parameter :: kuA=4
    integer, parameter :: klB=4
    integer, parameter :: kuB=4
    integer, parameter :: klC=2
    integer, parameter :: kuC=2
    integer, parameter :: n_boundaries=2
-   integer, parameter :: n_bands_Amat=2*klA4+kuA4+1
 
-   integer :: lenA4
-   real(cp), allocatable :: A1mat(:,:,:)
-   real(cp), allocatable :: A2mat(:,:,:)
-   real(cp), allocatable :: A3mat(:,:,:)
-   real(cp), allocatable :: A4mat(:,:,:)
    logical,  allocatable :: lTmat(:)
-   integer,  allocatable :: pivotA4(:, :)
-   integer,  allocatable :: pivotA1(:, :)
    complex(cp), allocatable :: rhs(:)
 
    type(type_bordmat_real), allocatable :: A_mat(:)
@@ -53,13 +45,6 @@ contains
 
       integer :: n_m, m
 
-      lenA4 = n_r_max-n_boundaries
-
-      allocate( A1mat(n_boundaries, n_boundaries,nMstart:nMstop) )
-      allocate( A2mat(n_boundaries, lenA4, nMstart:nMstop) )
-      allocate( A3mat(lenA4, n_boundaries,nMstart:nMstop) )
-      allocate( A4mat(n_bands_Amat,lenA4,nMstart:nMstop) )
-
       call B_mat%initialize(klB, kuB, n_r_max)
 
       allocate( C_mat(nMstart:nMstop) )
@@ -67,13 +52,8 @@ contains
 
       do n_m=nMstart,nMstop
          call C_mat(n_m)%initialize(klC, kuC, n_r_max)
-         call A_mat(n_m)%initialize(klA4, kuA4, n_boundaries, n_r_max)
+         call A_mat(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
       end do
-
-      A1mat(:,:,:)=0.0_cp
-      A2mat(:,:,:)=0.0_cp
-      A3mat(:,:,:)=0.0_cp
-      A4mat(:,:,:)=0.0_cp
 
       call get_rhs_exp_mat(B_mat)
       do n_m=nMstart,nMstop
@@ -83,9 +63,8 @@ contains
 
       allocate( lTmat(nMstart:nMstop) )
       lTmat(:)=.false.
+      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
-      allocate( pivotA4(n_r_max, nMstart:nMstop) )
-      allocate( pivotA1(n_r_max, nMstart:nMstop) )
       allocate( rhs(n_r_max) )
       bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
@@ -99,7 +78,9 @@ contains
       call B_mat%finalize()
       do n_m=nMstart,nMstop
          call C_mat(n_m)%finalize()
+         call A_mat(n_m)%finalize()
       end do
+      deallocate( A_mat )
       deallocate( C_mat )
       deallocate( rhs )
       deallocate( lTmat)
@@ -126,7 +107,7 @@ contains
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
-      real(cp) :: rhsr(n_r_max), rhsi(n_r_max), tmpr(n_r_max), tmpi(n_r_max)
+      real(cp) :: rhsr(n_r_max), rhsi(n_r_max)
       integer :: n_r, n_m, n_r_out, m, n_o
 
       if ( lMat ) lTMat(:)=.false.
@@ -183,9 +164,7 @@ contains
          m = idx2m(n_m)
          
          if ( .not. lTmat(n_m) ) then
-            call get_lhs_mat(tscheme, m, A_mat(n_m) ) !, A2mat(:,:,n_m), &
-                 !&            A3mat(:,:,n_m), A4mat(:,:,n_m),            &
-                 !&            pivotA1(:,n_m), pivotA4(:,n_m))
+            call get_lhs_mat( tscheme, m, A_mat(n_m) )
             lTmat(n_m)=.true.
          end if
 
@@ -361,7 +340,7 @@ contains
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands)
-      integer :: n_r, info, i_r, n_band
+      integer :: n_r, i_r, n_band
       real(cp) :: a, b
 
       a = half*(r(1)-r(n_r_max))
@@ -429,11 +408,11 @@ contains
       !-- Cheb factor for boundary conditions
       do n_r=1,A_mat%ntau
          A_mat%A1(n_r,1)    =rscheme%boundary_fac*A_mat%A1(n_r,1)
-         A_mat%A2(n_r,lenA4)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
+         A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
       end do
 
       if ( m == 4 ) then
-!         do n_r=1,lenA4
+!         do n_r=1,A_mat%nlines_band
 !            print*, 'A3=', A3(n_r,:)
 !         end do
 !
