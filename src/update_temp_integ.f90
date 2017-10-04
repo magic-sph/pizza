@@ -14,7 +14,7 @@ module update_temp_integ
    use algebra, only: prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun, roll
    use time_schemes, only: type_tscheme
-   use matrix_types, only: type_bandmat_real
+   use matrix_types, only: type_bandmat_real, type_bordmat_real
    use chebsparselib, only: intcheb2rmult2, intcheb2rmult2lapl
 
    implicit none
@@ -40,6 +40,7 @@ module update_temp_integ
    integer,  allocatable :: pivotA1(:, :)
    complex(cp), allocatable :: rhs(:)
 
+   type(type_bordmat_real), allocatable :: A_mat(:)
    type(type_bandmat_real) :: B_mat
    type(type_bandmat_real), allocatable :: C_mat(:)
 
@@ -62,9 +63,11 @@ contains
       call B_mat%initialize(klB, kuB, n_r_max)
 
       allocate( C_mat(nMstart:nMstop) )
+      allocate( A_mat(nMstart:nMstop) )
 
       do n_m=nMstart,nMstop
          call C_mat(n_m)%initialize(klC, kuC, n_r_max)
+         call A_mat(n_m)%initialize(klA4, kuA4, n_boundaries, n_r_max)
       end do
 
       A1mat(:,:,:)=0.0_cp
@@ -180,9 +183,9 @@ contains
          m = idx2m(n_m)
          
          if ( .not. lTmat(n_m) ) then
-            call get_lhs_mat(tscheme, m, A1mat(:,:,n_m), A2mat(:,:,n_m), &
-                 &            A3mat(:,:,n_m), A4mat(:,:,n_m),            &
-                 &            pivotA1(:,n_m), pivotA4(:,n_m))
+            call get_lhs_mat(tscheme, m, A_mat(n_m) ) !, A2mat(:,:,n_m), &
+                 !&            A3mat(:,:,n_m), A4mat(:,:,n_m),            &
+                 !&            pivotA1(:,n_m), pivotA4(:,n_m))
             lTmat(n_m)=.true.
          end if
 
@@ -208,16 +211,18 @@ contains
          !   print*, 'rhs_glob=', rhsr(:)
          !end if
 
-         call solve_bordered_mat(A1mat(:,:,n_m), A2mat(:,:,n_m),   &
-              &                  A3mat(:,:,n_m), A4mat(:,:,n_m),   &
-              &                  n_boundaries, lenA4, klA4, kuA4,  &
-              &                  pivotA1(:,n_m), pivotA4(:,n_m),   &
+         call solve_bordered_mat(A_mat(n_m)%A1, A_mat(n_m)%A2,            &
+              &                  A_mat(n_m)%A3, A_mat(n_m)%A4,            &
+              &                  A_mat(n_m)%ntau, A_mat(n_m)%nlines_band, &
+              &                  A_mat(n_m)%kl, A_mat(n_m)%ku,            &
+              &                  A_mat(n_m)%pivA1, A_mat(n_m)%pivA4,      &
               &                  rhsr, n_r_max)
 
-         call solve_bordered_mat(A1mat(:,:,n_m), A2mat(:,:,n_m),   &
-              &                  A3mat(:,:,n_m), A4mat(:,:,n_m),   &
-              &                  n_boundaries, lenA4, klA4, kuA4,  &
-              &                  pivotA1(:,n_m), pivotA4(:,n_m),   &
+         call solve_bordered_mat(A_mat(n_m)%A1, A_mat(n_m)%A2,            &
+              &                  A_mat(n_m)%A3, A_mat(n_m)%A4,            &
+              &                  A_mat(n_m)%ntau, A_mat(n_m)%nlines_band, &
+              &                  A_mat(n_m)%kl, A_mat(n_m)%ku,            &
+              &                  A_mat(n_m)%pivA1, A_mat(n_m)%pivA4,      &
               &                  rhsi, n_r_max)
 
          do n_r_out=1,rscheme%n_max
@@ -345,94 +350,86 @@ contains
 
    end subroutine get_temp_rhs_imp_int
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat(tscheme, m, A1, A2, A3, A4, pivA1, &
-              &           pivA4)
+   subroutine get_lhs_mat(tscheme, m, A_mat)
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme        ! time step
-      integer,            intent(in) :: m
+      type(type_tscheme), intent(in) :: tscheme    ! time step
+      integer,            intent(in) :: m          ! Azimuthal wavenumber
 
       !-- Output variables
-      real(cp), intent(inout) :: A1(n_boundaries,n_boundaries)
-      real(cp), intent(inout) :: A2(n_boundaries,lenA4)
-      real(cp), intent(inout) :: A3(lenA4,n_boundaries)
-      real(cp), intent(inout) :: A4(n_bands_Amat,lenA4)
-      integer,  intent(out) :: pivA1(n_boundaries)
-      integer,  intent(out) :: pivA4(lenA4)
+      type(type_bordmat_real), intent(inout) :: A_mat
 
       !-- Local variables
-      real(cp) :: stencilA4(klA4+kuA4+1)
+      real(cp) :: stencilA4(A_mat%nbands)
       integer :: n_r, info, i_r, n_band
-      real(cp) :: dm2, a, b
-
-      dm2 = real(m,cp)*real(m,cp)
+      real(cp) :: a, b
 
       a = half*(r(1)-r(n_r_max))
       b = half*(r(1)+r(n_r_max))
 
       !-- Fill A4 banded-block
-      do n_r=1,lenA4
+      do n_r=1,A_mat%nlines_band
          i_r = n_r+n_boundaries
 
          !-- Define the equations
-         stencilA4 = intcheb2rmult2(a,b,i_r-1,klA4+kuA4+1)-     &
-         &                       tscheme%wimp_lin(1)*opr*       &
-         &       intcheb2rmult2lapl(a,b,m,i_r-1,klA4+kuA4+1)  
+         stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-     &
+         &                       tscheme%wimp_lin(1)*opr*        &
+         &     intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
 
          !-- Roll the array for band storage
-         do n_band=1,klA4+kuA4+1
-            if ( n_r+kuA4+1-n_band <= lenA4 .and. n_r+kuA4+1-n_band >= 1 ) then
-               A4(klA4+n_band,n_r+kuA4+1-n_band) = rscheme%rnorm*stencilA4(n_band)
+         do n_band=1,A_mat%nbands
+            if ( n_r+A_mat%ku+1-n_band <= A_mat%nlines_band .and. n_r+A_mat%ku+1-n_band >= 1 ) then
+               A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) = rscheme%rnorm*stencilA4(n_band)
             end if
          end do
       end do
 
       !-- Fill A3
-      do n_r=1,lenA4
-         i_r = n_r+n_boundaries
-         stencilA4 = intcheb2rmult2(a,b,i_r-1,klA4+kuA4+1)-     &
+      do n_r=1,A_mat%nlines_band
+         i_r = n_r+A_mat%ntau
+         stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-    &
          &                       tscheme%wimp_lin(1)*opr*       &
-         &       intcheb2rmult2lapl(a,b,m,i_r-1,klA4+kuA4+1)  
+         &       intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
 
          !-- Only the lower bands can contribute to the matrix A3
-         do n_band=1,klA4
-            if ( n_r <= n_band .and. n_r+n_boundaries-n_band >= 1 ) then
-               A3(n_r,n_r+n_boundaries-n_band) = rscheme%rnorm*stencilA4(kuA4+1+n_band)
+         do n_band=1,A_mat%kl
+            if ( n_r <= n_band .and. n_r+A_mat%ntau-n_band >= 1 ) then
+               A_mat%A3(n_r,n_r+A_mat%ntau-n_band) = rscheme%rnorm*stencilA4(A_mat%ku+1+n_band)
             end if
          end do
       end do
 
       !-- Add the tau Lines for boundary conditions into A1 and A2
-      do n_r=1,n_r_max
-         if ( n_r <= n_boundaries) then
+      do n_r=1,A_mat%nlines
+         if ( n_r <= A_mat%ntau ) then
             if ( ktopt == 1 ) then
-               A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
+               A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
             else
-               A1(1,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
+               A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
             end if
             if ( kbott == 1 ) then
-               A1(2,n_r)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
             else
-               A1(2,n_r)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
+               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
             end if
          else
             if ( ktopt == 1 ) then
-               A2(1,n_r-n_boundaries)=rscheme%rnorm*rscheme%rMat(1,n_r)
+               A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
             else
-               A2(1,n_r-n_boundaries)=rscheme%rnorm*rscheme%drMat(1,n_r)
+               A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
             end if
             if ( kbott == 1 ) then
-               A2(2,n_r-n_boundaries)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(A_mat%nlines,n_r)
             else
-               A2(2,n_r-n_boundaries)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
+               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(A_mat%nlines,n_r)
             end if
          end if
       end do
 
       !-- Cheb factor for boundary conditions
-      do n_r=1,n_boundaries
-         A1(n_r,1)    =rscheme%boundary_fac*A1(n_r,1)
-         A2(n_r,lenA4)=rscheme%boundary_fac*A2(n_r,lenA4)
+      do n_r=1,A_mat%ntau
+         A_mat%A1(n_r,1)    =rscheme%boundary_fac*A_mat%A1(n_r,1)
+         A_mat%A2(n_r,lenA4)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
       end do
 
       if ( m == 4 ) then
@@ -458,8 +455,10 @@ contains
       end if
 
       !-- LU factorisation
-      call prepare_bordered_mat(A1,A2,A3,A4,n_boundaries,lenA4, &
-           &                    klA4,kuA4, pivA1, pivA4)
+      call prepare_bordered_mat(A_mat%A1,A_mat%A2,A_mat%A3,A_mat%A4,&
+           &                    A_mat%ntau,A_mat%nlines_band,       &
+           &                    A_mat%kl,A_mat%ku, A_mat%pivA1,     &
+           &                    A_mat%pivA4)
 
    end subroutine get_lhs_mat
 !------------------------------------------------------------------------------

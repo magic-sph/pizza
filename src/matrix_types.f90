@@ -29,12 +29,15 @@ module matrix_types
       integer :: kl ! Number of lower diagonals
       integer :: ku ! Number of upper diagonals
       integer :: nbands ! Number of bands
-      integer :: nlines_band ! Number of lines
+      integer :: nlines_band ! Number of lines of the banded block
+      integer :: nlines      ! Number of lines 
       integer :: ntau        ! Number of tau lines
       real(cp), allocatable :: A1(:,:) ! Upper left block
       real(cp), allocatable :: A2(:,:) ! Upper right block
       real(cp), allocatable :: A3(:,:) ! Lower left block
       real(cp), allocatable :: A4(:,:) ! Lower right block
+      integer, allocatable :: pivA1(:) ! Pivot for first block
+      integer, allocatable :: pivA4(:) ! Pivot for fourth block
 
    contains
 
@@ -130,6 +133,7 @@ contains
       this%ku = ku
       this%ntau = nbounds
       this%nlines_band = nlines-nbounds
+      this%nlines = nlines
       this%nbands = this%kl+this%ku+1
 
       allocate( this%A1(this%ntau, this%ntau) )
@@ -137,7 +141,10 @@ contains
       allocate( this%A3(this%nlines_band, this%ntau) )
       allocate( this%A4(this%nbands+this%kl, this%nlines_band) )
 
-      do n_r=1,nlines
+      allocate( this%pivA1(this%ntau) )
+      allocate( this%pivA4(this%nlines_band) )
+
+      do n_r=1,this%nlines
          do n_b=1,this%ntau
             if ( n_r <= this%ntau ) then
                this%A1(n_b,n_r)=0.0_cp
@@ -147,19 +154,22 @@ contains
          end do
       end do
 
-      do n_r=1,this%nlines_band
-         do n_b=1,this%ntau
-            this%A3(n_b,n_r)=0.0_cp
+      do n_b=1,this%ntau
+         do n_r=1,this%nlines_band
+            this%A3(n_r,n_b)=0.0_cp
          end do
+      end do
+
+      do n_r=1,this%nlines_band
          do n_b=1,this%nbands+this%kl
             this%A4(n_b,n_r)=0.0_cp
          end do
       end do
 
-      bytes_allocated=bytes_allocated+this%ntau*nlines*SIZEOF_DEF_REAL+&
-      &               this%ntau*this%nlines_band*SIZEOF_DEF_REAL+      &
-      &               (this%nbands+this%kl)*this%nlines_band*          &
-      &               SIZEOF_DEF_REAL
+      bytes_allocated=bytes_allocated+this%ntau*this%nlines*SIZEOF_DEF_REAL+&
+      &               this%ntau*this%nlines_band*SIZEOF_DEF_REAL+           &
+      &               (this%nbands+this%kl)*this%nlines_band*               &
+      &               SIZEOF_DEF_REAL+this%nlines*SIZEOF_INTEGER
 
    end subroutine initialize_bord
 !------------------------------------------------------------------------------
@@ -168,6 +178,7 @@ contains
       class(type_bordmat_real) :: this
 
       deallocate( this%A1, this%A2, this%A3, this%A4 )
+      deallocate( this%pivA1, this%pivA4)
 
    end subroutine finalize_bord
 !------------------------------------------------------------------------------
