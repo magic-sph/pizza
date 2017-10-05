@@ -2,7 +2,7 @@ module update_temp_integ
 
    use precision_mod
    use mem_alloc, only: bytes_allocated
-   use constants, only: one, zero, four, ci, three, half
+   use constants, only: zero, ci, half
    use pre_calculations, only: opr
    use namelists, only: kbott, ktopt, tadvz_fac, ra, r_cmb, r_icb
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
@@ -80,10 +80,7 @@ contains
          call C_mat(n_m)%finalize()
          call A_mat(n_m)%finalize()
       end do
-      deallocate( A_mat )
-      deallocate( C_mat )
-      deallocate( rhs )
-      deallocate( lTmat)
+      deallocate( A_mat, C_mat, rhs, lTmat )
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
@@ -186,10 +183,6 @@ contains
             rhsi(n_r)=aimag(rhs(n_r))
          end do
 
-         !if ( n_m == 5 ) then
-         !   print*, 'rhs_glob=', rhsr(:)
-         !end if
-
          call solve_bordered_mat(A_mat(n_m)%A1, A_mat(n_m)%A2,            &
               &                  A_mat(n_m)%A3, A_mat(n_m)%A4,            &
               &                  A_mat(n_m)%ntau, A_mat(n_m)%nlines_band, &
@@ -231,9 +224,6 @@ contains
             end if
          end do
       end do
-
-      !print*, temp_Mloc(5,:)
-      !stop
 
       !-- Roll the arrays before filling again the first block
       call roll(dtemp_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
@@ -285,17 +275,7 @@ contains
             dtemp_imp_Mloc_last(n_m,n_r)=rhs(n_r)
          end do
 
-         ! if ( n_m == 5 ) then
-            ! do n_r=1,n_r_max
-               ! print*, real(rhs(n_r))
-            ! end do
-            ! stop
-         ! end if
-
       end do
-
-      !print*, 'B*T=', dtemp_imp_Mloc_last(5,:)
-      !stop
 
       if ( wimp /= 0.0_cp ) then
 
@@ -321,8 +301,6 @@ contains
                work_Mloc(n_m,n_r)=rhs(n_r)
             end do
          end do
-
-         !print*, 'C*T=', work_Mloc(5,:)
 
          !-- Finally assemble the right hand side
          do n_r=1,n_r_max
@@ -417,28 +395,6 @@ contains
          A_mat%A1(n_r,1)    =rscheme%boundary_fac*A_mat%A1(n_r,1)
          A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
       end do
-
-      if ( m == 4 ) then
-!         do n_r=1,A_mat%nlines_band
-!            print*, 'A3=', A3(n_r,:)
-!         end do
-!
-!         do n_r=1,2
-!            print*, 'A1=', A1(n_r,:)
-!            print*, 'A2=', A2(n_r,:)
-!         end do
-
-         !print*, 'A4=', A4(5,:)
-         !print*, 'A4=', A4(6,:)
-         !print*, 'A4=', A4(7,:)
-         !print*, 'A4=', A4(8,:)
-         !print*, 'A4=', A4(9,:)
-         !print*, 'A4=', A4(10,:)
-         !print*, 'A4=', A4(11,:)
-         !print*, 'A4=', A4(12,:)
-         !print*, 'A4=', A4(13,:)
-        !stop
-      end if
 
       !-- LU factorisation
       call prepare_bordered_mat(A_mat%A1,A_mat%A2,A_mat%A3,A_mat%A4,&
