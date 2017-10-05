@@ -35,6 +35,7 @@ module namelists
    real(cp), public :: alph2  ! Input parameter for non-linear map to define central point of different spacing (-1.0:1.0)
    character(len=72), public :: map_function ! Mapping family: either tangent or arcsin
    character(len=72), public :: time_scheme ! Time scheme
+   character(len=72), public :: cheb_method ! Chebyshev method: collocation, integration
    logical, public :: l_newmap       ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
    real(cp), public :: dtMin           ! Minimum allowed time step
    real(cp), public :: dtMax           ! Maximum allowed time step
@@ -68,6 +69,7 @@ module namelists
    logical,  public :: l_chem
    logical,  public :: l_AB1
    logical,  public :: l_bridge_step
+   logical,  public :: l_cheb_coll     ! Collocation method for Chebs
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb                     ! OC radius
    real(cp), public :: r_icb                     ! IC radius
@@ -90,7 +92,7 @@ contains
       namelist/control/tag,n_time_steps,alpha,l_newmap,map_function,&
       &                alph1,alph2,dtMax,courfac,tEnd,runHours,     &
       &                runMinutes,runSeconds,l_non_rot,             &
-      &                n_fft_optim_lev,time_scheme
+      &                n_fft_optim_lev,time_scheme,cheb_method
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz
@@ -231,6 +233,15 @@ contains
       r_cmb=one/(one-radratio)
       r_icb=r_cmb-one
 
+      !-- Determine Cheb method
+      call capitalize(cheb_method)
+
+      if ( index(cheb_method, 'COLL') /= 0 ) then
+         l_cheb_coll = .true.
+      else
+         l_cheb_coll = .false.
+      end if
+
    end subroutine read_namelists
 !--------------------------------------------------------------------------------
    subroutine default_namelists
@@ -260,6 +271,7 @@ contains
                           ! 0: FFTW_ESTIMATE, 1: FFTW_MEASURE, 2: FFTW_PATIENT
                           ! 3: FFTW_EXHAUSTIVE
       time_scheme      ='CNAB2'
+      cheb_method      ='colloc'
 
       !-- Physcal parameters
       l_non_rot        =.false.
@@ -327,6 +339,8 @@ contains
       write(n_out,'(''  n_time_steps    ='',i8,'','')') n_time_steps
       length=length_to_blank(time_scheme)
       write(n_out,*) " time_scheme      = """,time_scheme(1:length),""","
+      length=length_to_blank(cheb_method)
+      write(n_out,*) " cheb_method      = """,cheb_method(1:length),""","
       write(n_out,'(''  alpha           ='',ES14.6,'','')')   alpha
       write(n_out,'(''  l_newmap        ='',l3,'','')') l_newmap
       length=length_to_blank(map_function)

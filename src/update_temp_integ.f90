@@ -325,8 +325,16 @@ contains
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands)
-      integer :: n_r, i_r, n_band
+      integer :: n_r, i_r, n_band, n_b
       real(cp) :: a, b
+
+      !-- We have to fill A3 with zeros again otherwise on the next iteration
+      !-- with a different dt there might be some issues with spurious values
+      do n_r=1,A_mat%nlines_band
+         do n_b=1,A_mat%ntau
+            A_mat%A3(n_r,n_b)=0.0_cp
+         end do
+      end do
 
       a = half*(r_cmb-r_icb)
       b = half*(r_cmb+r_icb)

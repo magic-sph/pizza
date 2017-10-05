@@ -10,7 +10,8 @@ program pizza
    use fieldsLast, only: initialize_fieldsLast, finalize_fieldsLast
    use communications, only: initialize_communications, finalize_communications
    use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains
-   use namelists, only: read_namelists, write_namelists, tag, time_scheme
+   use namelists, only: read_namelists, write_namelists, tag, time_scheme, &
+       &                l_cheb_coll
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use radial_functions, only: initialize_radial_functions, &
@@ -92,9 +93,13 @@ program pizza
    call memWrite('R loop', local_bytes_used)
    local_bytes_used = bytes_allocated-local_bytes_used
    local_bytes_used = bytes_allocated
-   call initialize_update_om()
-   call initialize_update_temp()
-   call initialize_temp_integ()
+   if ( l_cheb_coll ) then
+      call initialize_update_om()
+      call initialize_update_temp()
+   else
+      call initialize_update_om()
+      call initialize_temp_integ()
+   end if
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
 
@@ -147,9 +152,13 @@ program pizza
    end if
 
    !-- Close files
-   call finalize_update_temp()
-   call finalize_temp_integ()
-   call finalize_update_om()
+   if ( l_cheb_coll ) then
+      call finalize_update_temp()
+      call finalize_update_om()
+   else
+      call finalize_temp_integ()
+      call finalize_update_om()
+   end if
    call finalize_radial_loop()
    call finalize_fourier()
    call finalize_der_arrays()
