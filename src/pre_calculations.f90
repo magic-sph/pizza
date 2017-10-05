@@ -44,10 +44,9 @@ contains
          file_name='rNM.'//tag
          open(newunit=file_handle, file=file_name, status='unknown')
          do n_r=1,n_r_max
-            write(file_handle,'(I4,4ES16.8)') n_r, r(n_r),     &
+            write(file_handle,'(I4,3ES16.8)') n_r, r(n_r),     &
             &                                rscheme%drx(n_r), &
-            &                                rscheme%ddrx(n_r),&
-            &                                rscheme%dddrx(n_r)
+            &                                rscheme%ddrx(n_r)
          end do
          close(file_handle)
       end if

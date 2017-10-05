@@ -69,9 +69,8 @@ contains
       allocate( this%rMat(n_r_max,n_r_max) )
       allocate( this%drMat(n_r_max,n_r_max) )
       allocate( this%d2rMat(n_r_max,n_r_max) )
-      allocate( this%d3rMat(n_r_max,n_r_max) )
       allocate( this%r_cheb(n_r_max) )
-      bytes_allocated=bytes_allocated+(4*n_r_max*n_r_max+n_r_max)*SIZEOF_DEF_REAL
+      bytes_allocated=bytes_allocated+(3*n_r_max*n_r_max+n_r_max)*SIZEOF_DEF_REAL
 
       if ( present(no_work_array) ) then
          l_work_array=no_work_array
@@ -81,8 +80,8 @@ contains
 
       call this%chebt%initialize(nMstart, nMstop, n_r_max, l_work_array)
 
-      allocate ( this%drx(n_r_max), this%ddrx(n_r_max), this%dddrx(n_r_max) )
-      bytes_allocated=bytes_allocated+3*n_r_max*SIZEOF_DEF_REAL
+      allocate ( this%drx(n_r_max), this%ddrx(n_r_max) )
+      bytes_allocated=bytes_allocated+2*n_r_max*SIZEOF_DEF_REAL
 
    end subroutine initialize
 !------------------------------------------------------------------------------
@@ -136,10 +135,6 @@ contains
                this%ddrx(n_r) =-(four*this%alpha1**3*(two*r(n_r)-ricb-rcmb-      &
                &               this%alpha2)) / ((one+this%alpha1**2*(-two*r(n_r)+  &
                &               ricb+rcmb+this%alpha2)**2)**2*lambd)
-               this%dddrx(n_r)=(8.0_cp*this%alpha1**3*(-one+three*this%alpha1**2* &
-               &               (-two*r(n_r)+ricb+rcmb+this%alpha2)**2)) /          &
-               &               ((one+this%alpha1**2*(-two*r(n_r)+ricb+rcmb+        &
-               &               this%alpha2)**2)**3*lambd)
             end do
 
          !-- Arcsin mapping (see Kosloff and Tal-Ezer, 1993)
@@ -150,9 +145,6 @@ contains
                this%drx(n_r)  =asin(this%alpha1)/this%alpha1*sqrt(one-     &
                &               this%alpha1**2*this%r_cheb(n_r)**2)
                this%ddrx(n_r) =-two*asin(this%alpha1)**2*this%r_cheb(n_r)
-               this%dddrx(n_r)=-four*asin(this%alpha1)**3*                   &
-               &               sqrt(one-this%alpha1**2*this%r_cheb(n_r)**2)/ &
-               &               this%alpha1
             end do
 
          end if
@@ -162,7 +154,6 @@ contains
          do n_r=1,n_r_max
             this%drx(n_r)  =one/(rcmb-ricb)
             this%ddrx(n_r) =0.0_cp
-            this%dddrx(n_r)=0.0_cp
          end do
 
       end if
@@ -180,10 +171,8 @@ contains
       logical :: l_work_array
 
 
-      deallocate( this%rMat, this%drMat, this%d2rMat, this%d3rMat )
-      deallocate( this%r_cheb )
-      deallocate( this%drx )
-      deallocate( this%ddrx, this%dddrx )
+      deallocate( this%rMat, this%drMat, this%d2rMat )
+      deallocate( this%r_cheb, this%drx, this%ddrx)
 
       if ( present(no_work_array) ) then
          l_work_array=no_work_array
@@ -224,8 +213,6 @@ contains
          this%drMat(2,k) =two*this%drx(k)
          this%d2rMat(1,k)=0.0_cp
          this%d2rMat(2,k)=two*this%ddrx(k)
-         this%d3rMat(1,k)=0.0_cp
-         this%d3rMat(2,k)=two*this%dddrx(k)
 
          !----- now construct the rest with a recursion:
          do n=3,n_r_max ! do loop over the (n-1) order of the chebs
@@ -239,12 +226,6 @@ contains
             &                   8.0_cp*this%drx(k)*this%drMat(n-1,k) + &
             &                  two*this%r_cheb(k)*this%d2rMat(n-1,k) - &
             &                                     this%d2rMat(n-2,k)
-            this%d3rMat(n,k)=    four*this%dddrx(k)*this%rMat(n-1,k) + &
-            &                 12.0_cp*this%ddrx(k)*this%drMat(n-1,k) + &
-            &                 12.0_cp*this%drx(k)*this%d2rMat(n-1,k) + &
-            &                  two*this%r_cheb(k)*this%d3rMat(n-1,k) - &
-            &                                     this%d3rMat(n-2,k)
-
          end do
 
       end do
@@ -254,7 +235,6 @@ contains
       this%rMat  =transpose(this%rMat)
       this%drMat =transpose(this%drMat)
       this%d2rMat=transpose(this%d2rMat)
-      this%d3rMat=transpose(this%d3rMat)
 
    end subroutine get_der_mat
 !------------------------------------------------------------------------------

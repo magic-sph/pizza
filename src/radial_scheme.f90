@@ -20,7 +20,6 @@ module radial_scheme
       real(cp), allocatable :: rMat(:,:)
       real(cp), allocatable :: drMat(:,:)
       real(cp), allocatable :: d2rMat(:,:)
-      real(cp), allocatable :: d3rMat(:,:)
       real(cp), allocatable :: dr(:,:)
       real(cp), allocatable :: ddr(:,:)
       real(cp), allocatable :: dddr(:,:)
@@ -32,7 +31,6 @@ module radial_scheme
       real(cp), allocatable :: dddr_bot(:,:)
       real(cp), allocatable :: drx(:)   ! First derivative of non-linear mapping (see Bayliss and Turkel, 1990)
       real(cp), allocatable :: ddrx(:)  ! Second derivative of non-linear mapping
-      real(cp), allocatable :: dddrx(:) ! Third derivative of non-linear mapping
 
       character(len=72) :: version
 
