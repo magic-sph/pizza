@@ -336,6 +336,88 @@ contains
 
    end function intcheb2rmult2lapl
 !------------------------------------------------------------------------------
+   function intcheb4rmult4lapl(a, b, m, n, len_stencil) result(stencil)
+      !
+      ! Fourth integral of r^2\Delta operator
+      !
+
+      !-- Input variables
+      real(cp), intent(in) :: a
+      real(cp), intent(in) :: b
+      integer,  intent(in) :: m
+      integer,  intent(in) :: n
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variables
+      integer :: ku
+
+      ku = (len_stencil-1)/2
+
+      stencil(1:ku-6)          = 0.0_cp
+      stencil(ku-5)            =-a**6*real((m-n-6)*(m+n+6),cp)/ &
+      &                          real(64*n*(n+1)*(n+2)*(n+3),cp)
+      stencil(ku-4)            =-a**5*b*real(2*m**2-4*n**2-41*n-105,cp)/ &
+      &                          real(32*n*(n+1)*(n+2)*(n+3),cp)
+      stencil(ku-3)            = a**4*(a**2*m**2*n + 5*a**2*m**2 + a**2*n**3 + &
+      &                          3*a**2*n**2 - 34*a**2*n - 120*a**2 -          &
+      &                          2*b**2*m**2*n + 2*b**2*m**2 + 12*b**2*n**3 +  &
+      &                          90*b**2*n**2 + 114*b**2*n - 216*b**2)/        &
+      &                          real(32*n*(n - 1)*(n + 1)*(n + 2)*(n + 3),cp)
+      stencil(ku-2)            =a**3*b*(6*a**2*m**2 + 4*a**2*n**2 - 25*a**2*n -&
+      &                         183*a**2 + 16*b**2*n**2 + 44*b**2*n - 60*b**2)/&
+      &                         real(32*n*(n - 1)*(n + 1)*(n + 2),cp)
+      stencil(ku-1)            =a**2*(a**4*m**2*n - 17*a**4*m**2 - a**4*n**3 - &
+      &                         27*a**4*n**2 - 8*a**4*n + 372*a**4 +           &
+      &                         16*a**2*b**2*m**2*n - 32*a**2*b**2*m**2 -      &
+      &                         216*a**2*b**2*n**2 - 360*a**2*b**2*n +         &
+      &                         1584*a**2*b**2 + 16*b**4*n**3 - 112*b**4*n +   &
+      &                         96*b**4)/                                      &
+      &                         real(64*n*(n - 2)*(n - 1)*(n + 1)*(n + 3),cp)
+      stencil(ku)              =-a**3*b*(2*a**2*m**2*n + 16*a**2*m**2 +        &
+      &                          4*a**2*n**3 + 33*a**2*n**2 - 55*a**2*n -      &
+      &                          444*a**2 + 8*b**2*n**3 + 66*b**2*n**2 +       &
+      &                          10*b**2*n - 348*b**2)/                        &
+      &                          real(16*n*(n - 2)*(n - 1)*(n + 2)*(n + 3))
+      stencil(ku+1)            =-a**2*(a**4*m**2*n**2 - 19*a**4*m**2 +         &
+      &                          a**4*n**4 - 43*a**4*n**2 + 396*a**4 +         &
+      &                          6*a**2*b**2*m**2*n**2 - 54*a**2*b**2*m**2 +   &
+      &                          12*a**2*b**2*n**4 - 336*a**2*b**2*n**2 +      &
+      &                          2052*a**2*b**2 + 8*b**4*n**4 - 104*b**4*n**2 +&
+      &                          288*b**4)/                                    &
+      &                         real(16*(n-3)*(n-2)*(n-1)*(n+1)*(n+2)*(n+3),cp)
+      stencil(ku+2)            =-a**3*b*(2*a**2*m**2*n - 16*a**2*m**2 +        &
+      &                         4*a**2*n**3 - 33*a**2*n**2 - 55*a**2*n +       &
+      &                         444*a**2 + 8*b**2*n**3 - 66*b**2*n**2 +        &
+      &                         10*b**2*n + 348*b**2)/                         &
+      &                         real(16*n*(n - 3)*(n - 2)*(n + 1)*(n + 2),cp)
+      stencil(ku+3)            =a**2*(a**4*m**2*n + 17*a**4*m**2 - a**4*n**3 + &
+      &                         27*a**4*n**2 - 8*a**4*n - 372*a**4 +           &
+      &                         16*a**2*b**2*m**2*n + 32*a**2*b**2*m**2 +      &
+      &                         216*a**2*b**2*n**2 - 360*a**2*b**2*n -         &
+      &                         1584*a**2*b**2 + 16*b**4*n**3 - 112*b**4*n -   &
+      &                         96*b**4)/                                      &
+      &                         real(64*n*(n - 3)*(n - 1)*(n + 1)*(n + 2),cp)
+      stencil(ku+4)            =a**3*b*(6*a**2*m**2 + 4*a**2*n**2 + 25*a**2*n -&
+      &                         183*a**2 + 16*b**2*n**2 - 44*b**2*n - 60*b**2)/&
+      &                         real(32*n*(n - 2)*(n - 1)*(n + 1),cp)
+      stencil(ku+5)            =a**4*(a**2*m**2*n - 5*a**2*m**2 + a**2*n**3 - &
+      &                         3*a**2*n**2 - 34*a**2*n + 120*a**2 -          &
+      &                         2*b**2*m**2*n - 2*b**2*m**2 + 12*b**2*n**3 -  &
+      &                         90*b**2*n**2 + 114*b**2*n + 216*b**2)/        &
+      &                         real(32*n*(n - 3)*(n - 2)*(n - 1)*(n + 1),cp)
+      stencil(ku+6)            =-a**5*b*real(2*m**2-4*n**2+41*n-105,cp)/      &
+      &                         real(32*n*(n - 3)*(n - 2)*(n - 1),cp)
+      stencil(ku+7)            =-a**6*real((m-n+6)*(m+n-6),cp)/               &
+      &                         real(64*n*(n - 3)*(n - 2)*(n - 1),cp)
+      stencil(ku+8:len_stencil)= 0.0_cp
+
+      stencil = mirror_stencil(n, len_stencil)
+
+   end function intcheb4rmult4lapl
+!------------------------------------------------------------------------------
    function intcheb4rmult4lapl2(a, b, m, n, len_stencil) result(stencil)
       !
       ! Fourth integral of r**4*\Delta\Delta operator
