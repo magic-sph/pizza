@@ -406,7 +406,7 @@ contains
 !------------------------------------------------------------------------------
    function intcheb4rmult4lapl(a, b, m, n, len_stencil) result(stencil)
       !
-      ! Fourth integral of r^2\Delta operator
+      ! Fourth integral of r^4\Delta operator
       !
 
       !-- Input variables
@@ -488,7 +488,7 @@ contains
 !------------------------------------------------------------------------------
    function intcheb4rmult4lapl2(a, b, m, n, len_stencil) result(stencil)
       !
-      ! Fourth integral of r**4*\Delta\Delta operator
+      ! Fourth integral of r^4*\Delta\Delta operator
       !
 
       !-- Input variables

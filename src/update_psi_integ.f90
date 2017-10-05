@@ -77,7 +77,7 @@ contains
       lPsimat(:)=.false.
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
-      allocate( rhs(2*n_r_max), rhs_m0(n_r_max) )
+      allocate( rhs(n_r_max), rhs_m0(n_r_max) )
       allocate( psiPivot(n_r_max) )
 
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*4*n_r_max*n_r_max* &
@@ -379,17 +379,23 @@ contains
          end do
       end do
 
+      do n_r=1,n_r_max
+         do n_m=nMstart,nMstop
+            work_Mloc(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r)
+         end do
+      end do
+
       !-- Transform the implicit part to chebyshev space
-      call rscheme%costf1(dpsi_imp_Mloc_last, nMstart, nMstop, n_r_max)
+      call rscheme%costf1(work_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Matrix-vector multiplication by the operator -\int^4 r^4 \Delta .
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
-         if ( m > 0 ) then
+         if ( m /= 0 ) then
 
             do n_r=1,n_r_max
-               rhs(n_r)= dpsi_imp_Mloc_last(n_m,n_r)
+               rhs(n_r)= work_Mloc(n_m,n_r)
             end do
 
             call RHSI_mat(n_m)%mat_vec_mul(rhs)
@@ -648,7 +654,7 @@ contains
       type(type_bandmat_real), intent(inout) :: D_mat
 
       !-- Local variables
-      real(cp) :: stencilB(D_mat%nbands)
+      real(cp) :: stencilD(D_mat%nbands)
       real(cp) :: a, b
       integer :: n_band, n_r, i_r
 
@@ -660,12 +666,12 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilB = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
+         stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
 
          !-- Roll array for band storage
          do n_band=1,D_mat%nbands
             if ( i_r+D_mat%ku+1-n_band <= D_mat%nlines .and. i_r+D_mat%ku+1-n_band >= 1 ) then
-               D_mat%dat(n_band,i_r+D_mat%ku+1-n_band) = rscheme%rnorm*stencilB(n_band)
+               D_mat%dat(n_band,i_r+D_mat%ku+1-n_band) = rscheme%rnorm*stencilD(n_band)
             end if
          end do
       end do

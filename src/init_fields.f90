@@ -45,6 +45,7 @@ contains
          temp_Mloc(:,:)       =zero
          us_Mloc(:,:)         =zero
          up_Mloc(:,:)         =zero
+         psi_Mloc(:,:)        =zero
          dpsi_exp_Mloc(:,:,:) =zero
          dtemp_exp_Mloc(:,:,:)=zero
          dpsi_imp_Mloc(:,:,:) =zero
