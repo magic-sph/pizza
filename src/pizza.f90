@@ -23,6 +23,7 @@ program pizza
    use update_temperature, only: initialize_update_temp, finalize_update_temp
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
    use update_psi, only: initialize_update_om, finalize_update_om
+   use update_psi_integ, only: initialize_psi_integ, finalize_psi_integ
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
    use tests, only: solve_laplacian, test_radial_der, solve_biharmo
@@ -98,6 +99,7 @@ program pizza
       call initialize_update_temp()
    else
       call initialize_update_om()
+      call initialize_psi_integ()
       call initialize_temp_integ()
    end if
    local_bytes_used = bytes_allocated-local_bytes_used
@@ -157,6 +159,7 @@ program pizza
       call finalize_update_om()
    else
       call finalize_temp_integ()
+      call finalize_psi_integ()
       call finalize_update_om()
    end if
    call finalize_radial_loop()
