@@ -548,6 +548,7 @@ contains
       stencil(ku+6:len_stencil)= 0.0_cp
 
 
+      ! stencil_debug(1:ku-4)= 0.0_cp
       ! stencil_debug(ku-3)=a**4*(m - n - 6)*(m - n - 4)*(m + n + 4)*(m + n + 6)/ &
       ! &                   (16*n*(n + 1)*(n + 2)*(n + 3))
       ! stencil_debug(ku-2)=-a**3*b*(2*n + 9)*(2*m**2 - 2*n**2 - 18*n - 39)/ &
@@ -580,7 +581,8 @@ contains
       ! &                    (8*n*(n - 2)*(n - 1))
       ! stencil_debug(ku+5)=a**4*(m - n + 4)*(m - n + 6)*(m + n - 6)*(m + n - 4)/ &
       ! &                   (16*n*(n - 3)*(n - 2)*(n - 1))
-
+      ! stencil_debug(ku+6:len_stencil)= 0.0_cp
+! 
       stencil = mirror_stencil(n, len_stencil)
 
    end function intcheb4rmult4lapl2

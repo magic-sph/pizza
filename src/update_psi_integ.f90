@@ -30,7 +30,7 @@ module update_psi_integ
    integer, parameter    :: klB=6
    integer, parameter    :: kuB=6
    integer, parameter    :: kuC=4
-   integer, parameter    :: klC=6
+   integer, parameter    :: klC=4
    integer, parameter    :: klD=8
    integer, parameter    :: kuD=8
    integer, parameter    :: n_boundaries=4
@@ -146,8 +146,8 @@ contains
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_Mloc(n_m,n_r,1)=dpsi_exp_Mloc(n_m,n_r,1)-   &
-               &                    or1(n_r)*work_Mloc(n_m,n_r)
+               dpsi_exp_Mloc(n_m,n_r,1)=    dpsi_exp_Mloc(n_m,n_r,1)-   &
+               &                       or1(n_r)*work_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -172,10 +172,30 @@ contains
          end do
       end do
 
+      !-- Transform buoyancy to Chebyshev space
+      call rscheme%costf1(buo_imp_Mloc, nMstart, nMstop, n_r_max)
+
+      !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
+      do n_m=nMstart,nMstop
+         do n_r=1,n_r_max
+            rhs(n_r)=buo_imp_Mloc(n_m,n_r)
+         end do
+
+         call RHSE_mat%mat_vec_mul(rhs)
+
+         rhs(1)=zero
+         rhs(2)=zero
+         rhs(3)=zero
+         rhs(4)=zero
+         do n_r=1,n_r_max
+            buo_imp_Mloc(n_m,n_r)=rhs(n_r)
+         end do
+      end do
+
 
       !-- Calculation of the implicit part
       call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, tscheme%wimp_lin(2), &
-           &                   dpsi_imp_Mloc(:,:,1),vp_bal, l_vphi_bal_calc)
+           &                   dpsi_imp_Mloc(:,:,1), vp_bal, l_vphi_bal_calc)
 
 
       if ( lMat ) lPsimat(:)=.false.
@@ -235,7 +255,7 @@ contains
                   if ( n_o == 1 ) then
                      rhs(n_r)=tscheme%wimp(n_o+1)*dpsi_imp_Mloc(n_m,n_r,n_o)
                   else
-                     rhs(n_r)=rhs(n_r)+tscheme%wimp(n_o+1)*&
+                     rhs(n_r)=rhs(n_r)+tscheme%wimp(n_o+1)* &
                      &        dpsi_imp_Mloc(n_m,n_r,n_o)
                   end if
                end do
@@ -317,7 +337,8 @@ contains
             else
                us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
                up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
-               om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)
+               om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-or1(n_r)*work_Mloc(n_m,n_r)+ &
+               &                real(m,cp)*real(m,cp)*or2(n_r)*psi_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -375,6 +396,8 @@ contains
 
             rhs(1)=zero
             rhs(2)=zero
+            rhs(3)=zero
+            rhs(4)=zero
 
             do n_r=1,n_r_max
                dpsi_imp_Mloc_last(n_m,n_r)=rhs(n_r)
@@ -405,6 +428,8 @@ contains
             call RHSIL_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero
             rhs(2)=zero
+            rhs(3)=zero
+            rhs(4)=zero
             do n_r=1,n_r_max
                work_Mloc(n_m,n_r)=rhs(n_r)
             end do
@@ -436,7 +461,7 @@ contains
                      vp_bal%pump(n_r)=-ekpump(n_r)*uphi0(n_r)
                   end if
                else
-                  dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r)&
+                  dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r) &
                   &                              +wimp*work_Mloc(n_m,n_r)
                end if
             end do
