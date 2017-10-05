@@ -94,6 +94,7 @@ program pizza
    local_bytes_used = bytes_allocated
    call initialize_update_om()
    call initialize_update_temp()
+   call initialize_temp_integ()
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
 
@@ -106,9 +107,6 @@ program pizza
 
    !-- Pre calculations
    call preCalc()
-
-   !-- Radius needs to be know!
-   call initialize_temp_integ()
 
    !-- Start fields
    call get_start_fields(time, tscheme)

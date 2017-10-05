@@ -3,10 +3,9 @@ module init_fields
    use constants, only: zero, one, two, three, ci, pi
    use blocking, only: nRstart, nRstop
    use communications, only: transp_r2m, r2m_fields
-   use radial_functions, only: r_icb, r_cmb, r, rscheme, or1, or2, &
-       &                       beta, dbeta
+   use radial_functions, only: r, rscheme, or1, or2, beta, dbeta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
-       &                radratio
+       &                radratio, r_cmb, r_icb
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank

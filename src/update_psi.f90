@@ -6,9 +6,9 @@ module update_psi
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
    use pre_calculations, only: CorFac
-   use namelists, only: kbotv, ktopv, alpha
+   use namelists, only: kbotv, ktopv, alpha, r_cmb
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, &
-       &                       ekpump, oheight, r_cmb
+       &                       ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr

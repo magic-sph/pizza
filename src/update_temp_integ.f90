@@ -4,12 +4,12 @@ module update_temp_integ
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, four, ci, three, half
    use pre_calculations, only: opr
-   use namelists, only: kbott, ktopt, tadvz_fac, ra
+   use namelists, only: kbott, ktopt, tadvz_fac, ra, r_cmb, r_icb
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
-       &                       rgrav, r
+       &                       rgrav
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m
-   use radial_der, only: get_ddr, get_dr
+   use radial_der, only: get_dr
    use fields, only: work_Mloc
    use algebra, only: prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun, roll
@@ -350,8 +350,8 @@ contains
       integer :: n_r, i_r, n_band
       real(cp) :: a, b
 
-      a = half*(r(1)-r(n_r_max))
-      b = half*(r(1)+r(n_r_max))
+      a = half*(r_cmb-r_icb)
+      b = half*(r_cmb+r_icb)
 
       !-- Fill A4 banded-block
       do n_r=1,A_mat%nlines_band
@@ -458,8 +458,8 @@ contains
       real(cp) :: a, b
       integer :: n_band, n_r, i_r
 
-      a = half*(r(1)-r(n_r_max))
-      b = half*(r(1)+r(n_r_max))
+      a = half*(r_cmb-r_icb)
+      b = half*(r_cmb+r_icb)
 
       !-- Fill right-hand side matrix
       do n_r=1,B_mat%nlines
@@ -491,8 +491,8 @@ contains
       real(cp) :: a, b
       integer :: n_band, n_r, i_r
 
-      a = half*(r(1)-r(n_r_max))
-      b = half*(r(1)+r(n_r_max))
+      a = half*(r_cmb-r_icb)
+      b = half*(r_cmb+r_icb)
 
       !-- Fill right-hand side matrix
       do n_r=1,Cmat%nlines

@@ -5,7 +5,7 @@ module radial_functions
    use constants, only: one, two, three, pi, half
    use namelists, only: tag, alph1, alph2, l_newmap, radratio, &
        &                g0, g1, g2, l_non_rot, ek, l_ek_pump,  &
-       &                l_temp_3D, tcond_fac
+       &                l_temp_3D, tcond_fac, r_cmb, r_icb
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -35,8 +35,6 @@ module radial_functions
 
    real(cp), public :: alpha1   ! Input parameter for non-linear map to define degree of spacing (0.0:2.0)
    real(cp), public :: alpha2   ! Input parameter for non-linear map to define central point of different spacing (-1.0:1.0)
-   real(cp), public :: r_cmb                     ! OC radius
-   real(cp), public :: r_icb                     ! IC radius
  
    !-- arrays for buoyancy, depend on Ra and Pr:
    real(cp), public, allocatable :: rgrav(:)     ! Buoyancy term `dtemp0/Di`
@@ -103,9 +101,6 @@ contains
       else
          ek_pump_fac = 0.0_cp
       end if
-
-      r_cmb=one/(one-radratio)
-      r_icb=r_cmb-one
 
       ratio1=alph1
       ratio2=alph2

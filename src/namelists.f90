@@ -69,6 +69,9 @@ module namelists
    logical,  public :: l_AB1
    logical,  public :: l_bridge_step
    real(cp), public :: tadvz_fac
+   real(cp), public :: r_cmb                     ! OC radius
+   real(cp), public :: r_icb                     ! IC radius
+
 
    public :: read_namelists, write_namelists
 
@@ -224,6 +227,9 @@ contains
       !-- This is used when 1st order AB is used (i.e. Euler)
       l_AB1 = .false.
       l_bridge_step = .true.
+
+      r_cmb=one/(one-radratio)
+      r_icb=r_cmb-one
 
    end subroutine read_namelists
 !--------------------------------------------------------------------------------

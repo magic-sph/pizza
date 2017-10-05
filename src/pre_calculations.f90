@@ -4,8 +4,9 @@ module pre_calculations
    &                     n_cheb_max
    use constants, only: one, four, third, pi, vol_oc, surf, two, vol_otc
    use outputs, only: n_log_file
-   use radial_functions, only: r, rscheme, radial, r_cmb, r_icb
-   use namelists, only: l_newmap, tag, dtMax, dtMin, pr, l_non_rot, ek
+   use radial_functions, only: r, rscheme, radial
+   use namelists, only: l_newmap, tag, dtMax, dtMin, pr, l_non_rot, ek, &
+       &                r_cmb, r_icb
    use precision_mod
    use parallel_mod
 
