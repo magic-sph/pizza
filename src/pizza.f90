@@ -67,11 +67,11 @@ program pizza
    call set_mpi_domains()
 
    !-- Test radial derivatives
-   call test_i4()
+   !call test_i4()
    !call solve_laplacian(nMstart, nMstop)
    !call solve_biharmo(nMstart, nMstop)
-   stop
    !call test_radial_der(nMstart,nMstop)
+   !stop
 
    !-- Open output files
    call initialize_outputs()
