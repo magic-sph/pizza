@@ -436,107 +436,73 @@ contains
 
       !-- Output variable
       real(cp) :: stencil(len_stencil)
-      !real(cp) :: stencild(len_stencil)
 
       !-- Local variables
+      real(cp) :: dm, dn
       integer :: ku
+
+      dm = real(m, cp)
+      dn = real(n, cp)
 
       ku = (len_stencil-1)/2
 
       stencil(1:ku-6)          = 0.0_cp
-      stencil(ku-5)            =-a**6*real((m-n-6)*(m+n+6),cp)/ &
-      &                          real(64*n*(n+1)*(n+2)*(n+3),cp)
-      stencil(ku-4)            =-a**5*b*real(2*m**2-4*n**2-41*n-105,cp)/ &
-      &                          real(32*n*(n+1)*(n+2)*(n+3),cp)
-      stencil(ku-3)            = a**4*(a**2*m**2*n + 5*a**2*m**2 + a**2*n**3 + &
-      &                          3*a**2*n**2 - 34*a**2*n - 120*a**2 -          &
-      &                          2*b**2*m**2*n + 2*b**2*m**2 + 12*b**2*n**3 +  &
-      &                          90*b**2*n**2 + 114*b**2*n - 216*b**2)/        &
-      &                          real(32*n*(n - 1)*(n + 1)*(n + 2)*(n + 3),cp)
-      stencil(ku-2)            =a**3*b*(6*a**2*m**2 + 4*a**2*n**2 - 25*a**2*n -&
-      &                         183*a**2 + 16*b**2*n**2 + 44*b**2*n - 60*b**2)/&
-      &                         real(32*n*(n - 1)*(n + 1)*(n + 2),cp)
-      stencil(ku-1)            =a**2*(a**4*m**2*n - 17*a**4*m**2 - a**4*n**3 - &
-      &                         27*a**4*n**2 - 8*a**4*n + 372*a**4 +           &
-      &                         16*a**2*b**2*m**2*n - 32*a**2*b**2*m**2 -      &
-      &                         216*a**2*b**2*n**2 - 360*a**2*b**2*n +         &
-      &                         1584*a**2*b**2 + 16*b**4*n**3 - 112*b**4*n +   &
-      &                         96*b**4)/                                      &
-      &                         real(64*n*(n - 2)*(n - 1)*(n + 1)*(n + 3),cp)
-      stencil(ku)              =-a**3*b*(2*a**2*m**2*n + 16*a**2*m**2 +        &
-      &                          4*a**2*n**3 + 33*a**2*n**2 - 55*a**2*n -      &
-      &                          444*a**2 + 8*b**2*n**3 + 66*b**2*n**2 +       &
-      &                          10*b**2*n - 348*b**2)/                        &
-      &                          real(16*n*(n - 2)*(n - 1)*(n + 2)*(n + 3),cp)
-      stencil(ku+1)            =-a**2*(a**4*m**2*n**2 - 19*a**4*m**2 +         &
-      &                          a**4*n**4 - 43*a**4*n**2 + 396*a**4 +         &
-      &                          6*a**2*b**2*m**2*n**2 - 54*a**2*b**2*m**2 +   &
-      &                          12*a**2*b**2*n**4 - 336*a**2*b**2*n**2 +      &
-      &                          2052*a**2*b**2 + 8*b**4*n**4 - 104*b**4*n**2 +&
+      stencil(ku-5)            =-a**6*real((dm-dn-6)*(dm+dn+6),cp)/ &
+      &                          real(64*dn*(dn+1)*(dn+2)*(dn+3),cp)
+      stencil(ku-4)            =-a**5*b*real(2*dm**2-4*dn**2-41*dn-105,cp)/ &
+      &                          real(32*dn*(dn+1)*(dn+2)*(dn+3),cp)
+      stencil(ku-3)            = a**4*(a**2*dm**2*dn + 5*a**2*dm**2 + a**2*dn**3 + &
+      &                          3*a**2*dn**2 - 34*a**2*dn - 120*a**2 -            &
+      &                          2*b**2*dm**2*dn + 2*b**2*dm**2 + 12*b**2*dn**3 +  &
+      &                          90*b**2*dn**2 + 114*b**2*dn - 216*b**2)/          &
+      &                          real(32*dn*(dn - 1)*(dn + 1)*(dn + 2)*(dn + 3),cp)
+      stencil(ku-2)            =a**3*b*(6*a**2*dm**2 + 4*a**2*dn**2 - 25*a**2*dn -&
+      &                         183*a**2 + 16*b**2*dn**2 + 44*b**2*dn - 60*b**2)/ &
+      &                         real(32*dn*(dn - 1)*(dn + 1)*(dn + 2),cp)
+      stencil(ku-1)            =a**2*(a**4*dm**2*dn - 17*a**4*dm**2 - a**4*dn**3 - &
+      &                         27*a**4*dn**2 - 8*a**4*dn + 372*a**4 +             &
+      &                         16*a**2*b**2*dm**2*dn - 32*a**2*b**2*dm**2 -       &
+      &                         216*a**2*b**2*dn**2 - 360*a**2*b**2*dn +           &
+      &                         1584*a**2*b**2 + 16*b**4*dn**3 - 112*b**4*dn +     &
+      &                         96*b**4)/                                          &
+      &                         real(64*dn*(dn - 2)*(dn - 1)*(dn + 1)*(dn + 3),cp)
+      stencil(ku)              =-a**3*b*(2*a**2*dm**2*dn + 16*a**2*dm**2 +     &
+      &                          4*a**2*dn**3 + 33*a**2*dn**2 - 55*a**2*dn -   &
+      &                          444*a**2 + 8*b**2*dn**3 + 66*b**2*dn**2 +     &
+      &                          10*b**2*dn - 348*b**2)/                       &
+      &                          real(16*dn*(dn - 2)*(dn - 1)*(dn + 2)*(dn + 3),cp)
+      stencil(ku+1)            =-a**2*(a**4*dm**2*dn**2 - 19*a**4*dm**2 +       &
+      &                          a**4*dn**4 - 43*a**4*dn**2 + 396*a**4 +        &
+      &                          6*a**2*b**2*dm**2*dn**2 - 54*a**2*b**2*dm**2 + &
+      &                          12*a**2*b**2*dn**4 - 336*a**2*b**2*dn**2 +     &
+      &                          2052*a**2*b**2 + 8*b**4*dn**4 - 104*b**4*dn**2+&
       &                          288*b**4)/                                    &
-      &                         real(16*(n-3)*(n-2)*(n-1)*(n+1)*(n+2)*(n+3),cp)
-      stencil(ku+2)            =-a**3*b*(2*a**2*m**2*n - 16*a**2*m**2 +        &
-      &                         4*a**2*n**3 - 33*a**2*n**2 - 55*a**2*n +       &
-      &                         444*a**2 + 8*b**2*n**3 - 66*b**2*n**2 +        &
-      &                         10*b**2*n + 348*b**2)/                         &
-      &                         real(16*n*(n - 3)*(n - 2)*(n + 1)*(n + 2),cp)
-      stencil(ku+3)            =a**2*(a**4*m**2*n + 17*a**4*m**2 - a**4*n**3 + &
-      &                         27*a**4*n**2 - 8*a**4*n - 372*a**4 +           &
-      &                         16*a**2*b**2*m**2*n + 32*a**2*b**2*m**2 +      &
-      &                         216*a**2*b**2*n**2 - 360*a**2*b**2*n -         &
-      &                         1584*a**2*b**2 + 16*b**4*n**3 - 112*b**4*n -   &
-      &                         96*b**4)/                                      &
-      &                         real(64*n*(n - 3)*(n - 1)*(n + 1)*(n + 2),cp)
-      stencil(ku+4)            =a**3*b*(6*a**2*m**2 + 4*a**2*n**2 + 25*a**2*n -&
-      &                         183*a**2 + 16*b**2*n**2 - 44*b**2*n - 60*b**2)/&
-      &                         real(32*n*(n - 2)*(n - 1)*(n + 1),cp)
-      stencil(ku+5)            =a**4*(a**2*m**2*n - 5*a**2*m**2 + a**2*n**3 - &
-      &                         3*a**2*n**2 - 34*a**2*n + 120*a**2 -          &
-      &                         2*b**2*m**2*n - 2*b**2*m**2 + 12*b**2*n**3 -  &
-      &                         90*b**2*n**2 + 114*b**2*n + 216*b**2)/        &
-      &                         real(32*n*(n - 3)*(n - 2)*(n - 1)*(n + 1),cp)
-      stencil(ku+6)            =-a**5*b*real(2*m**2-4*n**2+41*n-105,cp)/      &
-      &                         real(32*n*(n - 3)*(n - 2)*(n - 1),cp)
-      stencil(ku+7)            =-a**6*real((m-n+6)*(m+n-6),cp)/               &
-      &                         real(64*n*(n - 3)*(n - 2)*(n - 1),cp)
+      &                         real(16*(dn-3)*(dn-2)*(dn-1)*(dn+1)*(dn+2)*(dn+3),cp)
+      stencil(ku+2)            =-a**3*b*(2*a**2*dm**2*dn - 16*a**2*dm**2 +      &
+      &                         4*a**2*dn**3 - 33*a**2*dn**2 - 55*a**2*dn +     &
+      &                         444*a**2 + 8*b**2*dn**3 - 66*b**2*dn**2 +       &
+      &                         10*b**2*dn + 348*b**2)/                         &
+      &                         real(16*dn*(dn - 3)*(dn - 2)*(dn + 1)*(dn + 2),cp)
+      stencil(ku+3)            =a**2*(a**4*dm**2*dn + 17*a**4*dm**2 - a**4*dn**3 +&
+      &                         27*a**4*dn**2 - 8*a**4*dn - 372*a**4 +            &
+      &                         16*a**2*b**2*dm**2*dn + 32*a**2*b**2*dm**2 +      &
+      &                         216*a**2*b**2*dn**2 - 360*a**2*b**2*dn -          &
+      &                         1584*a**2*b**2 + 16*b**4*dn**3 - 112*b**4*dn -    &
+      &                         96*b**4)/                                         &
+      &                         real(64*dn*(dn - 3)*(dn - 1)*(dn + 1)*(dn + 2),cp)
+      stencil(ku+4)            =a**3*b*(6*a**2*dm**2 + 4*a**2*dn**2 + 25*a**2*dn -&
+      &                         183*a**2 + 16*b**2*dn**2 - 44*b**2*dn - 60*b**2)/ &
+      &                         real(32*dn*(dn - 2)*(dn - 1)*(dn + 1),cp)
+      stencil(ku+5)            =a**4*(a**2*dm**2*dn - 5*a**2*dm**2 + a**2*dn**3 - &
+      &                         3*a**2*dn**2 - 34*a**2*dn + 120*a**2 -            &
+      &                         2*b**2*dm**2*dn - 2*b**2*dm**2 + 12*b**2*dn**3 -  &
+      &                         90*b**2*dn**2 + 114*b**2*dn + 216*b**2)/          &
+      &                         real(32*dn*(dn - 3)*(dn - 2)*(dn - 1)*(dn + 1),cp)
+      stencil(ku+6)            =-a**5*b*real(2*dm**2-4*dn**2+41*dn-105,cp)/      &
+      &                         real(32*dn*(dn - 3)*(dn - 2)*(dn - 1),cp)
+      stencil(ku+7)            =-a**6*real((dm-dn+6)*(dm+dn-6),cp)/           &
+      &                         real(64*dn*(dn - 3)*(dn - 2)*(dn - 1),cp)
       stencil(ku+8:len_stencil)= 0.0_cp
-
-      ! stencild(1:ku-6)          = 0.0_cp
-      ! stencild(ku-5)=-a**6*(m - n - 6)*(m + n + 6)/(64*n*(n + 1)*(n + 2)*(n + 3))
-      ! stencild(ku-4)=-a**5*b*(2*m**2 - 4*n**2 - 41*n - 105)/(32*n*(n + 1)*(n + 2)*(n + 3))
-      ! stencild(ku-3)=a**4*(a**2*m**2*n + 5*a**2*m**2 + a**2*n**3 + 3*a**2*n**2 - &
-      ! & 34*a**2*n - 120*a**2 - 2*b**2*m**2*n + 2*b**2*m**2 + 12*b**2*n**3 +      &
-      ! & 90*b**2*n**2 + 114*b**2*n - 216*b**2)/(32*n*(n - 1)*(n + 1)*(n + 2)*(n + 3))
-      ! stencild(ku-2)=a**3*b*(6*a**2*m**2 + 4*a**2*n**2 - 25*a**2*n - 183*a**2 + &
-      ! & 16*b**2*n**2 + 44*b**2*n - 60*b**2)/(32*n*(n - 1)*(n + 1)*(n + 2))
-      ! stencild(ku-1)=a**2*(a**4*m**2*n - 17*a**4*m**2 - a**4*n**3 - 27*a**4*n**2 - &
-      ! & 8*a**4*n + 372*a**4 + 16*a**2*b**2*m**2*n - 32*a**2*b**2*m**2 -           &
-      ! & 216*a**2*b**2*n**2 - 360*a**2*b**2*n + 1584*a**2*b**2 + 16*b**4*n**3 -    &
-      ! & 112*b**4*n + 96*b**4)/(64*n*(n - 2)*(n - 1)*(n + 1)*(n + 3))
-      ! stencild(ku)  =-a**3*b*(2*a**2*m**2*n + 16*a**2*m**2 + 4*a**2*n**3 +    &
-      ! &   33*a**2*n**2 - 55*a**2*n - 444*a**2 + 8*b**2*n**3 + 66*b**2*n**2 + &
-      ! &   10*b**2*n - 348*b**2)/(16*n*(n - 2)*(n - 1)*(n + 2)*(n + 3))
-      ! stencild(ku+1)=-a**2*(a**4*m**2*n**2 - 19*a**4*m**2 + a**4*n**4 -          &
-      ! &   43*a**4*n**2 + 396*a**4 + 6*a**2*b**2*m**2*n**2 - 54*a**2*b**2*m**2 +  &
-      ! &   12*a**2*b**2*n**4 - 336*a**2*b**2*n**2 + 2052*a**2*b**2 + 8*b**4*n**4 -&
-      ! & 104*b**4*n**2 + 288*b**4)/(16*(n - 3)*(n - 2)*(n - 1)*(n + 1)*(n + 2)*(n + 3))
-      ! stencild(ku+2)=-a**3*b*(2*a**2*m**2*n - 16*a**2*m**2 + 4*a**2*n**3 -       &
-      ! &  33*a**2*n**2 - 55*a**2*n + 444*a**2 + 8*b**2*n**3 - 66*b**2*n**2 +      &
-      ! &  10*b**2*n + 348*b**2)/(16*n*(n - 3)*(n - 2)*(n + 1)*(n + 2))
-      ! stencild(ku+3)=a**2*(a**4*m**2*n + 17*a**4*m**2 - a**4*n**3 + 27*a**4*n**2-&
-      ! & 8*a**4*n - 372*a**4 + 16*a**2*b**2*m**2*n + 32*a**2*b**2*m**2 +          &
-      ! & 216*a**2*b**2*n**2 - 360*a**2*b**2*n - 1584*a**2*b**2 + 16*b**4*n**3 -   &
-      ! & 112*b**4*n - 96*b**4)/(64*n*(n - 3)*(n - 1)*(n + 1)*(n + 2))
-      ! stencild(ku+4)=a**3*b*(6*a**2*m**2 + 4*a**2*n**2 + 25*a**2*n - 183*a**2 + &
-      ! &  16*b**2*n**2 - 44*b**2*n - 60*b**2)/(32*n*(n - 2)*(n - 1)*(n + 1))
-      ! stencild(ku+5)=a**4*(a**2*m**2*n - 5*a**2*m**2 + a**2*n**3 - 3*a**2*n**2 - &
-      ! &  34*a**2*n + 120*a**2 - 2*b**2*m**2*n - 2*b**2*m**2 + 12*b**2*n**3 -     &
-      ! &  90*b**2*n**2 + 114*b**2*n + 216*b**2)/(32*n*(n - 3)*(n - 2)*(n - 1)*(n + 1))
-      ! stencild(ku+6)=-a**5*b*(2*m**2 - 4*n**2 + 41*n - 105)/(32*n*(n - 3)*(n - 2)*(n - 1))
-      ! stencild(ku+7)=-a**6*(m - n + 6)*(m + n - 6)/(64*n*(n - 3)*(n - 2)*(n - 1))
-      ! stencild(ku+8:len_stencil)= 0.0_cp
-
-      !print*, maxval(abs(stencil-stencild))
 
       stencil = mirror_stencil(n, len_stencil)
 
@@ -558,87 +524,55 @@ contains
       real(cp) :: stencil(len_stencil)
 
       !-- Local variables
+      real(cp) :: dm, dn
       integer :: ku
+
+      dm = real(m,cp)
+      dn = real(n,cp)
 
       ku = (len_stencil-1)/2
 
       stencil(1:ku-4)          = 0.0_cp
-      stencil(ku-3)            = a*a*a*a*real(m-n-6,cp)*real(m-n-4,cp)* &
-      &                          real(m+n+4,cp)*real(m+n+6,cp)/         &
-      &                          real(16*n*(n+1)*(n+2)*(n+3),cp)
-      stencil(ku-2)            =-a*a*a*b*real(2*n+9,cp)*                &
-      &                           real(2*m*m-2*n*n-18*n-39,cp)/         &
-      &                           real(8*n*(n+1)*(n+2),cp)
-      stencil(ku-1)            =-a*a*(a*a*m*m*m*m - 6*a*a*m*m*n - 28*a*a*m*m  &
-      &                            -a*a*n*n*n*n-10*a*a*n*n*n-20*a*a*n*n +     &
-      &                           64*a*a*n + 192*a*a + 2*b*b*m*m*n*n +        &
-      &                           4*b*b*m*m*n-6*b*b*m*m - 6*b*b*n*n*n*n -     &
-      &                           60*b*b*n*n*n-173*b*b*n*n-46*b*b*n+285*b*b)/ &
-      &                           real(4*n*(n-1)*(n+1)*(n+3),cp)
-      stencil(ku)              =a*b*(4*a*a*m*m*n + 38*a*a*m*m + 12*a*a*n*n*n +&
-      &                         54*a*a*n*n-88*a*a*n-461*a*a+16*b*b*n*n*n +    &
-      &                         72*b*b*n*n+24*b*b*n-112*b*b)/                 &
-      &                         real(8*n*(n-1)*(n+2),cp)
-      stencil(ku+1)            = (3*a*a*a*a*m*m*m*m + 2*a*a*a*a*m*m*n*n -     &
-      &                         68*a*a*a*a*m*m+3*a*a*a*a*n*n*n*n -            &
-      &                         68*a*a*a*a*n*n+416*a*a*a*a+8*a*a*b*b*m*m*n*n  &
-      &                         -32*a*a*b*b*m*m+24*a*a*b*b*n*n*n*n-332*a*a*   &
-      &                         b*b*n*n+944*a*a*b*b+8*b*b*b*b*n*n*n*n-        &
-      &                         40*b*b*b*b*n*n+32*b*b*b*b)/                   &
-      &                         real(8*(n-2)*(n-1)*(n+1)*(n+2),cp)
+      stencil(ku-3)            = a*a*a*a*real(dm-dn-6,cp)*real(dm-dn-4,cp)* &
+      &                          real(dm+dn+4,cp)*real(dm+dn+6,cp)/         &
+      &                          real(16*dn*(dn+1)*(dn+2)*(dn+3),cp)
+      stencil(ku-2)            =-a*a*a*b*real(2*dn+9,cp)*                   &
+      &                           real(2*dm*dm-2*dn*dn-18*dn-39,cp)/        &
+      &                           real(8*dn*(dn+1)*(dn+2),cp)
+      stencil(ku-1)            =-a*a*(a*a*dm*dm*dm*dm-6*a*a*dm*dm*dn-28*a*a*dm*dm  &
+      &                            -a*a*dn*dn*dn*dn-10*a*a*dn*dn*dn-20*a*a*dn*dn + &
+      &                           64*a*a*dn + 192*a*a + 2*b*b*dm*dm*dn*dn +        &
+      &                           4*b*b*dm*dm*dn-6*b*b*dm*dm - 6*b*b*dn*dn*dn*dn - &
+      &                           60*b*b*dn*dn*dn-173*b*b*dn*dn-46*b*b*dn+285*b*b)/&
+      &                           real(4*dn*(dn-1)*(dn+1)*(dn+3),cp)
+      stencil(ku)              =a*b*(4*a*a*dm*dm*dn+38*a*a*dm*dm+12*a*a*dn*dn*dn +&
+      &                         54*a*a*dn*dn-88*a*a*dn-461*a*a+16*b*b*dn*dn*dn +  &
+      &                         72*b*b*dn*dn+24*b*b*dn-112*b*b)/                  &
+      &                         real(8*dn*(dn-1)*(dn+2),cp)
+      stencil(ku+1)            = (3*a*a*a*a*dm*dm*dm*dm + 2*a*a*a*a*dm*dm*dn*dn -  &
+      &                         68*a*a*a*a*dm*dm+3*a*a*a*a*dn*dn*dn*dn -           &
+      &                         68*a*a*a*a*dn*dn+416*a*a*a*a+8*a*a*b*b*dm*dm*dn*dn &
+      &                         -32*a*a*b*b*dm*dm+24*a*a*b*b*dn*dn*dn*dn-332*a*a*  &
+      &                         b*b*dn*dn+944*a*a*b*b+8*b*b*b*b*dn*dn*dn*dn-       &
+      &                         40*b*b*b*b*dn*dn+32*b*b*b*b)/                      &
+      &                         real(8*(dn-2)*(dn-1)*(dn+1)*(dn+2),cp)
 
-      stencil(ku+2)            =a*b*(4*a*a*m*m*n-38*a*a*m*m+12*a*a*n*n*n -    &
-      &                         54*a*a*n*n-88*a*a*n+461*a*a+16*b*b*n*n*n -    &
-      &                         72*b*b*n*n+24*b*b*n+112*b*b)/                 &
-      &                         real(8*n*(n-2)*(n+1),cp)
-      stencil(ku+3)            =-a*a*(a*a*m*m*m*m+6*a*a*m*m*n-28*a*a*m*m -    &
-      &                          a*a*n*n*n*n+10*a*a*n*n*n-20*a*a*n*n -        &
-      &                          64*a*a*n+192*a*a+2*b*b*m*m*n*n-4*b*b*m*m*n - &
-      &                          6*b*b*m*m-6*b*b*n*n*n*n+60*b*b*n*n*n -       &
-      &                          173*b*b*n*n+46*b*b*n+285*b*b)/               &
-      &                          real(4*n*(n-3)*(n-1)*(n+1),cp)
-      stencil(ku+4)            =-a*a*a*b*real((2*n-9)*(2*m*m-2*n*n+18*n-39),cp) &
-      &                          /real(8*n*(n-2)*(n-1),cp)
-      stencil(ku+5)            =a*a*a*a*real((m-n+4)*(m-n+6)*(m+n-6)*(m+n-4),cp)&
-      &                          /real(16*n*(n-3)*(n-2)*(n-1),cp)
+      stencil(ku+2)            =a*b*(4*a*a*dm*dm*dn-38*a*a*dm*dm+12*a*a*dn*dn*dn - &
+      &                         54*a*a*dn*dn-88*a*a*dn+461*a*a+16*b*b*dn*dn*dn -   &
+      &                         72*b*b*dn*dn+24*b*b*dn+112*b*b)/                   &
+      &                         real(8*dn*(dn-2)*(dn+1),cp)
+      stencil(ku+3)            =-a*a*(a*a*dm*dm*dm*dm+6*a*a*dm*dm*dn-28*a*a*dm*dm- &
+      &                          a*a*dn*dn*dn*dn+10*a*a*dn*dn*dn-20*a*a*dn*dn -    &
+      &                          64*a*a*dn+192*a*a+2*b*b*dm*dm*dn*dn-              &
+      &                          4*b*b*dm*dm*dn-6*b*b*dm*dm-6*b*b*dn*dn*dn*dn+     &
+      &                          60*b*b*dn*dn*dn-173*b*b*dn*dn+46*b*b*dn+285*b*b)/ &
+      &                          real(4*dn*(dn-3)*(dn-1)*(dn+1),cp)
+      stencil(ku+4)            =-a*a*a*b*real((2*dn-9)*(2*dm*dm-2*dn*dn+18*dn-39),cp) &
+      &                          /real(8*dn*(dn-2)*(dn-1),cp)
+      stencil(ku+5)            =a*a*a*a*real((dm-dn+4)*(dm-dn+6)*(dm+dn-6)*(dm+dn-4),cp)&
+      &                          /real(16*dn*(dn-3)*(dn-2)*(dn-1),cp)
       stencil(ku+6:len_stencil)= 0.0_cp
 
-
-      ! stencil_debug(1:ku-4)= 0.0_cp
-      ! stencil_debug(ku-3)=a**4*(m - n - 6)*(m - n - 4)*(m + n + 4)*(m + n + 6)/ &
-      ! &                   (16*n*(n + 1)*(n + 2)*(n + 3))
-      ! stencil_debug(ku-2)=-a**3*b*(2*n + 9)*(2*m**2 - 2*n**2 - 18*n - 39)/ &
-      ! &                   (8*n*(n + 1)*(n + 2))
-      ! stencil_debug(ku-1)=-a**2*(a**2*m**4 - 6*a**2*m**2*n - 28*a**2*m**2 - &
-      ! &                    a**2*n**4 - 10*a**2*n**3 - 20*a**2*n**2 + 64*a**2*n + &
-      ! &                    192*a**2 + 2*b**2*m**2*n**2 + 4*b**2*m**2*n - &
-      ! &                    6*b**2*m**2 - 6*b**2*n**4 - 60*b**2*n**3 - &
-      ! &                    173*b**2*n**2 - 46*b**2*n + 285*b**2)/ &
-      ! &                    (4*n*(n - 1)*(n + 1)*(n + 3))
-      ! stencil_debug(ku)  =a*b*(4*a**2*m**2*n + 38*a**2*m**2 + 12*a**2*n**3 + &
-      ! &                   54*a**2*n**2 - 88*a**2*n - 461*a**2 + 16*b**2*n**3 +&
-      ! &                   72*b**2*n**2 + 24*b**2*n - 112*b**2)/(8*n*(n - 1)*(n + 2))
-      ! stencil_debug(ku+1)=(3*a**4*m**4 + 2*a**4*m**2*n**2 - 68*a**4*m**2 +  &
-      ! &                    3*a**4*n**4 - 68*a**4*n**2 + 416*a**4 +          &
-      ! &                    8*a**2*b**2*m**2*n**2 - 32*a**2*b**2*m**2 +      &
-      ! &                    24*a**2*b**2*n**4 - 332*a**2*b**2*n**2 +         &
-      ! &                    944*a**2*b**2 + 8*b**4*n**4 - 40*b**4*n**2 + 32*b**4)/&
-      ! &                    (8*(n - 2)*(n - 1)*(n + 1)*(n + 2))
-      ! stencil_debug(ku+2)=a*b*(4*a**2*m**2*n - 38*a**2*m**2 + 12*a**2*n**3 - &
-      ! &                   54*a**2*n**2 - 88*a**2*n + 461*a**2 + 16*b**2*n**3 -&
-      ! &                   72*b**2*n**2 + 24*b**2*n + 112*b**2)/(8*n*(n - 2)*(n + 1))
-      ! stencil_debug(ku+3)=-a**2*(a**2*m**4 + 6*a**2*m**2*n - 28*a**2*m**2 - &
-      ! &                    a**2*n**4 + 10*a**2*n**3 - 20*a**2*n**2 -        &
-      ! &                    64*a**2*n + 192*a**2 + 2*b**2*m**2*n**2 -        &
-      ! &                    4*b**2*m**2*n - 6*b**2*m**2 - 6*b**2*n**4 +      &
-      ! &                    60*b**2*n**3 - 173*b**2*n**2 + 46*b**2*n + 285*b**2)/&
-      ! &                    (4*n*(n - 3)*(n - 1)*(n + 1))
-      ! stencil_debug(ku+4)=-a**3*b*(2*n - 9)*(2*m**2 - 2*n**2 + 18*n - 39)/&
-      ! &                    (8*n*(n - 2)*(n - 1))
-      ! stencil_debug(ku+5)=a**4*(m - n + 4)*(m - n + 6)*(m + n - 6)*(m + n - 4)/ &
-      ! &                   (16*n*(n - 3)*(n - 2)*(n - 1))
-      ! stencil_debug(ku+6:len_stencil)= 0.0_cp
-! 
       stencil = mirror_stencil(n, len_stencil)
 
    end function intcheb4rmult4lapl2
