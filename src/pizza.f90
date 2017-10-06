@@ -26,7 +26,7 @@ program pizza
    use update_psi_integ, only: initialize_psi_integ, finalize_psi_integ
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
-   use tests, only: solve_laplacian, test_radial_der, solve_biharmo
+   use tests, only: solve_laplacian, test_radial_der, solve_biharmo, test_i4
 
    implicit none
 
@@ -67,9 +67,10 @@ program pizza
    call set_mpi_domains()
 
    !-- Test radial derivatives
+   call test_i4()
    !call solve_laplacian(nMstart, nMstop)
    !call solve_biharmo(nMstart, nMstop)
-   !stop
+   stop
    !call test_radial_der(nMstart,nMstop)
 
    !-- Open output files

@@ -71,7 +71,7 @@ contains
 !------------------------------------------------------------------------------
    function rmult2(a, b, idx, len_stencil) result(stencil)
       !
-      ! Multiplication by r^2 operator
+      ! Multiplication by r^2 operator (validation: OK)
       !
 
       !-- Input variables
@@ -199,7 +199,7 @@ contains
 !------------------------------------------------------------------------------
    function intcheb1rmult1(a, b, idx, len_stencil) result(stencil)
       !
-      ! Second integral of r operator
+      ! Second integral of r operator (validation: OK)
       !
 
       !-- Input variables
@@ -263,7 +263,7 @@ contains
 !------------------------------------------------------------------------------
    function intcheb2rmult2(a, b, idx, len_stencil) result(stencil)
       !
-      ! Second integral of r operator
+      ! Second integral of r operator (validation: OK)
       !
 
       !-- Input variables
@@ -339,7 +339,7 @@ contains
 !------------------------------------------------------------------------------
    function intcheb4rmult4(a, b, n, len_stencil) result(stencil)
       !
-      ! Fourth integral of r^4 operator
+      ! Fourth integral of r^4 operator (validation: OK)
       !
       !-- Input variables
       real(cp), intent(in) :: a
@@ -418,6 +418,7 @@ contains
 
       !-- Output variable
       real(cp) :: stencil(len_stencil)
+      !real(cp) :: stencild(len_stencil)
 
       !-- Local variables
       integer :: ku
@@ -481,6 +482,44 @@ contains
       stencil(ku+7)            =-a**6*real((m-n+6)*(m+n-6),cp)/               &
       &                         real(64*n*(n - 3)*(n - 2)*(n - 1),cp)
       stencil(ku+8:len_stencil)= 0.0_cp
+
+      ! stencild(1:ku-6)          = 0.0_cp
+      ! stencild(ku-5)=-a**6*(m - n - 6)*(m + n + 6)/(64*n*(n + 1)*(n + 2)*(n + 3))
+      ! stencild(ku-4)=-a**5*b*(2*m**2 - 4*n**2 - 41*n - 105)/(32*n*(n + 1)*(n + 2)*(n + 3))
+      ! stencild(ku-3)=a**4*(a**2*m**2*n + 5*a**2*m**2 + a**2*n**3 + 3*a**2*n**2 - &
+      ! & 34*a**2*n - 120*a**2 - 2*b**2*m**2*n + 2*b**2*m**2 + 12*b**2*n**3 +      &
+      ! & 90*b**2*n**2 + 114*b**2*n - 216*b**2)/(32*n*(n - 1)*(n + 1)*(n + 2)*(n + 3))
+      ! stencild(ku-2)=a**3*b*(6*a**2*m**2 + 4*a**2*n**2 - 25*a**2*n - 183*a**2 + &
+      ! & 16*b**2*n**2 + 44*b**2*n - 60*b**2)/(32*n*(n - 1)*(n + 1)*(n + 2))
+      ! stencild(ku-1)=a**2*(a**4*m**2*n - 17*a**4*m**2 - a**4*n**3 - 27*a**4*n**2 - &
+      ! & 8*a**4*n + 372*a**4 + 16*a**2*b**2*m**2*n - 32*a**2*b**2*m**2 -           &
+      ! & 216*a**2*b**2*n**2 - 360*a**2*b**2*n + 1584*a**2*b**2 + 16*b**4*n**3 -    &
+      ! & 112*b**4*n + 96*b**4)/(64*n*(n - 2)*(n - 1)*(n + 1)*(n + 3))
+      ! stencild(ku)  =-a**3*b*(2*a**2*m**2*n + 16*a**2*m**2 + 4*a**2*n**3 +    &
+      ! &   33*a**2*n**2 - 55*a**2*n - 444*a**2 + 8*b**2*n**3 + 66*b**2*n**2 + &
+      ! &   10*b**2*n - 348*b**2)/(16*n*(n - 2)*(n - 1)*(n + 2)*(n + 3))
+      ! stencild(ku+1)=-a**2*(a**4*m**2*n**2 - 19*a**4*m**2 + a**4*n**4 -          &
+      ! &   43*a**4*n**2 + 396*a**4 + 6*a**2*b**2*m**2*n**2 - 54*a**2*b**2*m**2 +  &
+      ! &   12*a**2*b**2*n**4 - 336*a**2*b**2*n**2 + 2052*a**2*b**2 + 8*b**4*n**4 -&
+      ! & 104*b**4*n**2 + 288*b**4)/(16*(n - 3)*(n - 2)*(n - 1)*(n + 1)*(n + 2)*(n + 3))
+      ! stencild(ku+2)=-a**3*b*(2*a**2*m**2*n - 16*a**2*m**2 + 4*a**2*n**3 -       &
+      ! &  33*a**2*n**2 - 55*a**2*n + 444*a**2 + 8*b**2*n**3 - 66*b**2*n**2 +      &
+      ! &  10*b**2*n + 348*b**2)/(16*n*(n - 3)*(n - 2)*(n + 1)*(n + 2))
+      ! stencild(ku+3)=a**2*(a**4*m**2*n + 17*a**4*m**2 - a**4*n**3 + 27*a**4*n**2-&
+      ! & 8*a**4*n - 372*a**4 + 16*a**2*b**2*m**2*n + 32*a**2*b**2*m**2 +          &
+      ! & 216*a**2*b**2*n**2 - 360*a**2*b**2*n - 1584*a**2*b**2 + 16*b**4*n**3 -   &
+      ! & 112*b**4*n - 96*b**4)/(64*n*(n - 3)*(n - 1)*(n + 1)*(n + 2))
+      ! stencild(ku+4)=a**3*b*(6*a**2*m**2 + 4*a**2*n**2 + 25*a**2*n - 183*a**2 + &
+      ! &  16*b**2*n**2 - 44*b**2*n - 60*b**2)/(32*n*(n - 2)*(n - 1)*(n + 1))
+      ! stencild(ku+5)=a**4*(a**2*m**2*n - 5*a**2*m**2 + a**2*n**3 - 3*a**2*n**2 - &
+      ! &  34*a**2*n + 120*a**2 - 2*b**2*m**2*n - 2*b**2*m**2 + 12*b**2*n**3 -     &
+      ! &  90*b**2*n**2 + 114*b**2*n + 216*b**2)/(32*n*(n - 3)*(n - 2)*(n - 1)*(n + 1))
+      ! stencild(ku+6)=-a**5*b*(2*m**2 - 4*n**2 + 41*n - 105)/(32*n*(n - 3)*(n - 2)*(n - 1))
+      ! stencild(ku+7)=-a**6*(m - n + 6)*(m + n - 6)/(64*n*(n - 3)*(n - 2)*(n - 1))
+      ! stencild(ku+8:len_stencil)= 0.0_cp
+
+      !print*, maxval(abs(stencil-stencild))
+
 
       stencil = mirror_stencil(n, len_stencil)
 

@@ -320,10 +320,10 @@ contains
          end if
       end if
 
-      !-- Bring psi and omega to the physical space
+      !-- Bring psi back the physical space
       call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Get the radial derivative of psi to calculate uphi
+      !-- Get the radial derivative of psi to calculate uphi, us and omega
       call get_ddr(psi_Mloc, work_Mloc, om_Mloc, nMstart, nMstop, n_r_max, rscheme)
 
       do n_r=1,n_r_max
