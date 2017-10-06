@@ -323,14 +323,14 @@ contains
 
       stencil(1:ku-2)          = 0.0_cp
       stencil(ku-1)            =-a*a*real(m-idx-2,cp)*real(m+idx+2,cp)/ &
-      &                          real(4*idx*(idx+1),cp)
+      &                          real(4*idx,cp)/real(idx+1,cp)
       stencil(ku)              = half*a*b*real(2*idx+3,cp)/real(idx,cp)
       stencil(ku+1)            = (a*a*real(m*m,cp)+a*a*real(idx*idx,cp)-   &
       &                          two*a*a+two*b*b*real(idx*idx,cp)-two*b*b)/&
-      &                          real(2*(idx-1)*(idx+1),cp)
+      &                          real(2*(idx-1),cp)/real(idx+1,cp)
       stencil(ku+2)            = a*b*real(2*idx-3,cp)/real(2*idx,cp)
       stencil(ku+3)            = -a*a*real(m-idx+2,cp)*real(m+idx-2,cp)/ &
-      &                          real(4*idx*(idx-1),cp)
+      &                          real(4*idx,cp)/real(idx-1,cp)
       stencil(ku+4:len_stencil)= 0.0_cp
 
       stencil = mirror_stencil(idx, len_stencil)
@@ -449,7 +449,7 @@ contains
       &                          4*a**2*n**3 + 33*a**2*n**2 - 55*a**2*n -      &
       &                          444*a**2 + 8*b**2*n**3 + 66*b**2*n**2 +       &
       &                          10*b**2*n - 348*b**2)/                        &
-      &                          real(16*n*(n - 2)*(n - 1)*(n + 2)*(n + 3))
+      &                          real(16*n*(n - 2)*(n - 1)*(n + 2)*(n + 3),cp)
       stencil(ku+1)            =-a**2*(a**4*m**2*n**2 - 19*a**4*m**2 +         &
       &                          a**4*n**4 - 43*a**4*n**2 + 396*a**4 +         &
       &                          6*a**2*b**2*m**2*n**2 - 54*a**2*b**2*m**2 +   &
@@ -520,7 +520,6 @@ contains
 
       !print*, maxval(abs(stencil-stencild))
 
-
       stencil = mirror_stencil(n, len_stencil)
 
    end function intcheb4rmult4lapl
@@ -581,7 +580,7 @@ contains
       &                          173*b*b*n*n+46*b*b*n+285*b*b)/               &
       &                          real(4*n*(n-3)*(n-1)*(n+1),cp)
       stencil(ku+4)            =-a*a*a*b*real((2*n-9)*(2*m*m-2*n*n+18*n-39),cp) &
-      &                          /real(8*n*(n-2)*(n-1))
+      &                          /real(8*n*(n-2)*(n-1),cp)
       stencil(ku+5)            =a*a*a*a*real((m-n+4)*(m-n+6)*(m+n-6)*(m+n-4),cp)&
       &                          /real(16*n*(n-3)*(n-2)*(n-1),cp)
       stencil(ku+6:len_stencil)= 0.0_cp
