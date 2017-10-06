@@ -20,7 +20,9 @@ module matrix_types
 
       procedure :: initialize => initialize_band
       procedure :: finalize => finalize_band
-      procedure :: mat_vec_mul
+      procedure :: mat_vec_complex_mul
+      procedure :: mat_vec_real_mul
+      generic :: mat_vec_mul => mat_vec_complex_mul, mat_vec_real_mul
 
    end type type_bandmat_real
 
@@ -86,7 +88,10 @@ contains
 
    end subroutine finalize_band
 !------------------------------------------------------------------------------
-   subroutine mat_vec_mul(this, vec)
+   subroutine mat_vec_complex_mul(this, vec)
+      !
+      ! This is a matrix-vector multiplication (real * complex)
+      !
 
       class(type_bandmat_real) :: this
 
@@ -114,7 +119,30 @@ contains
          vec(n_r) = cmplx(vecr(n_r), veci(n_r), kind=cp)
       end do
 
-   end subroutine mat_vec_mul
+   end subroutine mat_vec_complex_mul
+!------------------------------------------------------------------------------
+   subroutine mat_vec_real_mul(this, vec)
+      !
+      ! This is a matrix-vector multiplication (real * real)
+      !
+
+      class(type_bandmat_real) :: this
+
+      !-- Input/output variables
+      real(cp), intent(inout) :: vec(this%nlines)
+
+      !-- Local variables:
+      integer :: n_r
+      real(cp) :: tmp(this%nlines)
+
+      do n_r=1,this%nlines
+         tmp(n_r) = vec(n_r)
+      end do
+
+      call dgbmv('N', this%nlines, this%nlines, this%kl, this%ku, one, &
+           &      this%dat, this%nbands, tmp, 1, 0.0_cp, vec, 1)
+
+   end subroutine mat_vec_real_mul
 !------------------------------------------------------------------------------
    subroutine initialize_bord(this, kl, ku, nbounds, nlines)
 

@@ -645,11 +645,15 @@ contains
    end subroutine solve_biharmo_colloc
 !------------------------------------------------------------------------------
    subroutine test_i4()
+      !
+      ! This subroutine is used to compare the implementation of 4th order
+      ! recurrence relation: i4r4() vs i4(). This is a simple dgemv comparison
+      ! of I4*f with I4R4*f/r^4
+      !
 
       !-- Local variables
       integer, allocatable :: nrs(:)
       real(cp), allocatable :: r_loc(:), rhs1(:), rhs2(:), or2(:)
-      complex(cp), allocatable :: rhsc1(:), rhsc2(:)
       integer :: file_handle, n_r_max_loc, n_in, n_r
       real(cp) :: r_cmb, r_icb, eps, alph1, alph2, err
       type(type_bandmat_real) :: I4_mat, I4R4_mat
@@ -673,9 +677,8 @@ contains
          do n_r=1,size(nrs)
             n_r_max_loc = nrs(n_r)
             allocate( r_loc(n_r_max_loc), rhs1(n_r_max_loc), rhs2(n_r_max_loc) )
-            allocate( rhsc1(n_r_max_loc), rhsc2(n_r_max_loc), or2(n_r_max_loc) )
-            ! allocate( df_num(n_r_max_loc), d2f_num(n_r_max_loc) )
-            ! allocate( df_theo(n_r_max_loc), d2f_theo(n_r_max_loc) )
+            allocate( or2(n_r_max_loc) )
+
             call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in)
             alph1=0.0_cp
             alph2=0.0_cp
@@ -697,38 +700,34 @@ contains
             call rscheme%costf1(rhs2, n_r_max_loc)
 
             !-- DGEMM
-            rhsc1(:)=rhs1(:)
-            rhsc2(:)=rhs2(:)
-            call I4_mat%mat_vec_mul(rhsc1)
-            call I4R4_mat%mat_vec_mul(rhsc2)
-            rhsc1(1)=0.0_cp
-            rhsc1(2)=0.0_cp
-            rhsc1(3)=0.0_cp
-            rhsc1(4)=0.0_cp
+            call I4_mat%mat_vec_mul(rhs1)
+            call I4R4_mat%mat_vec_mul(rhs2)
+            rhs1(1)=0.0_cp
+            rhs1(2)=0.0_cp
+            rhs1(3)=0.0_cp
+            rhs1(4)=0.0_cp
 
-            rhsc2(1)=0.0_cp
-            rhsc2(2)=0.0_cp
-            rhsc2(3)=0.0_cp
-            rhsc2(4)=0.0_cp
+            rhs2(1)=0.0_cp
+            rhs2(2)=0.0_cp
+            rhs2(3)=0.0_cp
+            rhs2(4)=0.0_cp
 
-            err = maxval(abs(real(rhsc1)-real(rhsc2)))
-            write(file_handle, '(i5,5es20.12)') n_r_max_loc, err, real(rhsc1(5)), &
-            &                                  real(rhsc2(5)), real(rhsc1(9)),    &
-            &                                  real(rhsc2(9))
-            write(6, '(i5,5es20.12)') n_r_max_loc, err, real(rhsc1(5)),           &
-            &                        real(rhsc2(5)), real(rhsc1(9)), real(rhsc2(9))
+            err = maxval(abs(rhs1-rhs2))
+            write(file_handle, '(i5,5es20.12)') n_r_max_loc, err, rhs1(5), &
+            &                                   rhs2(5), rhs1(9), rhs2(9)
+            write(6, '(i5,5es20.12)') n_r_max_loc, err, rhs1(5), rhs2(5), &
+            &                         rhs1(9), rhs2(9)
 
             call I4_mat%finalize()
             call I4R4_mat%finalize()
 
             call rscheme%finalize()
-            deallocate( r_loc, rhs1, rhsc1, rhs2, rhsc2, or2 )
+            deallocate( r_loc, rhs1, rhs2, or2 )
          end do
 
          close(file_handle)
 
       end if
-
 
    end subroutine test_i4
 !------------------------------------------------------------------------------
