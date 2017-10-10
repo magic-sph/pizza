@@ -13,7 +13,7 @@ module update_psi_integ
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
-   use algebra, only: sgefa, rgesl, prepare_bordered_mat, solve_bordered_mat
+   use algebra, only: sgefa, rgesl
    use time_schemes, only: type_tscheme
    use useful, only: abortRun, roll
    use matrix_types, only: type_bandmat_real, type_bordmat_real
@@ -132,7 +132,7 @@ contains
       complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      real(cp) :: uphi0(n_r_max), om0(n_r_max), rhsr(n_r_max), rhsi(n_r_max)
+      real(cp) :: uphi0(n_r_max), om0(n_r_max)
       integer :: n_r, n_m, n_r_out, m, n_o
 
       if ( lMat ) lPsimat(:)=.false.
@@ -266,28 +266,10 @@ contains
                rhs(n_r)=rhs(n_r)+buo_imp_Mloc(n_m,n_r)
             end do
 
-            do n_r=1,n_r_max
-               rhsr(n_r)= real(rhs(n_r))
-               rhsi(n_r)=aimag(rhs(n_r))
-            end do
-
-
-            call solve_bordered_mat(LHS_mat(n_m)%A1, LHS_mat(n_m)%A2,            &
-                 &                  LHS_mat(n_m)%A3, LHS_mat(n_m)%A4,            &
-                 &                  LHS_mat(n_m)%ntau, LHS_mat(n_m)%nlines_band, &
-                 &                  LHS_mat(n_m)%kl, LHS_mat(n_m)%ku,            &
-                 &                  LHS_mat(n_m)%pivA1, LHS_mat(n_m)%pivA4,      &
-                 &                  rhsr, n_r_max)
-
-            call solve_bordered_mat(LHS_mat(n_m)%A1, LHS_mat(n_m)%A2,            &
-                 &                  LHS_mat(n_m)%A3, LHS_mat(n_m)%A4,            &
-                 &                  LHS_mat(n_m)%ntau, LHS_mat(n_m)%nlines_band, &
-                 &                  LHS_mat(n_m)%kl, LHS_mat(n_m)%ku,            &
-                 &                  LHS_mat(n_m)%pivA1, LHS_mat(n_m)%pivA4,      &
-                 &                  rhsi, n_r_max)
+            call LHS_mat(n_m)%solve(rhs, n_r_max)
 
             do n_r_out=1,rscheme%n_max
-               psi_Mloc(n_m,n_r_out)=cmplx(rhsr(n_r_out), rhsi(n_r_out), kind=cp)
+               psi_Mloc(n_m,n_r_out)=rhs(n_r_out)
             end do
 
          end if
@@ -641,10 +623,7 @@ contains
       end do
 
       !-- LU factorisation
-      call prepare_bordered_mat(A_mat%A1,A_mat%A2,A_mat%A3,A_mat%A4,&
-           &                    A_mat%ntau,A_mat%nlines_band,       &
-           &                    A_mat%kl,A_mat%ku, A_mat%pivA1,     &
-           &                    A_mat%pivA4)
+      call A_mat%prepare_LU()
 
    end subroutine get_lhs_mat
 !------------------------------------------------------------------------------

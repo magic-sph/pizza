@@ -11,7 +11,6 @@ module update_temp_integ
    use truncation, only: n_r_max, idx2m
    use radial_der, only: get_dr
    use fields, only: work_Mloc
-   use algebra, only: prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun, roll
    use time_schemes, only: type_tscheme
    use matrix_types, only: type_bandmat_real, type_bordmat_real
@@ -32,9 +31,9 @@ module update_temp_integ
    logical,  allocatable :: lTmat(:)
    complex(cp), allocatable :: rhs(:)
 
-   type(type_bordmat_real), allocatable :: A_mat(:)
-   type(type_bandmat_real) :: B_mat
-   type(type_bandmat_real), allocatable :: C_mat(:)
+   type(type_bordmat_real), allocatable :: LHS_mat(:)
+   type(type_bandmat_real) :: RHSE_mat
+   type(type_bandmat_real), allocatable :: RHSI_mat(:)
 
    public :: update_temp_int, initialize_temp_integ, finalize_temp_integ, &
    &         get_temp_rhs_imp_int
@@ -45,20 +44,20 @@ contains
 
       integer :: n_m, m
 
-      call B_mat%initialize(klB, kuB, n_r_max)
+      call RHSE_mat%initialize(klB, kuB, n_r_max)
 
-      allocate( C_mat(nMstart:nMstop) )
-      allocate( A_mat(nMstart:nMstop) )
+      allocate( RHSI_mat(nMstart:nMstop) )
+      allocate( LHS_mat(nMstart:nMstop) )
 
       do n_m=nMstart,nMstop
-         call C_mat(n_m)%initialize(klC, kuC, n_r_max)
-         call A_mat(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
+         call RHSI_mat(n_m)%initialize(klC, kuC, n_r_max)
+         call LHS_mat(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
       end do
 
-      call get_rhs_exp_mat(B_mat)
+      call get_rhs_exp_mat(RHSE_mat)
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
-         call get_rhs_imp_mat(C_mat(n_m), m)
+         call get_rhs_imp_mat(RHSI_mat(n_m), m)
       end do
 
       allocate( lTmat(nMstart:nMstop) )
@@ -75,12 +74,12 @@ contains
       !-- Local variables
       integer :: n_m
 
-      call B_mat%finalize()
+      call RHSE_mat%finalize()
       do n_m=nMstart,nMstop
-         call C_mat(n_m)%finalize()
-         call A_mat(n_m)%finalize()
+         call RHSI_mat(n_m)%finalize()
+         call LHS_mat(n_m)%finalize()
       end do
-      deallocate( A_mat, C_mat, rhs, lTmat )
+      deallocate( LHS_mat, RHSI_mat, rhs, lTmat )
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
@@ -104,7 +103,6 @@ contains
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
-      real(cp) :: rhsr(n_r_max), rhsi(n_r_max)
       integer :: n_r, n_m, n_r_out, m, n_o
 
       if ( lMat ) lTMat(:)=.false.
@@ -143,7 +141,7 @@ contains
             rhs(n_r)=dtemp_exp_Mloc(n_m,n_r,1)
          end do
 
-         call B_mat%mat_vec_mul(rhs)
+         call RHSE_mat%mat_vec_mul(rhs)
 
          rhs(1)=zero
          rhs(2)=zero
@@ -161,7 +159,7 @@ contains
          m = idx2m(n_m)
          
          if ( .not. lTmat(n_m) ) then
-            call get_lhs_mat( tscheme, m, A_mat(n_m) )
+            call get_lhs_mat( tscheme, m, LHS_mat(n_m) )
             lTmat(n_m)=.true.
          end if
 
@@ -178,27 +176,10 @@ contains
             end do
          end do
 
-         do n_r=1,n_r_max
-            rhsr(n_r)= real(rhs(n_r))
-            rhsi(n_r)=aimag(rhs(n_r))
-         end do
-
-         call solve_bordered_mat(A_mat(n_m)%A1, A_mat(n_m)%A2,            &
-              &                  A_mat(n_m)%A3, A_mat(n_m)%A4,            &
-              &                  A_mat(n_m)%ntau, A_mat(n_m)%nlines_band, &
-              &                  A_mat(n_m)%kl, A_mat(n_m)%ku,            &
-              &                  A_mat(n_m)%pivA1, A_mat(n_m)%pivA4,      &
-              &                  rhsr, n_r_max)
-
-         call solve_bordered_mat(A_mat(n_m)%A1, A_mat(n_m)%A2,            &
-              &                  A_mat(n_m)%A3, A_mat(n_m)%A4,            &
-              &                  A_mat(n_m)%ntau, A_mat(n_m)%nlines_band, &
-              &                  A_mat(n_m)%kl, A_mat(n_m)%ku,            &
-              &                  A_mat(n_m)%pivA1, A_mat(n_m)%pivA4,      &
-              &                  rhsi, n_r_max)
+         call LHS_mat(n_m)%solve(rhs, n_r_max)
 
          do n_r_out=1,rscheme%n_max
-            temp_Mloc(n_m, n_r_out)=cmplx(rhsr(n_r_out), rhsi(n_r_out), kind=cp)
+            temp_Mloc(n_m, n_r_out)=rhs(n_r_out)
          end do
 
       end do
@@ -266,7 +247,7 @@ contains
             rhs(n_r)= dtemp_imp_Mloc_last(n_m,n_r)
          end do
 
-         call B_mat%mat_vec_mul(rhs)
+         call RHSE_mat%mat_vec_mul(rhs)
 
          rhs(1)=zero
          rhs(2)=zero
@@ -294,7 +275,7 @@ contains
             do n_r=1,n_r_max
                rhs(n_r)=work_Mloc(n_m,n_r)
             end do
-            call C_mat(n_m)%mat_vec_mul(rhs)
+            call RHSI_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero
             rhs(2)=zero
             do n_r=1,n_r_max
@@ -405,10 +386,7 @@ contains
       end do
 
       !-- LU factorisation
-      call prepare_bordered_mat(A_mat%A1,A_mat%A2,A_mat%A3,A_mat%A4,&
-           &                    A_mat%ntau,A_mat%nlines_band,       &
-           &                    A_mat%kl,A_mat%ku, A_mat%pivA1,     &
-           &                    A_mat%pivA4)
+      call A_mat%prepare_LU()
 
    end subroutine get_lhs_mat
 !------------------------------------------------------------------------------

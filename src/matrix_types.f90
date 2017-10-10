@@ -3,6 +3,7 @@ module matrix_types
    use precision_mod
    use constants, only: one
    use mem_alloc, only: bytes_allocated
+   use algebra, only: prepare_bordered_mat, solve_bordered_mat
 
    implicit none
 
@@ -45,6 +46,10 @@ module matrix_types
 
       procedure :: initialize => initialize_bord
       procedure :: finalize => finalize_bord
+      procedure :: prepare_LU => prepare_LU_real
+      procedure :: solve_real_mat_complex_rhs
+      procedure :: solve_real_mat_real_rhs
+      generic :: solve => solve_real_mat_complex_rhs, solve_real_mat_real_rhs
 
    end type type_bordmat_real
 
@@ -209,5 +214,63 @@ contains
       deallocate( this%pivA1, this%pivA4)
 
    end subroutine finalize_bord
+!------------------------------------------------------------------------------
+   subroutine prepare_LU_real(this)
+
+      class(type_bordmat_real) :: this
+
+      call prepare_bordered_mat(this%A1, this%A2, this%A3, this%A4, this%ntau, &
+           &                    this%nlines_band, this%kl, this%ku, this%pivA1,&
+           &                    this%pivA4)
+
+   end subroutine prepare_LU_real
+!------------------------------------------------------------------------------
+   subroutine solve_real_mat_complex_rhs(this, rhs, nRmax)
+
+      class(type_bordmat_real) :: this
+
+      !-- Input variable
+      integer, intent(in) :: nRmax
+
+      !-- In/Out variable
+      complex(cp), intent(inout) :: rhs(nRmax)
+
+      !-- Local variable
+      integer :: n_r
+      real(cp) :: rhsr(nRmax), rhsi(nRmax)
+
+      do n_r=1,nRmax
+         rhsr(n_r)= real(rhs(n_r))
+         rhsi(n_r)=aimag(rhs(n_r))
+      end do
+
+      call solve_bordered_mat(this%A1, this%A2, this%A3, this%A4, this%ntau, &
+           &                  this%nlines_band, this%kl, this%ku, this%pivA1,&
+           &                  this%pivA4, rhsr, nRmax)
+      call solve_bordered_mat(this%A1, this%A2, this%A3, this%A4, this%ntau, &
+           &                  this%nlines_band, this%kl, this%ku, this%pivA1,&
+           &                  this%pivA4, rhsi, nRmax)
+
+      do n_r=1,nRmax
+         rhs(n_r)=cmplx(rhsr(n_r),rhsi(n_r),kind=cp)
+      end do
+
+   end subroutine solve_real_mat_complex_rhs
+!------------------------------------------------------------------------------
+   subroutine solve_real_mat_real_rhs(this, rhs, nRmax)
+
+      class(type_bordmat_real) :: this
+
+      !-- Input variable
+      integer, intent(in) :: nRmax
+
+      !-- In/Out variable
+      real(cp), intent(inout) :: rhs(nRmax)
+
+      call solve_bordered_mat(this%A1, this%A2, this%A3, this%A4, this%ntau, &
+           &                  this%nlines_band, this%kl, this%ku, this%pivA1,&
+           &                  this%pivA4, rhs, nRmax)
+
+   end subroutine solve_real_mat_real_rhs
 !------------------------------------------------------------------------------
 end module matrix_types
