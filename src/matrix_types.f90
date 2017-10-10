@@ -57,6 +57,26 @@ module matrix_types
       generic :: solve => solve_real_mat_complex_rhs, solve_real_mat_real_rhs
    end type type_bordmat_real
 
+   type, public :: type_bordmat_complex
+      integer :: kl ! Number of lower diagonals
+      integer :: ku ! Number of upper diagonals
+      integer :: nbands ! Number of bands
+      integer :: nlines_band ! Number of lines of the banded block
+      integer :: nlines      ! Number of lines 
+      integer :: ntau        ! Number of tau lines
+      complex(cp), allocatable :: A1(:,:) ! Upper left block
+      complex(cp), allocatable :: A2(:,:) ! Upper right block
+      complex(cp), allocatable :: A3(:,:) ! Lower left block
+      complex(cp), allocatable :: A4(:,:) ! Lower right block
+      integer, allocatable :: pivA1(:) ! Pivot for first block
+      integer, allocatable :: pivA4(:) ! Pivot for fourth block
+   contains
+      procedure :: initialize => initialize_bord_complex
+      procedure :: finalize => finalize_bord_complex
+      procedure :: prepare_LU => prepare_LU_complex
+      procedure :: solve => solve_complex_mat_complex_rhs
+   end type type_bordmat_complex
+
 contains
 
    subroutine initialize_band_real(this, kl, ku, len)
@@ -337,5 +357,97 @@ contains
            &                  this%pivA4, rhs, nRmax)
 
    end subroutine solve_real_mat_real_rhs
+!------------------------------------------------------------------------------
+   subroutine initialize_bord_complex(this, kl, ku, nbounds, nlines)
+
+      class(type_bordmat_complex) :: this
+
+      !-- Input variables
+      integer, intent(in) :: kl
+      integer, intent(in) :: ku
+      integer, intent(in) :: nbounds
+      integer, intent(in) :: nlines
+
+      !-- Local variables
+      integer :: n_r, n_b
+
+      this%kl = kl
+      this%ku = ku
+      this%ntau = nbounds
+      this%nlines_band = nlines-nbounds
+      this%nlines = nlines
+      this%nbands = this%kl+this%ku+1
+
+      allocate( this%A1(this%ntau, this%ntau) )
+      allocate( this%A2(this%ntau, this%nlines_band) )
+      allocate( this%A3(this%nlines_band, this%ntau) )
+      allocate( this%A4(this%nbands+this%kl, this%nlines_band) )
+
+      allocate( this%pivA1(this%ntau) )
+      allocate( this%pivA4(this%nlines_band) )
+
+      do n_r=1,this%nlines
+         do n_b=1,this%ntau
+            if ( n_r <= this%ntau ) then
+               this%A1(n_b,n_r)=zero
+            else
+               this%A2(n_b,n_r-this%ntau)=zero
+            end if
+         end do
+      end do
+
+      do n_b=1,this%ntau
+         do n_r=1,this%nlines_band
+            this%A3(n_r,n_b)=zero
+         end do
+      end do
+
+      do n_r=1,this%nlines_band
+         do n_b=1,this%nbands+this%kl
+            this%A4(n_b,n_r)=zero
+         end do
+      end do
+
+      bytes_allocated=bytes_allocated+this%ntau*this%nlines*SIZEOF_DEF_COMPLEX+&
+      &               this%ntau*this%nlines_band*SIZEOF_DEF_COMPLEX+           &
+      &               (this%nbands+this%kl)*this%nlines_band*                  &
+      &               SIZEOF_DEF_COMPLEX+this%nlines*SIZEOF_INTEGER
+
+   end subroutine initialize_bord_complex
+!------------------------------------------------------------------------------
+   subroutine finalize_bord_complex(this)
+
+      class(type_bordmat_complex) :: this
+
+      deallocate( this%A1, this%A2, this%A3, this%A4 )
+      deallocate( this%pivA1, this%pivA4)
+
+   end subroutine finalize_bord_complex
+!------------------------------------------------------------------------------
+   subroutine prepare_LU_complex(this)
+
+      class(type_bordmat_complex) :: this
+
+      call prepare_bordered_mat(this%A1, this%A2, this%A3, this%A4, this%ntau, &
+           &                    this%nlines_band, this%kl, this%ku, this%pivA1,&
+           &                    this%pivA4)
+
+   end subroutine prepare_LU_complex
+!------------------------------------------------------------------------------
+   subroutine solve_complex_mat_complex_rhs(this, rhs, nRmax)
+
+      class(type_bordmat_complex) :: this
+
+      !-- Input variable
+      integer, intent(in) :: nRmax
+
+      !-- In/Out variable
+      complex(cp), intent(inout) :: rhs(nRmax)
+
+      call solve_bordered_mat(this%A1, this%A2, this%A3, this%A4, this%ntau, &
+           &                  this%nlines_band, this%kl, this%ku, this%pivA1,&
+           &                  this%pivA4, rhs, nRmax)
+
+   end subroutine solve_complex_mat_complex_rhs
 !------------------------------------------------------------------------------
 end module matrix_types
