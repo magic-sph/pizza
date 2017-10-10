@@ -1,7 +1,7 @@
 module matrix_types
 
    use precision_mod
-   use constants, only: one
+   use constants, only: one, zero
    use mem_alloc, only: bytes_allocated
    use algebra, only: prepare_bordered_mat, solve_bordered_mat
 
@@ -10,25 +10,32 @@ module matrix_types
    private
 
    type, public :: type_bandmat_real
-
       integer :: kl ! Number of lower diagonals
       integer :: ku ! Number of upper diagonals
       integer :: nbands ! Number of bands
       integer :: nlines    ! Number of lines
       real(cp), allocatable :: dat(:,:) ! data
-
    contains
-
-      procedure :: initialize => initialize_band
-      procedure :: finalize => finalize_band
-      procedure :: mat_vec_complex_mul
-      procedure :: mat_vec_real_mul
-      generic :: mat_vec_mul => mat_vec_complex_mul, mat_vec_real_mul
-
+      procedure :: initialize => initialize_band_real
+      procedure :: finalize => finalize_band_real
+      procedure :: mat_real_vec_complex_mul
+      procedure :: mat_real_vec_real_mul
+      generic :: mat_vec_mul => mat_real_vec_complex_mul, mat_real_vec_real_mul
    end type type_bandmat_real
 
-   type, public :: type_bordmat_real
+   type, public :: type_bandmat_complex
+      integer :: kl ! Number of lower diagonals
+      integer :: ku ! Number of upper diagonals
+      integer :: nbands ! Number of bands
+      integer :: nlines    ! Number of lines
+      complex(cp), allocatable :: dat(:,:) ! data
+   contains
+      procedure :: initialize => initialize_band_complex
+      procedure :: finalize => finalize_band_complex
+      procedure :: mat_vec_mul => mat_complex_vec_complex_mul
+   end type type_bandmat_complex
 
+   type, public :: type_bordmat_real
       integer :: kl ! Number of lower diagonals
       integer :: ku ! Number of upper diagonals
       integer :: nbands ! Number of bands
@@ -41,21 +48,18 @@ module matrix_types
       real(cp), allocatable :: A4(:,:) ! Lower right block
       integer, allocatable :: pivA1(:) ! Pivot for first block
       integer, allocatable :: pivA4(:) ! Pivot for fourth block
-
    contains
-
-      procedure :: initialize => initialize_bord
-      procedure :: finalize => finalize_bord
+      procedure :: initialize => initialize_bord_real
+      procedure :: finalize => finalize_bord_real
       procedure :: prepare_LU => prepare_LU_real
       procedure :: solve_real_mat_complex_rhs
       procedure :: solve_real_mat_real_rhs
       generic :: solve => solve_real_mat_complex_rhs, solve_real_mat_real_rhs
-
    end type type_bordmat_real
 
 contains
 
-   subroutine initialize_band(this, kl, ku, len)
+   subroutine initialize_band_real(this, kl, ku, len)
 
       class(type_bandmat_real) :: this
 
@@ -83,17 +87,17 @@ contains
 
       bytes_allocated = bytes_allocated+this%nbands*this%nlines*SIZEOF_DEF_REAL
 
-   end subroutine initialize_band
+   end subroutine initialize_band_real
 !------------------------------------------------------------------------------
-   subroutine finalize_band(this)
+   subroutine finalize_band_real(this)
 
       class(type_bandmat_real) :: this
 
       deallocate( this%dat )
 
-   end subroutine finalize_band
+   end subroutine finalize_band_real
 !------------------------------------------------------------------------------
-   subroutine mat_vec_complex_mul(this, vec)
+   subroutine mat_real_vec_complex_mul(this, vec)
       !
       ! This is a matrix-vector multiplication (real * complex)
       !
@@ -124,9 +128,70 @@ contains
          vec(n_r) = cmplx(vecr(n_r), veci(n_r), kind=cp)
       end do
 
-   end subroutine mat_vec_complex_mul
+   end subroutine mat_real_vec_complex_mul
 !------------------------------------------------------------------------------
-   subroutine mat_vec_real_mul(this, vec)
+   subroutine initialize_band_complex(this, kl, ku, len)
+
+      class(type_bandmat_complex) :: this
+
+      !-- Input variables
+      integer, intent(in) :: kl
+      integer, intent(in) :: ku
+      integer, intent(in) :: len
+
+      !-- Local variables
+      integer :: n_r, n_b
+
+      this%kl = kl
+      this%ku = ku
+      this%nlines = len
+      this%nbands = kl+ku+1
+
+      allocate( this%dat(this%nbands,this%nlines))
+
+      !-- Fill it with zeros
+      do n_r=1,this%nlines
+         do n_b=1,this%nbands
+            this%dat(n_b,n_r)=zero
+         end do
+      end do
+
+      bytes_allocated = bytes_allocated+this%nbands*this%nlines*SIZEOF_DEF_COMPLEX
+
+   end subroutine initialize_band_complex
+!------------------------------------------------------------------------------
+   subroutine finalize_band_complex(this)
+
+      class(type_bandmat_complex) :: this
+
+      deallocate( this%dat )
+
+   end subroutine finalize_band_complex
+!------------------------------------------------------------------------------
+   subroutine mat_complex_vec_complex_mul(this, vec)
+      !
+      ! This is a matrix-vector multiplication (real * real)
+      !
+
+      class(type_bandmat_complex) :: this
+
+      !-- Input/output variables
+      complex(cp), intent(inout) :: vec(this%nlines)
+
+      !-- Local variables:
+      integer :: n_r
+      complex(cp) :: tmp(this%nlines)
+
+      do n_r=1,this%nlines
+         tmp(n_r) = vec(n_r)
+      end do
+
+      call zgbmv('N', this%nlines, this%nlines, this%kl, this%ku, one, &
+           &      this%dat, this%nbands, tmp, 1, 0.0_cp, vec, 1)
+
+   end subroutine mat_complex_vec_complex_mul
+!------------------------------------------------------------------------------
+   subroutine mat_real_vec_real_mul(this, vec)
       !
       ! This is a matrix-vector multiplication (real * real)
       !
@@ -147,9 +212,9 @@ contains
       call dgbmv('N', this%nlines, this%nlines, this%kl, this%ku, one, &
            &      this%dat, this%nbands, tmp, 1, 0.0_cp, vec, 1)
 
-   end subroutine mat_vec_real_mul
+   end subroutine mat_real_vec_real_mul
 !------------------------------------------------------------------------------
-   subroutine initialize_bord(this, kl, ku, nbounds, nlines)
+   subroutine initialize_bord_real(this, kl, ku, nbounds, nlines)
 
       class(type_bordmat_real) :: this
 
@@ -204,16 +269,16 @@ contains
       &               (this%nbands+this%kl)*this%nlines_band*               &
       &               SIZEOF_DEF_REAL+this%nlines*SIZEOF_INTEGER
 
-   end subroutine initialize_bord
+   end subroutine initialize_bord_real
 !------------------------------------------------------------------------------
-   subroutine finalize_bord(this)
+   subroutine finalize_bord_real(this)
 
       class(type_bordmat_real) :: this
 
       deallocate( this%A1, this%A2, this%A3, this%A4 )
       deallocate( this%pivA1, this%pivA4)
 
-   end subroutine finalize_bord
+   end subroutine finalize_bord_real
 !------------------------------------------------------------------------------
    subroutine prepare_LU_real(this)
 

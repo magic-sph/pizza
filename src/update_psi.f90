@@ -72,6 +72,7 @@ contains
       logical,            intent(in) :: lMat
       logical,            intent(in) :: l_vphi_bal_calc
       logical,            intent(in) :: l_roll_imp
+      complex(cp),        intent(in) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -83,7 +84,6 @@ contains
       complex(cp),       intent(inout) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
