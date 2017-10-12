@@ -6,9 +6,9 @@ module update_psi_integ
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
    use pre_calculations, only: CorFac
-   use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb
+   use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, &
-       &                       ekpump, oheight
+       &                       ekpump
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -26,10 +26,7 @@ module update_psi_integ
    private
 
    logical,  allocatable :: lPsimat(:)
-   real(cp), allocatable :: uphiMat(:,:)
-   integer, allocatable  :: psiPivot(:)
    complex(cp), allocatable :: rhs(:)
-   real(cp), allocatable :: rhs_m0(:)
 
    type(type_bordmat_complex), allocatable :: LHS_mat(:)
    type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
@@ -46,10 +43,12 @@ contains
       !-- Local variables
       integer :: n_m, m
 
+      !-- Allocate array of matrices (this is cool it can store various bandwidth)
       allocate( RHSI_mat(nMstart:nMstop) )
       allocate( RHSIL_mat(nMstart:nMstop) )
       allocate( LHS_mat(nMstart:nMstop) )
 
+      !-- Initialize matrices
       call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
       call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
       do n_m=nMstart,nMstop
@@ -65,6 +64,7 @@ contains
          end if
       end do
 
+      !-- Fill matrices
       call get_rhs_exp_mat(RHSE_mat(1),1)
       call get_rhs_exp_mat(RHSE_mat(2),2)
       do n_m=nMstart,nMstop
@@ -77,16 +77,9 @@ contains
       lPsimat(:)=.false.
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
-      allocate( rhs(n_r_max), rhs_m0(n_r_max) )
-      allocate( psiPivot(n_r_max) )
-
-      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*4*n_r_max*n_r_max* &
-      &                 SIZEOF_DEF_COMPLEX+2*n_r_max*(nMstop-nMstart+1)*      &
-      &                 SIZEOF_INTEGER+ n_r_max*(3+4*(nMstop-nMstart+1))*     &
-      &                 SIZEOF_DEF_REAL
-
-      allocate( uphiMat(n_r_max,n_r_max) )
-      bytes_allocated = bytes_allocated+n_r_max*n_r_max*SIZEOF_DEF_REAL
+      allocate( rhs(n_r_max) )
+      rhs(:)=zero
+      bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
    end subroutine initialize_psi_integ
 !------------------------------------------------------------------------------
@@ -104,9 +97,8 @@ contains
       end do
       deallocate( LHS_mat, RHSIL_mat, RHSI_mat )
 
-      deallocate( rhs_m0, rhs)
-      deallocate( lPsimat, uphiMat )
-      deallocate( psiPivot )
+      deallocate( rhs)
+      deallocate( lPsimat )
 
    end subroutine finalize_psi_integ
 !------------------------------------------------------------------------------
