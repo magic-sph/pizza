@@ -7,8 +7,7 @@ module update_psi_integ
    use outputs, only: vp_bal_type
    use pre_calculations, only: CorFac
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot
-   use radial_functions, only: rscheme, or1, or2, beta, dbeta, &
-       &                       ekpump
+   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -16,9 +15,11 @@ module update_psi_integ
    use time_schemes, only: type_tscheme
    use useful, only: abortRun, roll
    use matrix_types, only: type_bandmat_complex, type_bordmat_complex 
-   use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl, &
-       &                    intcheb4rmult4, rmult2, intcheb1rmult1,  &
-       &                    intcheb2rmult2
+   use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,          &
+       &                    intcheb4rmult4, rmult2, intcheb1rmult1,           &
+       &                    intcheb2rmult2, intcheb4rmult4hmult8laplrot2,     &
+       &                    intcheb4rmult4hmult8laplrot, intcheb4rmult4hmult8,&
+       &                    intcheb4rmult4hmult6
 
 
    implicit none
@@ -49,20 +50,37 @@ contains
       allocate( LHS_mat(nMstart:nMstop) )
 
       !-- Initialize matrices
-      call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-      call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
-      do n_m=nMstart,nMstop
-         m = idx2m(n_m)
-         if ( m == 0 ) then
-            call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
-            call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
-            call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
-         else
-            call RHSI_mat(n_m)%initialize(6, 6, n_r_max)
-            call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
-            call LHS_mat(n_m)%initialize(6, 6, 4, n_r_max)
-         end if
-      end do
+      if ( l_non_rot ) then
+         call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+         call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m == 0 ) then
+               call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
+               call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
+               call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
+            else
+               call RHSI_mat(n_m)%initialize(6, 6, n_r_max)
+               call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
+               call LHS_mat(n_m)%initialize(6, 6, 4, n_r_max)
+            end if
+         end do
+      else
+         call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+         call RHSE_mat(2)%initialize(16, 16, n_r_max) ! This is m /= 0
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m == 0 ) then
+               call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
+               call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
+               call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
+            else
+               call RHSI_mat(n_m)%initialize(14, 14, n_r_max)
+               call RHSIL_mat(n_m)%initialize(14, 14, n_r_max)
+               call LHS_mat(n_m)%initialize(14, 14, 4, n_r_max)
+            end if
+         end do
+      end if
 
       !-- Fill matrices
       call get_rhs_exp_mat(RHSE_mat(1),1)
@@ -440,7 +458,7 @@ contains
       type(type_bordmat_complex), intent(inout) :: A_mat
 
       !-- Local variables
-      real(cp) :: stencilA4(A_mat%nbands)
+      real(cp) :: stencilA4(A_mat%nbands), CorSten(A_mat%nbands)
       integer :: n_r, i_r, n_band, n_b
       real(cp) :: a, b
 
@@ -461,20 +479,40 @@ contains
          i_r = n_r+A_mat%ntau
 
          !-- Define the equations
-         if ( m == 0 ) then
-            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-            &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-            &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+         if ( l_non_rot ) then
+            if ( m == 0 ) then
+               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
+               &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+               CorSten   = 0.0_cp
+            else
+               stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
+               &           tscheme%wimp_lin(1)*                            &
+               &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+               CorSten   = 0.0_cp
+            end if
          else
-            stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
-            &           tscheme%wimp_lin(1)*                            &
-            &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+            if ( m == 0 ) then
+               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
+               &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+               CorSten   = 0.0_cp
+            else
+               stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,r_cmb,m,i_r-1, &
+               &                                        A_mat%nbands)   +  &
+               &           tscheme%wimp_lin(1)*                            &
+               &           intcheb4rmult4hmult8laplrot2(a,b,r_cmb,m,i_r-1, &
+               &                                        A_mat%nbands)  
+               CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
+               &           intcheb4rmult4hmult6(a,b,r_cmb,i_r-1,A_mat%nbands)
+            end if
          end if
 
          !-- Roll the array for band storage
          do n_band=1,A_mat%nbands
             if ( n_r+A_mat%ku+1-n_band <= A_mat%nlines_band .and. n_r+A_mat%ku+1-n_band >= 1 ) then
-               A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) = rscheme%rnorm*stencilA4(n_band)
+               A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) = rscheme%rnorm* &
+               &             cmplx(stencilA4(n_band), CorSten(n_band), kind=cp)
             end if
          end do
       end do
@@ -483,20 +521,41 @@ contains
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
 
-         if ( m == 0 ) then
-            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-            &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-            &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+         if ( l_non_rot ) then
+            if ( m == 0 ) then
+               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
+               &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+               CorSten   = 0.0_cp
+            else
+               stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
+               &           tscheme%wimp_lin(1)*                            &
+               &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+               CorSten   = 0.0_cp
+            end if
          else
-            stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
-            &           tscheme%wimp_lin(1)*                            &
-            &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+            if ( m == 0 ) then
+               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
+               &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+               CorSten   = 0.0_cp
+            else
+               stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,r_cmb,m,i_r-1, &
+               &                                        A_mat%nbands)   +  &
+               &           tscheme%wimp_lin(1)*                            &
+               &           intcheb4rmult4hmult8laplrot2(a,b,r_cmb,m,i_r-1, &
+               &                                        A_mat%nbands)  
+               CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
+               &           intcheb4rmult4hmult6(a,b,r_cmb,i_r-1,A_mat%nbands)
+            end if
          end if
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,A_mat%kl
             if ( n_r <= n_band .and. n_r+A_mat%ntau-n_band >= 1 ) then
-               A_mat%A3(n_r,n_r+A_mat%ntau-n_band) = rscheme%rnorm*stencilA4(A_mat%ku+1+n_band)
+               A_mat%A3(n_r,n_r+A_mat%ntau-n_band) = rscheme%rnorm*       &
+               &      cmplx(stencilA4(A_mat%ku+1+n_band),                 &
+               &            CorSten(A_mat%ku+1+n_band), kind=cp)
             end if
          end do
       end do
@@ -587,6 +646,9 @@ contains
    end subroutine get_lhs_mat
 !------------------------------------------------------------------------------
    subroutine get_rhs_exp_mat(D_mat, m0)
+      !
+      ! This corresponds to the matrix that goes in front of the explicit terms
+      !
 
       !-- Input variable
       integer, intent(in) :: m0
@@ -613,10 +675,18 @@ contains
          i_r = n_r+n_bounds
 
          !-- Define right-hand side equations
-         if ( m0 == 1) then
-            stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
+         if ( l_non_rot ) then
+            if ( m0 == 1) then
+               stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
+            else
+               stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
+            end if
          else
-            stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
+            if ( m0 == 1) then
+               stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
+            else
+               stencilD = intcheb4rmult4hmult8(a,b,r_cmb,i_r-1,D_mat%nbands)
+            end if
          end if
 
          !-- Roll array for band storage
@@ -630,6 +700,10 @@ contains
    end subroutine get_rhs_exp_mat
 !------------------------------------------------------------------------------
    subroutine get_rhs_imp_mat(B_mat, m)
+      !
+      ! This matrix corresponds to the that goes in front of the d/dt term
+      ! in the right-hand-side
+      !
 
       !-- Input variable
       integer, intent(in) :: m
@@ -656,10 +730,19 @@ contains
          i_r = n_r+n_bounds
 
          !-- Define right-hand side equations
-         if ( m == 0 ) then
-            stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+         if ( l_non_rot ) then
+            if ( m == 0 ) then
+               stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+            else
+               stencilB = -intcheb4rmult4lapl(a,b,m,i_r-1,B_mat%nbands)
+            end if
          else
-            stencilB = -intcheb4rmult4lapl(a,b,m,i_r-1,B_mat%nbands)
+            if ( m == 0 ) then
+               stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+            else
+               stencilB = -intcheb4rmult4hmult8laplrot(a,b,r_cmb,m,i_r-1,&
+               &                                       B_mat%nbands)
+            end if
          end if
 
          !-- Roll array for band storage
@@ -673,6 +756,9 @@ contains
    end subroutine get_rhs_imp_mat
 !------------------------------------------------------------------------------
    subroutine get_rhs_imp_lin_mat(Cmat, m)
+      !
+      ! This matrix corresponds to the linear part that goes on the right-hand-side
+      !
 
       !-- Input variable
       integer, intent(in) :: m
@@ -681,7 +767,7 @@ contains
       type(type_bandmat_complex), intent(inout) :: Cmat
 
       !-- Local variables
-      real(cp) :: stencilC(Cmat%nbands)
+      real(cp) :: stencilC(Cmat%nbands), CorSten(Cmat%nbands)
       real(cp) :: a, b
       integer :: n_band, n_r, i_r, n_bounds
 
@@ -699,17 +785,33 @@ contains
          i_r = n_r+n_bounds
 
          !-- Define right-hand side equations
-         if ( m == 0 ) then
-            stencilC =               rmult2(a,b,i_r-1,Cmat%nbands)- &
-            &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands)
+         if ( l_non_rot ) then
+            if ( m == 0 ) then
+               stencilC =               rmult2(a,b,i_r-1,Cmat%nbands)- &
+               &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands)
+               CorSten  = 0.0_cp
+            else
+               stencilC = -intcheb4rmult4lapl2(a,b,m,i_r-1,Cmat%nbands)
+               CorSten  = 0.0_cp
+            end if
          else
-            stencilC = -intcheb4rmult4lapl2(a,b,m,i_r-1,Cmat%nbands)
+            if ( m == 0 ) then
+               stencilC =               rmult2(a,b,i_r-1,Cmat%nbands)- &
+               &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands)
+               CorSten  = 0.0_cp
+            else
+               stencilC = -intcheb4rmult4hmult8laplrot2(a,b,r_cmb,m,i_r-1,&
+               &                                        Cmat%nbands)
+               CorSten  = -CorFac*real(m,cp)*intcheb4rmult4hmult6(a,b,r_cmb, &
+               &                                                  i_r-1,Cmat%nbands)
+            end if
          end if
 
          !-- Roll array for band storage
          do n_band=1,Cmat%nbands
             if ( i_r+Cmat%ku+1-n_band <= Cmat%nlines .and. i_r+Cmat%ku+1-n_band >= 1 ) then
-               Cmat%dat(n_band,i_r+Cmat%ku+1-n_band) = rscheme%rnorm*stencilC(n_band)
+               Cmat%dat(n_band,i_r+Cmat%ku+1-n_band) = rscheme%rnorm*       &
+               &            cmplx(stencilC(n_band), CorSten(n_band), kind=cp)
             end if
          end do
       end do
