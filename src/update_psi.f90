@@ -100,8 +100,8 @@ contains
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_Mloc(n_m,n_r,1)=dpsi_exp_Mloc(n_m,n_r,1)-   &
-               &                    or1(n_r)*work_Mloc(n_m,n_r)
+               dpsi_exp_Mloc(n_m,n_r,1)=  dpsi_exp_Mloc(n_m,n_r,1)-   &
+               &                     or1(n_r)*work_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -111,12 +111,6 @@ contains
            &               tscheme%wimp_lin(2), dpsi_imp_Mloc(:,:,1), &
            &               vp_bal, l_vphi_bal_calc)
 
-      !print*, 'om[n-1]', sum(abs(dpsi_imp_Mloc(:,:,2)))
-      !print*, 'om[n] (from imp)', sum(abs(dpsi_imp_Mloc(:,:,1)))
-      !print*, 'om[n]', sum(abs(om_Mloc(:,:)))
-      !print*, 'buo[n]', sum(abs(buo_imp_Mloc(:,:)))
-
-      if ( lMat ) lPsimat(:)=.false.
 
       do n_m=nMstart,nMstop
 
@@ -264,8 +258,6 @@ contains
       if ( l_roll_imp ) then
          call roll(dpsi_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
       end if
-
-      !print*, 'om[n+1]', sum(abs(om_Mloc))
 
    end subroutine update_om
 !------------------------------------------------------------------------------
