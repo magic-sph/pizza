@@ -16,7 +16,7 @@ module update_psi_integ
    use algebra, only: sgefa, rgesl
    use time_schemes, only: type_tscheme
    use useful, only: abortRun, roll
-   use matrix_types, only: type_bandmat_real, type_bordmat_real
+   use matrix_types, only: type_bandmat_complex, type_bordmat_complex 
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl, &
        &                    intcheb4rmult4
 
@@ -40,10 +40,10 @@ module update_psi_integ
    complex(cp), allocatable :: rhs(:)
    real(cp), allocatable :: rhs_m0(:)
 
-   type(type_bordmat_real), allocatable :: LHS_mat(:)
-   type(type_bandmat_real), allocatable :: RHSIL_mat(:)
-   type(type_bandmat_real), allocatable :: RHSI_mat(:)
-   type(type_bandmat_real) :: RHSE_mat
+   type(type_bordmat_complex), allocatable :: LHS_mat(:)
+   type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
+   type(type_bandmat_complex), allocatable :: RHSI_mat(:)
+   type(type_bandmat_complex) :: RHSE_mat
 
    public :: update_psi_int, initialize_psi_integ, finalize_psi_integ, &
    &         get_psi_rhs_imp_int
@@ -318,9 +318,10 @@ contains
                om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
             else
                us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-               up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
-               om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-or1(n_r)*work_Mloc(n_m,n_r)+ &
-               &                real(m,cp)*real(m,cp)*or2(n_r)*psi_Mloc(n_m,n_r)
+               up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+               om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-(or1(n_r)+beta(n_r))*          &
+               &               work_Mloc(n_m,n_r)-(or1(n_r)*beta(n_r)+dbeta(n_r) &
+               &               -real(m,cp)*real(m,cp)*or2(n_r))*psi_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -529,7 +530,7 @@ contains
       integer,            intent(in) :: m          ! Azimuthal wavenumber
 
       !-- Output variables
-      type(type_bordmat_real), intent(inout) :: A_mat
+      type(type_bordmat_complex), intent(inout) :: A_mat
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands)
@@ -630,7 +631,7 @@ contains
    subroutine get_rhs_exp_mat(D_mat)
 
       !-- Output variable
-      type(type_bandmat_real), intent(inout) :: D_mat
+      type(type_bandmat_complex), intent(inout) :: D_mat
 
       !-- Local variables
       real(cp) :: stencilD(D_mat%nbands)
@@ -663,7 +664,7 @@ contains
       integer, intent(in) :: m
 
       !-- Output variable
-      type(type_bandmat_real), intent(inout) :: B_mat
+      type(type_bandmat_complex), intent(inout) :: B_mat
 
       !-- Local variables
       real(cp) :: stencilB(B_mat%nbands)
@@ -696,7 +697,7 @@ contains
       integer, intent(in) :: m
 
       !-- Output variable
-      type(type_bandmat_real), intent(inout) :: Cmat
+      type(type_bandmat_complex), intent(inout) :: Cmat
 
       !-- Local variables
       real(cp) :: stencilC(Cmat%nbands)
