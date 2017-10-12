@@ -190,7 +190,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine mat_complex_vec_complex_mul(this, vec)
       !
-      ! This is a matrix-vector multiplication (real * real)
+      ! This is a matrix-vector multiplication (complex * complex)
       !
 
       class(type_bandmat_complex) :: this
@@ -206,8 +206,8 @@ contains
          tmp(n_r) = vec(n_r)
       end do
 
-      call zgbmv('N', this%nlines, this%nlines, this%kl, this%ku, one, &
-           &      this%dat, this%nbands, tmp, 1, 0.0_cp, vec, 1)
+      call zgbmv('N', this%nlines, this%nlines, this%kl, this%ku, (one,0.0_cp), &
+           &     this%dat, this%nbands, tmp, 1, zero, vec, 1)
 
    end subroutine mat_complex_vec_complex_mul
 !------------------------------------------------------------------------------

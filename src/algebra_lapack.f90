@@ -71,7 +71,7 @@ contains
 
       !-- Output variables
       real(cp), intent(inout) :: rhs(n) ! on input RHS of problem
-      integer :: info, n_r
+      integer :: info
 
 #if (DEFAULT_PRECISION==sngl)
       call sgetrs('N',n,1,a,len_a,pivot,rhs,n,info)
@@ -96,8 +96,7 @@ contains
 
       !-- Output variables
       complex(cp), intent(inout) :: rhs(n) ! on input RHS of problem
-      real(cp) :: tmp_real(n), tmp_imag(n)
-      integer :: info, n_r
+      integer :: info
 
 #if (DEFAULT_PRECISION==sngl)
       call cgetrs('N',n,1,a,len_a,pivot,rhs,n,info)
@@ -220,8 +219,8 @@ contains
            &      A3, lenA4, info)
 
       !-- Assemble A1 <- A1-A2*v
-      call zgemm('N', 'N', n_boundaries, n_boundaries, lenA4, -one, A2,  &
-           &     n_boundaries, A3, lenA4, one, A1,  n_boundaries)
+      call zgemm('N', 'N', n_boundaries, n_boundaries, lenA4, -(one,0.0_cp), A2,  &
+           &     n_boundaries, A3, lenA4, (one,0.0_cp), A1,  n_boundaries)
       !-- LU factorisation of the small A1 matrix
       call zgetrf(n_boundaries, n_boundaries, A1, n_boundaries, pivotA1, info)
 
@@ -300,16 +299,16 @@ contains
            &      rhs(nStart:), lenA4, info)
 
       !-- rhs1 <- rhs1-A2*rhs2
-      call zgemv('N', n_boundaries, lenA4, -one, A2, n_boundaries,  &
-           &     rhs(nStart:), 1, one, rhs(1:n_boundaries), 1)
+      call zgemv('N', n_boundaries, lenA4, -(one,0.0_cp), A2, n_boundaries,  &
+           &     rhs(nStart:), 1, (one,0.0_cp), rhs(1:n_boundaries), 1)
 
       !-- Solve A1*y = rhs1
       call zgetrs('N', n_boundaries, 1, A1, n_boundaries, pivotA1, &
            &      rhs(1:n_boundaries), n_boundaries, info)
 
       !-- Assemble rhs2 <- rhs2-A3*rhs1
-      call zgemv('N', lenA4, n_boundaries, -one, A3, lenA4, &
-           &      rhs(1:n_boundaries), 1, one, rhs(nStart:), 1)
+      call zgemv('N', lenA4, n_boundaries, -(one,0.0_cp), A3, lenA4, &
+           &      rhs(1:n_boundaries), 1, (one,0.0_cp), rhs(nStart:), 1)
 
    end subroutine solve_bordered_mat_complex
 !-----------------------------------------------------------------------------
