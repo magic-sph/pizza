@@ -5,8 +5,7 @@ module update_psi_integ
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
-   use pre_calculations, only: CorFac
-   use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot
+   use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -555,7 +554,7 @@ contains
             if ( n_r <= n_band .and. n_r+A_mat%ntau-n_band >= 1 ) then
                A_mat%A3(n_r,n_r+A_mat%ntau-n_band) = rscheme%rnorm*       &
                &      cmplx(stencilA4(A_mat%ku+1+n_band),                 &
-               &            CorSten(A_mat%ku+1+n_band), kind=cp)
+               &              CorSten(A_mat%ku+1+n_band), kind=cp)
             end if
          end do
       end do

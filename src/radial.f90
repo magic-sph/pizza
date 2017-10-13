@@ -155,7 +155,7 @@ contains
       else ! Calculate beta only when this is rotating !
          height(1) = 0.0_cp
          beta(1)   = 1.0e10_cp
-         ekpump(1) = 1.0e10_cp
+         ekpump(1) = ek_pump_fac*1.0e10_cp
          oheight(1)= 1.0e10_cp
          do n_r=2,n_r_max
             height(n_r) = two * sqrt(r_cmb**2-r(n_r)**2)

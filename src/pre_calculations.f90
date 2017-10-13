@@ -15,7 +15,6 @@ module pre_calculations
    private
    
    real(cp), public :: opr
-   real(cp), public :: CorFac
    real(cp), public :: epsc0
 
    public :: preCalc
@@ -33,12 +32,6 @@ contains
       call radial()
 
       opr = one/pr
-
-      if ( l_non_rot ) then
-         CorFac = 0.0_cp
-      else
-         CorFac = two/ek
-      end if
 
       if ( ( l_newmap ) .and. (rank == 0) ) then
          file_name='rNM.'//tag

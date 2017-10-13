@@ -5,7 +5,7 @@ module namelists
    use parallel_mod, only: rank
    use useful, only: abortRun
    use char_manip, only: length_to_blank, capitalize
-   use constants, only: one, half
+   use constants, only: one, half, two
    use precision_mod
 
    implicit none
@@ -73,7 +73,7 @@ module namelists
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb                     ! OC radius
    real(cp), public :: r_icb                     ! IC radius
-
+   real(cp), public :: CorFac
 
    public :: read_namelists, write_namelists
 
@@ -240,6 +240,12 @@ contains
          l_cheb_coll = .true.
       else
          l_cheb_coll = .false.
+      end if
+
+      if ( l_non_rot ) then
+         CorFac = 0.0_cp
+      else
+         CorFac = two/ek
       end if
 
    end subroutine read_namelists

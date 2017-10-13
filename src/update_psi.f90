@@ -5,8 +5,7 @@ module update_psi
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
-   use pre_calculations, only: CorFac
-   use namelists, only: kbotv, ktopv, alpha, r_cmb
+   use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, &
        &                       ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
