@@ -13,7 +13,8 @@ module update_psi_integ
    use fields, only: work_Mloc
    use time_schemes, only: type_tscheme
    use useful, only: abortRun, roll
-   use matrix_types, only: type_bandmat_complex, type_bordmat_complex 
+   use matrix_types, only: type_bandmat_complex, type_bordmat_complex,        &
+   &                       type_bandmat_real
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,          &
        &                    intcheb4rmult4, rmult2, intcheb1rmult1,           &
        &                    intcheb2rmult2, intcheb4rmult4hmult8laplrot2,     &
@@ -30,8 +31,8 @@ module update_psi_integ
 
    type(type_bordmat_complex), allocatable :: LHS_mat(:)
    type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
-   type(type_bandmat_complex), allocatable :: RHSI_mat(:)
-   type(type_bandmat_complex) :: RHSE_mat(2)
+   type(type_bandmat_real), allocatable :: RHSI_mat(:)
+   type(type_bandmat_real) :: RHSE_mat(2)
 
    public :: update_psi_int, initialize_psi_integ, finalize_psi_integ, &
    &         get_psi_rhs_imp_int
@@ -39,11 +40,15 @@ module update_psi_integ
 contains
 
    subroutine initialize_psi_integ
+      !
+      ! Memory allocation
+      !
+
 
       !-- Local variables
       integer :: n_m, m
 
-      !-- Allocate array of matrices (this is cool it can store various bandwidth)
+      !-- Allocate array of matrices (this is handy since it can store various bandwidths)
       allocate( RHSI_mat(nMstart:nMstop) )
       allocate( RHSIL_mat(nMstart:nMstop) )
       allocate( LHS_mat(nMstart:nMstop) )
@@ -101,6 +106,9 @@ contains
    end subroutine initialize_psi_integ
 !------------------------------------------------------------------------------
    subroutine finalize_psi_integ
+      !
+      ! Memory deallocation
+      ! 
 
       !-- Local variable
       integer :: n_m
@@ -143,7 +151,7 @@ contains
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
-      integer :: n_r, n_m, n_r_out, m, n_o
+      integer :: n_r, n_m, n_cheb, m, n_o
 
       if ( lMat ) lPsimat(:)=.false.
 
@@ -164,7 +172,7 @@ contains
 
       if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
          do n_r=1,n_r_max
-            vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(n_m,n_r,1))
+            vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(m2idx(0),n_r,1))
          end do
       end if
 
@@ -236,7 +244,7 @@ contains
          !-- Store vphi force balance if needed
          if ( m == 0 .and. l_vphi_bal_calc ) then
             do n_r=1,n_r_max
-               vp_bal%dvpdt(n_r)     =real(up_Mloc(n_m,n_r))/tscheme%dt(1)
+               vp_bal%dvpdt(n_r)=real(up_Mloc(n_m,n_r))/tscheme%dt(1)
             end do
          end if
 
@@ -262,12 +270,12 @@ contains
          call LHS_mat(n_m)%solve(rhs, n_r_max)
 
          if ( m == 0 ) then
-            do n_r_out=1,rscheme%n_max
-               uphi0(n_r_out)=real(rhs(n_r_out))
+            do n_cheb=1,rscheme%n_max
+               uphi0(n_cheb)=real(rhs(n_cheb))
             end do
          else
-            do n_r_out=1,rscheme%n_max
-               psi_Mloc(n_m,n_r_out)=rhs(n_r_out)
+            do n_cheb=1,rscheme%n_max
+               psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
          end if
 
@@ -275,13 +283,13 @@ contains
 
       !-- set cheb modes > rscheme%n_max to zero (dealiazing)
       if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
-         do n_r_out=rscheme%n_max+1,n_r_max
+         do n_cheb=rscheme%n_max+1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  uphi0(n_r_out)=0.0_cp
+                  uphi0(n_cheb)=0.0_cp
                else
-                  psi_Mloc(n_m,n_r_out)=zero
+                  psi_Mloc(n_m,n_cheb)=zero
                end if
             end do
          end do
@@ -385,8 +393,21 @@ contains
 
       end do
 
-      if ( wimp /= 0.0_cp .or. l_vphi_bal_calc ) then
+      !-- Calculate and store vphi force balance if needed
+      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
+         m0 = m2idx(0)
+         do n_r=1,n_r_max
+            uphi0(n_r)=real(up_Mloc(m0, n_r),kind=cp)
+         end do
+         call get_ddr(uphi0, duphi0, d2uphi0, n_r_max, rscheme)
+         do n_r=1,n_r_max
+            vp_bal%visc(n_r)=d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
+            &                or2(n_r)*uphi0(n_r)
+            vp_bal%pump(n_r)=-ekpump(n_r)*uphi0(n_r)
+         end do
+      end if
 
+      if ( wimp /= 0.0_cp ) then
 
          !-- Copy psi_Mloc into work_Mloc
          do n_r=1,n_r_max
@@ -405,6 +426,7 @@ contains
 
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
+            m = idx2m(n_m)
             do n_r=1,n_r_max
                rhs(n_r)=work_Mloc(n_m,n_r)
             end do
@@ -420,20 +442,6 @@ contains
             end do
          end do
 
-         m0 = m2idx(0)
-
-         if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
-            do n_r=1,n_r_max
-               uphi0(n_r)=real(up_Mloc(m0, n_r),kind=cp)
-            end do
-            call get_ddr(uphi0, duphi0, d2uphi0, n_r_max, rscheme)
-            do n_r=1,n_r_max
-               vp_bal%visc(n_r)=d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
-               &                or2(n_r)*uphi0(n_r)
-               vp_bal%pump(n_r)=-ekpump(n_r)*uphi0(n_r)
-            end do
-         end if
-
          !-- Finally assemble the right hand side
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
@@ -443,7 +451,7 @@ contains
             end do
          end do
 
-      end if ! if wimp /= .or. l_vphi_bal_calc
+      end if ! if wimp /= 0
 
    end subroutine get_psi_rhs_imp_int
 !------------------------------------------------------------------------------
@@ -466,7 +474,7 @@ contains
       !-- with a different dt there might be some issues with spurious values
       do n_r=1,A_mat%nlines_band
          do n_b=1,A_mat%ntau
-            A_mat%A3(n_r,n_b)=0.0_cp
+            A_mat%A3(n_r,n_b)=zero
          end do
       end do
 
@@ -653,7 +661,7 @@ contains
       integer, intent(in) :: m0
 
       !-- Output variable
-      type(type_bandmat_complex), intent(inout) :: D_mat
+      type(type_bandmat_real), intent(inout) :: D_mat
 
       !-- Local variables
       real(cp) :: stencilD(D_mat%nbands)
@@ -708,7 +716,7 @@ contains
       integer, intent(in) :: m
 
       !-- Output variable
-      type(type_bandmat_complex), intent(inout) :: B_mat
+      type(type_bandmat_real), intent(inout) :: B_mat
 
       !-- Local variables
       real(cp) :: stencilB(B_mat%nbands)
