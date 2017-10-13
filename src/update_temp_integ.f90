@@ -361,9 +361,9 @@ contains
                A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
             end if
             if ( kbott == 1 ) then
-               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
             else
-               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
+               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
             end if
          else
             if ( ktopt == 1 ) then
@@ -372,16 +372,16 @@ contains
                A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
             end if
             if ( kbott == 1 ) then
-               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(A_mat%nlines,n_r)
+               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
             else
-               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(A_mat%nlines,n_r)
+               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
             end if
          end if
       end do
 
       !-- Cheb factor for boundary conditions
       do n_r=1,A_mat%ntau
-         A_mat%A1(n_r,1)    =rscheme%boundary_fac*A_mat%A1(n_r,1)
+         A_mat%A1(n_r,1)                =rscheme%boundary_fac*A_mat%A1(n_r,1)
          A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
       end do
 

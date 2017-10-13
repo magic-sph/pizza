@@ -2,7 +2,7 @@ module chebyshev
 
    use precision_mod
    use mem_alloc, only: bytes_allocated
-   use constants, only: half, one, two, three, four, pi
+   use constants, only: half, one, two, three, four, pi, third
    use blocking, only: nMstart,nMstop
    use radial_scheme, only: type_rscheme
    use chebyshev_polynoms_mod, only: cheb_grid
@@ -34,7 +34,8 @@ module chebyshev
 
 contains
 
-   subroutine initialize(this, n_r_max, order, order_boundary, no_work_array)
+   subroutine initialize(this, n_r_max, order, order_boundary, l_cheb_coll, &
+              &          no_work_array)
       !
       !  Purpose of this subroutine is to calculate and store several     
       !  values that will be needed for a fast cosine transform of the    
@@ -48,6 +49,7 @@ contains
       integer, intent(in) :: n_r_max
       integer, intent(in) :: order ! This is going to be n_cheb_max
       integer, intent(in) :: order_boundary ! this is used to determine whether mappings are used
+      logical, intent(in) :: l_cheb_coll
       logical, optional, intent(in) :: no_work_array
 
       !-- Local variable
@@ -66,11 +68,17 @@ contains
          this%l_map=.false.
       end if
 
-      allocate( this%rMat(n_r_max,n_r_max) )
-      allocate( this%drMat(n_r_max,n_r_max) )
-      allocate( this%d2rMat(n_r_max,n_r_max) )
-      allocate( this%r_cheb(n_r_max) )
-      bytes_allocated=bytes_allocated+(3*n_r_max*n_r_max+n_r_max)*SIZEOF_DEF_REAL
+      if ( l_cheb_coll ) then
+         allocate( this%rMat(n_r_max,n_r_max) )
+         allocate( this%drMat(n_r_max,n_r_max) )
+         allocate( this%d2rMat(n_r_max,n_r_max) )
+         bytes_allocated=bytes_allocated+3*n_r_max*n_r_max*SIZEOF_DEF_REAL
+      else
+         allocate( this%rMat(2,n_r_max) )
+         allocate( this%drMat(2,n_r_max) )
+         allocate( this%d2rMat(2,n_r_max) )
+         bytes_allocated=bytes_allocated+6*n_r_max*SIZEOF_DEF_REAL
+      end if
 
       if ( present(no_work_array) ) then
          l_work_array=no_work_array
@@ -80,8 +88,8 @@ contains
 
       call this%chebt%initialize(nMstart, nMstop, n_r_max, l_work_array)
 
-      allocate ( this%drx(n_r_max), this%ddrx(n_r_max) )
-      bytes_allocated=bytes_allocated+2*n_r_max*SIZEOF_DEF_REAL
+      allocate( this%r_cheb(n_r_max), this%drx(n_r_max), this%ddrx(n_r_max) )
+      bytes_allocated=bytes_allocated+3*n_r_max*SIZEOF_DEF_REAL
 
    end subroutine initialize
 !------------------------------------------------------------------------------
@@ -184,7 +192,7 @@ contains
 
    end subroutine finalize
 !------------------------------------------------------------------------------
-   subroutine get_der_mat(this, n_r_max)
+   subroutine get_der_mat(this, n_r_max, l_cheb_coll)
       !
       !  Construct Chebychev polynomials and their first, second,
       !  and third derivative up to degree n_r at n_r points x
@@ -199,42 +207,61 @@ contains
 
       !-- Input variables:
       integer, intent(in) :: n_r_max
+      logical, intent(in) :: l_cheb_coll
 
       !-- Local variables:
+      real(cp) :: dn2
       integer :: n,k   ! counter
 
-      !-- construction of chebs and derivatives with recursion:
-      do k=1,n_r_max  ! do loop over the n_r grid points !
+      if ( l_cheb_coll ) then
+         !-- construction of chebs and derivatives with recursion:
+         do k=1,n_r_max  ! do loop over the n_r grid points !
 
-         !----- set first two chebs:
-         this%rMat(1,k)  =one
-         this%rMat(2,k)  =this%r_cheb(k)
-         this%drMat(1,k) =0.0_cp
-         this%drMat(2,k) =two*this%drx(k)
-         this%d2rMat(1,k)=0.0_cp
-         this%d2rMat(2,k)=two*this%ddrx(k)
+            !----- set first two chebs:
+            this%rMat(1,k)  =one
+            this%rMat(2,k)  =this%r_cheb(k)
+            this%drMat(1,k) =0.0_cp
+            this%drMat(2,k) =two*this%drx(k)
+            this%d2rMat(1,k)=0.0_cp
+            this%d2rMat(2,k)=two*this%ddrx(k)
 
-         !----- now construct the rest with a recursion:
-         do n=3,n_r_max ! do loop over the (n-1) order of the chebs
+            !----- now construct the rest with a recursion:
+            do n=3,n_r_max ! do loop over the (n-1) order of the chebs
 
-            this%rMat(n,k)  =    two*this%r_cheb(k)*this%rMat(n-1,k) - &
-            &                                       this%rMat(n-2,k)
-            this%drMat(n,k) =      four*this%drx(k)*this%rMat(n-1,k) + &
-            &                   two*this%r_cheb(k)*this%drMat(n-1,k) - &
-            &                                      this%drMat(n-2,k)
-            this%d2rMat(n,k)=     four*this%ddrx(k)*this%rMat(n-1,k) + &
-            &                   8.0_cp*this%drx(k)*this%drMat(n-1,k) + &
-            &                  two*this%r_cheb(k)*this%d2rMat(n-1,k) - &
-            &                                     this%d2rMat(n-2,k)
+               this%rMat(n,k)  =    two*this%r_cheb(k)*this%rMat(n-1,k) - &
+               &                                       this%rMat(n-2,k)
+               this%drMat(n,k) =      four*this%drx(k)*this%rMat(n-1,k) + &
+               &                   two*this%r_cheb(k)*this%drMat(n-1,k) - &
+               &                                      this%drMat(n-2,k)
+               this%d2rMat(n,k)=     four*this%ddrx(k)*this%rMat(n-1,k) + &
+               &                   8.0_cp*this%drx(k)*this%drMat(n-1,k) + &
+               &                  two*this%r_cheb(k)*this%d2rMat(n-1,k) - &
+               &                                     this%d2rMat(n-2,k)
+            end do
+
          end do
 
-      end do
+         !-- This transposition is needed to bring those matrices in alignement
+         !-- with the fortran column-major storage (see update routines)
+         this%rMat  =transpose(this%rMat)
+         this%drMat =transpose(this%drMat)
+         this%d2rMat=transpose(this%d2rMat)
 
-      !-- This transposition is needed to bring those matrices in alignement
-      !-- with the fortran column-major storage (see update routines)
-      this%rMat  =transpose(this%rMat)
-      this%drMat =transpose(this%drMat)
-      this%d2rMat=transpose(this%d2rMat)
+      else ! When Collocation is not used one just needs to store the tau-lines
+           ! For each derivative the first row corresponds to the outer boundary
+           ! the second row to the inner boundary
+
+         do n=1,n_r_max
+            dn2 = real(n-1,cp)*real(n-1,cp)
+            this%rMat(1,n)  = one
+            this%rMat(2,n)  = (-one)**(n-1)
+            this%drMat(1,n) = two*dn2 ! Replace by drx maybe
+            this%drMat(2,n) = two*dn2*(-one)**n ! drx
+            this%d2rMat(1,n)= four*third*dn2*(dn2-one) ! drx
+            this%d2rMat(2,n)= four*third*dn2*(dn2-one)*(-one)**(n-1)
+         end do
+
+      end if
 
    end subroutine get_der_mat
 !------------------------------------------------------------------------------

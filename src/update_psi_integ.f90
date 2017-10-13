@@ -579,10 +579,10 @@ contains
                   A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
                end if
                if ( kbotv == 1 ) then ! Stress free
-                  A_mat%A1(2,n_r)=rscheme%rnorm*( rscheme%drMat(n_r_max,n_r) &
-                  &                  -or1(n_r_max)*rscheme%rMat(n_r_max,n_r) )
+                  A_mat%A1(2,n_r)=rscheme%rnorm*( rscheme%drMat(2,n_r) &
+                  &                  -or1(n_r_max)*rscheme%rMat(2,n_r) )
                else ! Rigid
-                  A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+                  A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
                end if
             else
 
@@ -593,12 +593,12 @@ contains
                   A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
                end if
                if ( kbotv == 1 ) then
-                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*(                   &
-                  &                               rscheme%drMat(n_r_max,n_r)-  &
-                  &                   or1(n_r_max)*rscheme%rMat(n_r_max,n_r) )
+                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*(             &
+                  &                               rscheme%drMat(2,n_r)-  &
+                  &                   or1(n_r_max)*rscheme%rMat(2,n_r) )
 
                else
-                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(A_mat%nlines,n_r)
+                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
                end if
             end if
          end do
@@ -608,7 +608,7 @@ contains
          do n_r=1,A_mat%nlines
             if ( n_r <= A_mat%ntau ) then
                A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
-               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
                if ( ktopv == 1 ) then !-- Stress-free
                   A_mat%A1(3,n_r)=rscheme%rnorm*(rscheme%d2rMat(1,n_r)-&
                   &                        or1(1)*rscheme%drMat(1,n_r) ) 
@@ -616,14 +616,14 @@ contains
                   A_mat%A1(3,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
                end if
                if ( kbotv == 1 ) then
-                  A_mat%A1(4,n_r)=rscheme%rnorm*(rscheme%d2rMat(n_r_max,n_r)-&
-                  &                  or1(n_r_max)*rscheme%drMat(n_r_max,n_r) )
+                  A_mat%A1(4,n_r)=rscheme%rnorm*(rscheme%d2rMat(2,n_r)-&
+                  &                  or1(n_r_max)*rscheme%drMat(2,n_r) )
                else
-                  A_mat%A1(4,n_r)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
+                  A_mat%A1(4,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
                end if
             else
                A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
-               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(A_mat%nlines,n_r)
+               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
                if ( ktopv == 1 ) then
                   A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*(rscheme%d2rMat(1,n_r)-&
                   &                                   or1(1)*rscheme%drMat(1,n_r) )
@@ -631,11 +631,11 @@ contains
                   A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
                end if
                if ( kbotv == 1 ) then
-                  A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*(                   &
-                  &                              rscheme%d2rMat(n_r_max,n_r)-  &
-                  &                  or1(n_r_max)*rscheme%drMat(n_r_max,n_r) )
+                  A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*(             &
+                  &                              rscheme%d2rMat(2,n_r)-  &
+                  &                  or1(n_r_max)*rscheme%drMat(2,n_r) )
                else
-                  A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(A_mat%nlines,n_r)
+                  A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
                end if
             end if
          end do

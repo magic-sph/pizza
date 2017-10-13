@@ -1,11 +1,15 @@
 module radial_functions
+   !
+   ! This module calculates some arrays that depend on the radial direction
+   ! only. This is called only once at the initialisation of the code.
+   !
 
    use truncation, only: n_r_max, n_cheb_max, m_max
    use radial_der, only: get_dr
    use constants, only: one, two, three, pi, half
-   use namelists, only: tag, alph1, alph2, l_newmap, radratio, &
-       &                g0, g1, g2, l_non_rot, ek, l_ek_pump,  &
-       &                l_temp_3D, tcond_fac, r_cmb, r_icb
+   use namelists, only: tag, alph1, alph2, l_newmap, radratio, g0, g1, g2, &
+       &                l_non_rot, ek, l_ek_pump, l_temp_3D, tcond_fac,    &
+       &                r_cmb, r_icb, l_cheb_coll
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -70,7 +74,7 @@ contains
          n_in_2 = 0
       end if
 
-      call rscheme%initialize(n_r_max,n_in,n_in_2)
+      call rscheme%initialize(n_r_max,n_in,n_in_2,l_cheb_coll)
 
    end subroutine initialize_radial_functions
 !------------------------------------------------------------------------------
@@ -106,7 +110,7 @@ contains
       ratio2=alph2
 
       call rscheme%get_grid(n_r_max, r_icb, r_cmb, ratio1, ratio2, r)
-      call rscheme%get_der_mat(n_r_max)
+      call rscheme%get_der_mat(n_r_max, l_cheb_coll)
 
       if ( rank == 0 ) then
          file_name = 'radius.'//tag
@@ -154,7 +158,8 @@ contains
          height(:) =1.0_cp
       else ! Calculate beta only when this is rotating !
          height(1) = 0.0_cp
-         beta(1)   = 1.0e10_cp
+         beta(1)   = 0.0_cp
+         dbeta(1)  = 0.0_cp
          ekpump(1) = ek_pump_fac*1.0e10_cp
          oheight(1)= 1.0e10_cp
          do n_r=2,n_r_max

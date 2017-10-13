@@ -70,22 +70,25 @@ module radial_scheme
 
       end subroutine get_grid_if
       !------------------------------------------------------------------------
-      subroutine initialize_if(this,n_r_max,order,order_boundary,no_work_array)
+      subroutine initialize_if(this,n_r_max,order,order_boundary,l_cheb_coll, &
+                 &             no_work_array)
 
          import
          class(type_rscheme) :: this
          integer, intent(in) :: n_r_max
          integer, intent(in) :: order
          integer, intent(in) :: order_boundary
+         logical, intent(in) :: l_cheb_coll
          logical, optional, intent(in) :: no_work_array
 
       end subroutine initialize_if
       !------------------------------------------------------------------------
-      subroutine get_der_mat_if(this,n_r_max)
+      subroutine get_der_mat_if(this,n_r_max,l_cheb_coll)
 
          import
          class(type_rscheme) :: this
          integer, intent(in) :: n_r_max
+         logical, intent(in) :: l_cheb_coll
 
       end subroutine get_der_mat_if
       !------------------------------------------------------------------------

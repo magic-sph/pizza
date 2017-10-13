@@ -87,8 +87,11 @@ program pizza
    call initialize_fieldsLast(tscheme%norder_exp, tscheme%norder_imp)
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('Fields', local_bytes_used)
+   local_bytes_used = bytes_allocated
    call initialize_radial_functions()
    call initialize_der_arrays(n_r_max, nMstart, nMstop)
+   local_bytes_used = bytes_allocated-local_bytes_used
+   call memWrite('Radial functions', local_bytes_used)
    local_bytes_used = bytes_allocated
    call initialize_fourier(n_phi_max)
    call initialize_radial_loop(n_phi_max)

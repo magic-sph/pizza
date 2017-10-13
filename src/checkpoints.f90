@@ -242,7 +242,7 @@ contains
             ! allocate ( type_fd :: rscheme_old )
          end if
 
-         call rscheme_old%initialize(n_r_max_old, n_in, n_in_2, &
+         call rscheme_old%initialize(n_r_max_old, n_in, n_in_2,l_cheb_coll=.true.,&
               &                      no_work_array=.true.)
 
          ! call rscheme_old%get_grid(n_r_max_old, r_icb_old, r_cmb_old, ratio1, &

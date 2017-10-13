@@ -65,7 +65,8 @@ contains
             allocate( sol_theo(n_r_max_loc) )
             ! allocate( df_num(n_r_max_loc), d2f_num(n_r_max_loc) )
             ! allocate( df_theo(n_r_max_loc), d2f_theo(n_r_max_loc) )
-            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in)
+            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in, &
+                 &                  l_cheb_coll=.true.)
             if ( l_newmap ) then
                alph1=1.0_cp/cosh(abs(log(eps))/(n_r_max_loc-1))
                alph2=0.0_cp
@@ -75,7 +76,7 @@ contains
             end if
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
             call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
-            call rscheme%get_der_mat(n_r_max_loc)
+            call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             c1 = (-1.0_cp-0.75_cp*(r_cmb**2-r_icb**2))/log(r_cmb/r_icb)
             c2 = -0.25_cp-0.75_cp*r_cmb**2-c1*log(r_cmb)
@@ -158,7 +159,8 @@ contains
             allocate( sol_theo(n_r_max_loc) )
             ! allocate( df_num(n_r_max_loc), d2f_num(n_r_max_loc) )
             ! allocate( df_theo(n_r_max_loc), d2f_theo(n_r_max_loc) )
-            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in)
+            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in, &
+                 &                  l_cheb_coll=.true.)
             if ( l_newmap ) then
                alph1=1.0_cp/cosh(abs(log(eps))/(n_r_max_loc-1))
                alph2=0.0_cp
@@ -168,7 +170,7 @@ contains
             end if
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
             call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
-            call rscheme%get_der_mat(n_r_max_loc)
+            call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             sol_theo(:)=one/8.0_cp*(two*(r_loc(:)-pi)*sin(r_loc)+ &
             &           (two*pi-r_loc(:))*r_loc(:)*cos(r_loc))
@@ -682,7 +684,8 @@ contains
             allocate( r_loc(n_r_max_loc), rhs1(n_r_max_loc), rhs2(n_r_max_loc) )
             allocate( or2(n_r_max_loc), rhs3(n_r_max_loc) )
 
-            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in)
+            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in, &
+                 &                  l_cheb_coll=.true.)
             alph1=0.0_cp
             alph2=0.0_cp
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
@@ -898,7 +901,8 @@ contains
             allocate( d2cheb(n_r_max_loc,n_r_max_loc) )
             allocate( df_num_matmul(n_r_max_loc) )
             allocate( df_theo(n_r_max_loc), d2f_theo(n_r_max_loc) )
-            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in)
+            call rscheme%initialize(n_r_max_loc, n_r_max_loc, n_in, &
+                 &                  l_cheb_coll=.true.)
             if ( l_newmap ) then
                alph1=one/cosh(abs(log(eps))/(n_r_max_loc-1))
                alph2=0.0_cp
@@ -908,7 +912,7 @@ contains
             end if
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
             call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
-            call rscheme%get_der_mat(n_r_max_loc)
+            call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             !-- Define a function and its analytical derivatives
             f(:) = sqrt(r_loc(:))
