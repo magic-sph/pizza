@@ -5,8 +5,9 @@ module update_psi_integ
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
-   use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac
-   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump
+   use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
+       &                l_ek_pump
+   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -169,6 +170,28 @@ contains
             end if
          end do
       end do
+
+      !-- Add Ekman pumping as an explicit term if this is requested
+      if ( l_ek_pump ) then
+
+         do n_r=2,n_r_max-1
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m == 0 ) then
+                  dpsi_exp_Mloc(n_m,n_r,1)=       dpsi_exp_Mloc(n_m,n_r,1) -     &
+                  &                           ekpump(n_r)*up_Mloc(n_m,n_r)
+
+               else 
+                  dpsi_exp_Mloc(n_m,n_r,1)=       dpsi_exp_Mloc(n_m,n_r,1) +     &
+                  &                        ekpump(n_r)*( -om_Mloc(n_m,n_r) +     &
+                  &                     half*beta(n_r)*   up_Mloc(n_m,n_r) +     &
+                  &       beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
+                  &                                       us_Mloc(n_m,n_r) )
+               end if
+            end do
+         end do
+
+      end if
 
       if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
          do n_r=1,n_r_max
