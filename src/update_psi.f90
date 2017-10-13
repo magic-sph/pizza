@@ -86,7 +86,7 @@ contains
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
-      integer :: n_r, n_m, n_r_out, m, n_o
+      integer :: n_r, n_m, n_cheb, m, n_o
 
       if ( lMat ) lPsimat(:)=.false.
 
@@ -150,8 +150,8 @@ contains
             call rgesl(uphiMat(:,:), n_r_max, n_r_max, psiPivot(1:n_r_max,n_m), &
                  &     rhs_m0(:))
 
-            do n_r_out=1,rscheme%n_max
-               uphi0(n_r_out)=rhs_m0(n_r_out)
+            do n_cheb=1,rscheme%n_max
+               uphi0(n_cheb)=rhs_m0(n_cheb)
             end do
 
          else ! Non-axisymmetric components
@@ -194,9 +194,9 @@ contains
                rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,2,n_m)
             end do
 
-            do n_r_out=1,rscheme%n_max
-               om_Mloc(n_m,n_r_out) =rhs(n_r_out)
-               psi_Mloc(n_m,n_r_out)=rhs(n_r_out+n_r_max)
+            do n_cheb=1,rscheme%n_max
+               om_Mloc(n_m,n_cheb) =rhs(n_cheb)
+               psi_Mloc(n_m,n_cheb)=rhs(n_cheb+n_r_max)
             end do
 
          end if
@@ -205,14 +205,14 @@ contains
 
       !-- set cheb modes > rscheme%n_max to zero (dealiazing)
       if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
-         do n_r_out=rscheme%n_max+1,n_r_max
+         do n_cheb=rscheme%n_max+1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  uphi0(n_r_out)=0.0_cp
+                  uphi0(n_cheb)=0.0_cp
                else
-                  om_Mloc(n_m,n_r_out) =zero
-                  psi_Mloc(n_m,n_r_out)=zero
+                  om_Mloc(n_m,n_cheb) =zero
+                  psi_Mloc(n_m,n_cheb)=zero
                end if
             end do
          end do
