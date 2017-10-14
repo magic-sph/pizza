@@ -20,6 +20,7 @@ program pizza
        &                 finalize_truncation
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop
+   use rloop_integ, only: initialize_radial_loop_integ, finalize_radial_loop_integ
    use update_temperature, only: initialize_update_temp, finalize_update_temp
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
    use update_psi, only: initialize_update_om, finalize_update_om
@@ -95,6 +96,7 @@ program pizza
    local_bytes_used = bytes_allocated
    call initialize_fourier(n_phi_max)
    call initialize_radial_loop(n_phi_max)
+   call initialize_radial_loop_integ(n_phi_max)
    call memWrite('R loop', local_bytes_used)
    local_bytes_used = bytes_allocated-local_bytes_used
    local_bytes_used = bytes_allocated
@@ -166,6 +168,7 @@ program pizza
       call finalize_psi_integ()
       call finalize_update_om()
    end if
+   call finalize_radial_loop_integ()
    call finalize_radial_loop()
    call finalize_fourier()
    call finalize_der_arrays()

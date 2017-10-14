@@ -20,7 +20,7 @@ module update_psi_integ
        &                    intcheb4rmult4, rmult2, intcheb1rmult1,           &
        &                    intcheb2rmult2, intcheb4rmult4hmult8laplrot2,     &
        &                    intcheb4rmult4hmult8laplrot, intcheb4rmult4hmult8,&
-       &                    intcheb4rmult4hmult6
+       &                    intcheb4rmult4hmult6, intcheb4hmult2
 
 
    implicit none
@@ -33,7 +33,7 @@ module update_psi_integ
    type(type_bordmat_complex), allocatable :: LHS_mat(:)
    type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
-   type(type_bandmat_real) :: RHSE_mat(2)
+   type(type_bandmat_real) :: RHSE_mat(3)
 
    public :: update_psi_int, initialize_psi_integ, finalize_psi_integ, &
    &         get_psi_rhs_imp_int
@@ -73,6 +73,7 @@ contains
       else
          call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
          call RHSE_mat(2)%initialize(16, 16, n_r_max) ! This is m /= 0
+         call RHSE_mat(3)%initialize(6, 6, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
@@ -90,6 +91,7 @@ contains
       !-- Fill matrices
       call get_rhs_exp_mat(RHSE_mat(1),1)
       call get_rhs_exp_mat(RHSE_mat(2),2)
+      call get_adv_exp_mat(RHSE_mat(3))
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
          call get_rhs_imp_mat(RHSI_mat(n_m), m)
@@ -128,7 +130,7 @@ contains
 
    end subroutine finalize_psi_integ
 !------------------------------------------------------------------------------
-   subroutine update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,            &
+   subroutine update_psi_int(psi_Mloc, dpsi_Mloc, d2psi_Mloc, om_Mloc, us_Mloc, up_Mloc,            &
               &              dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,       &
               &              buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp,&
               &              l_vphi_bal_calc)
@@ -141,6 +143,8 @@ contains
 
       !-- Output variables
       complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(out) :: dpsi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(out) :: d2psi_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
@@ -165,8 +169,7 @@ contains
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_Mloc(n_m,n_r,1)=    dpsi_exp_Mloc(n_m,n_r,1)-   &
-               &                       or1(n_r)*work_Mloc(n_m,n_r)
+               dpsi_exp_Mloc(n_m,n_r,1)=dpsi_exp_Mloc(n_m,n_r,1)-work_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -202,7 +205,7 @@ contains
       !-- Transform the explicit part to chebyshev space
       call rscheme%costf1(dpsi_exp_Mloc(:,:,1), nMstart, nMstop, n_r_max)
 
-      !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
+      !-- Matrix-vector multiplication by the operator \int\int\int\int h^2
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
@@ -213,7 +216,7 @@ contains
          if ( m == 0 ) then
             call RHSE_mat(1)%mat_vec_mul(rhs)
          else
-            call RHSE_mat(2)%mat_vec_mul(rhs)
+            call RHSE_mat(3)%mat_vec_mul(rhs)
             rhs(3)=zero
             rhs(4)=zero
          end if
@@ -228,7 +231,7 @@ contains
       !-- Transform buoyancy to Chebyshev space
       call rscheme%costf1(buo_imp_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
+      !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 h^8
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
@@ -334,21 +337,26 @@ contains
       call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Get the radial derivative of psi to calculate uphi, us and omega
-      call get_ddr(psi_Mloc, work_Mloc, om_Mloc, nMstart, nMstop, n_r_max, rscheme)
+      call get_ddr(psi_Mloc, dpsi_Mloc, d2psi_Mloc, nMstart, nMstop, n_r_max, &
+           &       rscheme)
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
 
             if ( m == 0 ) then
+               !uphi0(n_r)=0.0_cp ! to be removed
                us_Mloc(n_m,n_r)=0.0_cp
                up_Mloc(n_m,n_r)=uphi0(n_r)
                om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+
+               !dpsi_Mloc(n_m,n_r)=-uphi0(n_r)
+               !d2psi_Mloc(n_m,n_r)=0.0_cp
             else
                us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-               up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
-               om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-(or1(n_r)+beta(n_r))*          &
-               &               work_Mloc(n_m,n_r)-(or1(n_r)*beta(n_r)+dbeta(n_r) &
+               up_Mloc(n_m,n_r)=-dpsi_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+               om_Mloc(n_m,n_r)=-d2psi_Mloc(n_m,n_r)-(or1(n_r)+beta(n_r))*       &
+               &               dpsi_Mloc(n_m,n_r)-(or1(n_r)*beta(n_r)+dbeta(n_r) &
                &               -real(m,cp)*real(m,cp)*or2(n_r))*psi_Mloc(n_m,n_r)
             end if
          end do
@@ -728,6 +736,45 @@ contains
       end do
 
    end subroutine get_rhs_exp_mat
+!------------------------------------------------------------------------------
+   subroutine get_adv_exp_mat(D_mat)
+      !
+      ! This corresponds to the matrix that goes in front of the advection terms
+      !
+
+      !-- Output variable
+      type(type_bandmat_real), intent(inout) :: D_mat
+
+      !-- Local variables
+      real(cp) :: stencilD(D_mat%nbands)
+      real(cp) :: a, b
+      integer :: n_band, n_r, i_r, n_bounds
+
+      a = half*(r_cmb-r_icb)
+      b = half*(r_cmb+r_icb)
+
+      n_bounds = 4
+
+      !-- Fill right-hand side matrix
+      do n_r=1,D_mat%nlines
+         i_r = n_r+n_bounds
+
+         !-- Define right-hand side equations
+         if ( l_non_rot ) then
+            stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
+         else
+            stencilD = intcheb4hmult2(a,b,r_cmb,i_r-1,D_mat%nbands)
+         end if
+
+         !-- Roll array for band storage
+         do n_band=1,D_mat%nbands
+            if ( i_r+D_mat%ku+1-n_band <= D_mat%nlines .and. i_r+D_mat%ku+1-n_band >= 1 ) then
+               D_mat%dat(n_band,i_r+D_mat%ku+1-n_band) = rscheme%rnorm*stencilD(n_band)
+            end if
+         end do
+      end do
+
+   end subroutine get_adv_exp_mat
 !------------------------------------------------------------------------------
    subroutine get_rhs_imp_mat(B_mat, m)
       !

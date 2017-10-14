@@ -3,9 +3,10 @@ module step_time
    use communications, only: transp_m2r, m2r_fields, transp_r2m, r2m_fields, &
        &                     gather_from_mloc_to_rank0, my_reduce_mean,      &
        &                     scatter_from_rank0_to_mloc
-   use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
-       &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
-       &             dom_Mloc
+   use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,        &
+       &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc,    &
+       &             dom_Mloc, dpsi_Rloc, d2psi_Rloc, psi_Rloc, dpsi_Mloc, &
+       &             d2psi_Mloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc,              &
        &                 dVsT_Rloc, dVsT_Mloc, dVsOm_Rloc,       &
        &                 dVsOm_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc, &
@@ -18,6 +19,7 @@ module step_time
    use update_psi_integ, only: update_psi_int, get_psi_rhs_imp_int
    use update_psi, only: update_om, get_psi_rhs_imp
    use rLoop, only: radial_loop
+   use rLoop_integ, only: radial_loop_integ
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
@@ -127,6 +129,11 @@ contains
          call transp_m2r(m2r_fields, up_Mloc, up_Rloc)
          call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
          call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
+
+         call transp_m2r(m2r_fields, psi_Mloc, psi_Rloc)
+         call transp_m2r(m2r_fields, dpsi_Mloc, dpsi_Rloc)
+         call transp_m2r(m2r_fields, d2psi_Mloc, d2psi_Rloc)
+
          runStop = MPI_Wtime()
          if (runStop>runStartT) then
             n_mpi_comms  =n_mpi_comms+1
@@ -155,9 +162,14 @@ contains
          !-- Radial loop
          !-------------------
          runStart = MPI_Wtime()
-         call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc,  &
-              &            dtempdt_Rloc, dVsT_Rloc, dpsidt_Rloc,  &
-              &            dVsOm_Rloc, dtr_Rloc, dth_Rloc )
+         !call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc,  &
+         !     &            dtempdt_Rloc, dVsT_Rloc, dpsidt_Rloc,  &
+         !     &            dVsOm_Rloc, dtr_Rloc, dth_Rloc )
+
+         call radial_loop_integ( psi_Rloc, dpsi_Rloc, d2psi_Rloc, us_Rloc,    &
+              &                  up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc,   &
+              &                  dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,&
+              &                  dth_Rloc )
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             n_r_loops  =n_r_loops+1
@@ -307,13 +319,10 @@ contains
             call update_temp_int(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc, &
                  &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,  &
                  &           tscheme, lMat, l_roll_imp, l_log_next)
-            !call update_om(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,   &
-            !     &         dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,        &
-            !     &         buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp, &
-            !     &         l_vphi_bal_calc)
-            call update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc, dVsOm_Mloc, &
-                 &              dpsi_exp_Mloc, dpsi_imp_Mloc, buo_imp_Mloc,      &
-                 &              vp_bal, tscheme, lMat, l_roll_imp, l_vphi_bal_calc)
+            call update_psi_int(psi_Mloc, dpsi_Mloc, d2psi_Mloc, om_Mloc,    &
+                 &              us_Mloc, up_Mloc, dVsOm_Mloc, dpsi_exp_Mloc, &
+                 &              dpsi_imp_Mloc, buo_imp_Mloc, vp_bal, tscheme,&
+                 &              lMat, l_roll_imp, l_vphi_bal_calc)
          end if
 
          runStop = MPI_Wtime()

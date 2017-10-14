@@ -20,8 +20,13 @@ module fields
    complex(cp), allocatable, public :: dom_Mloc(:,:)
    complex(cp), allocatable, public :: work_Mloc(:,:)
 
+   complex(cp), allocatable, public :: dpsi_Mloc(:,:), d2psi_Mloc(:,:)
+
    complex(cp), allocatable, public :: us_Mloc(:,:), up_Mloc(:,:)
    complex(cp), allocatable, public :: us_Rloc(:,:), up_Rloc(:,:)
+   complex(cp), allocatable, public :: psi_Rloc(:,:), dpsi_Rloc(:,:)
+
+   complex(cp), allocatable, public :: d2psi_Rloc(:,:)
  
    public :: initialize_fields, finalize_fields
 
@@ -40,6 +45,9 @@ contains
       bytes_allocated = bytes_allocated + &
       &                 8*(nMstop-nMstart+1)*n_r_max*SIZEOF_DEF_COMPLEX
 
+      allocate( dpsi_Mloc(nMStart:nMstop,n_r_max) )
+      allocate( d2psi_Mloc(nMStart:nMstop,n_r_max) )
+
       temp_Mloc(:,:) =zero
       dtemp_Mloc(:,:)=zero
       psi_Mloc(:,:)  =zero
@@ -49,6 +57,9 @@ contains
       up_Mloc(:,:)   =zero
       work_Mloc(:,:) =zero
 
+      dpsi_Mloc(:,:)  =zero
+      d2psi_Mloc(:,:)  =zero
+
       allocate( temp_Rloc(n_m_max,nRstart:nRstop) )
       allocate( us_Rloc(n_m_max,nRstart:nRstop) )
       allocate( up_Rloc(n_m_max,nRstart:nRstop) )
@@ -56,10 +67,18 @@ contains
       bytes_allocated = bytes_allocated + &
       &                 4*n_m_max*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
 
+      allocate( psi_Rloc(n_m_max,nRstart:nRstop) )
+      allocate( dpsi_Rloc(n_m_max,nRstart:nRstop) )
+      allocate( d2psi_Rloc(n_m_max,nRstart:nRstop) )
+
       temp_Rloc(:,:) =zero
       us_Rloc(:,:)   =zero
       up_Rloc(:,:)   =zero
       om_Rloc(:,:)   =zero
+
+      psi_Rloc(:,:)  =zero
+      dpsi_Rloc(:,:) =zero
+      d2psi_Rloc(:,:)=zero
 
    end subroutine initialize_fields
 !----------------------------------------------------------------------------
@@ -68,6 +87,9 @@ contains
       deallocate( us_Rloc, up_Rloc, us_Mloc, up_Mloc, work_Mloc )
       deallocate( om_Rloc, om_Mloc, dom_Mloc )
       deallocate( temp_Mloc, dtemp_Mloc, psi_Mloc, temp_Rloc )
+
+      deallocate( dpsi_Mloc, d2psi_Mloc )
+      deallocate( psi_Rloc, dpsi_Rloc, d2psi_Rloc )
 
    end subroutine finalize_fields
 !----------------------------------------------------------------------------
