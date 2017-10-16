@@ -267,7 +267,7 @@ contains
             if ( l_cheb_coll ) then
                call get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2),&
                     &         dtemp_imp_Mloc(:,:,tscheme%norder_imp-n_time_step))
-               call get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,        &
+               call get_psi_rhs_imp(us_Mloc, dpsi_Mloc, om_Mloc, dom_Mloc,      &
                     &               tscheme%wimp_lin(2),                        &
                     &       dpsi_imp_Mloc(:,:,tscheme%norder_imp-n_time_step),  &
                     &               vp_bal, l_vphi_bal_calc)

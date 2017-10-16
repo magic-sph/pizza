@@ -7,7 +7,7 @@ module update_psi_integ
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump
-   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
+   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -15,12 +15,14 @@ module update_psi_integ
    use time_schemes, only: type_tscheme
    use useful, only: abortRun, roll
    use matrix_types, only: type_bandmat_complex, type_bordmat_complex,        &
-   &                       type_bandmat_real
+       &                   type_bandmat_real
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,          &
-       &                    intcheb4rmult4, rmult2, intcheb1rmult1,           &
+       &                    intcheb4, rmult2, intcheb1rmult1,                 & 
        &                    intcheb2rmult2, intcheb4rmult4hmult8laplrot2,     &
        &                    intcheb4rmult4hmult8laplrot, intcheb4rmult4hmult6,&
-       &                    intcheb4hmult2
+       &                    intcheb4hmult2, intcheb3hmult2,                   &
+       &                    intcheb3rmult2hmult6vpaxi,                        &
+       &                    intcheb3rmult2hmult6laplrotaxi
 
 
    implicit none
@@ -57,7 +59,7 @@ contains
       !-- Initialize matrices
       if ( l_non_rot ) then
          call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-         call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
+         call RHSE_mat(2)%initialize(4, 4, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
@@ -71,14 +73,14 @@ contains
             end if
          end do
       else
-         call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+         call RHSE_mat(1)%initialize(5, 5, n_r_max) ! This is m  = 0
          call RHSE_mat(2)%initialize(6, 6, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
-               call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
-               call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
-               call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
+               call RHSI_mat(n_m)%initialize(10, 10, n_r_max)
+               call RHSIL_mat(n_m)%initialize(9, 9, n_r_max)
+               call LHS_mat(n_m)%initialize(10, 10, 3, n_r_max)
             else
                call RHSI_mat(n_m)%initialize(14, 14, n_r_max)
                call RHSIL_mat(n_m)%initialize(14, 14, n_r_max)
@@ -153,8 +155,7 @@ contains
       complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      real(cp) :: uphi0(n_r_max), om0(n_r_max)
-      integer :: n_r, n_m, n_cheb, m, n_o
+      integer :: n_r, n_m, n_cheb, m, n_o, nm0
 
       if ( lMat ) lPsimat(:)=.false.
 
@@ -171,6 +172,20 @@ contains
             end if
          end do
       end do
+
+      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
+         vp_bal%rey_stress(1)=0.0_cp
+         if ( l_non_rot ) then
+            do n_r=2,n_r_max
+               vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(m2idx(0),n_r,1))*or2(n_r)
+            end do
+         else
+            do n_r=2,n_r_max
+               vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(m2idx(0),n_r,1))*  &
+               &                      or2(n_r)/(r_cmb**2-r(n_r)**2)**2
+            end do
+         end if
+      end if
 
       !-- Add Ekman pumping as an explicit term if this is requested
       if ( l_ek_pump ) then
@@ -194,12 +209,6 @@ contains
 
       end if
 
-      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
-         do n_r=1,n_r_max
-            vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(m2idx(0),n_r,1))
-         end do
-      end if
-
       !-- Transform the explicit part to chebyshev space
       call rscheme%costf1(dpsi_exp_Mloc(:,:,1), nMstart, nMstop, n_r_max)
 
@@ -215,11 +224,11 @@ contains
             call RHSE_mat(1)%mat_vec_mul(rhs)
          else
             call RHSE_mat(2)%mat_vec_mul(rhs)
-            rhs(3)=zero
             rhs(4)=zero
          end if
          rhs(1)=zero
          rhs(2)=zero
+         rhs(3)=zero
 
          do n_r=1,n_r_max
             dpsi_exp_Mloc(n_m,n_r,1)=rhs(n_r)
@@ -250,7 +259,7 @@ contains
 
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, tscheme%wimp_lin(2), &
+      call get_psi_rhs_imp_int(psi_Mloc, dpsi_Mloc, tscheme%wimp_lin(2), &
            &                   dpsi_imp_Mloc(:,:,1), vp_bal, l_vphi_bal_calc)
 
 
@@ -266,7 +275,8 @@ contains
          !-- Store vphi force balance if needed
          if ( m == 0 .and. l_vphi_bal_calc ) then
             do n_r=1,n_r_max
-               vp_bal%dvpdt(n_r)=real(up_Mloc(n_m,n_r))/tscheme%dt(1)
+               vp_bal%dvpdt(n_r)=(-real(dpsi_Mloc(n_m,n_r))-beta(n_r)*  &
+               &                   real( psi_Mloc(n_m,n_r)))/tscheme%dt(1)
             end do
          end if
 
@@ -291,15 +301,9 @@ contains
 
          call LHS_mat(n_m)%solve(rhs, n_r_max)
 
-         if ( m == 0 ) then
-            do n_cheb=1,rscheme%n_max
-               uphi0(n_cheb)=real(rhs(n_cheb))
-            end do
-         else
-            do n_cheb=1,rscheme%n_max
-               psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
-            end do
-         end if
+         do n_cheb=1,rscheme%n_max
+            psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
+         end do
 
       end do
 
@@ -308,25 +312,9 @@ contains
          do n_cheb=rscheme%n_max+1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
-               if ( m == 0 ) then
-                  uphi0(n_cheb)=0.0_cp
-               else
-                  psi_Mloc(n_m,n_cheb)=zero
-               end if
+               psi_Mloc(n_m,n_cheb)=zero
             end do
          end do
-      end if
-
-      !-- Bring uphi0 to the physical space
-      if ( l_rank_has_m0 ) then
-         call rscheme%costf1(uphi0, n_r_max)
-         call get_dr(uphi0, om0, n_r_max, rscheme)
-
-         if ( l_vphi_bal_calc ) then
-            do n_r=1,n_r_max
-               vp_bal%dvpdt(n_r)=uphi0(n_r)/tscheme%dt(1)-vp_bal%dvpdt(n_r)
-            end do
-         end if
       end if
 
       !-- Bring psi back the physical space
@@ -336,25 +324,30 @@ contains
       call get_ddr(psi_Mloc, dpsi_Mloc, d2psi_Mloc, nMstart, nMstop, n_r_max, &
            &       rscheme)
 
+
+      !-- Bring uphi0 to the physical space
+      if ( l_rank_has_m0 ) then
+         if ( l_vphi_bal_calc ) then
+            nm0 = m2idx(0)
+            do n_r=1,n_r_max
+               vp_bal%dvpdt(n_r)=(-real(dpsi_Mloc(nm0,n_r))-beta(n_r)*     &
+               &                   real( psi_Mloc(nm0,n_r)))/tscheme%dt(1) &
+               &                   -vp_bal%dvpdt(n_r)
+            end do
+         end if
+      end if
+
+
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
 
-            if ( m == 0 ) then
-               !uphi0(n_r)=0.0_cp ! to be removed
-               us_Mloc(n_m,n_r)=0.0_cp
-               up_Mloc(n_m,n_r)=uphi0(n_r)
-               om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+            us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+            up_Mloc(n_m,n_r)=-dpsi_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+            om_Mloc(n_m,n_r)=-d2psi_Mloc(n_m,n_r)-(or1(n_r)+beta(n_r))*       &
+            &               dpsi_Mloc(n_m,n_r)-(or1(n_r)*beta(n_r)+dbeta(n_r) &
+            &               -real(m,cp)*real(m,cp)*or2(n_r))*psi_Mloc(n_m,n_r)
 
-               !dpsi_Mloc(n_m,n_r)=-uphi0(n_r)
-               !d2psi_Mloc(n_m,n_r)=0.0_cp
-            else
-               us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-               up_Mloc(n_m,n_r)=-dpsi_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
-               om_Mloc(n_m,n_r)=-d2psi_Mloc(n_m,n_r)-(or1(n_r)+beta(n_r))*       &
-               &               dpsi_Mloc(n_m,n_r)-(or1(n_r)*beta(n_r)+dbeta(n_r) &
-               &               -real(m,cp)*real(m,cp)*or2(n_r))*psi_Mloc(n_m,n_r)
-            end if
          end do
       end do
 
@@ -366,12 +359,12 @@ contains
 
    end subroutine update_psi_int
 !------------------------------------------------------------------------------
-   subroutine get_psi_rhs_imp_int(psi_Mloc, up_Mloc, wimp, dpsi_imp_Mloc_last, &
+   subroutine get_psi_rhs_imp_int(psi_Mloc, dpsi_Mloc, wimp, dpsi_imp_Mloc_last, &
               &                   vp_bal, l_vphi_bal_calc)
 
       !-- Input variables
       complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: dpsi_Mloc(nMstart:nMstop,n_r_max)
       real(cp),    intent(in) :: wimp
       logical,     intent(in) :: l_vphi_bal_calc
 
@@ -385,12 +378,7 @@ contains
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m == 0 ) then
-               dpsi_imp_Mloc_last(n_m,n_r)=up_Mloc(n_m,n_r)
-            else
-               dpsi_imp_Mloc_last(n_m,n_r)=psi_Mloc(n_m,n_r)
-            end if
+            dpsi_imp_Mloc_last(n_m,n_r)=psi_Mloc(n_m,n_r)
          end do
       end do
 
@@ -409,10 +397,8 @@ contains
 
          rhs(1)=zero ! vphi equation has only 2 BCs
          rhs(2)=zero
-         if ( m > 0 ) then
-            rhs(3)=zero
-            rhs(4)=zero
-         end if
+         rhs(3)=zero
+         if ( m > 0 ) rhs(4)=zero
 
          do n_r=1,n_r_max
             dpsi_imp_Mloc_last(n_m,n_r)=rhs(n_r)
@@ -424,8 +410,10 @@ contains
       if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
          m0 = m2idx(0)
          do n_r=1,n_r_max
-            uphi0(n_r)=real(up_Mloc(m0, n_r),kind=cp)
+            uphi0(n_r)=-real(dpsi_Mloc(m0,n_r),kind=cp)-beta(n_r)* &
+            &           real( psi_Mloc(m0,n_r),kind=cp)
          end do
+
          call get_ddr(uphi0, duphi0, d2uphi0, n_r_max, rscheme)
          do n_r=1,n_r_max
             vp_bal%visc(n_r)=d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
@@ -439,12 +427,7 @@ contains
          !-- Copy psi_Mloc into work_Mloc
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m == 0 ) then
-                  work_Mloc(n_m,n_r)=up_Mloc(n_m,n_r)
-               else
-                  work_Mloc(n_m,n_r)=psi_Mloc(n_m,n_r)
-               end if
+               work_Mloc(n_m,n_r)=psi_Mloc(n_m,n_r)
             end do
          end do
 
@@ -460,10 +443,8 @@ contains
             call RHSIL_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero ! vphi equation has only 2 BCs
             rhs(2)=zero
-            if ( m > 0 ) then
-               rhs(3)=zero
-               rhs(4)=zero
-            end if
+            rhs(3)=zero
+            if ( m > 0 ) rhs(4)=zero
             do n_r=1,n_r_max
                work_Mloc(n_m,n_r)=rhs(n_r)
             end do
@@ -527,9 +508,11 @@ contains
             end if
          else
             if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+               stencilA4 = -intcheb3rmult2hmult6vpaxi(a,b,r_cmb,i_r-1,     &
+               &                                      A_mat%nbands)        &
+               &           +tscheme%wimp_lin(1)*                           &
+               &           intcheb3rmult2hmult6laplrotaxi(a,b,r_cmb,i_r-1, &
+               &                                          A_mat%nbands)
                CorSten   = 0.0_cp
             else
                stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,r_cmb,m,i_r-1, &
@@ -569,9 +552,11 @@ contains
             end if
          else
             if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+               stencilA4 = -intcheb3rmult2hmult6vpaxi(a,b,r_cmb,i_r-1,     &
+               &                                      A_mat%nbands)        &
+               &           +tscheme%wimp_lin(1)*                           &
+               &           intcheb3rmult2hmult6laplrotaxi(a,b,r_cmb,i_r-1, &
+               &                                          A_mat%nbands)
                CorSten   = 0.0_cp
             else
                stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,r_cmb,m,i_r-1, &
@@ -600,33 +585,37 @@ contains
          do n_r=1,A_mat%nlines
             if ( n_r <= A_mat%ntau ) then
                if ( ktopv == 1 ) then ! Stress free
-                  A_mat%A1(1,n_r)=rscheme%rnorm*( rscheme%drMat(1,n_r)-or1(1)*&
-                  &                                rscheme%rMat(1,n_r) )
+                  A_mat%A1(1,n_r)=rscheme%rnorm*( rscheme%d2rMat(1,n_r)-or1(1)*&
+                  &                                rscheme%drMat(1,n_r) )
                else ! Rigid
-                  A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
+                  A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
                end if
                if ( kbotv == 1 ) then ! Stress free
-                  A_mat%A1(2,n_r)=rscheme%rnorm*( rscheme%drMat(2,n_r) &
-                  &                  -or1(n_r_max)*rscheme%rMat(2,n_r) )
+                  A_mat%A1(2,n_r)=rscheme%rnorm*( rscheme%d2rMat(2,n_r) &
+                  &                  -or1(n_r_max)*rscheme%drMat(2,n_r) )
                else ! Rigid
-                  A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
+                  A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
                end if
+               !-- Gauge freedom on psi(m=0)
+               A_mat%A1(3,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
             else
 
                if ( ktopv == 1 ) then
-                  A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*(rscheme%drMat(1,n_r)-&
-                  &                                   or1(1)*rscheme%rMat(1,n_r) )
+                  A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*(rscheme%d2rMat(1,n_r)-&
+                  &                                   or1(1)*rscheme%drMat(1,n_r) )
                else
-                  A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
+                  A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
                end if
                if ( kbotv == 1 ) then
                   A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*(             &
-                  &                               rscheme%drMat(2,n_r)-  &
-                  &                   or1(n_r_max)*rscheme%rMat(2,n_r) )
+                  &                               rscheme%d2rMat(2,n_r)-  &
+                  &                   or1(n_r_max)*rscheme%drMat(2,n_r) )
 
                else
-                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
+                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
                end if
+               !-- Gauge freedom on psi(m=0)
+               A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
             end if
          end do
 
@@ -699,7 +688,7 @@ contains
       b = half*(r_cmb+r_icb)
 
       if ( m0 == 1 ) then ! This is the axisymmetric part
-         n_bounds = 2
+         n_bounds = 3
       else                ! This is the non-axisymmetric part
          n_bounds = 4
       end if
@@ -713,11 +702,11 @@ contains
             if ( m0 == 1) then
                stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
             else
-               stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
+               stencilD = intcheb4(a,i_r-1,D_mat%nbands)
             end if
          else
             if ( m0 == 1) then
-               stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
+               stencilD = intcheb3hmult2(a,b,r_cmb,i_r-1,D_mat%nbands)
             else
                stencilD = intcheb4hmult2(a,b,r_cmb,i_r-1,D_mat%nbands)
             end if
@@ -754,7 +743,7 @@ contains
       b = half*(r_cmb+r_icb)
 
       if ( m == 0 ) then
-         n_bounds = 2 ! For vphi equation, only 2 BCs
+         n_bounds = 3 ! For vphi equation, only 2 BCs
       else
          n_bounds = 4 ! For psi equation, 4 BCs
       end if
@@ -772,7 +761,8 @@ contains
             end if
          else
             if ( m == 0 ) then
-               stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+               stencilB = -intcheb3rmult2hmult6vpaxi(a,b,r_cmb,i_r-1, &
+               &                                     B_mat%nbands)
             else
                stencilB = -intcheb4rmult4hmult8laplrot(a,b,r_cmb,m,i_r-1,&
                &                                       B_mat%nbands)
@@ -809,7 +799,7 @@ contains
       b = half*(r_cmb+r_icb)
 
       if ( m == 0 ) then
-         n_bounds = 2 ! vphi equation has 2 BCs
+         n_bounds = 3 ! vphi equation has 2 BCs
       else
          n_bounds = 4 ! psi equation has 4 BCs
       end if
@@ -830,8 +820,8 @@ contains
             end if
          else
             if ( m == 0 ) then
-               stencilC =               rmult2(a,b,i_r-1,Cmat%nbands)- &
-               &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands)
+               stencilC = -intcheb3rmult2hmult6laplrotaxi(a,b,r_cmb,i_r-1, &
+               &                                          Cmat%nbands)
                CorSten  = 0.0_cp
             else
                stencilC = -intcheb4rmult4hmult8laplrot2(a,b,r_cmb,m,i_r-1,&

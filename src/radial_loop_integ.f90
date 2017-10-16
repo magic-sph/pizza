@@ -3,8 +3,8 @@ module rloop_integ
    use precision_mod
    use constants, only: ci, one, half, two, three, zero
    use mem_alloc, only: bytes_allocated
-   use namelists, only: ek, tadvz_fac, r_cmb
-   use radial_functions, only: r, ekpump
+   use namelists, only: ek, tadvz_fac, r_cmb, l_non_rot
+   use radial_functions, only: r, ekpump, or1
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
    use courant_mod, only: courant
@@ -102,30 +102,20 @@ contains
 
       do n_r=nRstart,nRstop
 
-         !-- Calculate Reynolds stress for axisymmetric equation
+         !-- (r_cmb^2-s^2)
+         ro2ms2 = r_cmb**2-r(n_r)**2
+
          usom = 0.0_cp
          do n_m=1,n_m_max
             m = idx2m(n_m)
 
-            if ( m == 0 ) then ! Add first order contribution for this term
-                               ! us(m=0) * vortz(m=0)
-               us_fluct = half*ek*ekpump(n_r)*up_Rloc(n_m,n_r)
-            else
-               us_fluct = us_Rloc(n_m,n_r)
-            end if
-            usom = usom+cc22real(us_fluct,om_Rloc(n_m,n_r),m)
-         end do
+            if ( l_non_rot ) then
+               upMod(n_m) =-dpsi_Rloc(n_m,n_r)
+               omMod(n_m) =-r(n_r)**2*            d2psi_Rloc(n_m,n_r)    &
+               &           -r(n_r)*                dpsi_Rloc(n_m,n_r)    &
+               &           +real(m,cp)*real(m,cp)*  psi_Rloc(n_m,n_r)
 
-         !-- (r_cmb^2-s^2)
-         ro2ms2 = (r_cmb**2-r(n_r)**2)
-
-         do n_m=1,n_m_max
-            m = idx2m(n_m)
-
-            if ( m == 0 ) then
-               upMod(n_m) =ro2ms2*up_Rloc(n_m,n_r)
-
-               omMod(n_m) =ro2ms2*r(n_r)**2*om_Rloc(n_m,n_r)
+               usMod(n_m) = ci*real(m,cp)*psi_Rloc(n_m,n_r)
             else
                upMod(n_m) =-ro2ms2*dpsi_Rloc(n_m,n_r)+r(n_r)*psi_Rloc(n_m,n_r)
 
@@ -134,9 +124,20 @@ contains
                &                                     dpsi_Rloc(n_m,n_r)    &
                &           +( two*r_cmb**2*r(n_r)**2+ro2ms2**2*real(m,cp)* &
                &              real(m,cp) )*           psi_Rloc(n_m,n_r)
+
+               usMod(n_m) = ci*real(m,cp)*psi_Rloc(n_m,n_r)
             end if
 
-            usMod(n_m) = ci*real(m,cp)*psi_Rloc(n_m,n_r)
+            if ( m == 0 ) then ! Add first order contribution for this term
+                               ! us(m=0) * vortz(m=0)
+               us_fluct = half*ek*ekpump(n_r)*up_Rloc(n_m,n_r)
+            else
+               !us_fluct = us_Rloc(n_m,n_r)
+               us_fluct = ci*real(m,cp)*psi_Rloc(n_m,n_r)*or1(n_r)
+            end if
+
+            !-- Calculate Reynolds stress for axisymmetric equation
+            usom = usom+cc22real(us_fluct,omMod(n_m),m)
 
          end do
 
@@ -174,14 +175,26 @@ contains
 
          do n_m=1,n_m_max
             m = idx2m(n_m)
-            dtempdt_Rloc(n_m,n_r)=-ci*m*dtempdt_Rloc(n_m,n_r)              &
-            &                     +(one-tadvz_fac)*r(n_r)*dVsT_Rloc(n_m,n_r)
-            if ( m == 0 ) then
-               dpsidt_Rloc(n_m,n_r)=-usom
+            if ( l_non_rot ) then
+               dtempdt_Rloc(n_m,n_r)=-ci*m*dtempdt_Rloc(n_m,n_r) 
+               if ( m == 0 ) then
+                  dpsidt_Rloc(n_m,n_r)=-usom
+               else
+                  dpsidt_Rloc(n_m,n_r)=-ci*m*dpsidt_Rloc(n_m,n_r)+ &
+                  &                     three*dVsOm_Rloc(n_m,n_r)
+                  dVsOm_Rloc(n_m, n_r)=r(n_r)*dVsOm_Rloc(n_m,n_r)
+               end if
+
             else
-               dpsidt_Rloc(n_m,n_r)=-ci*m*dpsidt_Rloc(n_m,n_r)+ &
-               &         three*(r_cmb**2-three*r(n_r)**2)*dVsOm_Rloc(n_m,n_r)
-               dVsOm_Rloc(n_m, n_r)=ro2ms2*r(n_r)**3*dVsOm_Rloc(n_m,n_r)
+               dtempdt_Rloc(n_m,n_r)=-ci*m*dtempdt_Rloc(n_m,n_r)              &
+               &                     +(one-tadvz_fac)*r(n_r)*dVsT_Rloc(n_m,n_r)
+               if ( m == 0 ) then
+                  dpsidt_Rloc(n_m,n_r)=-usom
+               else
+                  dpsidt_Rloc(n_m,n_r)=-ci*m*dpsidt_Rloc(n_m,n_r)+ &
+                  &         three*(r_cmb**2-three*r(n_r)**2)*dVsOm_Rloc(n_m,n_r)
+                  dVsOm_Rloc(n_m, n_r)=ro2ms2*r(n_r)*dVsOm_Rloc(n_m,n_r)
+               end if
             end if
          end do
 

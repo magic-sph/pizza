@@ -4,7 +4,7 @@ module update_temp_integ
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, ci, half
    use pre_calculations, only: opr
-   use namelists, only: kbott, ktopt, tadvz_fac, ra, r_cmb, r_icb
+   use namelists, only: kbott, ktopt, tadvz_fac, ra, r_cmb, r_icb, l_non_rot
    use radial_functions, only: rscheme, or1, r, dtcond, tcond, beta, &
        &                       rgrav
    use blocking, only: nMstart, nMstop
@@ -15,7 +15,7 @@ module update_temp_integ
    use time_schemes, only: type_tscheme
    use matrix_types, only: type_bandmat_real, type_bordmat_real
    use chebsparselib, only: intcheb2rmult2hmult2, intcheb2rmult2hmult2lapl, &
-       &                    intcheb2rmult1
+       &                    intcheb2rmult1, intcheb2rmult2, intcheb2rmult2lapl
 
    implicit none
    
@@ -40,15 +40,26 @@ contains
       integer :: n_m, m
 
       call RHSE_mat%initialize(3, 3, n_r_max)
-      call RHSI_mat%initialize(8, 8, n_r_max)
+      if ( l_non_rot ) then
+         call RHSI_mat%initialize(4, 4, n_r_max)
+      else
+         call RHSI_mat%initialize(8, 8, n_r_max)
+      end if
 
       allocate( RHSIL_mat(nMstart:nMstop) )
       allocate( LHS_mat(nMstart:nMstop) )
 
-      do n_m=nMstart,nMstop
-         call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
-         call LHS_mat(n_m)%initialize(8, 8, n_boundaries, n_r_max)
-      end do
+      if ( l_non_rot ) then
+         do n_m=nMstart,nMstop
+            call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
+            call LHS_mat(n_m)%initialize(4, 4, n_boundaries, n_r_max)
+         end do
+      else
+         do n_m=nMstart,nMstop
+            call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
+            call LHS_mat(n_m)%initialize(8, 8, n_boundaries, n_r_max)
+         end do
+      end if
 
       call get_rhs_exp_mat(RHSE_mat)
       call get_rhs_imp_mat(RHSI_mat)
@@ -110,9 +121,15 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*r(n_r)**3*    &
-               &                      (r_cmb**2-r(n_r)**2)**3*ra*opr*ci*real(m,cp)*&
-               &                      temp_Mloc(n_m,n_r)
+               if ( l_non_rot ) then
+                  buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*r(n_r)**3* &
+                  &                      ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+
+               else
+                  buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*r(n_r)**3* &
+                  &                      (r_cmb**2-r(n_r)**2)**3*ra*opr*           &
+                  &                      ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               end if
             end if
          end do
       end do
@@ -125,11 +142,17 @@ contains
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
-            dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
-            &         -(r_cmb**2-r(n_r)**2)*work_Mloc(n_m,n_r)    &
-            &                 -ci*real(m,cp)*psi_Mloc(n_m,n_r)*(  &
-            &               (r_cmb**2-r(n_r)**2)*dtcond(n_r)+     &
-            &                    tadvz_fac*r(n_r)*tcond(n_r) )
+            if ( l_non_rot ) then
+               dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
+               &                             -work_Mloc(n_m,n_r)     &
+               &    -ci*real(m,cp)*dtcond(n_r)*psi_Mloc(n_m,n_r)
+            else
+               dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
+               &         -(r_cmb**2-r(n_r)**2)*work_Mloc(n_m,n_r)    &
+               &                 -ci*real(m,cp)*psi_Mloc(n_m,n_r)*(  &
+               &               (r_cmb**2-r(n_r)**2)*dtcond(n_r)+     &
+               &                    tadvz_fac*r(n_r)*tcond(n_r) )
+            end if
          end do
       end do
 
@@ -198,10 +221,16 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-      &
-               &               tscheme%wimp_lin(1)*rgrav(n_r)*r(n_r)**3*     &
-               &               (r_cmb**2-r(n_r)**2)**3*ra*opr*ci*real(m,cp)* &
-               &                                    temp_Mloc(n_m,n_r)
+               if ( l_non_rot ) then
+                  buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-      &
+                  &               tscheme%wimp_lin(1)*rgrav(n_r)*r(n_r)**3*     &
+                  &               ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               else
+                  buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-      &
+                  &               tscheme%wimp_lin(1)*rgrav(n_r)*r(n_r)**3*     &
+                  &               (r_cmb**2-r(n_r)**2)**3*ra*opr*ci*real(m,cp)* &
+                  &                                    temp_Mloc(n_m,n_r)
+               end if
             end if
          end do
       end do
@@ -320,9 +349,15 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define the equations
-         stencilA4 = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,A_mat%nbands)- &
-         &                       tscheme%wimp_lin(1)*opr*                &
-         &     intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,A_mat%nbands)  
+         if ( l_non_rot ) then
+            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-    &
+            &                       tscheme%wimp_lin(1)*opr*       &
+            &     intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         else
+            stencilA4 = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,A_mat%nbands)- &
+            &                       tscheme%wimp_lin(1)*opr*                &
+            &     intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,A_mat%nbands)  
+         end if
 
          !-- Roll the array for band storage
          do n_band=1,A_mat%nbands
@@ -335,9 +370,15 @@ contains
       !-- Fill A3
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
-         stencilA4 = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,A_mat%nbands)-    &
-         &                                   tscheme%wimp_lin(1)*opr*       &
-         &       intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,A_mat%nbands)  
+         if ( l_non_rot ) then
+            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-              &
+            &                                   tscheme%wimp_lin(1)*opr*     &
+            &       intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         else
+            stencilA4 = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,A_mat%nbands)-    &
+            &                                   tscheme%wimp_lin(1)*opr*       &
+            &       intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,A_mat%nbands)  
+         end if
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,A_mat%kl
@@ -436,7 +477,11 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilC = intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,Cmat%nbands)
+         if ( l_non_rot ) then
+            stencilC = intcheb2rmult2lapl(a,b,m,i_r-1,Cmat%nbands)
+         else
+            stencilC = intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,Cmat%nbands)
+         end if
 
          !-- Roll array for band storage
          do n_band=1,Cmat%nbands
@@ -466,7 +511,11 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilB = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,B_mat%nbands)
+         if ( l_non_rot ) then
+            stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+         else
+            stencilB = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,B_mat%nbands)
+         end if
 
          !-- Roll array for band storage
          do n_band=1,B_mat%nbands
