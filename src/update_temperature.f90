@@ -115,11 +115,6 @@ contains
       call get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2), &
            &                dtemp_imp_Mloc(:,:,1))
 
-      !print*, 'T[n-2]', sum(abs(dtemp_imp_Mloc(:,:,3)))
-      !print*, 'T[n-1]', sum(abs(dtemp_imp_Mloc(:,:,2)))
-      !print*, 'T[n] (from imp)', sum(abs(dtemp_imp_Mloc(:,:,1)))
-      !print*, 'T[n]', sum(abs(temp_Mloc))
-
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
@@ -172,8 +167,6 @@ contains
 
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
-
-      !print*, 'T[n+1]', sum(abs(temp_Mloc))
 
       !-- Assemble second buoyancy part from T^{n+1}
       do n_r=1,n_r_max
