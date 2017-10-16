@@ -20,8 +20,9 @@ module rloop_integ
    real(cp), allocatable :: usT_grid(:), upT_grid(:)
    real(cp), allocatable :: usOm_grid(:), upOm_grid(:)
 
-   complex(cp), allocatable :: omMod(:), upMod(:)
+   complex(cp), allocatable :: omMod(:), upMod(:), usMod(:)
    real(cp), allocatable :: psi_grid(:), omMod_grid(:), upMod_grid(:)
+   real(cp), allocatable :: usMod_grid(:)
 
    public :: radial_loop_integ, initialize_radial_loop_integ, &
    &         finalize_radial_loop_integ
@@ -47,13 +48,16 @@ contains
       usOm_grid(:)   =0.0_cp
       upOm_grid(:)   =0.0_cp
 
-      allocate( omMod(n_m_max), upMod(n_m_max) )
-      allocate( psi_grid(n_phi_max), omMod_grid(n_phi_max), upMod_grid(n_phi_max) )
+      allocate( omMod(n_m_max), upMod(n_m_max), usMod(n_m_max) )
+      allocate( psi_grid(n_phi_max), omMod_grid(n_phi_max) )
+      allocate( usMod_grid(n_phi_max), upMod_grid(n_phi_max) )
       omMod(:)     =zero
       upMod(:)     =zero
+      usMod(:)     =zero
       omMod_grid(:)=0.0_cp
       psi_grid(:)  =0.0_cp
       upMod_grid(:)=0.0_cp
+      usMod_grid(:)=0.0_cp
 
    end subroutine initialize_radial_loop_integ
 !------------------------------------------------------------------------------
@@ -62,8 +66,8 @@ contains
       deallocate( usT_grid, upT_grid, usOm_grid, upOm_grid )
       deallocate( us_grid, up_grid, temp_grid, om_grid )
 
-      deallocate( upMod_grid, omMod_grid, psi_grid )
-      deallocate( upMod, omMod )
+      deallocate( usMod_grid, upMod_grid, omMod_grid, psi_grid )
+      deallocate( usMod, upMod, omMod )
 
    end subroutine finalize_radial_loop_integ
 !------------------------------------------------------------------------------
@@ -127,6 +131,8 @@ contains
             &              real(m,cp) )*           psi_Rloc(n_m,n_r)
             upMod(n_m) =-ro2ms2*dpsi_Rloc(n_m,n_r)+r(n_r)*psi_Rloc(n_m,n_r)
 
+            usMod(n_m) = ci*real(m,cp)*psi_Rloc(n_m,n_r)
+
          end do
 
          !-----------------
@@ -138,6 +144,7 @@ contains
          call ifft(temp_Rloc(:,n_r), temp_grid)
 
          call ifft(omMod, omMod_grid)
+         call ifft(usMod, usMod_grid)
          call ifft(upMod, upMod_grid)
          call ifft(psi_Rloc(:,n_r), psi_grid)
 
@@ -149,7 +156,7 @@ contains
             usT_grid(n_phi) =r(n_r)*us_grid(n_phi)*temp_grid(n_phi)
             upT_grid(n_phi) =       up_grid(n_phi)*temp_grid(n_phi)
 
-            usOm_grid(n_phi)=ro2ms2*r(n_r)**2*omMod_grid(n_phi)*us_grid(n_phi)
+            usOm_grid(n_phi)=ro2ms2*r(n_r)*omMod_grid(n_phi)*usMod_grid(n_phi)
             upOm_grid(n_phi)=r(n_r)*omMod_grid(n_phi)*upMod_grid(n_phi)
             tmp(n_phi)      =three*(r_cmb**2-three*r(n_r)**2)*omMod_grid(n_phi)*&
             &                                                   psi_grid(n_phi)
