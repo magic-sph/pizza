@@ -14,26 +14,20 @@ module update_temp_integ
    use useful, only: abortRun, roll
    use time_schemes, only: type_tscheme
    use matrix_types, only: type_bandmat_real, type_bordmat_real
-   use chebsparselib, only: intcheb2rmult2, intcheb2rmult2lapl
+   use chebsparselib, only: intcheb2rmult2hmult2, intcheb2rmult2hmult2lapl
 
    implicit none
    
    private
 
-   integer, parameter :: klA=4
-   integer, parameter :: kuA=4
-   integer, parameter :: klB=4
-   integer, parameter :: kuB=4
-   integer, parameter :: klC=2
-   integer, parameter :: kuC=2
-   integer, parameter :: n_boundaries=2
+   integer, parameter :: n_boundaries=2 ! Number of boundary conditions
 
    logical,  allocatable :: lTmat(:)
    complex(cp), allocatable :: rhs(:)
 
    type(type_bordmat_real), allocatable :: LHS_mat(:)
-   type(type_bandmat_real) :: RHSE_mat
-   type(type_bandmat_real), allocatable :: RHSI_mat(:)
+   type(type_bandmat_real) :: RHSE_mat, RHSI_mat
+   type(type_bandmat_real), allocatable :: RHSIL_mat(:)
 
    public :: update_temp_int, initialize_temp_integ, finalize_temp_integ, &
    &         get_temp_rhs_imp_int
@@ -44,20 +38,22 @@ contains
 
       integer :: n_m, m
 
-      call RHSE_mat%initialize(klB, kuB, n_r_max)
+      call RHSE_mat%initialize(8, 8, n_r_max)
+      call RHSI_mat%initialize(8, 8, n_r_max)
 
-      allocate( RHSI_mat(nMstart:nMstop) )
+      allocate( RHSIL_mat(nMstart:nMstop) )
       allocate( LHS_mat(nMstart:nMstop) )
 
       do n_m=nMstart,nMstop
-         call RHSI_mat(n_m)%initialize(klC, kuC, n_r_max)
-         call LHS_mat(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
+         call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
+         call LHS_mat(n_m)%initialize(8, 8, n_boundaries, n_r_max)
       end do
 
       call get_rhs_exp_mat(RHSE_mat)
+      call get_rhs_imp_mat(RHSI_mat)
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
-         call get_rhs_imp_mat(RHSI_mat(n_m), m)
+         call get_rhs_imp_lin_mat(RHSIL_mat(n_m), m)
       end do
 
       allocate( lTmat(nMstart:nMstop) )
@@ -75,11 +71,12 @@ contains
       integer :: n_m
 
       call RHSE_mat%finalize()
+      call RHSI_mat%finalize()
       do n_m=nMstart,nMstop
-         call RHSI_mat(n_m)%finalize()
+         call RHSIL_mat(n_m)%finalize()
          call LHS_mat(n_m)%finalize()
       end do
-      deallocate( LHS_mat, RHSI_mat, rhs, lTmat )
+      deallocate( LHS_mat, RHSIL_mat, rhs, lTmat )
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
@@ -244,20 +241,15 @@ contains
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
-
          do n_r=1,n_r_max
             rhs(n_r)= dtemp_imp_Mloc_last(n_m,n_r)
          end do
-
-         call RHSE_mat%mat_vec_mul(rhs)
-
+         call RHSI_mat%mat_vec_mul(rhs)
          rhs(1)=zero
          rhs(2)=zero
-
          do n_r=1,n_r_max
             dtemp_imp_Mloc_last(n_m,n_r)=rhs(n_r)
          end do
-
       end do
 
       if ( wimp /= 0.0_cp ) then
@@ -277,7 +269,7 @@ contains
             do n_r=1,n_r_max
                rhs(n_r)=work_Mloc(n_m,n_r)
             end do
-            call RHSI_mat(n_m)%mat_vec_mul(rhs)
+            call RHSIL_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero
             rhs(2)=zero
             do n_r=1,n_r_max
@@ -327,9 +319,9 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define the equations
-         stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-     &
-         &                       tscheme%wimp_lin(1)*opr*        &
-         &     intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         stencilA4 = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,A_mat%nbands)- &
+         &                       tscheme%wimp_lin(1)*opr*                &
+         &     intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,A_mat%nbands)  
 
          !-- Roll the array for band storage
          do n_band=1,A_mat%nbands
@@ -342,9 +334,9 @@ contains
       !-- Fill A3
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
-         stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-    &
-         &                       tscheme%wimp_lin(1)*opr*       &
-         &       intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         stencilA4 = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,A_mat%nbands)-    &
+         &                                   tscheme%wimp_lin(1)*opr*       &
+         &       intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,A_mat%nbands)  
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,A_mat%kl
@@ -410,7 +402,7 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+         stencilB = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,B_mat%nbands)
 
          !-- Roll array for band storage
          do n_band=1,B_mat%nbands
@@ -422,7 +414,7 @@ contains
 
    end subroutine get_rhs_exp_mat
 !------------------------------------------------------------------------------
-   subroutine get_rhs_imp_mat(Cmat, m)
+   subroutine get_rhs_imp_lin_mat(Cmat, m)
 
       !-- Input variable
       integer, intent(in) :: m
@@ -443,12 +435,42 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilC = intcheb2rmult2lapl(a,b,m,i_r-1,Cmat%nbands)
+         stencilC = intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,Cmat%nbands)
 
          !-- Roll array for band storage
          do n_band=1,Cmat%nbands
             if ( i_r+Cmat%ku+1-n_band <= Cmat%nlines .and. i_r+Cmat%ku+1-n_band >= 1 ) then
                Cmat%dat(n_band,i_r+Cmat%ku+1-n_band) = rscheme%rnorm*stencilC(n_band)
+            end if
+         end do
+      end do
+
+   end subroutine get_rhs_imp_lin_mat
+!------------------------------------------------------------------------------
+   subroutine get_rhs_imp_mat(B_mat)
+
+      !-- Output variable
+      type(type_bandmat_real), intent(inout) :: B_mat
+
+      !-- Local variables
+      real(cp) :: stencilB(B_mat%nbands)
+      real(cp) :: a, b
+      integer :: n_band, n_r, i_r
+
+      a = half*(r_cmb-r_icb)
+      b = half*(r_cmb+r_icb)
+
+      !-- Fill right-hand side matrix
+      do n_r=1,B_mat%nlines
+         i_r = n_r+n_boundaries
+
+         !-- Define right-hand side equations
+         stencilB = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,B_mat%nbands)
+
+         !-- Roll array for band storage
+         do n_band=1,B_mat%nbands
+            if ( i_r+B_mat%ku+1-n_band <= B_mat%nlines .and. i_r+B_mat%ku+1-n_band >= 1 ) then
+               B_mat%dat(n_band,i_r+B_mat%ku+1-n_band) = rscheme%rnorm*stencilB(n_band)
             end if
          end do
       end do
