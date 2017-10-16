@@ -4,7 +4,7 @@ module rloop_integ
    use constants, only: ci, one, half, two, three, zero
    use mem_alloc, only: bytes_allocated
    use namelists, only: ek, tadvz_fac, r_cmb
-   use radial_functions, only: or1, r, beta, oheight, dtcond, ekpump
+   use radial_functions, only: r, ekpump
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
    use courant_mod, only: courant
@@ -122,12 +122,19 @@ contains
          do n_m=1,n_m_max
             m = idx2m(n_m)
 
-            omMod(n_m) =-ro2ms2**2*r(n_r)**2*    d2psi_Rloc(n_m,n_r)    &
-            &           -ro2ms2*r(n_r)*(r_cmb**2-two*r(n_r)**2)*        &
-            &                                     dpsi_Rloc(n_m,n_r)    &
-            &           +( two*r_cmb**2*r(n_r)**2+ro2ms2**2*real(m,cp)* &
-            &              real(m,cp) )*           psi_Rloc(n_m,n_r)
-            upMod(n_m) =-ro2ms2*dpsi_Rloc(n_m,n_r)+r(n_r)*psi_Rloc(n_m,n_r)
+            if ( m == 0 ) then
+               upMod(n_m) =ro2ms2*up_Rloc(n_m,n_r)
+
+               omMod(n_m) =ro2ms2*r(n_r)**2*om_Rloc(n_m,n_r)
+            else
+               upMod(n_m) =-ro2ms2*dpsi_Rloc(n_m,n_r)+r(n_r)*psi_Rloc(n_m,n_r)
+
+               omMod(n_m) =-ro2ms2**2*r(n_r)**2*    d2psi_Rloc(n_m,n_r)    &
+               &           -ro2ms2*r(n_r)*(r_cmb**2-two*r(n_r)**2)*        &
+               &                                     dpsi_Rloc(n_m,n_r)    &
+               &           +( two*r_cmb**2*r(n_r)**2+ro2ms2**2*real(m,cp)* &
+               &              real(m,cp) )*           psi_Rloc(n_m,n_r)
+            end if
 
             usMod(n_m) = ci*real(m,cp)*psi_Rloc(n_m,n_r)
 
@@ -151,8 +158,8 @@ contains
 
          !-- Get nonlinear products
          do n_phi=1,n_phi_max
-            usT_grid(n_phi) =r(n_r)*us_grid(n_phi)*temp_grid(n_phi)
-            upT_grid(n_phi) =       up_grid(n_phi)*temp_grid(n_phi)
+            usT_grid(n_phi) =usMod_grid(n_phi)*temp_grid(n_phi)
+            upT_grid(n_phi) =upMod_grid(n_phi)*temp_grid(n_phi)
 
             !usOm_grid(n_phi)=ro2ms2*r(n_r)**3*omMod_grid(n_phi)*usMod_grid(n_phi)
             usOm_grid(n_phi)=       usMod_grid(n_phi)*omMod_grid(n_phi)
@@ -167,9 +174,8 @@ contains
 
          do n_m=1,n_m_max
             m = idx2m(n_m)
-            dtempdt_Rloc(n_m,n_r)=-or1(n_r)*ci*m*dtempdt_Rloc(n_m,n_r) &
-            &                     -(one-tadvz_fac)*beta(n_r)*or1(n_r)* &
-            &                     dVsT_Rloc(n_m,n_r)
+            dtempdt_Rloc(n_m,n_r)=-ci*m*dtempdt_Rloc(n_m,n_r)              &
+            &                     +(one-tadvz_fac)*r(n_r)*dVsT_Rloc(n_m,n_r)
             if ( m == 0 ) then
                dpsidt_Rloc(n_m,n_r)=-usom
             else

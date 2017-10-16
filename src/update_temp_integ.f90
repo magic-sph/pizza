@@ -14,7 +14,8 @@ module update_temp_integ
    use useful, only: abortRun, roll
    use time_schemes, only: type_tscheme
    use matrix_types, only: type_bandmat_real, type_bordmat_real
-   use chebsparselib, only: intcheb2rmult2hmult2, intcheb2rmult2hmult2lapl
+   use chebsparselib, only: intcheb2rmult2hmult2, intcheb2rmult2hmult2lapl, &
+       &                    intcheb2rmult1
 
    implicit none
    
@@ -38,7 +39,7 @@ contains
 
       integer :: n_m, m
 
-      call RHSE_mat%initialize(8, 8, n_r_max)
+      call RHSE_mat%initialize(3, 3, n_r_max)
       call RHSI_mat%initialize(8, 8, n_r_max)
 
       allocate( RHSIL_mat(nMstart:nMstop) )
@@ -80,7 +81,7 @@ contains
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
-   subroutine update_temp_int(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc, &
+   subroutine update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,&
               &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,  &
               &           tscheme, lMat, l_roll_imp, l_log_next)
 
@@ -89,7 +90,7 @@ contains
       logical,            intent(in) :: lMat
       logical,            intent(in) :: l_roll_imp
       logical,            intent(in) :: l_log_next
-      complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),        intent(in) :: psi_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Output variables
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
@@ -123,24 +124,24 @@ contains
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
+            m = idx2m(n_m)
             dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
-            &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
-            &                     -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
-            &                     tadvz_fac*beta(n_r)*tcond(n_r))
+            &         -(r_cmb**2-r(n_r)**2)*work_Mloc(n_m,n_r)    &
+            &                 -ci*real(m,cp)*psi_Mloc(n_m,n_r)*(  &
+            &               (r_cmb**2-r(n_r)**2)*dtcond(n_r)+     &
+            &                    tadvz_fac*r(n_r)*tcond(n_r) )
          end do
       end do
 
       !-- Transform the explicit part to chebyshev space
       call rscheme%costf1(dtemp_exp_Mloc(:,:,1), nMstart, nMstop, n_r_max)
 
-      !-- Matrix-vector multiplication by the operator \int\int r^2 .
+      !-- Matrix-vector multiplication by the operator \int\int r .
       do n_m=nMstart,nMstop
          do n_r=1,n_r_max
             rhs(n_r)=dtemp_exp_Mloc(n_m,n_r,1)
          end do
-
          call RHSE_mat%mat_vec_mul(rhs)
-
          rhs(1)=zero
          rhs(2)=zero
          do n_r=1,n_r_max
@@ -402,7 +403,7 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilB = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,B_mat%nbands)
+         stencilB = intcheb2rmult1(a,b,i_r-1,B_mat%nbands)
 
          !-- Roll array for band storage
          do n_band=1,B_mat%nbands

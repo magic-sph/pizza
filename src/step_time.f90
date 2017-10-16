@@ -316,7 +316,7 @@ contains
                  &         buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp, &
                  &         l_vphi_bal_calc)
          else
-            call update_temp_int(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc, &
+            call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc, &
                  &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,  &
                  &           tscheme, lMat, l_roll_imp, l_log_next)
             call update_psi_int(psi_Mloc, dpsi_Mloc, d2psi_Mloc, om_Mloc,    &
