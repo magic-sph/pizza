@@ -19,8 +19,8 @@ module update_psi_integ
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,          &
        &                    intcheb4rmult4, rmult2, intcheb1rmult1,           &
        &                    intcheb2rmult2, intcheb4rmult4hmult8laplrot2,     &
-       &                    intcheb4rmult4hmult8laplrot, intcheb4rmult4hmult8,&
-       &                    intcheb4rmult4hmult6, intcheb4hmult2
+       &                    intcheb4rmult4hmult8laplrot, intcheb4rmult4hmult6,&
+       &                    intcheb4hmult2
 
 
    implicit none
@@ -33,7 +33,7 @@ module update_psi_integ
    type(type_bordmat_complex), allocatable :: LHS_mat(:)
    type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
-   type(type_bandmat_real) :: RHSE_mat(3)
+   type(type_bandmat_real) :: RHSE_mat(2)
 
    public :: update_psi_int, initialize_psi_integ, finalize_psi_integ, &
    &         get_psi_rhs_imp_int
@@ -72,8 +72,7 @@ contains
          end do
       else
          call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-         call RHSE_mat(2)%initialize(16, 16, n_r_max) ! This is m /= 0
-         call RHSE_mat(3)%initialize(6, 6, n_r_max) ! This is m /= 0
+         call RHSE_mat(2)%initialize(6, 6, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
@@ -91,7 +90,6 @@ contains
       !-- Fill matrices
       call get_rhs_exp_mat(RHSE_mat(1),1)
       call get_rhs_exp_mat(RHSE_mat(2),2)
-      call get_adv_exp_mat(RHSE_mat(3))
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
          call get_rhs_imp_mat(RHSI_mat(n_m), m)
@@ -216,7 +214,7 @@ contains
          if ( m == 0 ) then
             call RHSE_mat(1)%mat_vec_mul(rhs)
          else
-            call RHSE_mat(3)%mat_vec_mul(rhs)
+            call RHSE_mat(2)%mat_vec_mul(rhs)
             rhs(3)=zero
             rhs(4)=zero
          end if
@@ -239,9 +237,7 @@ contains
             do n_r=1,n_r_max
                rhs(n_r)=buo_imp_Mloc(n_m,n_r)
             end do
-
             call RHSE_mat(2)%mat_vec_mul(rhs)
-
             rhs(1)=zero
             rhs(2)=zero
             rhs(3)=zero
@@ -723,7 +719,7 @@ contains
             if ( m0 == 1) then
                stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
             else
-               stencilD = intcheb4rmult4hmult8(a,b,r_cmb,i_r-1,D_mat%nbands)
+               stencilD = intcheb4hmult2(a,b,r_cmb,i_r-1,D_mat%nbands)
             end if
          end if
 
@@ -736,45 +732,6 @@ contains
       end do
 
    end subroutine get_rhs_exp_mat
-!------------------------------------------------------------------------------
-   subroutine get_adv_exp_mat(D_mat)
-      !
-      ! This corresponds to the matrix that goes in front of the advection terms
-      !
-
-      !-- Output variable
-      type(type_bandmat_real), intent(inout) :: D_mat
-
-      !-- Local variables
-      real(cp) :: stencilD(D_mat%nbands)
-      real(cp) :: a, b
-      integer :: n_band, n_r, i_r, n_bounds
-
-      a = half*(r_cmb-r_icb)
-      b = half*(r_cmb+r_icb)
-
-      n_bounds = 4
-
-      !-- Fill right-hand side matrix
-      do n_r=1,D_mat%nlines
-         i_r = n_r+n_bounds
-
-         !-- Define right-hand side equations
-         if ( l_non_rot ) then
-            stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
-         else
-            stencilD = intcheb4hmult2(a,b,r_cmb,i_r-1,D_mat%nbands)
-         end if
-
-         !-- Roll array for band storage
-         do n_band=1,D_mat%nbands
-            if ( i_r+D_mat%ku+1-n_band <= D_mat%nlines .and. i_r+D_mat%ku+1-n_band >= 1 ) then
-               D_mat%dat(n_band,i_r+D_mat%ku+1-n_band) = rscheme%rnorm*stencilD(n_band)
-            end if
-         end do
-      end do
-
-   end subroutine get_adv_exp_mat
 !------------------------------------------------------------------------------
    subroutine get_rhs_imp_mat(B_mat, m)
       !

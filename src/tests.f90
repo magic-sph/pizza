@@ -13,7 +13,7 @@ module tests
    use algebra, only: sgefa, rgesl, prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun
    use chebsparselib, only: intcheb2rmult1, rmult1, intcheb1, intcheb4, &
-       &                    intcheb2, eye, intcheb4rmult4, intcheb4rmult4hmult8
+       &                    intcheb2, eye, intcheb4rmult4, intcheb4rmult4hmult6
    use matrix_types, only: type_bandmat_real
 
    implicit none
@@ -659,7 +659,7 @@ contains
       integer :: file_handle, n_r_max_loc, n_in, n_r
       real(cp) :: r_cmb, r_icb, eps, alph1, alph2, err
       real(cp) :: ro
-      type(type_bandmat_real) :: I4_mat, I4R4_mat, I4R4H8_mat
+      type(type_bandmat_real) :: I4_mat, I4R4_mat, I4R4H6_mat
 
       ro = 4.15_cp
 
@@ -693,16 +693,16 @@ contains
 
             call I4_mat%initialize(4, 4, n_r_max_loc)
             call I4R4_mat%initialize(8, 8, n_r_max_loc)
-            call I4R4H8_mat%initialize(16, 16, n_r_max_loc)
+            call I4R4H6_mat%initialize(14, 14, n_r_max_loc)
 
             call fill_i4_mat(I4_mat, r_cmb, r_icb, 4)
             call fill_i4r4_mat(I4R4_mat, r_cmb, r_icb, 4)
-            call fill_i4r4h8_mat(I4R4H8_mat, r_cmb, r_icb, ro, 4)
+            call fill_i4r4h6_mat(I4R4H6_mat, r_cmb, r_icb, ro, 4)
 
             !-- Define a RHS
             rhs1(:) = sqrt(r_loc)
             rhs2(:) = sqrt(r_loc)*or2(:)*or2(:)
-            rhs3(:) = sqrt(r_loc)/(ro**2-r_loc(:)**2)**4
+            rhs3(:) = sqrt(r_loc)/(ro**2-r_loc(:)**2)**3
 
             !-- Bring it to Chebyshev space
             call rscheme%costf1(rhs1, n_r_max_loc)
@@ -713,7 +713,7 @@ contains
             !call I4_mat%mat_vec_mul(rhs1)
             !call I4R4_mat%mat_vec_mul(rhs2)
             call I4R4_mat%mat_vec_mul(rhs1)
-            call I4R4H8_mat%mat_vec_mul(rhs3)
+            call I4R4H6_mat%mat_vec_mul(rhs3)
             rhs1(1)=0.0_cp
             rhs1(2)=0.0_cp
             rhs1(3)=0.0_cp
@@ -734,7 +734,7 @@ contains
 
             call I4_mat%finalize()
             call I4R4_mat%finalize()
-            call I4R4H8_mat%finalize()
+            call I4R4H6_mat%finalize()
 
             call rscheme%finalize()
             deallocate( r_loc, rhs1, rhs2, rhs3, or2 )
@@ -816,7 +816,7 @@ contains
 
    end subroutine fill_i4r4_mat
 !------------------------------------------------------------------------------
-   subroutine fill_i4r4h8_mat(D_mat, r_cmb, r_icb, ro, n_boundaries)
+   subroutine fill_i4r4h6_mat(D_mat, r_cmb, r_icb, ro, n_boundaries)
 
       !-- Input variables
       real(cp), intent(in) :: r_cmb
@@ -840,7 +840,7 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilD = intcheb4rmult4hmult8(a,b,ro,i_r-1,D_mat%nbands)
+         stencilD = intcheb4rmult4hmult6(a,b,ro,i_r-1,D_mat%nbands)
 
          !-- Roll array for band storage
          do n_band=1,D_mat%nbands
@@ -850,7 +850,7 @@ contains
          end do
       end do
 
-   end subroutine fill_i4r4h8_mat
+   end subroutine fill_i4r4h6_mat
 !------------------------------------------------------------------------------
    subroutine test_radial_der(nMstart, nMstop)
 

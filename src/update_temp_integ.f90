@@ -5,7 +5,7 @@ module update_temp_integ
    use constants, only: zero, ci, half
    use pre_calculations, only: opr
    use namelists, only: kbott, ktopt, tadvz_fac, ra, r_cmb, r_icb
-   use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
+   use radial_functions, only: rscheme, or1, r, dtcond, tcond, beta, &
        &                       rgrav
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m
@@ -112,8 +112,9 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*or1(n_r) &
-               &                      *ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*r(n_r)**3*    &
+               &                      (r_cmb**2-r(n_r)**2)**3*ra*opr*ci*real(m,cp)*&
+               &                      temp_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -199,9 +200,10 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-&
-               &               tscheme%wimp_lin(1)*rgrav(n_r)*or1(n_r) &
-               &               *ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-      &
+               &               tscheme%wimp_lin(1)*rgrav(n_r)*r(n_r)**3*     &
+               &               (r_cmb**2-r(n_r)**2)**3*ra*opr*ci*real(m,cp)* &
+               &                                    temp_Mloc(n_m,n_r)
             end if
          end do
       end do
