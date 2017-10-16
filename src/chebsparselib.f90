@@ -16,10 +16,10 @@ module chebsparselib
    &         rmult2, intcheb2rmult2, intcheb1rmult1, intcheb2rmult2lapl, &
    &         intcheb4rmult4lapl2, intcheb4rmult4lapl, intcheb4rmult4,    &
    &         intcheb4rmult4hmult6, intcheb4rmult4hmult8laplrot,          &
-   &         intcheb4rmult4hmult8laplrot2, intcheb4hmult2,               &
+   &         intcheb4rmult4hmult8laplrot2, intcheb4hmult2, intcheb3,     &
    &         intcheb2rmult2hmult2, intcheb2rmult2hmult2lapl,             &
    &         intcheb3rmult2hmult6laplrotaxi, intcheb3rmult2hmult6vpaxi,  &
-   &         intcheb3hmult2
+   &         intcheb3hmult2, intcheb3rmult2laplaxi, intcheb3rmult2der1
 
 contains
 
@@ -454,6 +454,34 @@ contains
 
    end function intcheb2rmult2hmult2lapl
 !------------------------------------------------------------------------------
+   function intcheb3(a, n, len_stencil) result(stencil)
+
+      !-- Input variables
+      real(cp), intent(in) :: a
+      integer,  intent(in) :: n
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable 
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variables
+      real(cp) :: dn
+      integer :: ku
+
+      dn = real(n, cp)
+      ku = (len_stencil-1)/2
+
+      stencil(1:ku-1)           =0.0_cp
+      stencil(ku-2)             =-a**3/(8.0_cp*dn*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku)               =3.0_cp*a**3/(8.0_cp*dn*(dn-1.0_cp)*(dn+2.0_cp))
+      stencil(ku+2)             =-3.0_cp*a**3/(8.0_cp*dn*(dn-2.0_cp)*(dn+1.0_cp))
+      stencil(ku+4)             =a**3/(8.0_cp*dn*(dn-2.0_cp)*(dn-1.0_cp))
+      stencil(ku+5:len_stencil) =0.0_cp
+
+      stencil = mirror_stencil(n, len_stencil)
+
+   end function intcheb3
+!------------------------------------------------------------------------------
    function intcheb3hmult2(a, b, r, n, len_stencil) result(stencil)
 
       !-- Input variables
@@ -499,6 +527,43 @@ contains
       stencil = mirror_stencil(n, len_stencil)
 
    end function intcheb3hmult2
+!------------------------------------------------------------------------------
+   function intcheb3rmult2der1(a, b, n, len_stencil) result(stencil)
+
+      !-- Input variables
+      real(cp), intent(in) :: a
+      real(cp), intent(in) :: b
+      integer,  intent(in) :: n
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable 
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variables
+      real(cp) :: dn
+      integer :: ku
+
+      dn = real(n, cp)
+      ku = (len_stencil-1)/2
+
+      stencil(1:ku-4) = 0.0_cp
+      stencil(ku-3)=a**4*(dn+4.0_cp)/(16.0_cp*dn*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku-2)=a**3*b*(dn+3.0_cp)/(4.0_cp*dn*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku-1)=-a**2*(3.0_cp*a**2-2.0_cp*b**2*dn+2.0_cp*b**2)/(8.0_cp &
+      &             *dn*(dn-1.0_cp)*(dn+1.0_cp))
+      stencil(ku)  =-a**3*b*(dn+5.0_cp)/(4.0_cp*dn*(dn-1.0_cp)*(dn+2.0_cp))
+      stencil(ku+1)=-a**2*(a**2*dn**2-10.0_cp*a**2+4.0_cp*b**2*dn**2-16.0_cp &
+      &             *b**2)/(8.0_cp*(dn-2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku+2)=-a**3*b*(dn-5.0_cp)/(4.0_cp*dn*(dn-2.0_cp)*(dn+1.0_cp))
+      stencil(ku+3)=a**2*(3.0_cp*a**2+2.0_cp*b**2*dn+2.0_cp*b**2)/(8.0_cp &
+      &             *dn*(dn-1.0_cp)*(dn+1.0_cp))
+      stencil(ku+4)=a**3*b*(dn-3.0_cp)/(4.0_cp*dn*(dn-2.0_cp)*(dn-1.0_cp))
+      stencil(ku+5)=a**4*(dn-4.0_cp)/(16.0_cp*dn*(dn-2.0_cp)*(dn-1.0_cp))
+      stencil(ku+6:len_stencil) = 0.0_cp
+
+      stencil = mirror_stencil(n, len_stencil)
+
+   end function intcheb3rmult2der1
 !------------------------------------------------------------------------------
    function intcheb3rmult2hmult6vpaxi(a, b, r, n, len_stencil) result(stencil)
 
@@ -700,6 +765,37 @@ contains
       stencil = mirror_stencil(n, len_stencil)
 
    end function intcheb3rmult2hmult6vpaxi
+!------------------------------------------------------------------------------
+   function intcheb3rmult2laplaxi(a, b, n, len_stencil) result(stencil)
+
+      !-- Input variables
+      real(cp), intent(in) :: a
+      real(cp), intent(in) :: b
+      integer,  intent(in) :: n
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable 
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variables
+      real(cp) :: dn
+      integer :: ku
+
+      dn = real(n, cp)
+      ku = (len_stencil-1)/2
+
+      stencil(1:ku-2) = 0.0_cp
+      stencil(ku-1)=a**2*(dn+2.0_cp)*(dn+4.0_cp)/(4.0_cp*dn*(dn+1.0_cp))
+      stencil(ku)  =a*b*(2.0_cp*dn+5.0_cp)/(2.0_cp*dn)
+      stencil(ku+1)=(a**2*dn**2-4.0_cp*a**2+2.0_cp*b**2*dn**2-2.0_cp*b**2 &
+      &             )/(2.0_cp*(dn-1.0_cp)*(dn+1.0_cp))
+      stencil(ku+2)=a*b*(2.0_cp*dn-5.0_cp)/(2.0_cp*dn)
+      stencil(ku+3)=a**2*(dn-4.0_cp)*(dn-2.0_cp)/(4.0_cp*dn*(dn-1.0_cp))
+      stencil(ku+4:len_stencil) = 0.0_cp
+
+      stencil = mirror_stencil(n, len_stencil)
+
+   end function intcheb3rmult2laplaxi
 !------------------------------------------------------------------------------
    function intcheb3rmult2hmult6laplrotaxi(a, b, r, n, len_stencil) result(stencil)
 

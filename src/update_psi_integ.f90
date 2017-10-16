@@ -21,8 +21,9 @@ module update_psi_integ
        &                    intcheb2rmult2, intcheb4rmult4hmult8laplrot2,     &
        &                    intcheb4rmult4hmult8laplrot, intcheb4rmult4hmult6,&
        &                    intcheb4hmult2, intcheb3hmult2,                   &
-       &                    intcheb3rmult2hmult6vpaxi,                        &
-       &                    intcheb3rmult2hmult6laplrotaxi
+       &                    intcheb3rmult2hmult6vpaxi, intcheb3rmult2der1,    &
+       &                    intcheb3rmult2hmult6laplrotaxi, intcheb3,         &
+       &                    intcheb3rmult2laplaxi
 
 
    implicit none
@@ -58,14 +59,14 @@ contains
 
       !-- Initialize matrices
       if ( l_non_rot ) then
-         call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+         call RHSE_mat(1)%initialize(3, 3, n_r_max) ! This is m  = 0
          call RHSE_mat(2)%initialize(4, 4, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
                call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
                call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
-               call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
+               call LHS_mat(n_m)%initialize(4, 4, 3, n_r_max)
             else
                call RHSI_mat(n_m)%initialize(6, 6, n_r_max)
                call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
@@ -496,9 +497,9 @@ contains
          !-- Define the equations
          if ( l_non_rot ) then
             if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+               stencilA4 = -intcheb3rmult2der1(a,b,i_r-1,A_mat%nbands)+      &
+               &           tscheme%wimp_lin(1)*(                             &
+               &           intcheb3rmult2laplaxi(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
@@ -540,9 +541,9 @@ contains
 
          if ( l_non_rot ) then
             if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &           tscheme%wimp_lin(1)*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+               stencilA4 = -intcheb3rmult2der1(a,b,i_r-1,A_mat%nbands)+      &
+               &           tscheme%wimp_lin(1)*(                             &
+               &           intcheb3rmult2laplaxi(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
@@ -700,7 +701,7 @@ contains
          !-- Define right-hand side equations
          if ( l_non_rot ) then
             if ( m0 == 1) then
-               stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
+               stencilD = intcheb3(a,i_r-1,D_mat%nbands)
             else
                stencilD = intcheb4(a,i_r-1,D_mat%nbands)
             end if
@@ -755,7 +756,7 @@ contains
          !-- Define right-hand side equations
          if ( l_non_rot ) then
             if ( m == 0 ) then
-               stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+               stencilB = -intcheb3rmult2der1(a,b,i_r-1,B_mat%nbands)
             else
                stencilB = -intcheb4rmult4lapl(a,b,m,i_r-1,B_mat%nbands)
             end if
@@ -811,8 +812,7 @@ contains
          !-- Define right-hand side equations
          if ( l_non_rot ) then
             if ( m == 0 ) then
-               stencilC =               rmult2(a,b,i_r-1,Cmat%nbands)- &
-               &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands)
+               stencilC = -intcheb3rmult2laplaxi(a,b,i_r-1,Cmat%nbands)
                CorSten  = 0.0_cp
             else
                stencilC = -intcheb4rmult4lapl2(a,b,m,i_r-1,Cmat%nbands)

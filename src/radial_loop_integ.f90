@@ -114,8 +114,6 @@ contains
                omMod(n_m) =-r(n_r)**2*            d2psi_Rloc(n_m,n_r)    &
                &           -r(n_r)*                dpsi_Rloc(n_m,n_r)    &
                &           +real(m,cp)*real(m,cp)*  psi_Rloc(n_m,n_r)
-
-               usMod(n_m) = ci*real(m,cp)*psi_Rloc(n_m,n_r)
             else
                upMod(n_m) =-ro2ms2*dpsi_Rloc(n_m,n_r)+r(n_r)*psi_Rloc(n_m,n_r)
 
@@ -124,16 +122,14 @@ contains
                &                                     dpsi_Rloc(n_m,n_r)    &
                &           +( two*r_cmb**2*r(n_r)**2+ro2ms2**2*real(m,cp)* &
                &              real(m,cp) )*           psi_Rloc(n_m,n_r)
-
-               usMod(n_m) = ci*real(m,cp)*psi_Rloc(n_m,n_r)
             end if
+            usMod(n_m) = ci*real(m,cp)*psi_Rloc(n_m,n_r)
 
             if ( m == 0 ) then ! Add first order contribution for this term
                                ! us(m=0) * vortz(m=0)
                us_fluct = half*ek*ekpump(n_r)*up_Rloc(n_m,n_r)
             else
-               !us_fluct = us_Rloc(n_m,n_r)
-               us_fluct = ci*real(m,cp)*psi_Rloc(n_m,n_r)*or1(n_r)
+               us_fluct = usMod(n_m)*or1(n_r)
             end if
 
             !-- Calculate Reynolds stress for axisymmetric equation
