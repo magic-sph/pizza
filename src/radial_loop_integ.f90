@@ -96,8 +96,6 @@ contains
       !-- Local variables
       real(cp) :: usom, ro2ms2
       complex(cp) :: us_fluct
-      real(cp) :: tmp(n_phi_max)
-      complex(cp) :: tmp_hat(n_m_max)
       integer :: n_r, n_phi, n_m, m, idx_m0
 
       idx_m0 = m2idx(0)
@@ -156,10 +154,9 @@ contains
             usT_grid(n_phi) =r(n_r)*us_grid(n_phi)*temp_grid(n_phi)
             upT_grid(n_phi) =       up_grid(n_phi)*temp_grid(n_phi)
 
-            usOm_grid(n_phi)=ro2ms2*r(n_r)*omMod_grid(n_phi)*usMod_grid(n_phi)
+            !usOm_grid(n_phi)=ro2ms2*r(n_r)**3*omMod_grid(n_phi)*usMod_grid(n_phi)
+            usOm_grid(n_phi)=       usMod_grid(n_phi)*omMod_grid(n_phi)
             upOm_grid(n_phi)=r(n_r)*omMod_grid(n_phi)*upMod_grid(n_phi)
-            tmp(n_phi)      =three*(r_cmb**2-three*r(n_r)**2)*omMod_grid(n_phi)*&
-            &                                                   psi_grid(n_phi)
          end do
 
          !-- Bring data back on the spectral domain
@@ -167,7 +164,6 @@ contains
          call fft(usT_grid, dVsT_Rloc(:,n_r))
          call fft(upOm_grid, dpsidt_Rloc(:,n_r))
          call fft(usOm_grid, dVsOm_Rloc(:,n_r))
-         call fft(tmp, tmp_hat)
 
          do n_m=1,n_m_max
             m = idx2m(n_m)
@@ -177,7 +173,9 @@ contains
             if ( m == 0 ) then
                dpsidt_Rloc(n_m,n_r)=-usom
             else
-               dpsidt_Rloc(n_m,n_r)=-ci*m*dpsidt_Rloc(n_m,n_r)+tmp_hat(n_m)
+               dpsidt_Rloc(n_m,n_r)=-ci*m*dpsidt_Rloc(n_m,n_r)+ &
+               &         three*(r_cmb**2-three*r(n_r)**2)*dVsOm_Rloc(n_m,n_r)
+               dVsOm_Rloc(n_m, n_r)=ro2ms2*r(n_r)**3*dVsOm_Rloc(n_m,n_r)
             end if
          end do
 
