@@ -302,9 +302,15 @@ contains
 
          call LHS_mat(n_m)%solve(rhs, n_r_max)
 
-         do n_cheb=1,rscheme%n_max
-            psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
-         end do
+         if ( m > 0 ) then
+            do n_cheb=1,rscheme%n_max
+               psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
+            end do
+         else
+            do n_cheb=1,rscheme%n_max
+               psi_Mloc(n_m,n_cheb)=0.0_cp
+            end do
+         end if
 
       end do
 
@@ -497,8 +503,8 @@ contains
          !-- Define the equations
          if ( l_non_rot ) then
             if ( m == 0 ) then
-               stencilA4 = -intcheb3rmult2der1(a,b,i_r-1,A_mat%nbands)+      &
-               &           tscheme%wimp_lin(1)*(                             &
+               stencilA4 = -intcheb3rmult2der1(a,b,i_r-1,A_mat%nbands)+    &
+               &           tscheme%wimp_lin(1)*(                           &
                &           intcheb3rmult2laplaxi(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
@@ -541,8 +547,8 @@ contains
 
          if ( l_non_rot ) then
             if ( m == 0 ) then
-               stencilA4 = -intcheb3rmult2der1(a,b,i_r-1,A_mat%nbands)+      &
-               &           tscheme%wimp_lin(1)*(                             &
+               stencilA4 = -intcheb3rmult2der1(a,b,i_r-1,A_mat%nbands)+    &
+               &           tscheme%wimp_lin(1)*(                           &
                &           intcheb3rmult2laplaxi(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
