@@ -302,15 +302,9 @@ contains
 
          call LHS_mat(n_m)%solve(rhs, n_r_max)
 
-         if ( m > 0 ) then
-            do n_cheb=1,rscheme%n_max
-               psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
-            end do
-         else
-            do n_cheb=1,rscheme%n_max
-               psi_Mloc(n_m,n_cheb)=0.0_cp
-            end do
-         end if
+         do n_cheb=1,rscheme%n_max
+            psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
+         end do
 
       end do
 
