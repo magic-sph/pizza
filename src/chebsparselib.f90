@@ -336,9 +336,8 @@ contains
       &             (dn+1.0_cp))
       stencil(ku-1)=-a**2*(-a**4*dn-5.0_cp*a**4-48.0_cp*a**2*b**2+8.0_cp* &
       &             a**2*r**2+16.0_cp*b**4*dn-16.0_cp*b**4-16.0_cp*b**2*  &
-      &             dn*r**2+16.0_cp &
-      &             *b**2*r**2)/(64.0_cp*dn*(dn-1.0_cp)*(dn+1.0_cp))
-      stencil(ku)=-a**3*b*(-a**2-2.0_cp*b**2+r**2)/(4.0_cp*dn*(dn-1.0_cp))
+      &             dn*r**2+16.0_cp*b**2*r**2)/(64.0_cp*dn*(dn-1.0_cp)*(dn+1.0_cp))
+      stencil(ku)  =-a**3*b*(-a**2-2.0_cp*b**2+r**2)/(4.0_cp*dn*(dn-1.0_cp))
       stencil(ku+1)=-a**2*(-a**4-12.0_cp*a**2*b**2+2.0_cp*a**2*r**2-8.0_cp    &
       &             *b**4+8.0_cp*b**2*r**2)/(16.0_cp*(dn-1.0_cp)*(dn+1.0_cp))
       stencil(ku+2)=-a**3*b*(-a**2-2.0_cp*b**2+r**2)/(4.0_cp*dn*(dn+1.0_cp))
@@ -471,10 +470,13 @@ contains
       dn = real(n, cp)
       ku = (len_stencil-1)/2
 
-      stencil(1:ku-1)           =0.0_cp
+      stencil(1:ku-3)           =0.0_cp
       stencil(ku-2)             =-a**3/(8.0_cp*dn*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku-1)             =0.0_cp
       stencil(ku)               =3.0_cp*a**3/(8.0_cp*dn*(dn-1.0_cp)*(dn+2.0_cp))
+      stencil(ku+1)             =0.0_cp
       stencil(ku+2)             =-3.0_cp*a**3/(8.0_cp*dn*(dn-2.0_cp)*(dn+1.0_cp))
+      stencil(ku+3)             =0.0_cp
       stencil(ku+4)             =a**3/(8.0_cp*dn*(dn-2.0_cp)*(dn-1.0_cp))
       stencil(ku+5:len_stencil) =0.0_cp
 
@@ -656,7 +658,7 @@ contains
       &              *b**4*dn*r**4+768.0_cp*b**4*r**4-128.0_cp*b**2*dn**2*r**6+384.0_cp* &
       &              b**2*dn*r**6-256.0_cp*b**2*r**6)/(512.0_cp*dn*(dn-2.0_cp)*(dn-1.0_cp &
       &              )*(dn+1.0_cp))
-      stencil(ku)=-a**3*b*(-56.0_cp*a**6*dn**2-147.0_cp*a**6*dn+1400.0_cp &
+      stencil(ku)  =-a**3*b*(-56.0_cp*a**6*dn**2-147.0_cp*a**6*dn+1400.0_cp &
       &              *a**6-560.0_cp*a**4*b**2*dn**2-1470.0_cp*a**4*b**2*dn+11060.0_cp*a**4* &
       &              b**2+180.0_cp*a**4*dn**2*r**2+480.0_cp*a**4*dn*r**2-3600.0_cp*a**4* &
       &              r**2-896.0_cp*a**2*b**4*dn**2-2352.0_cp*a**2*b**4*dn+12992.0_cp*a** &
@@ -897,7 +899,7 @@ contains
       &             *b**2*r**5+32.0_cp*dn**4*r**7+96.0_cp*dn**3*r**7-256.0_cp*dn**2*r** &
       &             7-384.0_cp*dn*r**7+512.0_cp*r**7)/(128.0_cp*dn*r*(dn-2.0_cp)*(dn-1.0_cp &
       &             )*(dn+1.0_cp))
-      stencil(ku)=a*(3.0_cp*a**8*dn-24.0_cp*a**8+90.0_cp*a**6*b**2*dn-540.0_cp &
+      stencil(ku)  =a*(3.0_cp*a**8*dn-24.0_cp*a**8+90.0_cp*a**6*b**2*dn-540.0_cp &
       &             *a**6*b**2-560.0_cp*a**6*b*dn**4*r-980.0_cp*a**6*b*dn**3*r+12060.0_cp &
       &             *a**6*b*dn**2*r+11090.0_cp*a**6*b*dn*r-82300.0_cp*a**6*b*r+240.0_cp &
       &             *a**4*b**4*dn-960.0_cp*a**4*b**4-4480.0_cp*a**4*b**3*dn**4*r-7840.0_cp &

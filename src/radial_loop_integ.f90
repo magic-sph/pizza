@@ -160,7 +160,7 @@ contains
 
             !usOm_grid(n_phi)=ro2ms2*r(n_r)**3*omMod_grid(n_phi)*usMod_grid(n_phi)
             usOm_grid(n_phi)=       usMod_grid(n_phi)*omMod_grid(n_phi)
-            upOm_grid(n_phi)=r(n_r)*omMod_grid(n_phi)*upMod_grid(n_phi)
+            upOm_grid(n_phi)=r(n_r)*upMod_grid(n_phi)*omMod_grid(n_phi)
          end do
 
          !-- Bring data back on the spectral domain
