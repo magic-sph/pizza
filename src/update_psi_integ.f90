@@ -589,23 +589,24 @@ contains
                   A_mat%A1(1,n_r)=rscheme%rnorm*( rscheme%d2rMat(1,n_r)-or1(1)*&
                   &                                rscheme%drMat(1,n_r) )
                else ! Rigid
-                  A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
+                  A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
                end if
                if ( kbotv == 1 ) then ! Stress free
                   A_mat%A1(2,n_r)=rscheme%rnorm*( rscheme%d2rMat(2,n_r) &
                   &                  -or1(n_r_max)*rscheme%drMat(2,n_r) )
                else ! Rigid
-                  A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
+                  A_mat%A1(2,n_r)=rscheme%rnorm*(rscheme%drMat(2,n_r)+  &
+                  &                 beta(n_r_max)*rscheme%rMat(2,n_r))
                end if
                !-- Gauge freedom on psi(m=0)
-               A_mat%A1(3,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
+               A_mat%A1(3,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
             else
 
                if ( ktopv == 1 ) then
                   A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*(rscheme%d2rMat(1,n_r)-&
                   &                                   or1(1)*rscheme%drMat(1,n_r) )
                else
-                  A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
+                  A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
                end if
                if ( kbotv == 1 ) then
                   A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*(             &
@@ -613,10 +614,11 @@ contains
                   &                   or1(n_r_max)*rscheme%drMat(2,n_r) )
 
                else
-                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
+                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*( rscheme%drMat(2,n_r) &
+                  &                            +beta(n_r_max)*rscheme%rMat(2,n_r) )
                end if
                !-- Gauge freedom on psi(m=0)
-               A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
+               A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
             end if
          end do
 
