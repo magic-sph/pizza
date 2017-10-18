@@ -162,14 +162,17 @@ contains
          !-- Radial loop
          !-------------------
          runStart = MPI_Wtime()
-         !call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc,  &
-         !     &            dtempdt_Rloc, dVsT_Rloc, dpsidt_Rloc,  &
-         !     &            dVsOm_Rloc, dtr_Rloc, dth_Rloc )
 
-         call radial_loop_integ( psi_Rloc, dpsi_Rloc, d2psi_Rloc, us_Rloc,    &
-              &                  up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc,   &
-              &                  dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,&
-              &                  dth_Rloc )
+         if ( l_cheb_coll ) then
+            call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc,  &
+                 &            dtempdt_Rloc, dVsT_Rloc, dpsidt_Rloc,  &
+                 &            dVsOm_Rloc, dtr_Rloc, dth_Rloc )
+         else
+            call radial_loop_integ( psi_Rloc, dpsi_Rloc, d2psi_Rloc, us_Rloc,    &
+                 &                  up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc,   &
+                 &                  dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,&
+                 &                  dth_Rloc )
+         end if
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             n_r_loops  =n_r_loops+1
@@ -278,10 +281,6 @@ contains
                call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, tscheme%wimp_lin(2), &
                     &       dpsi_imp_Mloc(:,:,tscheme%norder_imp-n_time_step),  &
                     &               vp_bal, l_vphi_bal_calc)
-               !call get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,        &
-               !     &               tscheme%wimp_lin(2),                        &
-               !     &       dpsi_imp_Mloc(:,:,tscheme%norder_imp-n_time_step),  &
-               !     &               vp_bal, l_vphi_bal_calc)
             end if
             old_scheme         =tscheme%time_scheme
             tscheme%time_scheme='CNAB2'
@@ -317,7 +316,7 @@ contains
                  &         l_vphi_bal_calc)
          else
             call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc, &
-                 &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,  &
+                 &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,   &
                  &           tscheme, lMat, l_roll_imp, l_log_next)
             call update_psi_int(psi_Mloc,  dpsi_Mloc, d2psi_Mloc, om_Mloc,   &
                  &              us_Mloc, up_Mloc, dVsOm_Mloc, dpsi_exp_Mloc, &
