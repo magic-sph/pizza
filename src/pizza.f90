@@ -95,8 +95,11 @@ program pizza
    call memWrite('Radial functions', local_bytes_used)
    local_bytes_used = bytes_allocated
    call initialize_fourier(n_phi_max)
-   call initialize_radial_loop(n_phi_max)
-   call initialize_radial_loop_integ(n_phi_max)
+   if ( l_cheb_coll ) then
+      call initialize_radial_loop(n_phi_max)
+   else
+      call initialize_radial_loop_integ(n_phi_max)
+   end if
    call memWrite('R loop', local_bytes_used)
    local_bytes_used = bytes_allocated-local_bytes_used
    local_bytes_used = bytes_allocated
@@ -163,13 +166,12 @@ program pizza
    if ( l_cheb_coll ) then
       call finalize_update_temp()
       call finalize_update_om()
+      call finalize_radial_loop()
    else
       call finalize_temp_integ()
       call finalize_psi_integ()
-      call finalize_update_om()
+      call finalize_radial_loop_integ()
    end if
-   call finalize_radial_loop_integ()
-   call finalize_radial_loop()
    call finalize_fourier()
    call finalize_der_arrays()
    call finalize_radial_functions()

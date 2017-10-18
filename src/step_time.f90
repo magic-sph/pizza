@@ -275,8 +275,8 @@ contains
                call get_temp_rhs_imp_int(temp_Mloc, tscheme%wimp_lin(2),&
                     &         dtemp_imp_Mloc(:,:,tscheme%norder_imp-n_time_step))
 
-               call get_psi_rhs_imp_int(psi_Mloc, dpsi_Mloc, tscheme%wimp_lin(2), &
-                    &       dpsi_imp_Mloc(:,:,tscheme%norder_imp-n_time_step),    &
+               call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, tscheme%wimp_lin(2), &
+                    &       dpsi_imp_Mloc(:,:,tscheme%norder_imp-n_time_step),  &
                     &               vp_bal, l_vphi_bal_calc)
                !call get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,        &
                !     &               tscheme%wimp_lin(2),                        &
@@ -319,7 +319,7 @@ contains
             call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc, &
                  &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,  &
                  &           tscheme, lMat, l_roll_imp, l_log_next)
-            call update_psi_int(psi_Mloc, dpsi_Mloc, d2psi_Mloc, om_Mloc,    &
+            call update_psi_int(psi_Mloc,  dpsi_Mloc, d2psi_Mloc, om_Mloc,   &
                  &              us_Mloc, up_Mloc, dVsOm_Mloc, dpsi_exp_Mloc, &
                  &              dpsi_imp_Mloc, buo_imp_Mloc, vp_bal, tscheme,&
                  &              lMat, l_roll_imp, l_vphi_bal_calc)

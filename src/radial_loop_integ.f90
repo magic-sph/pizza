@@ -115,13 +115,17 @@ contains
                &           -r(n_r)*                dpsi_Rloc(n_m,n_r)    &
                &           +real(m,cp)*real(m,cp)*  psi_Rloc(n_m,n_r)
             else
-               upMod(n_m) =-ro2ms2*dpsi_Rloc(n_m,n_r)+r(n_r)*psi_Rloc(n_m,n_r)
-
-               omMod(n_m) =-ro2ms2**2*r(n_r)**2*    d2psi_Rloc(n_m,n_r)    &
-               &           -ro2ms2*r(n_r)*(r_cmb**2-two*r(n_r)**2)*        &
-               &                                     dpsi_Rloc(n_m,n_r)    &
-               &           +( two*r_cmb**2*r(n_r)**2+ro2ms2**2*real(m,cp)* &
-               &              real(m,cp) )*           psi_Rloc(n_m,n_r)
+               if ( m == 0 ) then
+                  upMod(n_m)=ro2ms2*up_Rloc(n_m,n_r)
+                  omMod(n_m)=ro2ms2**2*r(n_r)**2*om_Rloc(n_m,n_r)
+               else
+                  upMod(n_m)=-ro2ms2*dpsi_Rloc(n_m,n_r)+r(n_r)*psi_Rloc(n_m,n_r)
+                  omMod(n_m)=-ro2ms2**2*r(n_r)**2*    d2psi_Rloc(n_m,n_r)    &
+                  &          -ro2ms2*r(n_r)*(r_cmb**2-two*r(n_r)**2)*        &
+                  &                                    dpsi_Rloc(n_m,n_r)    &
+                  &          +( two*r_cmb**2*r(n_r)**2+ro2ms2**2*real(m,cp)* &
+                  &             real(m,cp) )*           psi_Rloc(n_m,n_r)
+               end if
             end if
             usMod(n_m) = ci*real(m,cp)*psi_Rloc(n_m,n_r)
 
@@ -129,7 +133,7 @@ contains
                                ! us(m=0) * vortz(m=0)
                us_fluct = half*ek*ekpump(n_r)*up_Rloc(n_m,n_r)
             else
-               us_fluct = usMod(n_m)*or1(n_r)
+               us_fluct = us_Rloc(n_m,n_r)
             end if
 
             !-- Calculate Reynolds stress for axisymmetric equation
