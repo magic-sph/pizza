@@ -354,9 +354,9 @@ contains
             &                       tscheme%wimp_lin(1)*opr*       &
             &     intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
          else
-            stencilA4 = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,A_mat%nbands)- &
+            stencilA4 = intcheb2rmult2hmult2(a,b,i_r-1,A_mat%nbands)- &
             &                       tscheme%wimp_lin(1)*opr*                &
-            &     intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,A_mat%nbands)  
+            &     intcheb2rmult2hmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
          end if
 
          !-- Roll the array for band storage
@@ -375,9 +375,9 @@ contains
             &                                   tscheme%wimp_lin(1)*opr*     &
             &       intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
          else
-            stencilA4 = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,A_mat%nbands)-    &
+            stencilA4 = intcheb2rmult2hmult2(a,b,i_r-1,A_mat%nbands)-    &
             &                                   tscheme%wimp_lin(1)*opr*       &
-            &       intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,A_mat%nbands)  
+            &       intcheb2rmult2hmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
          end if
 
          !-- Only the lower bands can contribute to the matrix A3
@@ -480,7 +480,7 @@ contains
          if ( l_non_rot ) then
             stencilC = intcheb2rmult2lapl(a,b,m,i_r-1,Cmat%nbands)
          else
-            stencilC = intcheb2rmult2hmult2lapl(a,b,r_cmb,m,i_r-1,Cmat%nbands)
+            stencilC = intcheb2rmult2hmult2lapl(a,b,m,i_r-1,Cmat%nbands)
          end if
 
          !-- Roll array for band storage
@@ -514,7 +514,7 @@ contains
          if ( l_non_rot ) then
             stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
          else
-            stencilB = intcheb2rmult2hmult2(a,b,r_cmb,i_r-1,B_mat%nbands)
+            stencilB = intcheb2rmult2hmult2(a,b,i_r-1,B_mat%nbands)
          end if
 
          !-- Roll array for band storage

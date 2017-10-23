@@ -253,12 +253,12 @@ contains
 
          do n=1,n_r_max
             dn2 = real(n-1,cp)*real(n-1,cp)
-            this%rMat(1,n)  = one
             if ( mod(n,2) == 0 ) then
                mone = -one
             else
                mone = one
             end if
+            this%rMat(1,n)  = one
             this%rMat(2,n)  = mone
             this%drMat(1,n) = two*dn2 ! Replace by drx maybe
             this%drMat(2,n) = two*dn2*(-one)*mone ! drx
