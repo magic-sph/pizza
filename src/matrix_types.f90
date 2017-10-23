@@ -75,6 +75,8 @@ module matrix_types
       procedure :: finalize => finalize_bord_complex
       procedure :: prepare_LU => prepare_LU_complex
       procedure :: solve => solve_complex_mat_complex_rhs
+      procedure :: mat_vec_mul => bordmat_complex_vec_complex_mul
+
    end type type_bordmat_complex
 
 contains
@@ -449,5 +451,56 @@ contains
            &                  this%pivA4, rhs, nRmax)
 
    end subroutine solve_complex_mat_complex_rhs
+!------------------------------------------------------------------------------
+   subroutine bordmat_complex_vec_complex_mul(this, vec)
+      !
+      ! This is a matrix-vector multiplication (complex * complex)
+      !
+
+      class(type_bordmat_complex) :: this
+
+      !-- Input/output variables
+      complex(cp), intent(inout) :: vec(this%nlines)
+
+      !-- Local variables:
+      integer :: n_r
+      complex(cp) :: tmp1(this%ntau), tmp2(this%nlines_band)
+
+      do n_r=1,this%ntau
+         tmp1(n_r) = vec(n_r)
+      end do
+
+      do n_r=1,this%nlines_band
+         tmp2(n_r) = vec(n_r+this%ntau)
+      end do
+
+      !-- A1 * vec(1:ntau)
+      call zgemv('N', this%ntau, this%ntau, (one, 0.0_cp), this%A1,&
+           &      this%ntau, vec(1:this%ntau), 1, (0.0_cp,0.0_cp), tmp1, 1)
+
+      !-- A2 * vec(ntau+1:nlines)
+      call zgemv('N', this%ntau, this%nlines_band, (one, 0.0_cp), &
+           &     this%A2, this%ntau, vec(this%ntau+1:), 1,        &
+           &     (one,0.0_cp), tmp1, 1)
+
+      !-- A3 * vec(1:ntau)
+       call zgemv('N', this%nlines_band, this%ntau, (one, 0.0_cp), this%A3,&
+            &      this%nlines_band, vec(1:this%ntau), 1, (0.0_cp,0.0_cp), &
+            &      tmp2, 1)
+
+      !-- A4 * vec(ntau+1:nlines)
+      call zgbmv('N', this%nlines_band, this%nlines_band, this%kl, this%ku,      &
+           &    (one,0.0_cp), this%A4(this%kl+1:,:), this%nbands, vec(this%ntau+1:), 1, &
+           &    (1.0_cp,0.0_cp), tmp2, 1)
+
+      do n_r=1,this%ntau
+         vec(n_r)=tmp1(n_r)
+      end do
+! 
+      do n_r=1,this%nlines_band
+         vec(n_r+this%ntau)=tmp2(n_r)
+      end do
+
+   end subroutine bordmat_complex_vec_complex_mul
 !------------------------------------------------------------------------------
 end module matrix_types

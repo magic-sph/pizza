@@ -146,7 +146,6 @@ contains
          !-----------------
          call ifft(us_Rloc(:,n_r), us_grid)
          call ifft(up_Rloc(:,n_r), up_grid)
-         call ifft(om_Rloc(:,n_r), om_grid)
          call ifft(temp_Rloc(:,n_r), temp_grid)
 
          call ifft(omMod, omMod_grid)
