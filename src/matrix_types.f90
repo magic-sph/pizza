@@ -76,7 +76,7 @@ module matrix_types
       procedure :: prepare_LU => prepare_LU_complex
       procedure :: solve => solve_complex_mat_complex_rhs
       procedure :: mat_vec_mul => bordmat_complex_vec_complex_mul
-
+      procedure :: write => write_bordmat_complex
    end type type_bordmat_complex
 
 contains
@@ -502,5 +502,56 @@ contains
       end do
 
    end subroutine bordmat_complex_vec_complex_mul
+!------------------------------------------------------------------------------
+   subroutine write_bordmat_complex(this)
+      !
+      ! This subroutine write a file A_mat that contains the bordered matrix.
+      ! This is a Fortran unformatted file
+      !
+      class(type_bordmat_complex) :: this
+
+      !-- Local variables:
+      complex(cp) :: tmp(this%nlines)
+      integer :: n_r, n_col, file_handle
+
+      open(file_handle, file='A_mat', form='unformatted')
+
+      write(file_handle) this%nlines
+
+      !-- Top blocks (A1 and A2)
+      do n_r=1,this%ntau
+
+         do n_col=1,this%nlines
+            if ( n_col <= this%ntau ) then
+               tmp(n_col)=this%A1(n_r,n_col)
+            else
+               tmp(n_col)=this%A2(n_r,n_col-this%ntau)
+            end if
+         end do
+         write(file_handle) tmp
+
+      end do
+
+      !-- Bottom blocks (A3 and A4)
+      do n_r=1,this%nlines_band
+
+         do n_col=1,this%nlines
+            if ( n_col <= this%ntau ) then
+               tmp(n_col)=this%A3(n_r,n_col)
+            else
+               if ( this%kl+this%kl+n_r-n_col+this%ntau > 0 .and.  this%kl+this%kl+n_r-n_col+this%ntau < this%nbands+this%kl) then
+                  tmp(n_col)=this%A4(this%kl+this%kl+n_r-n_col+1+this%ntau,n_col-this%ntau)
+               else
+                  tmp(n_col)=zero
+               end if
+            end if
+         end do
+         write(file_handle) tmp
+
+      end do
+
+      close(file_handle)
+
+   end subroutine write_bordmat_complex
 !------------------------------------------------------------------------------
 end module matrix_types
