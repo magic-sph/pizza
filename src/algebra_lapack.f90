@@ -175,16 +175,15 @@ contains
       n_bands_A4 = 2*kl+ku+1
 
       !-- LU factorisation for the banded block
-      call dgbtrf(lenA4, lenA4, kl, ku, A4, n_bands_A4, pivotA4, &
-           &      info)
-      !-- Solve A4*v = A3 (on output v = A3
+      call dgbtrf(lenA4, lenA4, kl, ku, A4, n_bands_A4, pivotA4, info)
+      !-- Solve A4*v = A3 (on output v = A3)
       call dgbtrs('N', lenA4, kl, ku, n_boundaries, A4, n_bands_A4, pivotA4, &
            &      A3, lenA4, info)
 
-      !-- Assemble A1 <- A1-A2*v
+      !-- Assemble the Schur complement of A4: A1 <- A1-A2*v
       call dgemm('N', 'N', n_boundaries, n_boundaries, lenA4, -one, A2,  &
            &     n_boundaries, A3, lenA4, one, A1,  n_boundaries)
-      !-- LU factorisation of the small A1 matrix
+      !-- LU factorisation of the Schur complement
       call dgetrf(n_boundaries, n_boundaries, A1, n_boundaries, pivotA1, info)
 
    end subroutine prepare_bordered_mat_real
@@ -212,16 +211,15 @@ contains
       n_bands_A4 = 2*kl+ku+1
 
       !-- LU factorisation for the banded block
-      call zgbtrf(lenA4, lenA4, kl, ku, A4, n_bands_A4, pivotA4, &
-           &      info)
-      !-- Solve A4*v = A3 (on output v = A3
+      call zgbtrf(lenA4, lenA4, kl, ku, A4, n_bands_A4, pivotA4, info)
+      !-- Solve A4*v = A3 (on output v = A3)
       call zgbtrs('N', lenA4, kl, ku, n_boundaries, A4, n_bands_A4, pivotA4, &
            &      A3, lenA4, info)
 
-      !-- Assemble A1 <- A1-A2*v
+      !-- Assemble the Schur complement of A4: A1 <- A1-A2*v
       call zgemm('N', 'N', n_boundaries, n_boundaries, lenA4, -(one,0.0_cp), A2,  &
            &     n_boundaries, A3, lenA4, (one,0.0_cp), A1,  n_boundaries)
-      !-- LU factorisation of the small A1 matrix
+      !-- LU factorisation of the Schur complement
       call zgetrf(n_boundaries, n_boundaries, A1, n_boundaries, pivotA1, info)
 
    end subroutine prepare_bordered_mat_complex
