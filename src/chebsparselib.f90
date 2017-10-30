@@ -18,7 +18,8 @@ module chebsparselib
    &         intcheb4rmult4hmult6, intcheb4rmult4hmult8laplrot,          &
    &         intcheb4rmult4hmult8laplrot2, intcheb4hmult2,               &
    &         intcheb2rmult2hmult2, intcheb2rmult2hmult2lapl,             &
-   &         intcheb2rmult2hmult4, intcheb2rmult2hmult4laplaxi
+   &         intcheb2rmult2hmult4, intcheb2rmult2hmult4laplaxi,          &
+   &         intcheb4hmult2der1
 
 contains
 
@@ -690,6 +691,55 @@ contains
 
    end function intcheb4hmult2
 !------------------------------------------------------------------------------
+   function intcheb4hmult2der1(a, b, n, len_stencil) result(stencil)
+
+      !-- Input variables
+      real(cp), intent(in) :: a
+      real(cp), intent(in) :: b
+      integer,  intent(in) :: n
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable 
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variables
+      real(cp) :: dn
+      integer :: ku
+
+      dn = real(n, cp)
+      ku = (len_stencil-1)/2
+
+      stencil(1:ku-5) = 0.0_cp
+      stencil(ku-4)=a**5*(dn+5.0_cp)/(32.0_cp*dn*(dn+1.0_cp)*(dn+2.0_cp)* &
+      &             (dn+3.0_cp))
+      stencil(ku-3)=a**4*b*(dn+4.0_cp)/(8.0_cp*dn*(dn+1.0_cp)*(dn+2.0_cp) &
+      &             *(dn+3.0_cp))
+      stencil(ku-2)=-a**4*(5.0_cp*a*dn+7.0_cp*a+8.0_cp*b*dn-8.0_cp*b)/(32.0_cp &
+      &             *dn*(dn-1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku-1)=-a**4*b*(dn+5.0_cp)/(4.0_cp*dn*(dn-1.0_cp)*(dn+1.0_cp &
+      &             )*(dn+3.0_cp))
+      stencil(ku)  =a**4*(5.0_cp*a*dn**2+9.0_cp*a*dn-8.0_cp*a+12.0_cp*b*dn**2+   &
+      &             12.0_cp*b*dn-72.0_cp*b)/(16.0_cp*dn*(dn-2.0_cp)*(dn-1.0_cp)* &
+      &             (dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku+1)=3.0_cp*a**4*b/(2.0_cp*(dn-2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp)* &
+      &             (dn+2.0_cp))
+      stencil(ku+2)=-a**4*(5.0_cp*a*dn**2-9.0_cp*a*dn-8.0_cp*a+12.0_cp*b*dn**2   &
+      &             -12.0_cp*b*dn-72.0_cp*b)/(16.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp)*&
+      &             (dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku+3)=a**4*b*(dn-5.0_cp)/(4.0_cp*dn*(dn-3.0_cp)*(dn-1.0_cp) &
+      &             *(dn+1.0_cp))
+      stencil(ku+4)=a**4*(5.0_cp*a*dn-7.0_cp*a+8.0_cp*b*dn+8.0_cp*b)/(32.0_cp &
+      &             *dn*(dn-2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp))
+      stencil(ku+5)=-a**4*b*(dn-4.0_cp)/(8.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp) &
+      &             *(dn-1.0_cp))
+      stencil(ku+6)=-a**5*(dn-5.0_cp)/(32.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp)   &
+      &             *(dn-1.0_cp))
+      stencil(ku+7:len_stencil) = 0.0_cp
+
+      stencil = mirror_stencil(n, len_stencil)
+
+   end function intcheb4hmult2der1
+!------------------------------------------------------------------------------
    function intcheb4rmult4lapl(a, b, m, n, len_stencil) result(stencil)
       !
       ! Fourth integral of r^4\Delta operator
@@ -1083,6 +1133,172 @@ contains
       stencil = mirror_stencil(n, len_stencil)
 
    end function intcheb4rmult4hmult6
+!------------------------------------------------------------------------------
+   function intcheb4rmult4laplrot(a, b, m, n, len_stencil) result(stencil)
+
+      !-- Input variables
+      real(cp), intent(in) :: a
+      real(cp), intent(in) :: b
+      integer,  intent(in) :: m 
+      integer,  intent(in) :: n
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable 
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variables
+      real(cp) :: dm
+      real(cp) :: dn
+      integer :: ku
+
+      dm = real(m, cp)
+      dn = real(n, cp)
+      ku = (len_stencil-1)/2
+
+      stencil(1:ku-8) = 0.0_cp
+      stencil(ku-7)=-a**8*(dm**2-dn**2-11.0_cp*dn-30.0_cp)/(256.0_cp*dn*(dn &
+      &             +1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku-6)=-a**7*b*(2.0_cp*dm**2-3.0_cp*dn**2-30.0_cp*dn-75.0_cp &
+      &             )/(64.0_cp*dn*(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku-5)=a**6*(2.0_cp*a**2*dm**2*dn+4.0_cp*a**2*dm**2-9.0_cp*a**2 &
+      &             *dn**2-57.0_cp*a**2*dn-54.0_cp*a**2+4.0_cp*a*b*dm**2*dn-4.0_cp*a*b*dm**2 &
+      &             -4.0_cp*a*b*dn**3-44.0_cp*a*b*dn**2-96.0_cp*a*b*dn+144.0_cp*a*b-10.0_cp &
+      &             *b**2*dm**2*dn+10.0_cp*b**2*dm**2+28.0_cp*b**2*dn**3+218.0_cp*b**2*dn**2 &
+      &             +294.0_cp*b**2*dn-540.0_cp*b**2)/(128.0_cp*dn*(dn-1.0_cp)*(dn+1.0_cp &
+      &             )*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku-4)=a**5*b*(6.0_cp*a**2*dm**2*dn+18.0_cp*a**2*dm**2+a**2*dn**3 &
+      &             -29.0_cp*a**2*dn**2-221.0_cp*a**2*dn-327.0_cp*a**2+8.0_cp*a*b*dm**2 &
+      &             *dn-8.0_cp*a*b*dm**2-16.0_cp*a*b*dn**3-148.0_cp*a*b*dn**2-256.0_cp* &
+      &             a*b*dn+420.0_cp*a*b-4.0_cp*b**2*dm**2*dn+4.0_cp*b**2*dm**2+32.0_cp* &
+      &             b**2*dn**3+206.0_cp*b**2*dn**2+200.0_cp*b**2*dn-438.0_cp*b**2)/(64.0_cp &
+      &             *dn*(dn-1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku-3)=-a**4*(2.0_cp*a**4*dm**2*dn**2+12.0_cp*a**4*dm**2*dn-2.0_cp &
+      &             *a**4*dm**2+2.0_cp*a**4*dn**4+11.0_cp*a**4*dn**3-65.0_cp*a**4*dn**2 &
+      &             -236.0_cp*a**4*dn+252.0_cp*a**4+8.0_cp*a**3*b*dm**2*dn**2+24.0_cp*a**3 &
+      &             *b*dm**2*dn-80.0_cp*a**3*b*dm**2+8.0_cp*a**3*b*dn**4+8.0_cp*a**3*b*dn**3 &
+      &             -320.0_cp*a**3*b*dn**2-416.0_cp*a**3*b*dn+1920.0_cp*a**3*b-28.0_cp* &
+      &             a**2*b**2*dm**2*dn**2-36.0_cp*a**2*b**2*dm**2*dn+184.0_cp*a**2*b**2 &
+      &             *dm**2-8.0_cp*a**2*b**2*dn**4+208.0_cp*a**2*b**2*dn**3+1040.0_cp*a**2* &
+      &             b**2*dn**2-592.0_cp*a**2*b**2*dn-4512.0_cp*a**2*b**2-16.0_cp*a*b**3 &
+      &             *dm**2*dn**2+48.0_cp*a*b**3*dm**2*dn-32.0_cp*a*b**3*dm**2+96.0_cp*a &
+      &             *b**3*dn**4+528.0_cp*a*b**3*dn**3-528.0_cp*a*b**3*dn**2-3552.0_cp*a &
+      &             *b**3*dn+3456.0_cp*a*b**3-72.0_cp*b**4*dn**4-216.0_cp*b**4*dn**3+528.0_cp &
+      &             *b**4*dn**2+1008.0_cp*b**4*dn-1248.0_cp*b**4)/(128.0_cp*dn*(dn-2.0_cp &
+      &             )*(dn-1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku-2)=-a**3*b*(6.0_cp*a**4*dm**2*dn+12.0_cp*a**4*dm**2+5.0_cp &
+      &             *a**4*dn**3+6.0_cp*a**4*dn**2-173.0_cp*a**4*dn-42.0_cp*a**4+24.0_cp &
+      &             *a**3*b*dm**2*dn-48.0_cp*a**3*b*dm**2+16.0_cp*a**3*b*dn**3-132.0_cp &
+      &             *a**3*b*dn**2-532.0_cp*a**3*b*dn+1464.0_cp*a**3*b-12.0_cp*a**2*b**2 &
+      &             *dm**2*dn+24.0_cp*a**2*b**2*dm**2+198.0_cp*a**2*b**2*dn**2+102.0_cp &
+      &             *a**2*b**2*dn-996.0_cp*a**2*b**2+64.0_cp*a*b**3*dn**3+48.0_cp*a*b** &
+      &             3*dn**2-592.0_cp*a*b**3*dn+480.0_cp*a*b**3-16.0_cp*b**4*dn**3+24.0_cp &
+      &             *b**4*dn**2+40.0_cp*b**4*dn-48.0_cp*b**4)/(64.0_cp*dn*(dn-2.0_cp)*(dn &
+      &             -1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku-1)=-a**3*(2.0_cp*a**5*dm**2*dn**2-22.0_cp*a**5*dm**2*dn+36.0_cp &
+      &             *a**5*dm**2-27.0_cp*a**5*dn**3+42.0_cp*a**5*dn**2+495.0_cp*a**5*dn-1062.0_cp &
+      &             *a**5+4.0_cp*a**4*b*dm**2*dn**2-80.0_cp*a**4*b*dm**2*dn+204.0_cp*a**4* &
+      &             b*dm**2-4.0_cp*a**4*b*dn**4-96.0_cp*a**4*b*dn**3+292.0_cp*a**4*b*dn**2 &
+      &             +1584.0_cp*a**4*b*dn-4464.0_cp*a**4*b+22.0_cp*a**3*b**2*dm**2*dn**2 &
+      &             +40.0_cp*a**3*b**2*dm**2*dn-318.0_cp*a**3*b**2*dm**2+28.0_cp*a**3*b**2 &
+      &             *dn**4-30.0_cp*a**3*b**2*dn**3-856.0_cp*a**3*b**2*dn**2+630.0_cp*a**3* &
+      &             b**2*dn+4356.0_cp*a**3*b**2+64.0_cp*a**2*b**3*dm**2*dn**2-320.0_cp* &
+      &             a**2*b**3*dm**2*dn+384.0_cp*a**2*b**3*dm**2-864.0_cp*a**2*b**3*dn** &
+      &             3+1152.0_cp*a**2*b**3*dn**2+10656.0_cp*a**2*b**3*dn-19008.0_cp*a**2 &
+      &             *b**3+32.0_cp*a*b**4*dn**4+192.0_cp*a*b**4*dn**3-896.0_cp*a*b**4*dn**2 &
+      &             -1248.0_cp*a*b**4*dn+4032.0_cp*a*b**4+64.0_cp*b**5*dn**4-192.0_cp*b**5 &
+      &             *dn**3-448.0_cp*b**5*dn**2+1728.0_cp*b**5*dn-1152.0_cp*b**5)/(128.0_cp &
+      &             *dn*(dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp)*(dn+3.0_cp))
+      stencil(ku)=a**3*b*(2.0_cp*a**4*dm**2*dn**2+10.0_cp*a**4*dm**2*dn+12.0_cp &
+      &             *a**4*dm**2+a**4*dn**4+39.0_cp*a**4*dn**3-115.0_cp*a**4*dn**2-531.0_cp &
+      &             *a**4*dn+1134.0_cp*a**4+16.0_cp*a**3*b*dm**2*dn**2+80.0_cp*a**3*b*dm**2 &
+      &             *dn-384.0_cp*a**3*b*dm**2+32.0_cp*a**3*b*dn**4+168.0_cp*a**3*b*dn** &
+      &             3-1232.0_cp*a**3*b*dn**2-2232.0_cp*a**3*b*dn+10656.0_cp*a**3*b-8.0_cp &
+      &             *a**2*b**2*dm**2*dn**2-40.0_cp*a**2*b**2*dm**2*dn+192.0_cp*a**2*b** &
+      &             2*dm**2-32.0_cp*a**2*b**2*dn**4+12.0_cp*a**2*b**2*dn**3+728.0_cp*a**2* &
+      &             b**2*dn**2+12.0_cp*a**2*b**2*dn-4320.0_cp*a**2*b**2+64.0_cp*a*b**3*dn**4 &
+      &             +336.0_cp*a*b**3*dn**3-1504.0_cp*a*b**3*dn**2-3024.0_cp*a*b**3*dn+8352.0_cp &
+      &             *a*b**3-16.0_cp*b**4*dn**4+24.0_cp*b**4*dn**3+160.0_cp*b**4*dn**2-216.0_cp &
+      &             *b**4*dn-144.0_cp*b**4)/(64.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp &
+      &             )*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku+1)=a**3*(5.0_cp*a**5*dm**2*dn**2-65.0_cp*a**5*dm**2+3.0_cp &
+      &             *a**5*dn**4-171.0_cp*a**5*dn**2+1656.0_cp*a**5+16.0_cp*a**4*b*dm**2 &
+      &             *dn**2-304.0_cp*a**4*b*dm**2+16.0_cp*a**4*b*dn**4-688.0_cp*a**4*b*dn**2 &
+      &             +6336.0_cp*a**4*b+8.0_cp*a**3*b**2*dm**2*dn**2+328.0_cp*a**3*b**2*dm**2 &
+      &             -16.0_cp*a**3*b**2*dn**4+256.0_cp*a**3*b**2*dn**2-3168.0_cp*a**3*b**2+ &
+      &             96.0_cp*a**2*b**3*dm**2*dn**2-864.0_cp*a**2*b**3*dm**2+192.0_cp*a** &
+      &             2*b**3*dn**4-5376.0_cp*a**2*b**3*dn**2+32832.0_cp*a**2*b**3-80.0_cp &
+      &             *a*b**4*dn**4+1328.0_cp*a*b**4*dn**2-5472.0_cp*a*b**4+128.0_cp*b**5 &
+      &             *dn**4-1664.0_cp*b**5*dn**2+4608.0_cp*b**5)/(128.0_cp*(dn-3.0_cp)*(dn &
+      &             -2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku+2)=a**3*b*(2.0_cp*a**4*dm**2*dn**2-10.0_cp*a**4*dm**2*dn &
+      &             +12.0_cp*a**4*dm**2+a**4*dn**4-39.0_cp*a**4*dn**3-115.0_cp*a**4*dn**2+ &
+      &             531.0_cp*a**4*dn+1134.0_cp*a**4+16.0_cp*a**3*b*dm**2*dn**2-80.0_cp* &
+      &             a**3*b*dm**2*dn-384.0_cp*a**3*b*dm**2+32.0_cp*a**3*b*dn**4-168.0_cp &
+      &             *a**3*b*dn**3-1232.0_cp*a**3*b*dn**2+2232.0_cp*a**3*b*dn+10656.0_cp &
+      &             *a**3*b-8.0_cp*a**2*b**2*dm**2*dn**2+40.0_cp*a**2*b**2*dm**2*dn+192.0_cp &
+      &             *a**2*b**2*dm**2-32.0_cp*a**2*b**2*dn**4-12.0_cp*a**2*b**2*dn**3+728.0_cp &
+      &             *a**2*b**2*dn**2-12.0_cp*a**2*b**2*dn-4320.0_cp*a**2*b**2+64.0_cp*a &
+      &             *b**3*dn**4-336.0_cp*a*b**3*dn**3-1504.0_cp*a*b**3*dn**2+3024.0_cp* &
+      &             a*b**3*dn+8352.0_cp*a*b**3-16.0_cp*b**4*dn**4-24.0_cp*b**4*dn**3+160.0_cp &
+      &             *b**4*dn**2+216.0_cp*b**4*dn-144.0_cp*b**4)/(64.0_cp*dn*(dn-3.0_cp) &
+      &             *(dn-2.0_cp)*(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku+3)=-a**3*(2.0_cp*a**5*dm**2*dn**2+22.0_cp*a**5*dm**2*dn+36.0_cp &
+      &             *a**5*dm**2+27.0_cp*a**5*dn**3+42.0_cp*a**5*dn**2-495.0_cp*a**5*dn-1062.0_cp &
+      &             *a**5+4.0_cp*a**4*b*dm**2*dn**2+80.0_cp*a**4*b*dm**2*dn+204.0_cp*a**4* &
+      &             b*dm**2-4.0_cp*a**4*b*dn**4+96.0_cp*a**4*b*dn**3+292.0_cp*a**4*b*dn**2 &
+      &             -1584.0_cp*a**4*b*dn-4464.0_cp*a**4*b+22.0_cp*a**3*b**2*dm**2*dn**2 &
+      &             -40.0_cp*a**3*b**2*dm**2*dn-318.0_cp*a**3*b**2*dm**2+28.0_cp*a**3*b**2 &
+      &             *dn**4+30.0_cp*a**3*b**2*dn**3-856.0_cp*a**3*b**2*dn**2-630.0_cp*a**3* &
+      &             b**2*dn+4356.0_cp*a**3*b**2+64.0_cp*a**2*b**3*dm**2*dn**2+320.0_cp* &
+      &             a**2*b**3*dm**2*dn+384.0_cp*a**2*b**3*dm**2+864.0_cp*a**2*b**3*dn** &
+      &             3+1152.0_cp*a**2*b**3*dn**2-10656.0_cp*a**2*b**3*dn-19008.0_cp*a**2 &
+      &             *b**3+32.0_cp*a*b**4*dn**4-192.0_cp*a*b**4*dn**3-896.0_cp*a*b**4*dn**2 &
+      &             +1248.0_cp*a*b**4*dn+4032.0_cp*a*b**4+64.0_cp*b**5*dn**4+192.0_cp*b**5 &
+      &             *dn**3-448.0_cp*b**5*dn**2-1728.0_cp*b**5*dn-1152.0_cp*b**5)/(128.0_cp &
+      &             *dn*(dn-3.0_cp)*(dn-1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku+4)=-a**3*b*(6.0_cp*a**4*dm**2*dn-12.0_cp*a**4*dm**2+5.0_cp &
+      &             *a**4*dn**3-6.0_cp*a**4*dn**2-173.0_cp*a**4*dn+42.0_cp*a**4+24.0_cp &
+      &             *a**3*b*dm**2*dn+48.0_cp*a**3*b*dm**2+16.0_cp*a**3*b*dn**3+132.0_cp &
+      &             *a**3*b*dn**2-532.0_cp*a**3*b*dn-1464.0_cp*a**3*b-12.0_cp*a**2*b**2 &
+      &             *dm**2*dn-24.0_cp*a**2*b**2*dm**2-198.0_cp*a**2*b**2*dn**2+102.0_cp &
+      &             *a**2*b**2*dn+996.0_cp*a**2*b**2+64.0_cp*a*b**3*dn**3-48.0_cp*a*b** &
+      &             3*dn**2-592.0_cp*a*b**3*dn-480.0_cp*a*b**3-16.0_cp*b**4*dn**3-24.0_cp &
+      &             *b**4*dn**2+40.0_cp*b**4*dn+48.0_cp*b**4)/(64.0_cp*dn*(dn-2.0_cp)*(dn &
+      &             -1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku+5)=-a**4*(2.0_cp*a**4*dm**2*dn**2-12.0_cp*a**4*dm**2*dn-2.0_cp &
+      &             *a**4*dm**2+2.0_cp*a**4*dn**4-11.0_cp*a**4*dn**3-65.0_cp*a**4*dn**2 &
+      &             +236.0_cp*a**4*dn+252.0_cp*a**4+8.0_cp*a**3*b*dm**2*dn**2-24.0_cp*a**3 &
+      &             *b*dm**2*dn-80.0_cp*a**3*b*dm**2+8.0_cp*a**3*b*dn**4-8.0_cp*a**3*b*dn**3 &
+      &             -320.0_cp*a**3*b*dn**2+416.0_cp*a**3*b*dn+1920.0_cp*a**3*b-28.0_cp* &
+      &             a**2*b**2*dm**2*dn**2+36.0_cp*a**2*b**2*dm**2*dn+184.0_cp*a**2*b**2 &
+      &             *dm**2-8.0_cp*a**2*b**2*dn**4-208.0_cp*a**2*b**2*dn**3+1040.0_cp*a**2* &
+      &             b**2*dn**2+592.0_cp*a**2*b**2*dn-4512.0_cp*a**2*b**2-16.0_cp*a*b**3 &
+      &             *dm**2*dn**2-48.0_cp*a*b**3*dm**2*dn-32.0_cp*a*b**3*dm**2+96.0_cp*a &
+      &             *b**3*dn**4-528.0_cp*a*b**3*dn**3-528.0_cp*a*b**3*dn**2+3552.0_cp*a &
+      &             *b**3*dn+3456.0_cp*a*b**3-72.0_cp*b**4*dn**4+216.0_cp*b**4*dn**3+528.0_cp &
+      &             *b**4*dn**2-1008.0_cp*b**4*dn-1248.0_cp*b**4)/(128.0_cp*dn*(dn-3.0_cp &
+      &             )*(dn-2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku+6)=a**5*b*(6.0_cp*a**2*dm**2*dn-18.0_cp*a**2*dm**2+a**2*dn**3 &
+      &             +29.0_cp*a**2*dn**2-221.0_cp*a**2*dn+327.0_cp*a**2+8.0_cp*a*b*dm**2 &
+      &             *dn+8.0_cp*a*b*dm**2-16.0_cp*a*b*dn**3+148.0_cp*a*b*dn**2-256.0_cp* &
+      &             a*b*dn-420.0_cp*a*b-4.0_cp*b**2*dm**2*dn-4.0_cp*b**2*dm**2+32.0_cp* &
+      &             b**2*dn**3-206.0_cp*b**2*dn**2+200.0_cp*b**2*dn+438.0_cp*b**2)/(64.0_cp &
+      &             *dn*(dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp))
+      stencil(ku+7)=a**6*(2.0_cp*a**2*dm**2*dn-4.0_cp*a**2*dm**2+9.0_cp*a**2 &
+      &             *dn**2-57.0_cp*a**2*dn+54.0_cp*a**2+4.0_cp*a*b*dm**2*dn+4.0_cp*a*b*dm**2 &
+      &             -4.0_cp*a*b*dn**3+44.0_cp*a*b*dn**2-96.0_cp*a*b*dn-144.0_cp*a*b-10.0_cp &
+      &             *b**2*dm**2*dn-10.0_cp*b**2*dm**2+28.0_cp*b**2*dn**3-218.0_cp*b**2*dn**2 &
+      &             +294.0_cp*b**2*dn+540.0_cp*b**2)/(128.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp &
+      &             )*(dn-1.0_cp)*(dn+1.0_cp))
+      stencil(ku+8)=-a**7*b*(2.0_cp*dm**2-3.0_cp*dn**2+30.0_cp*dn-75.0_cp &
+      &             )/(64.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp))
+      stencil(ku+9)=-a**8*(dm**2-dn**2+11.0_cp*dn-30.0_cp)/(256.0_cp*dn*(dn &
+      &             -3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp))
+      stencil(ku+10:len_stencil) = 0.0_cp
+
+      stencil = mirror_stencil(n, len_stencil)
+
+   end function intcheb4rmult4laplrot
 !------------------------------------------------------------------------------
    function intcheb4rmult4hmult8laplrot(a, b, m, n, len_stencil) result(stencil)
 
@@ -1654,6 +1870,161 @@ contains
       stencil = mirror_stencil(n, len_stencil)
 
    end function intcheb4rmult4hmult8laplrot
+!------------------------------------------------------------------------------
+   function intcheb4rmult4laplrot2(a, b, m, n, len_stencil) result(stencil)
+
+      !-- Input variables
+      real(cp), intent(in) :: a
+      real(cp), intent(in) :: b
+      integer,  intent(in) :: m 
+      integer,  intent(in) :: n
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable 
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variables
+      real(cp) :: dm
+      real(cp) :: dn
+      integer :: ku
+
+      dm = real(m, cp)
+      dn = real(n, cp)
+      ku = (len_stencil-1)/2
+
+      stencil(1:ku-6) = 0.0_cp
+      stencil(ku-5)=a**6*(dm-dn-6.0_cp)*(dm+dn+6.0_cp)*(dm**2-dn**2-7.0_cp &
+      &             *dn-12.0_cp)/(64.0_cp*dn*(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku-4)=a**5*b*(2.0_cp*dm**4-8.0_cp*dm**2*dn**2-67.0_cp*dm**2 &
+      &             *dn-147.0_cp*dm**2+6.0_cp*dn**4+101.0_cp*dn**3+628.0_cp*dn**2+1707.0_cp &
+      &             *dn+1710.0_cp)/(32.0_cp*dn*(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku-3)=-a**4*(3.0_cp*a**2*dm**4*dn+3.0_cp*a**2*dm**4-2.0_cp* &
+      &             a**2*dm**2*dn**3-30.0_cp*a**2*dm**2*dn**2-108.0_cp*a**2*dm**2*dn-46.0_cp &
+      &             *a**2*dm**2-a**2*dn**5-3.0_cp*a**2*dn**4+68.0_cp*a**2*dn**3+420.0_cp &
+      &             *a**2*dn**2+608.0_cp*a**2*dn-192.0_cp*a**2+4.0_cp*a*b*dm**4*dn-4.0_cp &
+      &             *a*b*dm**4-8.0_cp*a*b*dm**2*dn**3-72.0_cp*a*b*dm**2*dn**2-128.0_cp* &
+      &             a*b*dm**2*dn+208.0_cp*a*b*dm**2+4.0_cp*a*b*dn**5+76.0_cp*a*b*dn**4+512.0_cp &
+      &             *a*b*dn**3+1328.0_cp*a*b*dn**2+384.0_cp*a*b*dn-2304.0_cp*a*b+20.0_cp &
+      &             *b**2*dm**2*dn**3+114.0_cp*b**2*dm**2*dn**2+86.0_cp*b**2*dm**2*dn-220.0_cp &
+      &             *b**2*dm**2-28.0_cp*b**2*dn**5-372.0_cp*b**2*dn**4-1710.0_cp*b**2*dn**3 &
+      &             -2742.0_cp*b**2*dn**2+772.0_cp*b**2*dn+4080.0_cp*b**2)/(32.0_cp*dn* &
+      &             (dn-1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku-2)=-a**3*b*(6.0_cp*a**2*dm**4-8.0_cp*a**2*dm**2*dn**2-91.0_cp &
+      &             *a**2*dm**2*dn-165.0_cp*a**2*dm**2-14.0_cp*a**2*dn**4-55.0_cp*a**2*dn**3 &
+      &             +212.0_cp*a**2*dn**2+967.0_cp*a**2*dn+498.0_cp*a**2-32.0_cp*a*b*dm**2* &
+      &             dn**2-112.0_cp*a*b*dm**2*dn+144.0_cp*a*b*dm**2+32.0_cp*a*b*dn**4+400.0_cp &
+      &             *a*b*dn**3+1488.0_cp*a*b*dn**2+888.0_cp*a*b*dn-2808.0_cp*a*b+16.0_cp &
+      &             *b**2*dm**2*dn**2+12.0_cp*b**2*dm**2*dn-28.0_cp*b**2*dm**2-64.0_cp* &
+      &             b**2*dn**4-480.0_cp*b**2*dn**3-904.0_cp*b**2*dn**2+308.0_cp*b**2*dn &
+      &             +1140.0_cp*b**2)/(32.0_cp*dn*(dn-1.0_cp)*(dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku-1)=a**2*(15.0_cp*a**4*dm**4*dn-15.0_cp*a**4*dm**4+2.0_cp &
+      &             *a**4*dm**2*dn**3-57.0_cp*a**4*dm**2*dn**2-249.0_cp*a**4*dm**2*dn+440.0_cp &
+      &             *a**4*dm**2-a**4*dn**5-48.0_cp*a**4*dn**4-83.0_cp*a**4*dn**3+840.0_cp &
+      &             *a**4*dn**2+1092.0_cp*a**4*dn-3600.0_cp*a**4+32.0_cp*a**3*b*dm**4*dn &
+      &             -64.0_cp*a**3*b*dm**4-192.0_cp*a**3*b*dm**2*dn**2-512.0_cp*a**3*b*dm**2 &
+      &             *dn+1792.0_cp*a**3*b*dm**2-32.0_cp*a**3*b*dn**5-256.0_cp*a**3*b*dn**4+ &
+      &             3328.0_cp*a**3*b*dn**2+2048.0_cp*a**3*b*dn-12288.0_cp*a**3*b+32.0_cp &
+      &             *a**2*b**2*dm**2*dn**3+216.0_cp*a**2*b**2*dm**2*dn**2-24.0_cp*a**2* &
+      &             b**2*dm**2*dn-1072.0_cp*a**2*b**2*dm**2+128.0_cp*a**2*b**2*dn**5+384.0_cp &
+      &             *a**2*b**2*dn**4-1488.0_cp*a**2*b**2*dn**3-3888.0_cp*a**2*b**2*dn** &
+      &             2+4624.0_cp*a**2*b**2*dn+7968.0_cp*a**2*b**2+64.0_cp*a*b**3*dm**2*dn**3 &
+      &             -448.0_cp*a*b**3*dm**2*dn+384.0_cp*a*b**3*dm**2-192.0_cp*a*b**3*dn**5- &
+      &             1536.0_cp*a*b**3*dn**4-1696.0_cp*a*b**3*dn**3+9600.0_cp*a*b**3*dn** &
+      &             2+12064.0_cp*a*b**3*dn-18240.0_cp*a*b**3+144.0_cp*b**4*dn**5+512.0_cp &
+      &             *b**4*dn**4-800.0_cp*b**4*dn**3-2720.0_cp*b**4*dn**2+1616.0_cp*b**4 &
+      &             *dn+1248.0_cp*b**4)/(64.0_cp*dn*(dn-2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp) &
+      &             *(dn+3.0_cp))
+      stencil(ku)=a*b*(2.0_cp*a**4*dm**4*dn+16.0_cp*a**4*dm**4-33.0_cp*a**4* &
+      &             dm**2*dn**2-105.0_cp*a**4*dm**2*dn-108.0_cp*a**4*dm**2+6.0_cp*a**4*dn**5 &
+      &             -7.0_cp*a**4*dn**4-40.0_cp*a**4*dn**3+439.0_cp*a**4*dn**2+490.0_cp* &
+      &             a**4*dn-1536.0_cp*a**4-16.0_cp*a**3*b*dm**2*dn**3-168.0_cp*a**3*b*dm**2 &
+      &             *dn**2-56.0_cp*a**3*b*dm**2*dn+912.0_cp*a**3*b*dm**2-48.0_cp*a**3*b &
+      &             *dn**5-264.0_cp*a**3*b*dn**4+424.0_cp*a**3*b*dn**3+3492.0_cp*a**3*b &
+      &             *dn**2-268.0_cp*a**3*b*dn-11064.0_cp*a**3*b+8.0_cp*a**2*b**2*dm**2*dn**3 &
+      &             +18.0_cp*a**2*b**2*dm**2*dn**2-38.0_cp*a**2*b**2*dm**2*dn-60.0_cp*a**2 &
+      &             *b**2*dm**2+64.0_cp*a**2*b**2*dn**5+192.0_cp*a**2*b**2*dn**4-452.0_cp &
+      &             *a**2*b**2*dn**3-1218.0_cp*a**2*b**2*dn**2+922.0_cp*a**2*b**2*dn+1524.0_cp &
+      &             *a**2*b**2-64.0_cp*a*b**3*dn**5-352.0_cp*a*b**3*dn**4+2080.0_cp*a*b**3 &
+      &             *dn**2+1024.0_cp*a*b**3*dn-2688.0_cp*a*b**3+16.0_cp*b**4*dn**5+24.0_cp &
+      &             *b**4*dn**4-128.0_cp*b**4*dn**3-72.0_cp*b**4*dn**2+256.0_cp*b**4*dn &
+      &             -96.0_cp*b**4)/(16.0_cp*dn*(dn-2.0_cp)*(dn-1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp &
+      &             ))
+      stencil(ku+1)=-a*(5.0_cp*a**5*dm**4*dn**2-35.0_cp*a**5*dm**4+2.0_cp &
+      &             *a**5*dm**2*dn**4-110.0_cp*a**5*dm**2*dn**2+738.0_cp*a**5*dm**2+a** &
+      &             5*dn**6-77.0_cp*a**5*dn**4+1156.0_cp*a**5*dn**2-4896.0_cp*a**5+12.0_cp &
+      &             *a**4*b*dm**4*dn**2-108.0_cp*a**4*b*dm**4+8.0_cp*a**4*b*dm**2*dn**4 &
+      &             -344.0_cp*a**4*b*dm**2*dn**2+2448.0_cp*a**4*b*dm**2+12.0_cp*a**4*b*dn**6 &
+      &             -380.0_cp*a**4*b*dn**4+4112.0_cp*a**4*b*dn**2-14976.0_cp*a**4*b-4.0_cp &
+      &             *a**3*b**2*dm**2*dn**4+148.0_cp*a**3*b**2*dm**2*dn**2-1008.0_cp*a** &
+      &             3*b**2*dm**2-36.0_cp*a**3*b**2*dn**6+490.0_cp*a**3*b**2*dn**4-1774.0_cp &
+      &             *a**3*b**2*dn**2+2520.0_cp*a**3*b**2+32.0_cp*a**2*b**3*dm**2*dn**4-416.0_cp &
+      &             *a**2*b**3*dm**2*dn**2+1152.0_cp*a**2*b**3*dm**2+96.0_cp*a**2*b**3*dn**6 &
+      &             -2192.0_cp*a**2*b**3*dn**4+15728.0_cp*a**2*b**3*dn**2-33984.0_cp*a**2* &
+      &             b**3-56.0_cp*a*b**4*dn**6+704.0_cp*a*b**4*dn**4-1704.0_cp*a*b**4*dn**2 &
+      &             -864.0_cp*a*b**4+32.0_cp*b**5*dn**6-448.0_cp*b**5*dn**4+1568.0_cp*b**5 &
+      &             *dn**2-1152.0_cp*b**5)/(16.0_cp*(dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp) &
+      &             *(dn+1.0_cp)*(dn+2.0_cp)*(dn+3.0_cp))
+      stencil(ku+2)=a*b*(2.0_cp*a**4*dm**4*dn-16.0_cp*a**4*dm**4+33.0_cp* &
+      &             a**4*dm**2*dn**2-105.0_cp*a**4*dm**2*dn+108.0_cp*a**4*dm**2+6.0_cp* &
+      &             a**4*dn**5+7.0_cp*a**4*dn**4-40.0_cp*a**4*dn**3-439.0_cp*a**4*dn**2 &
+      &             +490.0_cp*a**4*dn+1536.0_cp*a**4-16.0_cp*a**3*b*dm**2*dn**3+168.0_cp &
+      &             *a**3*b*dm**2*dn**2-56.0_cp*a**3*b*dm**2*dn-912.0_cp*a**3*b*dm**2-48.0_cp &
+      &             *a**3*b*dn**5+264.0_cp*a**3*b*dn**4+424.0_cp*a**3*b*dn**3-3492.0_cp &
+      &             *a**3*b*dn**2-268.0_cp*a**3*b*dn+11064.0_cp*a**3*b+8.0_cp*a**2*b**2 &
+      &             *dm**2*dn**3-18.0_cp*a**2*b**2*dm**2*dn**2-38.0_cp*a**2*b**2*dm**2*dn &
+      &             +60.0_cp*a**2*b**2*dm**2+64.0_cp*a**2*b**2*dn**5-192.0_cp*a**2*b**2 &
+      &             *dn**4-452.0_cp*a**2*b**2*dn**3+1218.0_cp*a**2*b**2*dn**2+922.0_cp* &
+      &             a**2*b**2*dn-1524.0_cp*a**2*b**2-64.0_cp*a*b**3*dn**5+352.0_cp*a*b**3* &
+      &             dn**4-2080.0_cp*a*b**3*dn**2+1024.0_cp*a*b**3*dn+2688.0_cp*a*b**3+16.0_cp &
+      &             *b**4*dn**5-24.0_cp*b**4*dn**4-128.0_cp*b**4*dn**3+72.0_cp*b**4*dn**2+ &
+      &             256.0_cp*b**4*dn+96.0_cp*b**4)/(16.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp)* &
+      &             (dn+1.0_cp)*(dn+2.0_cp))
+      stencil(ku+3)=a**2*(15.0_cp*a**4*dm**4*dn+15.0_cp*a**4*dm**4+2.0_cp &
+      &             *a**4*dm**2*dn**3+57.0_cp*a**4*dm**2*dn**2-249.0_cp*a**4*dm**2*dn-440.0_cp &
+      &             *a**4*dm**2-a**4*dn**5+48.0_cp*a**4*dn**4-83.0_cp*a**4*dn**3-840.0_cp &
+      &             *a**4*dn**2+1092.0_cp*a**4*dn+3600.0_cp*a**4+32.0_cp*a**3*b*dm**4*dn &
+      &             +64.0_cp*a**3*b*dm**4+192.0_cp*a**3*b*dm**2*dn**2-512.0_cp*a**3*b*dm**2 &
+      &             *dn-1792.0_cp*a**3*b*dm**2-32.0_cp*a**3*b*dn**5+256.0_cp*a**3*b*dn**4- &
+      &             3328.0_cp*a**3*b*dn**2+2048.0_cp*a**3*b*dn+12288.0_cp*a**3*b+32.0_cp &
+      &             *a**2*b**2*dm**2*dn**3-216.0_cp*a**2*b**2*dm**2*dn**2-24.0_cp*a**2* &
+      &             b**2*dm**2*dn+1072.0_cp*a**2*b**2*dm**2+128.0_cp*a**2*b**2*dn**5-384.0_cp &
+      &             *a**2*b**2*dn**4-1488.0_cp*a**2*b**2*dn**3+3888.0_cp*a**2*b**2*dn** &
+      &             2+4624.0_cp*a**2*b**2*dn-7968.0_cp*a**2*b**2+64.0_cp*a*b**3*dm**2*dn**3 &
+      &             -448.0_cp*a*b**3*dm**2*dn-384.0_cp*a*b**3*dm**2-192.0_cp*a*b**3*dn**5+ &
+      &             1536.0_cp*a*b**3*dn**4-1696.0_cp*a*b**3*dn**3-9600.0_cp*a*b**3*dn** &
+      &             2+12064.0_cp*a*b**3*dn+18240.0_cp*a*b**3+144.0_cp*b**4*dn**5-512.0_cp &
+      &             *b**4*dn**4-800.0_cp*b**4*dn**3+2720.0_cp*b**4*dn**2+1616.0_cp*b**4 &
+      &             *dn-1248.0_cp*b**4)/(64.0_cp*dn*(dn-3.0_cp)*(dn-1.0_cp)*(dn+1.0_cp) &
+      &             *(dn+2.0_cp))
+      stencil(ku+4)=-a**3*b*(6.0_cp*a**2*dm**4-8.0_cp*a**2*dm**2*dn**2+91.0_cp &
+      &             *a**2*dm**2*dn-165.0_cp*a**2*dm**2-14.0_cp*a**2*dn**4+55.0_cp*a**2*dn**3 &
+      &             +212.0_cp*a**2*dn**2-967.0_cp*a**2*dn+498.0_cp*a**2-32.0_cp*a*b*dm**2* &
+      &             dn**2+112.0_cp*a*b*dm**2*dn+144.0_cp*a*b*dm**2+32.0_cp*a*b*dn**4-400.0_cp &
+      &             *a*b*dn**3+1488.0_cp*a*b*dn**2-888.0_cp*a*b*dn-2808.0_cp*a*b+16.0_cp &
+      &             *b**2*dm**2*dn**2-12.0_cp*b**2*dm**2*dn-28.0_cp*b**2*dm**2-64.0_cp* &
+      &             b**2*dn**4+480.0_cp*b**2*dn**3-904.0_cp*b**2*dn**2-308.0_cp*b**2*dn &
+      &             +1140.0_cp*b**2)/(32.0_cp*dn*(dn-2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp))
+      stencil(ku+5)=-a**4*(3.0_cp*a**2*dm**4*dn-3.0_cp*a**2*dm**4-2.0_cp* &
+      &             a**2*dm**2*dn**3+30.0_cp*a**2*dm**2*dn**2-108.0_cp*a**2*dm**2*dn+46.0_cp &
+      &             *a**2*dm**2-a**2*dn**5+3.0_cp*a**2*dn**4+68.0_cp*a**2*dn**3-420.0_cp &
+      &             *a**2*dn**2+608.0_cp*a**2*dn+192.0_cp*a**2+4.0_cp*a*b*dm**4*dn+4.0_cp &
+      &             *a*b*dm**4-8.0_cp*a*b*dm**2*dn**3+72.0_cp*a*b*dm**2*dn**2-128.0_cp* &
+      &             a*b*dm**2*dn-208.0_cp*a*b*dm**2+4.0_cp*a*b*dn**5-76.0_cp*a*b*dn**4+512.0_cp &
+      &             *a*b*dn**3-1328.0_cp*a*b*dn**2+384.0_cp*a*b*dn+2304.0_cp*a*b+20.0_cp &
+      &             *b**2*dm**2*dn**3-114.0_cp*b**2*dm**2*dn**2+86.0_cp*b**2*dm**2*dn+220.0_cp &
+      &             *b**2*dm**2-28.0_cp*b**2*dn**5+372.0_cp*b**2*dn**4-1710.0_cp*b**2*dn**3 &
+      &             +2742.0_cp*b**2*dn**2+772.0_cp*b**2*dn-4080.0_cp*b**2)/(32.0_cp*dn* &
+      &             (dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp)*(dn+1.0_cp))
+      stencil(ku+6)=a**5*b*(2.0_cp*dm**4-8.0_cp*dm**2*dn**2+67.0_cp*dm**2 &
+      &             *dn-147.0_cp*dm**2+6.0_cp*dn**4-101.0_cp*dn**3+628.0_cp*dn**2-1707.0_cp &
+      &             *dn+1710.0_cp)/(32.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp))
+      stencil(ku+7)=a**6*(dm-dn+6.0_cp)*(dm+dn-6.0_cp)*(dm**2-dn**2+7.0_cp &
+      &             *dn-12.0_cp)/(64.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp))
+      stencil(ku+8:len_stencil) = 0.0_cp
+
+      stencil = mirror_stencil(n, len_stencil)
+
+   end function intcheb4rmult4laplrot2
 !------------------------------------------------------------------------------
    function intcheb4rmult4hmult8laplrot2(a, b, m, n, len_stencil) result(stencil)
 
