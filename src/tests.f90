@@ -13,14 +13,16 @@ module tests
    use algebra, only: sgefa, rgesl, prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun
    use chebsparselib, only: intcheb2rmult1, rmult1, intcheb1, intcheb4, &
-       &                    intcheb2, eye, intcheb4rmult4, intcheb4rmult4hmult8
-   use matrix_types, only: type_bandmat_real
+       &                    intcheb2, eye, intcheb4rmult4, intcheb4rmult4hmult6, &
+       &                    intcheb4rmult4hmult8laplrot2, intcheb4rmult4lapl2
+   use integration, only: rInt_R
+   use matrix_types, only: type_bandmat_real, type_bordmat_real
 
    implicit none
 
    private
 
-   public :: solve_laplacian, solve_biharmo, test_radial_der, test_i4
+   public :: solve_laplacian, solve_biharmo, test_radial_der, test_i4, test_i4r4laplro
 
 contains
 
@@ -117,6 +119,98 @@ contains
       end if
 
    end subroutine solve_laplacian
+!------------------------------------------------------------------------------
+   subroutine test_i4r4laplro(nMstart, nMstop)
+
+      integer, intent(in) :: nMstart
+      integer, intent(in) :: nMstop
+
+      !-- Local variables
+      integer, allocatable :: nrs(:)
+      real(cp), allocatable :: r_loc(:), rhs1(:), rhs2(:), or2(:), rhs3(:)
+      integer :: file_handle, n_r_max_loc, n_in, n_r
+      real(cp) :: r_cmb, r_icb, eps, alph1, alph2, err
+      real(cp) :: ro
+      type(type_bordmat_real) :: A_mat
+      type(type_bandmat_real) :: B_mat
+
+      ro = 4.15_cp
+
+      eps = epsilon(1.0_cp)
+      if ( l_newmap ) then
+         n_in = 1
+      else
+         n_in = 0
+      end if
+
+      if ( rank == 0 ) then
+         allocate ( type_cheb :: rscheme )
+         r_cmb=one/(one-radratio)
+         r_icb=radratio/(one-radratio)
+         nrs = [16, 20, 24, 32, 36, 40, 48, 56, 64, 80, 96, 128,            &
+         &      144, 160, 180, 200, 220, 256, 320, 400, 512, 640, 768, 1024,&
+         &      2048, 4096]
+         open( newunit=file_handle, file='sol', form='unformatted')
+
+         do n_r=1,size(nrs)
+            n_r_max_loc = nrs(n_r)
+            allocate( r_loc(n_r_max_loc), rhs1(n_r_max_loc), rhs2(n_r_max_loc) )
+            allocate( or2(n_r_max_loc), rhs3(n_r_max_loc) )
+
+            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in, &
+                 &                  l_cheb_coll=.true.)
+            alph1=0.0_cp
+            alph2=0.0_cp
+            call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
+            or2(:)=one/r_loc(:)/r_loc(:)
+            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
+            call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
+
+            call A_mat%initialize(12, 12, 4, n_r_max_loc)
+            ! call A_mat%initialize(4, 4, 4, n_r_max_loc)
+            call B_mat%initialize(1, 1, n_r_max_loc)
+
+            call get_lhs_mat(A_mat, m=5, n_r_max=n_r_max_loc, &
+                 &           r_icb=r_icb, r_cmb=r_cmb)
+            call get_rhs_mat(B_mat, r_icb, r_cmb)
+
+            !-- Define a RHS
+            rhs1(:) = cos(r_loc(:))
+
+            !-- Bring it to Chebyshev space
+            call rscheme%costf1(rhs1, n_r_max_loc)
+            call B_mat%mat_vec_mul(rhs1)
+
+            rhs1(1)=0.0_cp
+            rhs1(2)=0.0_cp
+            rhs1(3)=0.0_cp
+            rhs1(4)=0.0_cp
+
+            call A_mat%solve(rhs1, n_r_max_loc)
+
+            call rscheme%costf1(rhs1, n_r_max_loc)
+            write(file_handle) nrs(n_r)
+            write(file_handle) r_loc
+            write(file_handle) rhs1
+
+            err = sum(abs(rhs1))/n_r_max_loc
+            write(6, '(i5,5es20.12)') n_r_max_loc, err, rhs1(1), rhs1(n_r_max_loc/2)
+
+
+
+            call A_mat%finalize()
+            call B_mat%finalize()
+            call finalize_der_arrays()
+
+            call rscheme%finalize()
+            deallocate( r_loc, rhs1, rhs2, rhs3, or2 )
+         end do
+
+         close(file_handle)
+
+      end if
+
+   end subroutine test_i4r4laplro
 !------------------------------------------------------------------------------
    subroutine solve_biharmo(nMstart, nMstop)
 
@@ -646,6 +740,140 @@ contains
 
    end subroutine solve_biharmo_colloc
 !------------------------------------------------------------------------------
+   subroutine get_rhs_mat(D_mat, r_icb, r_cmb)
+      !
+      ! This corresponds to the matrix that goes in front of the explicit terms
+      !
+
+      real(cp),           intent(in) :: r_icb
+      real(cp),           intent(in) :: r_cmb
+
+      !-- Output variable
+      type(type_bandmat_real), intent(inout) :: D_mat
+
+      !-- Local variables
+      real(cp) :: stencilD(D_mat%nbands)
+      real(cp) :: a, b
+      integer :: n_band, n_r, i_r, n_bounds
+
+      a = half*(r_cmb-r_icb)
+      b = half*(r_cmb+r_icb)
+
+      n_bounds = 4
+
+      !-- Fill right-hand side matrix
+      do n_r=1,D_mat%nlines
+         i_r = n_r+n_bounds
+
+         !-- Define right-hand side equations
+         stencilD = eye(D_mat%nbands)
+
+         !-- Roll array for band storage
+         do n_band=1,D_mat%nbands
+            if ( i_r+D_mat%ku+1-n_band <= D_mat%nlines .and. i_r+D_mat%ku+1-n_band >= 1 ) then
+               D_mat%dat(n_band,i_r+D_mat%ku+1-n_band) = rscheme%rnorm*stencilD(n_band)
+            end if
+         end do
+      end do
+
+   end subroutine get_rhs_mat
+!------------------------------------------------------------------------------
+   subroutine get_lhs_mat(A_mat, m, n_r_max, r_icb, r_cmb)
+
+      !-- Input variables
+      integer,            intent(in) :: m          ! Azimuthal wavenumber
+      integer,            intent(in) :: n_r_max
+      real(cp),           intent(in) :: r_icb
+      real(cp),           intent(in) :: r_cmb
+
+      !-- Output variables
+      type(type_bordmat_real), intent(inout) :: A_mat
+
+      !-- Local variables
+      real(cp) :: stencilA4(A_mat%nbands)
+      integer :: n_r, i_r, n_band, n_b
+      real(cp) :: a, b
+
+
+      !-- We have to fill A3 with zeros again otherwise on the next iteration
+      !-- with a different dt there might be some issues with spurious values
+      do n_r=1,A_mat%nlines_band
+         do n_b=1,A_mat%ntau
+            A_mat%A3(n_r,n_b)=0.0_cp
+         end do
+      end do
+
+      a = half*(r_cmb-r_icb)
+      b = half*(r_cmb+r_icb)
+
+      !-- Fill A4 banded-block
+      do n_r=1,A_mat%nlines_band
+         i_r = n_r+A_mat%ntau
+
+         !-- Define the equations
+         stencilA4 = intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+         ! stencilA4 = intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+
+         print*, n_r, maxval(abs(stencilA4)), minval(abs(stencilA4))
+
+         !-- Roll the array for band storage
+         do n_band=1,A_mat%nbands
+            if ( n_r+A_mat%ku+1-n_band <= A_mat%nlines_band .and. n_r+A_mat%ku+1-n_band >= 1 ) then
+               A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) = rscheme%rnorm* &
+               &             stencilA4(n_band)
+            end if
+         end do
+      end do
+
+      !print*, 'min/max', minval(abs(A_mat%A4)), maxval(abs(A_mat%A4))
+
+      !-- Fill A3
+      do n_r=1,A_mat%nlines_band
+         i_r = n_r+A_mat%ntau
+
+         stencilA4 = intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+         ! stencilA4 = intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+
+         !-- Only the lower bands can contribute to the matrix A3
+         do n_band=1,A_mat%kl
+            if ( n_r <= n_band .and. n_r+A_mat%ntau-n_band >= 1 ) then
+               A_mat%A3(n_r,n_r+A_mat%ntau-n_band) = rscheme%rnorm*    &
+               &      stencilA4(A_mat%ku+1+n_band)
+            end if
+         end do
+      end do
+
+      !-- Add the tau Lines for boundary conditions into A1 and A2
+      do n_r=1,A_mat%nlines
+         if ( n_r <= A_mat%ntau ) then
+            A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
+            A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+            A_mat%A1(3,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
+            A_mat%A1(4,n_r)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
+         else
+            A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
+            A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(n_r_max,n_r)
+            A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
+            A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(n_r_max,n_r)
+         end if
+      end do
+
+      !-- Cheb factor for boundary conditions
+      do n_r=1,A_mat%ntau
+         A_mat%A1(n_r,1)                =rscheme%boundary_fac*A_mat%A1(n_r,1)
+         A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
+         print*, n_r, maxval(abs(A_mat%A2(n_r, :))), minval(abs(A_mat%A2(n_r,:)))
+      end do
+
+      ! do n_r=1,A_mat%ntau
+         ! print*, A_mat%A1(n_r,:)
+      ! end do
+      stop
+      !-- LU factorisation
+      call A_mat%prepare_LU()
+
+   end subroutine get_lhs_mat
+!------------------------------------------------------------------------------
    subroutine test_i4()
       !
       ! This subroutine is used to compare the implementation of 4th order
@@ -659,7 +887,7 @@ contains
       integer :: file_handle, n_r_max_loc, n_in, n_r
       real(cp) :: r_cmb, r_icb, eps, alph1, alph2, err
       real(cp) :: ro
-      type(type_bandmat_real) :: I4_mat, I4R4_mat, I4R4H8_mat
+      type(type_bandmat_real) :: I4_mat, I4R4_mat, I4R4H6_mat
 
       ro = 4.15_cp
 
@@ -693,16 +921,16 @@ contains
 
             call I4_mat%initialize(4, 4, n_r_max_loc)
             call I4R4_mat%initialize(8, 8, n_r_max_loc)
-            call I4R4H8_mat%initialize(16, 16, n_r_max_loc)
+            call I4R4H6_mat%initialize(14, 14, n_r_max_loc)
 
             call fill_i4_mat(I4_mat, r_cmb, r_icb, 4)
             call fill_i4r4_mat(I4R4_mat, r_cmb, r_icb, 4)
-            call fill_i4r4h8_mat(I4R4H8_mat, r_cmb, r_icb, ro, 4)
+            call fill_i4r4h6_mat(I4R4H6_mat, r_cmb, r_icb, 4)
 
             !-- Define a RHS
             rhs1(:) = sqrt(r_loc)
             rhs2(:) = sqrt(r_loc)*or2(:)*or2(:)
-            rhs3(:) = sqrt(r_loc)/(ro**2-r_loc(:)**2)**4
+            rhs3(:) = sqrt(r_loc)/(ro**2-r_loc(:)**2)**3
 
             !-- Bring it to Chebyshev space
             call rscheme%costf1(rhs1, n_r_max_loc)
@@ -713,7 +941,7 @@ contains
             !call I4_mat%mat_vec_mul(rhs1)
             !call I4R4_mat%mat_vec_mul(rhs2)
             call I4R4_mat%mat_vec_mul(rhs1)
-            call I4R4H8_mat%mat_vec_mul(rhs3)
+            call I4R4H6_mat%mat_vec_mul(rhs3)
             rhs1(1)=0.0_cp
             rhs1(2)=0.0_cp
             rhs1(3)=0.0_cp
@@ -734,7 +962,7 @@ contains
 
             call I4_mat%finalize()
             call I4R4_mat%finalize()
-            call I4R4H8_mat%finalize()
+            call I4R4H6_mat%finalize()
 
             call rscheme%finalize()
             deallocate( r_loc, rhs1, rhs2, rhs3, or2 )
@@ -816,12 +1044,11 @@ contains
 
    end subroutine fill_i4r4_mat
 !------------------------------------------------------------------------------
-   subroutine fill_i4r4h8_mat(D_mat, r_cmb, r_icb, ro, n_boundaries)
+   subroutine fill_i4r4h6_mat(D_mat, r_cmb, r_icb, n_boundaries)
 
       !-- Input variables
       real(cp), intent(in) :: r_cmb
       real(cp), intent(in) :: r_icb
-      real(cp), intent(in) :: ro
       integer,  intent(in) :: n_boundaries
 
       !-- Output variable
@@ -840,7 +1067,7 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilD = intcheb4rmult4hmult8(a,b,ro,i_r-1,D_mat%nbands)
+         stencilD = intcheb4rmult4hmult6(a,b,i_r-1,D_mat%nbands)
 
          !-- Roll array for band storage
          do n_band=1,D_mat%nbands
@@ -850,7 +1077,7 @@ contains
          end do
       end do
 
-   end subroutine fill_i4r4h8_mat
+   end subroutine fill_i4r4h6_mat
 !------------------------------------------------------------------------------
    subroutine test_radial_der(nMstart, nMstop)
 

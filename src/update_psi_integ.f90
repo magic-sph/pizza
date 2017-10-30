@@ -528,13 +528,11 @@ contains
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
-               stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,r_cmb,m,i_r-1, &
-               &                                        A_mat%nbands)   +  &
-               &           tscheme%wimp_lin(1)*                            &
-               &           intcheb4rmult4hmult8laplrot2(a,b,r_cmb,m,i_r-1, &
-               &                                        A_mat%nbands)  
+               stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,m,i_r-1,A_mat%nbands)+&
+               &           tscheme%wimp_lin(1)*                                   &
+               &           intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
-               &           intcheb4rmult4hmult6(a,b,r_cmb,i_r-1,A_mat%nbands)
+               &           intcheb4rmult4hmult6(a,b,i_r-1,A_mat%nbands)
             end if
          end if
 
@@ -570,13 +568,11 @@ contains
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
-               stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,r_cmb,m,i_r-1, &
-               &                                        A_mat%nbands)   +  &
-               &           tscheme%wimp_lin(1)*                            &
-               &           intcheb4rmult4hmult8laplrot2(a,b,r_cmb,m,i_r-1, &
-               &                                        A_mat%nbands)  
+               stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,m,i_r-1,A_mat%nbands)+&
+               &           tscheme%wimp_lin(1)*                                   &
+               &           intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
-               &           intcheb4rmult4hmult6(a,b,r_cmb,i_r-1,A_mat%nbands)
+               &           intcheb4rmult4hmult6(a,b,i_r-1,A_mat%nbands)
             end if
          end if
 
@@ -715,7 +711,7 @@ contains
             if ( m0 == 1) then
                stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
             else
-               stencilD = intcheb4rmult4hmult8(a,b,r_cmb,i_r-1,D_mat%nbands)
+               stencilD = intcheb4rmult4hmult8(a,b,i_r-1,D_mat%nbands)
             end if
          end if
 
@@ -770,8 +766,7 @@ contains
             if ( m == 0 ) then
                stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
             else
-               stencilB = -intcheb4rmult4hmult8laplrot(a,b,r_cmb,m,i_r-1,&
-               &                                       B_mat%nbands)
+               stencilB = -intcheb4rmult4hmult8laplrot(a,b,m,i_r-1,B_mat%nbands)
             end if
          end if
 
@@ -830,10 +825,9 @@ contains
                &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands)
                CorSten  = 0.0_cp
             else
-               stencilC = -intcheb4rmult4hmult8laplrot2(a,b,r_cmb,m,i_r-1,&
-               &                                        Cmat%nbands)
-               CorSten  = -CorFac*real(m,cp)*intcheb4rmult4hmult6(a,b,r_cmb, &
-               &                                                  i_r-1,Cmat%nbands)
+               stencilC = -intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,Cmat%nbands)
+               CorSten  = -CorFac*real(m,cp)*intcheb4rmult4hmult6(a,b,i_r-1,   &
+               &                                                  Cmat%nbands)
             end if
          end if
 
