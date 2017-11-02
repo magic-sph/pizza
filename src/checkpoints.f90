@@ -10,7 +10,7 @@ module checkpoints
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &
-       &                l_bridge_step
+       &                l_bridge_step, l_cheb_coll
    use radial_scheme, only: type_rscheme
    use radial_functions, only: rscheme, r
    use chebyshev, only: type_cheb
@@ -59,7 +59,7 @@ contains
          rst_file='checkpoint_t='//trim(string)//'.'//tag
       end if
 
-      version = 2
+      version = 3
 
       if ( rank == 0 ) then
          open(newunit=n_rst_file, file=rst_file, status='unknown', &
@@ -68,6 +68,7 @@ contains
          !-- Write the header of the file
          write(n_rst_file) version
          write(n_rst_file) time
+         write(n_rst_file) l_cheb_coll
          write(n_rst_file) tscheme%norder_exp, tscheme%norder_imp
          write(n_rst_file) tscheme%dt
          write(n_rst_file) ra,pr,raxi,sc,ek,radratio
@@ -180,6 +181,7 @@ contains
       real(cp) :: ratio1, ratio2
       integer :: n_in, n_in_2, m, n_m, n_r_max_max, m_max_max
       integer :: norder_imp_old, norder_exp_old, n_o
+      logical :: l_coll_old
       real(cp), allocatable :: dt_array_old(:)
 
       if ( rank == 0 ) then
@@ -199,8 +201,17 @@ contains
             read(n_start_file) time, dt_array_old(2), dt_array_old(1)
             norder_imp_old = 2
             norder_exp_old = 2
-         else 
+            l_coll_old = .true.
+         else if ( version == 2 ) then ! This was without l_cheb_coll
             read(n_start_file) time
+            read(n_start_file) norder_exp_old, norder_imp_old
+            allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp) ) )
+            dt_array_old(:)=0.0_cp
+            read(n_start_file) dt_array_old(1:norder_exp_old)
+            l_coll_old = .true.
+         else if ( version == 3 ) then
+            read(n_start_file) time
+            read(n_start_file) l_coll_old
             read(n_start_file) norder_exp_old, norder_imp_old
             allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp) ) )
             dt_array_old(:)=0.0_cp
@@ -281,6 +292,7 @@ contains
       call MPI_Bcast(ek_old,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_heat_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_chem_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(l_coll_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
 
       !-- Fill the time step array
       do n_o=1,tscheme%norder_exp
@@ -304,8 +316,9 @@ contains
       !-- us
       if ( rank == 0 ) then
          read( n_start_file ) work_old
-         call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-              &         n_m_max_old, n_r_max_old, n_r_max_max,.false.)
+         call map_field(work_old, work, r_old, m2idx_old, scale_u,  &
+              &         n_m_max_old, n_r_max_old, n_r_max_max,      &
+              &         lBc=.false.,l_phys_space=.true.)
       end if
       call scatter_from_rank0_to_mloc(work, us_Mloc)
 
@@ -313,7 +326,8 @@ contains
       if ( rank == 0 ) then
          read( n_start_file ) work_old
          call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-              &         n_m_max_old, n_r_max_old, n_r_max_max,.false.)
+              &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+              &         lBc=.false.,l_phys_space=.true.)
       end if
       call scatter_from_rank0_to_mloc(work, up_Mloc)
 
@@ -322,7 +336,8 @@ contains
          if ( rank == 0 ) then
             read( n_start_file ) work_old
             call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-                 &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
+                 &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+                 &         lBc=.true.,l_phys_space=l_coll_old)
          end if
          if ( n_o <= tscheme%norder_exp ) then
             call scatter_from_rank0_to_mloc(work, dpsi_exp_Mloc(:,:,n_o))
@@ -334,7 +349,8 @@ contains
          if ( rank == 0 ) then
             read( n_start_file ) work_old
             call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-                 &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
+                 &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+                 &         lBc=.true.,l_phys_space=l_coll_old)
          end if
          if ( n_o <= tscheme%norder_imp-1 ) then
             call scatter_from_rank0_to_mloc(work, dpsi_imp_Mloc(:,:,n_o))
@@ -346,7 +362,8 @@ contains
          if ( rank == 0 ) then
             read( n_start_file ) work_old
             call map_field(work_old, work, r_old, m2idx_old, scale_t, &
-                 &         n_m_max_old, n_r_max_old, n_r_max_max,.false.)
+                 &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+                 &         lBc=.false.,l_phys_space=.true.)
          end if
          call scatter_from_rank0_to_mloc(work, temp_Mloc)
 
@@ -355,7 +372,8 @@ contains
             if ( rank == 0 ) then
                read( n_start_file ) work_old
                call map_field(work_old, work, r_old, m2idx_old, scale_t, &
-                    &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
+                    &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+                    &         lBc=.true.,l_phys_space=l_coll_old)
             end if
             if ( n_o <= tscheme%norder_exp ) then
                call scatter_from_rank0_to_mloc(work, dtemp_exp_Mloc(:,:,n_o))
@@ -367,7 +385,8 @@ contains
             if ( rank == 0 ) then
                read( n_start_file ) work_old
                call map_field(work_old, work, r_old, m2idx_old, scale_t, &
-                    &         n_m_max_old, n_r_max_old, n_r_max_max,.true.)
+                    &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+                    &         lBc=.true.,l_phys_space=l_coll_old)
             end if
             if ( n_o <= tscheme%norder_imp-1 ) then
                call scatter_from_rank0_to_mloc(work, dtemp_imp_Mloc(:,:,n_o))
@@ -383,7 +402,7 @@ contains
    end subroutine read_checkpoint
 !------------------------------------------------------------------------------
    subroutine map_field(field_old, field_new, r_old, m2idx_old, scale_field, &
-              &         n_m_max_old, n_r_max_old, n_r_max_max, lBc)
+              &         n_m_max_old, n_r_max_old, n_r_max_max, lBc, l_phys_space)
 
       !-- Input variables:
       integer,     intent(in) :: n_r_max_old
@@ -394,6 +413,7 @@ contains
       integer,     intent(in) :: m2idx_old(0:)
       real(cp),    intent(in) :: scale_field
       logical,     intent(in) :: lBc
+      logical,     intent(in) :: l_phys_space
 
       !-- Output variable:
       complex(cp), intent(out) :: field_new(n_m_max, n_r_max)
@@ -415,7 +435,8 @@ contains
                do n_r=1,n_r_max_old
                   radial_data(n_r)=field_old(n_m_old,n_r)
                end do
-               call map_field_r(radial_data, r_old, n_r_max_old,n_r_max_max,lBc)
+               call map_field_r(radial_data, r_old, n_r_max_old,n_r_max_max, &
+                    &           lBc,l_phys_space)
                do n_r=1,n_r_max
                   field_new(n_m, n_r) = scale_field*radial_data(n_r)
                end do
@@ -434,13 +455,15 @@ contains
 
    end subroutine map_field
 !------------------------------------------------------------------------------
-   subroutine map_field_r(radial_data,r_old,n_r_max_old,n_r_max_max,lBc)
+   subroutine map_field_r(radial_data,r_old,n_r_max_old,n_r_max_max,lBc, &
+              &           l_phys_space)
 
       !-- Input variables
       integer,  intent(in) :: n_r_max_old
       integer,  intent(in) :: n_r_max_max
       real(cp), intent(in) :: r_old(n_r_max_old)
       logical,  intent(in) :: lBc
+      logical,  intent(in) :: l_phys_space
 
       !-- Output data
       complex(cp), intent(inout) :: radial_data(:)
@@ -458,7 +481,7 @@ contains
       !-- Hence we here overwrite the boundary value by a simple
       !-- linear interpolation. This is harmless for the rest since
       !-- the boundary value is useless in the time advance
-      if ( lBc ) then
+      if ( lBc .and. l_phys_space ) then
          radial_data(1)=two*radial_data(2)-radial_data(3)
       end if
 
@@ -469,11 +492,13 @@ contains
       &   .and. rscheme%order_boundary == rscheme_old%order_boundary  ) then
 
          do n_r=1,n_r_max_old
-            radial_data_real(n_r) = real(radial_data(n_r))
+            radial_data_real(n_r) =  real(radial_data(n_r))
             radial_data_imag(n_r) = aimag(radial_data(n_r))
          end do
-         call rscheme_old%costf1(radial_data_real,n_r_max_old)
-         call rscheme_old%costf1(radial_data_imag,n_r_max_old)
+         if ( l_phys_space ) then
+            call rscheme_old%costf1(radial_data_real,n_r_max_old)
+            call rscheme_old%costf1(radial_data_imag,n_r_max_old)
+         end if
 
          !----- Fill up cheb polynomial with zeros:
          if ( n_r_max>n_r_max_old ) then
@@ -485,8 +510,10 @@ contains
          end if
 
          !----- Now transform to new radial grid points:
-         call rscheme%costf1(radial_data_real,n_r_max)
-         call rscheme%costf1(radial_data_imag,n_r_max)
+         if ( l_phys_space ) then
+            call rscheme%costf1(radial_data_real,n_r_max)
+            call rscheme%costf1(radial_data_imag,n_r_max)
+         end if
          !----- Rescale :
          cheb_norm_old=sqrt(two/real(n_r_max_old-1,kind=cp))
          cheb_fac=cheb_norm_old/rscheme%rnorm

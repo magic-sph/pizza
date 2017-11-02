@@ -344,26 +344,45 @@ contains
       !-- Get the radial derivative of psi to calculate uphi, us and omega
       call get_ddr(psi_Mloc, work_Mloc, om_Mloc, nMstart, nMstop, n_r_max, rscheme)
 
-      do n_r=1,n_r_max
-         h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
+      if ( l_non_rot ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
 
-            if ( m == 0 ) then
-               us_Mloc(n_m,n_r)=0.0_cp
-               up_Mloc(n_m,n_r)=uphi0(n_r)
-               om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
-            else
-               us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*h2*      psi_Mloc(n_m,n_r)
-               up_Mloc(n_m,n_r)=-h2*                           work_Mloc(n_m,n_r) &
-               &                +3.0_cp*r(n_r)*                 psi_Mloc(n_m,n_r)
-               om_Mloc(n_m,n_r)=-h2*                             om_Mloc(n_m,n_r) &
-               &        -(r_cmb*r_cmb*or1(n_r)-6.0_cp*r(n_r))* work_Mloc(n_m,n_r) &
-               &        +(6.0_cp+real(m,cp)*real(m,cp)*or2(n_r)*h2)*              &
-               &                                                psi_Mloc(n_m,n_r)
-            end if
+               if ( m == 0 ) then
+                  us_Mloc(n_m,n_r)=0.0_cp
+                  up_Mloc(n_m,n_r)=uphi0(n_r)
+                  om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+               else
+                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+                  up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
+                  om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-or1(n_r)*work_Mloc(n_m,n_r)+ &
+                  &                real(m,cp)*real(m,cp)*or2(n_r)*psi_Mloc(n_m,n_r)
+               end if
+            end do
          end do
-      end do
+      else
+         do n_r=1,n_r_max
+            h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+
+               if ( m == 0 ) then
+                  us_Mloc(n_m,n_r)=0.0_cp
+                  up_Mloc(n_m,n_r)=uphi0(n_r)
+                  om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+               else
+                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*h2*   psi_Mloc(n_m,n_r)
+                  up_Mloc(n_m,n_r)=-h2*                        work_Mloc(n_m,n_r) &
+                  &                +3.0_cp*r(n_r)*              psi_Mloc(n_m,n_r)
+                  om_Mloc(n_m,n_r)=-h2*                          om_Mloc(n_m,n_r) &
+                  &     -(r_cmb*r_cmb*or1(n_r)-6.0_cp*r(n_r))* work_Mloc(n_m,n_r) &
+                  &     +(6.0_cp+real(m,cp)*real(m,cp)*or2(n_r)*h2)*              &
+                  &                                             psi_Mloc(n_m,n_r)
+               end if
+            end do
+         end do
+      end if
 
 
       ! call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
@@ -728,6 +747,7 @@ contains
          psiMat_fac(n_r)=one/maxval(abs(A_mat%A2(n_r,:)))
       end do
 
+      !-- Multiply the lines of the matrix by precond
       do n_r=1,A_mat%ntau
          A_mat%A1(n_r,:) = A_mat%A1(n_r,:)*psiMat_fac(n_r)
          A_mat%A2(n_r,:) = A_mat%A2(n_r,:)*psiMat_fac(n_r)
@@ -750,8 +770,6 @@ contains
          end do
 
       end do
-
-
 
       !-- LU factorisation
       call A_mat%prepare_LU()

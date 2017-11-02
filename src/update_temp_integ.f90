@@ -2,7 +2,7 @@ module update_temp_integ
 
    use precision_mod
    use mem_alloc, only: bytes_allocated
-   use constants, only: zero, ci, half
+   use constants, only: zero, one, ci, half
    use pre_calculations, only: opr
    use namelists, only: kbott, ktopt, tadvz_fac, ra, r_cmb, r_icb
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
@@ -20,12 +20,6 @@ module update_temp_integ
    
    private
 
-   integer, parameter :: klA=4
-   integer, parameter :: kuA=4
-   integer, parameter :: klB=4
-   integer, parameter :: kuB=4
-   integer, parameter :: klC=2
-   integer, parameter :: kuC=2
    integer, parameter :: n_boundaries=2
 
    logical,  allocatable :: lTmat(:)
@@ -34,6 +28,7 @@ module update_temp_integ
    type(type_bordmat_real), allocatable :: LHS_mat(:)
    type(type_bandmat_real) :: RHSE_mat
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
+   real(cp), allocatable :: tempfac(:,:) ! Preconditon matrix
 
    public :: update_temp_int, initialize_temp_integ, finalize_temp_integ, &
    &         get_temp_rhs_imp_int
@@ -44,14 +39,14 @@ contains
 
       integer :: n_m, m
 
-      call RHSE_mat%initialize(klB, kuB, n_r_max)
+      call RHSE_mat%initialize(4, 4, n_r_max)
 
       allocate( RHSI_mat(nMstart:nMstop) )
       allocate( LHS_mat(nMstart:nMstop) )
 
       do n_m=nMstart,nMstop
-         call RHSI_mat(n_m)%initialize(klC, kuC, n_r_max)
-         call LHS_mat(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
+         call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
+         call LHS_mat(n_m)%initialize(4, 4, n_boundaries, n_r_max)
       end do
 
       call get_rhs_exp_mat(RHSE_mat)
@@ -67,6 +62,10 @@ contains
       allocate( rhs(n_r_max) )
       bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
+      allocate( tempfac(n_r_max, nMstart:nMstop) )
+      bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
+      &                 SIZEOF_DEF_REAL
+
    end subroutine initialize_temp_integ
 !------------------------------------------------------------------------------
    subroutine finalize_temp_integ
@@ -79,7 +78,7 @@ contains
          call RHSI_mat(n_m)%finalize()
          call LHS_mat(n_m)%finalize()
       end do
-      deallocate( LHS_mat, RHSI_mat, rhs, lTmat )
+      deallocate( tempfac, LHS_mat, RHSI_mat, rhs, lTmat )
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
@@ -159,7 +158,7 @@ contains
          m = idx2m(n_m)
          
          if ( .not. lTmat(n_m) ) then
-            call get_lhs_mat( tscheme, m, LHS_mat(n_m) )
+            call get_lhs_mat( tscheme, LHS_mat(n_m), tempfac(:,n_m), m )
             lTmat(n_m)=.true.
          end if
 
@@ -174,6 +173,11 @@ contains
             do n_o=1,tscheme%norder_exp
                rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*dtemp_exp_Mloc(n_m,n_r,n_o)
             end do
+         end do
+
+         !-- Multiply rhs by precond matrix
+         do n_r=1,n_r_max
+            rhs(n_r)=rhs(n_r)*tempfac(n_r,n_m)
          end do
 
          call LHS_mat(n_m)%solve(rhs, n_r_max)
@@ -295,7 +299,7 @@ contains
 
    end subroutine get_temp_rhs_imp_int
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat(tscheme, m, A_mat)
+   subroutine get_lhs_mat(tscheme, A_mat, tempMat_fac, m)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme    ! time step
@@ -303,6 +307,7 @@ contains
 
       !-- Output variables
       type(type_bordmat_real), intent(inout) :: A_mat
+      real(cp),                intent(inout) :: tempMat_fac(n_r_max)
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands)
@@ -335,6 +340,8 @@ contains
                A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) = rscheme%rnorm*stencilA4(n_band)
             end if
          end do
+
+         tempMat_fac(n_r+A_mat%ntau)=one/rscheme%rnorm/maxval(abs(stencilA4))
       end do
 
       !-- Fill A3
@@ -383,6 +390,35 @@ contains
       do n_r=1,A_mat%ntau
          A_mat%A1(n_r,1)                =rscheme%boundary_fac*A_mat%A1(n_r,1)
          A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
+      end do
+
+      !-- Continue to assemble precond matrix
+      do n_r=1,A_mat%ntau
+         tempMat_fac(n_r)=one/maxval(abs(A_mat%A2(n_r,:)))
+      end do
+
+      !-- Multiply the lines of the matrix by precond
+      do n_r=1,A_mat%ntau
+         A_mat%A1(n_r,:) = A_mat%A1(n_r,:)*tempMat_fac(n_r)
+         A_mat%A2(n_r,:) = A_mat%A2(n_r,:)*tempMat_fac(n_r)
+      end do
+
+      do n_r=A_mat%ntau+1, n_r_max
+         A_mat%A3(n_r-A_mat%ntau,:) = A_mat%A3(n_r-A_mat%ntau,:)* tempMat_fac(n_r)
+      end do
+
+      do n_r=1,A_mat%nlines_band
+         i_r = n_r+A_mat%ntau
+
+         do n_band=1,A_mat%nbands
+            if ( n_r+A_mat%ku+1-n_band <= A_mat%nlines_band .and. &
+            &                         n_r+A_mat%ku+1-n_band >= 1 ) then
+               A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) =  &
+               & A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band)* &
+               &                      tempMat_fac(n_r+A_mat%ntau)
+            end if
+         end do
+
       end do
 
       !-- LU factorisation

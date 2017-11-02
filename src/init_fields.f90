@@ -5,7 +5,7 @@ module init_fields
    use communications, only: transp_r2m, r2m_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
-       &                radratio, r_cmb, r_icb
+       &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank
@@ -35,13 +35,40 @@ contains
 
       !-- Local variables
       integer :: m, n_r, n_m, n_o
+      real(cp) :: h2
       character(len=76) :: message
 
       if ( l_start_file ) then
          call read_checkpoint(us_Mloc, up_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc, &
               &               temp_Mloc, dtemp_exp_Mloc, dtemp_imp_Mloc,      &
               &               time, tscheme)
+
+         !-- If integration method is used, since u_s is stored, one needs to
+         !-- reconstruct psi(m/=0)
+         if ( .not. l_cheb_coll ) then
+            do n_r=2,n_r_max
+               if ( l_non_rot ) then
+                  h2 = one
+               else
+                  h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
+               end if
+               do n_m=nMstart,nMstop
+                  m = idx2m(n_m)
+                  if ( m > 0 ) then
+                     psi_Mloc(n_m, n_r) = -ci*r(n_r)/real(m,cp)/h2 * us_Mloc(n_m, n_r)
+                  else
+                     psi_Mloc(n_m, n_r) = 0.0_cp
+                  end if
+               end do
+            end do
+            !-- Boundary point (since h2 is singular there)
+            do n_m=nMstart, nMstop
+               psi_Mloc(n_m,1)=zero
+            end do
+         end if
+
       else
+
          temp_Mloc(:,:)       =zero
          us_Mloc(:,:)         =zero
          up_Mloc(:,:)         =zero
@@ -58,6 +85,7 @@ contains
 
          if (rank == 0) write(message,'(''! Using dtMax time step:'',ES16.6)') dtMax
          call logWrite(message, n_log_file)
+
       end if
 
       !-- Initialize the weights of the time scheme
