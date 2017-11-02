@@ -109,7 +109,7 @@ contains
       n_cheb  =n_cheb_max-1
       fac_cheb=real(2*n_cheb,kind=cp)
       do n_m=nMstart,nMstop
-         if ( abs(df(n_m,n_cheb)) > threshold(n_m) ) then
+         if ( abs(df(n_m,n_cheb)) >= threshold(n_m) ) then
             df(n_m,n_cheb)=fac_cheb*f(n_m,n_cheb+1)
          else
             df(n_m,n_cheb)=zero
@@ -120,7 +120,7 @@ contains
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(4*n_cheb,kind=cp)
          do n_m=nMstart,nMstop
-            if ( abs(f(n_m,n_cheb+1)) > threshold(n_m) ) then
+            if ( abs(f(n_m,n_cheb+1)) >= threshold(n_m) ) then
                df(n_m,n_cheb)=df(n_m,n_cheb+2) + fac_cheb*f(n_m,n_cheb+1)
             else
                df(n_m,n_cheb)=df(n_m,n_cheb+2)
@@ -152,7 +152,7 @@ contains
       end do
       n_cheb  =n_cheb_max-1
       fac_cheb=real(2*n_cheb,kind=cp)
-      if ( abs(f(n_cheb+1)) > threshold ) then
+      if ( abs(f(n_cheb+1)) >= threshold ) then
          df(n_cheb)=fac_cheb*f(n_cheb+1)
       else
          df(n_cheb)=0.0_cp
@@ -161,7 +161,7 @@ contains
       !----- Recursion
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(4*n_cheb,kind=cp)
-         if ( abs(f(n_cheb+1)) > threshold ) then
+         if ( abs(f(n_cheb+1)) >= threshold ) then
             df(n_cheb)=df(n_cheb+2) + fac_cheb*f(n_cheb+1)
          else
             df(n_cheb)=0.0_cp
@@ -207,7 +207,7 @@ contains
       n_cheb=n_cheb_max-1
       fac_cheb=real(2*n_cheb,kind=cp)
       do n_m=nMstart,nMstop
-         if ( abs(df(n_m,n_cheb)) > threshold(n_m) ) then
+         if ( abs(df(n_m,n_cheb)) >= threshold(n_m) ) then
             df(n_m,n_cheb)=fac_cheb*f(n_m,n_cheb+1)
          else
             df(n_m,n_cheb)=zero
@@ -219,12 +219,12 @@ contains
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(4*n_cheb,kind=cp)
          do n_m=nMstart,nMstop
-            if ( abs(f(n_m,n_cheb+1)) > threshold(n_m) ) then
+            if ( abs(f(n_m,n_cheb+1)) >= threshold(n_m) ) then
                df(n_m,n_cheb) = df(n_m,n_cheb+2) + fac_cheb* f(n_m,n_cheb+1)
             else
                df(n_m,n_cheb) = df(n_m,n_cheb+2)
             end if
-            if ( abs(df(n_m,n_cheb+1)) > threshold(n_m) ) then
+            if ( abs(df(n_m,n_cheb+1)) >= threshold(n_m) ) then
                ddf(n_m,n_cheb)=ddf(n_m,n_cheb+2) + fac_cheb*df(n_m,n_cheb+1)
             else
                ddf(n_m,n_cheb)=ddf(n_m,n_cheb+2)
@@ -263,7 +263,7 @@ contains
       end do
       n_cheb=n_cheb_max-1
       fac_cheb=real(2*n_cheb,kind=cp)
-      if ( abs(f(n_cheb+1)) > threshold ) then
+      if ( abs(f(n_cheb+1)) >= threshold ) then
          df(n_cheb) =fac_cheb*f(n_cheb+1)
       else
          df(n_cheb) =0.0_cp
@@ -273,13 +273,13 @@ contains
       !----- recursion
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(4*n_cheb,kind=cp)
-         if ( abs(f(n_cheb+1)) > threshold ) then
+         if ( abs(f(n_cheb+1)) >= threshold ) then
             df(n_cheb) = df(n_cheb+2) + fac_cheb* f(n_cheb+1)
          else
             df(n_cheb) = df(n_cheb+2)
          end if
 
-         if ( abs(df(n_cheb+1)) > threshold ) then
+         if ( abs(df(n_cheb+1)) >= threshold ) then
             ddf(n_cheb)=ddf(n_cheb+2) + fac_cheb*df(n_cheb+1)
          else
             ddf(n_cheb)=ddf(n_cheb+2)

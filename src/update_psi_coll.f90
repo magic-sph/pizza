@@ -1,4 +1,4 @@
-module update_psi
+module update_psi_coll
 
    use precision_mod
    use parallel_mod
@@ -28,12 +28,12 @@ module update_psi
    complex(cp), allocatable :: rhs(:)
    real(cp), allocatable :: rhs_m0(:)
 
-   public :: update_om, initialize_update_om, finalize_update_om, &
-   &         get_psi_rhs_imp
+   public :: update_om_coll, initialize_om_coll, finalize_om_coll, &
+   &         get_psi_rhs_imp_coll
 
 contains
 
-   subroutine initialize_update_om
+   subroutine initialize_om_coll
 
       allocate( lPsimat(nMstart:nMstop) )
       lPsimat(:)=.false.
@@ -52,19 +52,19 @@ contains
       allocate( uphiMat(n_r_max,n_r_max) )
       bytes_allocated = bytes_allocated+n_r_max*n_r_max*SIZEOF_DEF_REAL
 
-   end subroutine initialize_update_om
+   end subroutine initialize_om_coll
 !------------------------------------------------------------------------------
-   subroutine finalize_update_om
+   subroutine finalize_om_coll
 
       deallocate( rhs_m0, rhs, psiMat_fac )
       deallocate( lPsimat, psiMat, uphiMat, psiPivot )
 
-   end subroutine finalize_update_om
+   end subroutine finalize_om_coll
 !------------------------------------------------------------------------------
-   subroutine update_om(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,    &
-              &         dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,         &
-              &         buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp,  &
-              &         l_vphi_bal_calc)
+   subroutine update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,    &
+              &              dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,         &
+              &              buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp,  &
+              &              l_vphi_bal_calc)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -106,9 +106,9 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,       &
-           &               tscheme%wimp_lin(2), dpsi_imp_Mloc(:,:,1), &
-           &               vp_bal, l_vphi_bal_calc)
+      call get_psi_rhs_imp_coll(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,       &
+           &                    tscheme%wimp_lin(2), dpsi_imp_Mloc(:,:,1), &
+           &                    vp_bal, l_vphi_bal_calc)
 
 
       do n_m=nMstart,nMstop
@@ -258,11 +258,10 @@ contains
          call roll(dpsi_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
       end if
 
-   end subroutine update_om
+   end subroutine update_om_coll
 !------------------------------------------------------------------------------
-   subroutine get_psi_rhs_imp(us_Mloc, up_Mloc, om_Mloc, dom_Mloc, &
-              &               wimp, dpsi_imp_Mloc_last, vp_bal,    &
-              &               l_vphi_bal_calc)
+   subroutine get_psi_rhs_imp_coll(us_Mloc, up_Mloc, om_Mloc, dom_Mloc, wimp, &
+              &                    dpsi_imp_Mloc_last, vp_bal, l_vphi_bal_calc)
 
       !-- Input variables
       complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
@@ -337,7 +336,7 @@ contains
 
       end if ! if wimp /= .or. l_vphi_bal_calc
 
-   end subroutine get_psi_rhs_imp
+   end subroutine get_psi_rhs_imp_coll
 !------------------------------------------------------------------------------
    subroutine get_psiMat(tscheme, m, psiMat, psiPivot, psiMat_fac)
 
@@ -537,4 +536,4 @@ contains
 
    end subroutine get_uphiMat
 !------------------------------------------------------------------------------
-end module update_psi
+end module update_psi_coll

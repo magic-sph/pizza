@@ -1,4 +1,4 @@
-module update_temperature
+module update_temp_coll
 
    use precision_mod
    use mem_alloc, only: bytes_allocated
@@ -27,12 +27,12 @@ module update_temperature
 #endif
    complex(cp), allocatable :: rhs(:)
 
-   public :: update_temp, initialize_update_temp, finalize_update_temp, &
-   &         get_temp_rhs_imp
+   public :: update_temp_co, initialize_temp_coll, finalize_temp_coll, &
+   &         get_temp_rhs_imp_coll
 
 contains
 
-   subroutine initialize_update_temp
+   subroutine initialize_temp_coll
 
       allocate( lTmat(nMstart:nMstop) )
       lTmat(:)=.false.
@@ -50,9 +50,9 @@ contains
       allocate( rhs(n_r_max) )
       bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
-   end subroutine initialize_update_temp
+   end subroutine initialize_temp_coll
 !------------------------------------------------------------------------------
-   subroutine finalize_update_temp
+   subroutine finalize_temp_coll
 
       deallocate( rhs )
 #ifdef WITH_PRECOND_S
@@ -60,11 +60,11 @@ contains
 #endif
       deallocate( lTmat, tMat, tPivot )
 
-   end subroutine finalize_update_temp
+   end subroutine finalize_temp_coll
 !------------------------------------------------------------------------------
-   subroutine update_temp(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
-              &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
-              &           tscheme, lMat, l_roll_imp, l_log_next)
+   subroutine update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
+              &              dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
+              &              tscheme, lMat, l_roll_imp, l_log_next)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -112,13 +112,8 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2), &
-           &                dtemp_imp_Mloc(:,:,1))
-
-      !print*, 'T[n-2]', sum(abs(dtemp_imp_Mloc(:,:,3)))
-      !print*, 'T[n-1]', sum(abs(dtemp_imp_Mloc(:,:,2)))
-      !print*, 'T[n] (from imp)', sum(abs(dtemp_imp_Mloc(:,:,1)))
-      !print*, 'T[n]', sum(abs(temp_Mloc))
+      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2), &
+           &                     dtemp_imp_Mloc(:,:,1))
 
       do n_m=nMstart, nMstop
 
@@ -173,8 +168,6 @@ contains
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
-      !print*, 'T[n+1]', sum(abs(temp_Mloc))
-
       !-- Assemble second buoyancy part from T^{n+1}
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
@@ -198,9 +191,10 @@ contains
          call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, n_r_max, rscheme)
       end if
 
-   end subroutine update_temp
+   end subroutine update_temp_co
 !------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp(temp_Mloc, dtemp_Mloc, wimp, dtemp_imp_Mloc_last)
+   subroutine get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, wimp, &
+              &                     dtemp_imp_Mloc_last)
 
       !-- Input variables
       complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
@@ -237,7 +231,7 @@ contains
 
       end if
 
-   end subroutine get_temp_rhs_imp
+   end subroutine get_temp_rhs_imp_coll
 !------------------------------------------------------------------------------
 #ifdef WITH_PRECOND_S
    subroutine get_tempMat(tscheme, m, tMat, tPivot, tMat_fac)
@@ -322,4 +316,4 @@ contains
 
    end subroutine get_tempMat
 !------------------------------------------------------------------------------
-end module update_temperature
+end module update_temp_coll

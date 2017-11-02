@@ -20,9 +20,9 @@ program pizza
        &                 finalize_truncation
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop
-   use update_temperature, only: initialize_update_temp, finalize_update_temp
+   use update_temp_coll, only: initialize_temp_coll, finalize_temp_coll
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
-   use update_psi, only: initialize_update_om, finalize_update_om
+   use update_psi_coll, only: initialize_om_coll, finalize_om_coll
    use update_psi_integ, only: initialize_psi_integ, finalize_psi_integ
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
@@ -99,10 +99,9 @@ program pizza
    local_bytes_used = bytes_allocated-local_bytes_used
    local_bytes_used = bytes_allocated
    if ( l_cheb_coll ) then
-      call initialize_update_om()
-      call initialize_update_temp()
+      call initialize_om_coll()
+      call initialize_temp_coll()
    else
-      call initialize_update_om()
       call initialize_psi_integ()
       call initialize_temp_integ()
    end if
@@ -159,12 +158,11 @@ program pizza
 
    !-- Close files
    if ( l_cheb_coll ) then
-      call finalize_update_temp()
-      call finalize_update_om()
+      call finalize_temp_coll()
+      call finalize_om_coll()
    else
       call finalize_temp_integ()
       call finalize_psi_integ()
-      call finalize_update_om()
    end if
    call finalize_radial_loop()
    call finalize_fourier()
