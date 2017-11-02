@@ -11,7 +11,7 @@ program pizza
    use communications, only: initialize_communications, finalize_communications
    use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains
    use namelists, only: read_namelists, write_namelists, tag, time_scheme, &
-       &                l_cheb_coll
+       &                l_cheb_coll, l_rerror_fix, rerror_fac
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use radial_functions, only: initialize_radial_functions, &
@@ -89,7 +89,7 @@ program pizza
    call memWrite('Fields', local_bytes_used)
    local_bytes_used = bytes_allocated
    call initialize_radial_functions()
-   call initialize_der_arrays(n_r_max, nMstart, nMstop)
+   call initialize_der_arrays(n_r_max, nMstart, nMstop, l_rerror_fix, rerror_fac)
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('Radial functions', local_bytes_used)
    local_bytes_used = bytes_allocated

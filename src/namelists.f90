@@ -37,6 +37,8 @@ module namelists
    character(len=72), public :: time_scheme ! Time scheme
    character(len=72), public :: cheb_method ! Chebyshev method: collocation, integration
    logical, public :: l_newmap       ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
+   logical, public :: l_rerror_fix ! Switch to fix round-off error in derivative calculation
+   real(cp), public :: rerror_fac
    real(cp), public :: dtMin           ! Minimum allowed time step
    real(cp), public :: dtMax           ! Maximum allowed time step
    real(cp), public :: alpha           ! Weight for implicit time step
@@ -92,7 +94,8 @@ contains
       namelist/control/tag,n_time_steps,alpha,l_newmap,map_function,&
       &                alph1,alph2,dtMax,courfac,tEnd,runHours,     &
       &                runMinutes,runSeconds,l_non_rot,             &
-      &                n_fft_optim_lev,time_scheme,cheb_method
+      &                n_fft_optim_lev,time_scheme,cheb_method,     &
+      &                l_rerror_fix, rerror_fac
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz
@@ -278,6 +281,9 @@ contains
                           ! 3: FFTW_EXHAUSTIVE
       time_scheme      ='CNAB2'
       cheb_method      ='colloc'
+      l_rerror_fix     =.true.
+      rerror_fac       =500.0_cp
+
 
       !-- Physcal parameters
       l_non_rot        =.false.
@@ -360,6 +366,8 @@ contains
       write(n_out,'(''  runSeconds      ='',i4,'','')') runSeconds
       write(n_out,'(''  tEND            ='',ES14.6,'','')') tEND
       write(n_out,'(''  l_non_rot       ='',l3,'','')') l_non_rot
+      write(n_out,'(''  l_rerror_fix    ='',l3,'','')') l_rerror_fix
+      write(n_out,'(''  rerror_fac      ='',ES14.6,'','')') rerror_fac
       write(n_out,'(''  n_fft_optim_lev ='',i4,'','')') n_fft_optim_lev
       write(n_out,*) "/"
 

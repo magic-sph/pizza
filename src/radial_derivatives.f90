@@ -37,18 +37,27 @@ module radial_der
 
    complex(cp), allocatable :: work(:,:)
    real(cp), allocatable :: work_1d_real(:)
+   real(cp) :: thr
 
 contains
 
 !------------------------------------------------------------------------------
-   subroutine initialize_der_arrays(n_r_max,nMstart,nMstop)
+   subroutine initialize_der_arrays(n_r_max, nMstart, nMstop, l_rerror, rerror_fac)
       !
       ! Allocate work arrays to compute derivatives
       !
 
-      integer, intent(in) :: n_r_max
-      integer, intent(in) :: nMstart
-      integer, intent(in) :: nMstop
+      integer,  intent(in) :: n_r_max
+      integer,  intent(in) :: nMstart
+      integer,  intent(in) :: nMstop
+      logical,  intent(in) :: l_rerror
+      real(cp), intent(in) :: rerror_fac
+
+      if ( l_rerror ) then
+         thr = rerror_fac * epsilon(1.0_cp)
+      else
+         thr = 0.0_cp
+      end if
 
       allocate( work_1d_real(n_r_max) )
       allocate( work(nMstart:nMstop,n_r_max) )
@@ -85,7 +94,11 @@ contains
       !-- Local variables:
       integer :: n_m,n_cheb
       real(cp) :: fac_cheb
+      real(cp) :: threshold(nMstart:nMstop)
 
+      do n_m=nMstart, nMstop
+         threshold(n_m) = maxval(abs(f(n_m,:)))*thr
+      end do
 
       !-- initialize derivatives:
       do n_cheb=n_cheb_max,n_r_max
@@ -96,14 +109,22 @@ contains
       n_cheb  =n_cheb_max-1
       fac_cheb=real(2*n_cheb,kind=cp)
       do n_m=nMstart,nMstop
-         df(n_m,n_cheb)=fac_cheb*f(n_m,n_cheb+1)
+         if ( abs(df(n_m,n_cheb)) > threshold(n_m) ) then
+            df(n_m,n_cheb)=fac_cheb*f(n_m,n_cheb+1)
+         else
+            df(n_m,n_cheb)=zero
+         end if
       end do
 
       !----- Recursion
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(4*n_cheb,kind=cp)
          do n_m=nMstart,nMstop
-            df(n_m,n_cheb)=df(n_m,n_cheb+2) + fac_cheb*f(n_m,n_cheb+1)
+            if ( abs(f(n_m,n_cheb+1)) > threshold(n_m) ) then
+               df(n_m,n_cheb)=df(n_m,n_cheb+2) + fac_cheb*f(n_m,n_cheb+1)
+            else
+               df(n_m,n_cheb)=df(n_m,n_cheb+2)
+            end if
          end do
       end do
 
@@ -121,8 +142,9 @@ contains
 
       !-- Local variables:
       integer :: n_cheb
-      real(cp) :: fac_cheb
+      real(cp) :: fac_cheb, threshold
 
+      threshold = maxval(abs(f))*thr
 
       !-- initialize derivatives:
       do n_cheb=n_cheb_max,n_r_max
@@ -130,12 +152,20 @@ contains
       end do
       n_cheb  =n_cheb_max-1
       fac_cheb=real(2*n_cheb,kind=cp)
-      df(n_cheb)=fac_cheb*f(n_cheb+1)
+      if ( abs(f(n_cheb+1)) > threshold ) then
+         df(n_cheb)=fac_cheb*f(n_cheb+1)
+      else
+         df(n_cheb)=0.0_cp
+      end if
 
       !----- Recursion
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(4*n_cheb,kind=cp)
-         df(n_cheb)=df(n_cheb+2) + fac_cheb*f(n_cheb+1)
+         if ( abs(f(n_cheb+1)) > threshold ) then
+            df(n_cheb)=df(n_cheb+2) + fac_cheb*f(n_cheb+1)
+         else
+            df(n_cheb)=0.0_cp
+         end if
       end do
 
    end subroutine get_dcheb_real_1d
@@ -161,6 +191,11 @@ contains
       !-- local variables:
       integer :: n_m,n_cheb
       real(cp) :: fac_cheb
+      real(cp) :: threshold(nMstart:nMstop)
+
+      do n_m=nMstart, nMstop
+         threshold(n_m) = maxval(abs(f(n_m,:)))*thr
+      end do
     
       !----- initialize derivatives:
       do n_cheb=n_cheb_max,n_r_max
@@ -172,7 +207,11 @@ contains
       n_cheb=n_cheb_max-1
       fac_cheb=real(2*n_cheb,kind=cp)
       do n_m=nMstart,nMstop
-         df(n_m,n_cheb) =fac_cheb*f(n_m,n_cheb+1)
+         if ( abs(df(n_m,n_cheb)) > threshold(n_m) ) then
+            df(n_m,n_cheb)=fac_cheb*f(n_m,n_cheb+1)
+         else
+            df(n_m,n_cheb)=zero
+         end if
          ddf(n_m,n_cheb)=zero
       end do
     
@@ -180,8 +219,16 @@ contains
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(4*n_cheb,kind=cp)
          do n_m=nMstart,nMstop
-            df(n_m,n_cheb) = df(n_m,n_cheb+2) + fac_cheb* f(n_m,n_cheb+1)
-            ddf(n_m,n_cheb)=ddf(n_m,n_cheb+2) + fac_cheb*df(n_m,n_cheb+1)
+            if ( abs(f(n_m,n_cheb+1)) > threshold(n_m) ) then
+               df(n_m,n_cheb) = df(n_m,n_cheb+2) + fac_cheb* f(n_m,n_cheb+1)
+            else
+               df(n_m,n_cheb) = df(n_m,n_cheb+2)
+            end if
+            if ( abs(df(n_m,n_cheb+1)) > threshold(n_m) ) then
+               ddf(n_m,n_cheb)=ddf(n_m,n_cheb+2) + fac_cheb*df(n_m,n_cheb+1)
+            else
+               ddf(n_m,n_cheb)=ddf(n_m,n_cheb+2)
+            end if
          end do
       end do
 
@@ -205,7 +252,9 @@ contains
     
       !-- local variables:
       integer :: n_cheb
-      real(cp) :: fac_cheb
+      real(cp) :: fac_cheb, threshold
+
+      threshold = maxval(abs(f))*thr
     
       !----- initialize derivatives:
       do n_cheb=n_cheb_max,n_r_max
@@ -214,14 +263,27 @@ contains
       end do
       n_cheb=n_cheb_max-1
       fac_cheb=real(2*n_cheb,kind=cp)
-      df(n_cheb) =fac_cheb*f(n_cheb+1)
+      if ( abs(f(n_cheb+1)) > threshold ) then
+         df(n_cheb) =fac_cheb*f(n_cheb+1)
+      else
+         df(n_cheb) =0.0_cp
+      end if
       ddf(n_cheb)=0.0_cp
     
       !----- recursion
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(4*n_cheb,kind=cp)
-         df(n_cheb) = df(n_cheb+2) + fac_cheb* f(n_cheb+1)
-         ddf(n_cheb)=ddf(n_cheb+2) + fac_cheb*df(n_cheb+1)
+         if ( abs(f(n_cheb+1)) > threshold ) then
+            df(n_cheb) = df(n_cheb+2) + fac_cheb* f(n_cheb+1)
+         else
+            df(n_cheb) = df(n_cheb+2)
+         end if
+
+         if ( abs(df(n_cheb+1)) > threshold ) then
+            ddf(n_cheb)=ddf(n_cheb+2) + fac_cheb*df(n_cheb+1)
+         else
+            ddf(n_cheb)=ddf(n_cheb+2)
+         end if
       end do
 
    end subroutine get_ddcheb_real_1d

@@ -7,7 +7,7 @@ module update_psi_integ
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump
-   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight, r
+   use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -26,8 +26,9 @@ module update_psi_integ
    
    private
 
-   logical,  allocatable :: lPsimat(:)
-   complex(cp), allocatable :: rhs(:)
+   logical,  allocatable :: lPsimat(:) ! Do we need to rebuild the matrices?
+   complex(cp), allocatable :: rhs(:)  ! Complex right-hand-side
+   real(cp), allocatable :: psifac(:,:) ! Precondition matrix
 
    type(type_bordmat_complex), allocatable :: LHS_mat(:)
    type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
@@ -103,6 +104,10 @@ contains
       rhs(:)=zero
       bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
+      allocate( psifac(n_r_max, nMstart:nMstop) )
+      bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
+      &                 SIZEOF_DEF_REAL
+
    end subroutine initialize_psi_integ
 !------------------------------------------------------------------------------
    subroutine finalize_psi_integ
@@ -121,9 +126,7 @@ contains
          call LHS_mat(n_m)%finalize()
       end do
       deallocate( LHS_mat, RHSIL_mat, RHSI_mat )
-
-      deallocate( rhs)
-      deallocate( lPsimat )
+      deallocate( psifac, rhs, lPsimat )
 
    end subroutine finalize_psi_integ
 !------------------------------------------------------------------------------
@@ -260,7 +263,7 @@ contains
          m = idx2m(n_m)
 
          if ( .not. lPsimat(n_m) ) then
-            call get_lhs_mat(tscheme, LHS_mat(n_m), m)
+            call get_lhs_mat(tscheme, LHS_mat(n_m), psifac(:, n_m), m)
             lPsimat(n_m)=.true.
          end if
 
@@ -288,6 +291,11 @@ contains
             if ( m /= 0 ) then
                rhs(n_r)=rhs(n_r)+buo_imp_Mloc(n_m,n_r)
             end if
+         end do
+
+         !-- Multiply rhs by precond matrix
+         do n_r=1,n_r_max
+            rhs(n_r)=rhs(n_r)*psifac(n_r,n_m)
          end do
 
          call LHS_mat(n_m)%solve(rhs, n_r_max)
@@ -517,7 +525,7 @@ contains
 
    end subroutine get_psi_rhs_imp_int
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat(tscheme, A_mat, m)
+   subroutine get_lhs_mat(tscheme, A_mat, psiMat_fac, m)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme    ! time step
@@ -525,6 +533,7 @@ contains
 
       !-- Output variables
       type(type_bordmat_complex), intent(inout) :: A_mat
+      real(cp),                   intent(inout) :: psiMat_fac(n_r_max)
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands), CorSten(A_mat%nbands)
@@ -588,6 +597,9 @@ contains
                &             cmplx(stencilA4(n_band), CorSten(n_band), kind=cp)
             end if
          end do
+
+         psiMat_fac(n_r+A_mat%ntau)=one/rscheme%rnorm/  &
+         &                          maxval(abs(cmplx(stencilA4, CorSten, kind=cp)))
       end do
 
       !-- Fill A3
@@ -710,6 +722,36 @@ contains
          A_mat%A1(n_r,1)                =rscheme%boundary_fac*A_mat%A1(n_r,1)
          A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
       end do
+
+      !-- Continue to assemble precond matrix
+      do n_r=1,A_mat%ntau
+         psiMat_fac(n_r)=one/maxval(abs(A_mat%A2(n_r,:)))
+      end do
+
+      do n_r=1,A_mat%ntau
+         A_mat%A1(n_r,:) = A_mat%A1(n_r,:)*psiMat_fac(n_r)
+         A_mat%A2(n_r,:) = A_mat%A2(n_r,:)*psiMat_fac(n_r)
+      end do
+
+      do n_r=A_mat%ntau+1, n_r_max
+         A_mat%A3(n_r-A_mat%ntau,:) = A_mat%A3(n_r-A_mat%ntau,:)* psiMat_fac(n_r)
+      end do
+
+      do n_r=1,A_mat%nlines_band
+         i_r = n_r+A_mat%ntau
+
+         do n_band=1,A_mat%nbands
+            if ( n_r+A_mat%ku+1-n_band <= A_mat%nlines_band .and. &
+            &                         n_r+A_mat%ku+1-n_band >= 1 ) then
+               A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) =  &
+               & A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band)* &
+               &                      psiMat_fac(n_r+A_mat%ntau)
+            end if
+         end do
+
+      end do
+
+
 
       !-- LU factorisation
       call A_mat%prepare_LU()

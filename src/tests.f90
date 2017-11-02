@@ -5,7 +5,7 @@ module tests
    use precision_mod
    use parallel_mod
    use constants, only: one, half, two, pi
-   use namelists, only: l_newmap, radratio
+   use namelists, only: l_newmap, radratio, l_rerror_fix, rerror_fac
    use chebyshev, only: type_cheb
    use radial_functions, only: rscheme
    use radial_der, only: initialize_der_arrays, finalize_der_arrays, get_ddr
@@ -77,7 +77,8 @@ contains
                alph2=0.0_cp
             end if
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
-            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
+            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop, l_rerror_fix, &
+                 &                     rerror_fac)
             call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             c1 = (-1.0_cp-0.75_cp*(r_cmb**2-r_icb**2))/log(r_cmb/r_icb)
@@ -163,7 +164,8 @@ contains
             alph2=0.0_cp
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
             or2(:)=one/r_loc(:)/r_loc(:)
-            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
+            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop, l_rerror_fix, &
+                 &                     rerror_fac)
             call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             call A_mat%initialize(12, 12, 4, n_r_max_loc)
@@ -263,7 +265,8 @@ contains
                alph2=0.0_cp
             end if
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
-            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
+            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop, l_rerror_fix, &
+                 &                     rerror_fac)
             call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             sol_theo(:)=one/8.0_cp*(two*(r_loc(:)-pi)*sin(r_loc)+ &
@@ -1138,7 +1141,8 @@ contains
                alph2=0.0_cp
             end if
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
-            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop)
+            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop, l_rerror_fix, &
+                 &                     rerror_fac)
             call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             !-- Define a function and its analytical derivatives
