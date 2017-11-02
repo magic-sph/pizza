@@ -13,8 +13,8 @@ module tests
    use algebra, only: sgefa, rgesl, prepare_bordered_mat, solve_bordered_mat
    use useful, only: abortRun
    use chebsparselib, only: intcheb2rmult1, rmult1, intcheb1, intcheb4, &
-       &                    intcheb2, eye, intcheb4rmult4, intcheb4rmult4hmult6, &
-       &                    intcheb4rmult4hmult8laplrot2, intcheb4rmult4lapl2
+       &                    intcheb2, eye, intcheb4rmult4,  &
+       &                    intcheb4rmult4laplrot2, intcheb4rmult4lapl2
    use integration, only: rInt_R
    use matrix_types, only: type_bandmat_real, type_bordmat_real
 
@@ -811,7 +811,7 @@ contains
          i_r = n_r+A_mat%ntau
 
          !-- Define the equations
-         stencilA4 = intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+         stencilA4 = intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
          ! stencilA4 = intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
 
          print*, n_r, maxval(abs(stencilA4)), minval(abs(stencilA4))
@@ -831,7 +831,7 @@ contains
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
 
-         stencilA4 = intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+         stencilA4 = intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
          ! stencilA4 = intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
 
          !-- Only the lower bands can contribute to the matrix A3
@@ -1067,7 +1067,7 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilD = intcheb4rmult4hmult6(a,b,i_r-1,D_mat%nbands)
+         stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
 
          !-- Roll array for band storage
          do n_band=1,D_mat%nbands

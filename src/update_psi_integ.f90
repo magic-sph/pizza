@@ -7,7 +7,7 @@ module update_psi_integ
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump
-   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
+   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -16,11 +16,10 @@ module update_psi_integ
    use useful, only: abortRun, roll
    use matrix_types, only: type_bandmat_complex, type_bordmat_complex,        &
    &                       type_bandmat_real
-   use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,          &
-       &                    intcheb4rmult4, rmult2, intcheb1rmult1,           &
-       &                    intcheb2rmult2, intcheb4rmult4hmult8laplrot2,     &
-       &                    intcheb4rmult4hmult8laplrot, intcheb4rmult4hmult8,&
-       &                    intcheb4rmult4hmult6
+   use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,    &
+       &                    intcheb4rmult4, rmult2, intcheb1rmult1,     &
+       &                    intcheb2rmult2, intcheb4rmult4laplrot2,     &
+       &                    intcheb4rmult4laplrot 
 
 
    implicit none
@@ -72,7 +71,7 @@ contains
          end do
       else
          call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-         call RHSE_mat(2)%initialize(16, 16, n_r_max) ! This is m /= 0
+         call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
@@ -80,9 +79,9 @@ contains
                call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
                call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
             else
-               call RHSI_mat(n_m)%initialize(14, 14, n_r_max)
-               call RHSIL_mat(n_m)%initialize(14, 14, n_r_max)
-               call LHS_mat(n_m)%initialize(14, 14, 4, n_r_max)
+               call RHSI_mat(n_m)%initialize(8, 8, n_r_max)
+               call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
+               call LHS_mat(n_m)%initialize(8, 8, 4, n_r_max)
             end if
          end do
       end if
@@ -152,6 +151,7 @@ contains
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
+      real(cp) :: h2
       integer :: n_r, n_m, n_cheb, m, n_o
 
       if ( lMat ) lPsimat(:)=.false.
@@ -337,6 +337,7 @@ contains
       call get_ddr(psi_Mloc, work_Mloc, om_Mloc, nMstart, nMstop, n_r_max, rscheme)
 
       do n_r=1,n_r_max
+         h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
 
@@ -345,14 +346,52 @@ contains
                up_Mloc(n_m,n_r)=uphi0(n_r)
                om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
             else
-               us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-               up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
-               om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-(or1(n_r)+beta(n_r))*          &
-               &               work_Mloc(n_m,n_r)-(or1(n_r)*beta(n_r)+dbeta(n_r) &
-               &               -real(m,cp)*real(m,cp)*or2(n_r))*psi_Mloc(n_m,n_r)
+               us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*h2*      psi_Mloc(n_m,n_r)
+               up_Mloc(n_m,n_r)=-h2*                           work_Mloc(n_m,n_r) &
+               &                +3.0_cp*r(n_r)*                 psi_Mloc(n_m,n_r)
+               om_Mloc(n_m,n_r)=-h2*                             om_Mloc(n_m,n_r) &
+               &        -(r_cmb*r_cmb*or1(n_r)-6.0_cp*r(n_r))* work_Mloc(n_m,n_r) &
+               &        +(6.0_cp+real(m,cp)*real(m,cp)*or2(n_r)*h2)*              &
+               &                                                psi_Mloc(n_m,n_r)
             end if
          end do
       end do
+
+
+      ! call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
+! 
+      ! do n_r=1,n_r_max
+         ! h2 = r(1)*r(1)-r(n_r)*r(n_r)
+         ! do n_m=nMstart,nMstop
+            ! m = idx2m(n_m)
+! 
+            ! if ( m == 0 ) then
+               ! us_Mloc(n_m,n_r)=0.0_cp
+               ! up_Mloc(n_m,n_r)=uphi0(n_r)
+            ! else
+               ! us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*h2*      psi_Mloc(n_m,n_r)
+               ! up_Mloc(n_m,n_r)=-h2*                           work_Mloc(n_m,n_r) &
+               ! &                +3.0_cp*r(n_r)*                 psi_Mloc(n_m,n_r)
+            ! end if
+         ! end do
+      ! end do
+! 
+      ! call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
+! 
+      ! do n_r=1,n_r_max
+         ! h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
+         ! do n_m=nMstart,nMstop
+            ! m = idx2m(n_m)
+! 
+            ! if ( m == 0 ) then
+               ! om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+            ! else
+               ! om_Mloc(n_m,n_r)=work_Mloc(n_m,n_r)+or1(n_r)*up_Mloc(n_m,n_r)-  &
+               ! &                ci*real(m,cp)*or1(n_r)*us_Mloc(n_m,n_r)
+            ! end if
+         ! end do
+      ! end do
+
 
       !-- Roll the explicit arrays before filling again the first block
       call roll(dpsi_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
@@ -490,7 +529,13 @@ contains
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands), CorSten(A_mat%nbands)
       integer :: n_r, i_r, n_band, n_b
-      real(cp) :: a, b
+      real(cp) :: a, b, dn2
+      real(cp) :: d4top(n_r_max)
+
+      do n_r=1,n_r_max
+         dn2 = real(n_r-1,cp)*real(n_r-1,cp)
+         d4top(n_r)=16.0_cp/105.0_cp*dn2*(dn2-one)*(dn2-4.0_cp)*(dn2-9.0_cp)
+      end do
 
 
       !-- We have to fill A3 with zeros again otherwise on the next iteration
@@ -528,11 +573,11 @@ contains
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
-               stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,m,i_r-1,A_mat%nbands)+&
-               &           tscheme%wimp_lin(1)*                                   &
-               &           intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+               stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)    &
+               &           -tscheme%wimp_lin(1)*                              &
+               &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
-               &           intcheb4rmult4hmult6(a,b,i_r-1,A_mat%nbands)
+               &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
             end if
          end if
 
@@ -568,11 +613,11 @@ contains
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
-               stencilA4 = -intcheb4rmult4hmult8laplrot(a,b,m,i_r-1,A_mat%nbands)+&
-               &           tscheme%wimp_lin(1)*                                   &
-               &           intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+               stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)    &
+               &           -tscheme%wimp_lin(1)*                              &
+               &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
-               &           intcheb4rmult4hmult6(a,b,i_r-1,A_mat%nbands)
+               &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
             end if
          end if
 
@@ -632,7 +677,7 @@ contains
                   A_mat%A1(3,n_r)=rscheme%rnorm*(rscheme%d2rMat(1,n_r)-&
                   &                        or1(1)*rscheme%drMat(1,n_r) ) 
                else
-                  A_mat%A1(3,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
+                  A_mat%A1(3,n_r)=rscheme%rnorm*d4top(n_r)
                end if
                if ( kbotv == 1 ) then
                   A_mat%A1(4,n_r)=rscheme%rnorm*(rscheme%d2rMat(2,n_r)-&
@@ -647,7 +692,7 @@ contains
                   A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*(rscheme%d2rMat(1,n_r)-&
                   &                                   or1(1)*rscheme%drMat(1,n_r) )
                else
-                  A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
+                  A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*d4top(n_r)
                end if
                if ( kbotv == 1 ) then
                   A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*(             &
@@ -701,18 +746,10 @@ contains
          i_r = n_r+n_bounds
 
          !-- Define right-hand side equations
-         if ( l_non_rot ) then
-            if ( m0 == 1) then
-               stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
-            else
-               stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
-            end if
+         if ( m0 == 1) then
+            stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
          else
-            if ( m0 == 1) then
-               stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
-            else
-               stencilD = intcheb4rmult4hmult8(a,b,i_r-1,D_mat%nbands)
-            end if
+            stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
          end if
 
          !-- Roll array for band storage
@@ -766,7 +803,7 @@ contains
             if ( m == 0 ) then
                stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
             else
-               stencilB = -intcheb4rmult4hmult8laplrot(a,b,m,i_r-1,B_mat%nbands)
+               stencilB = intcheb4rmult4laplrot(a,b,m,i_r-1,B_mat%nbands)
             end if
          end if
 
@@ -825,9 +862,8 @@ contains
                &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands)
                CorSten  = 0.0_cp
             else
-               stencilC = -intcheb4rmult4hmult8laplrot2(a,b,m,i_r-1,Cmat%nbands)
-               CorSten  = -CorFac*real(m,cp)*intcheb4rmult4hmult6(a,b,i_r-1,   &
-               &                                                  Cmat%nbands)
+               stencilC = intcheb4rmult4laplrot2(a,b,m,i_r-1,Cmat%nbands)
+               CorSten  = -CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,Cmat%nbands)
             end if
          end if
 
