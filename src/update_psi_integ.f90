@@ -708,7 +708,11 @@ contains
                   A_mat%A1(3,n_r)=rscheme%rnorm*(rscheme%d2rMat(1,n_r)-&
                   &                        or1(1)*rscheme%drMat(1,n_r) ) 
                else
-                  A_mat%A1(3,n_r)=rscheme%rnorm*d4top(n_r)
+                  if ( l_non_rot ) then
+                     A_mat%A1(3,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
+                  else
+                     A_mat%A1(3,n_r)=rscheme%rnorm*d4top(n_r)
+                  end if
                end if
                if ( kbotv == 1 ) then
                   A_mat%A1(4,n_r)=rscheme%rnorm*(rscheme%d2rMat(2,n_r)-&
@@ -723,7 +727,11 @@ contains
                   A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*(rscheme%d2rMat(1,n_r)-&
                   &                                   or1(1)*rscheme%drMat(1,n_r) )
                else
-                  A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*d4top(n_r)
+                  if ( l_non_rot ) then
+                     A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
+                  else
+                     A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*d4top(n_r)
+                  end if
                end if
                if ( kbotv == 1 ) then
                   A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*(             &
