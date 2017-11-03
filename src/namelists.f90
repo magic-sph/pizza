@@ -370,9 +370,9 @@ contains
       write(n_out,*) " tag             = """,tag(1:length),""","
       write(n_out,'(''  n_time_steps    ='',i8,'','')') n_time_steps
       length=length_to_blank(time_scheme)
-      write(n_out,*) " time_scheme      = """,time_scheme(1:length),""","
+      write(n_out,*) " time_scheme     = """,time_scheme(1:length),""","
       length=length_to_blank(cheb_method)
-      write(n_out,*) " cheb_method      = """,cheb_method(1:length),""","
+      write(n_out,*) " cheb_method     = """,cheb_method(1:length),""","
       write(n_out,'(''  alpha           ='',ES14.6,'','')')   alpha
       write(n_out,'(''  l_newmap        ='',l3,'','')') l_newmap
       length=length_to_blank(map_function)
@@ -390,7 +390,7 @@ contains
       write(n_out,'(''  rerror_fac      ='',ES14.6,'','')') rerror_fac
       write(n_out,'(''  n_fft_optim_lev ='',i4,'','')') n_fft_optim_lev
       length=length_to_blank(time_scale)
-      write(n_out,*) " time_scale       = """,time_scale(1:length),""","
+      write(n_out,*) " time_scale      = """,time_scale(1:length),""","
       write(n_out,*) "/"
 
       write(n_out,*) "&phys_param"
