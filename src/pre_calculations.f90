@@ -14,7 +14,6 @@ module pre_calculations
 
    private
    
-   real(cp), public :: opr
    real(cp), public :: epsc0
 
    public :: preCalc
@@ -30,8 +29,6 @@ contains
       dtMin = dtMax/1e6_cp
 
       call radial()
-
-      opr = one/pr
 
       if ( ( l_newmap ) .and. (rank == 0) ) then
          file_name='rNM.'//tag

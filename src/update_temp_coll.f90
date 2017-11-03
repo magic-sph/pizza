@@ -3,8 +3,7 @@ module update_temp_coll
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, four, ci
-   use pre_calculations, only: opr
-   use namelists, only: kbott, ktopt, tadvz_fac, ra
+   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
        &                       rgrav
    use blocking, only: nMstart, nMstop
@@ -92,7 +91,7 @@ contains
             m = idx2m(n_m)
             if ( m /= 0 ) then
                buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*or1(n_r) &
-               &                      *ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               &                      *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -175,7 +174,7 @@ contains
             if ( m /= 0 ) then
                buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-&
                &               tscheme%wimp_lin(1)*rgrav(n_r)*or1(n_r) &
-               &               *ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               &               *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -223,7 +222,7 @@ contains
                m = idx2m(n_m)
                dm2 = real(m,cp)*real(m,cp)
                dtemp_imp_Mloc_last(n_m,n_r)=dtemp_imp_Mloc_last(n_m,n_r) &
-               &                          +wimp*opr*( work_Mloc(n_m,n_r) &
+               &                     +wimp*TdiffFac*( work_Mloc(n_m,n_r) &
                &                         +or1(n_r)*  dtemp_Mloc(n_m,n_r) &
                &                     -dm2*or2(n_r)*   temp_Mloc(n_m,n_r) )
             end do
@@ -283,11 +282,11 @@ contains
       !----- Other points:
       do nR_out=1,n_r_max
          do nR=2,n_r_max-1
-            tMat(nR,nR_out)= rscheme%rnorm * (                        &
-            &                               rscheme%rMat(nR,nR_out) - &
-            &   tscheme%wimp_lin(1)*opr*( rscheme%d2rMat(nR,nR_out) + &
-            &          or1(nR)*            rscheme%drMat(nR,nR_out) - &
-            &      dm2*or2(nR)*             rscheme%rMat(nR,nR_out) ) )
+            tMat(nR,nR_out)= rscheme%rnorm * (                          &
+            &                                 rscheme%rMat(nR,nR_out) - &
+            &tscheme%wimp_lin(1)*TdiffFac*( rscheme%d2rMat(nR,nR_out) + &
+            &          or1(nR)*              rscheme%drMat(nR,nR_out) - &
+            &      dm2*or2(nR)*               rscheme%rMat(nR,nR_out) ) )
          end do
       end do
 

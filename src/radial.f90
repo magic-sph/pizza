@@ -167,7 +167,7 @@ contains
             oheight(n_r)= half/sqrt(r_cmb**2-r(n_r)**2)
             beta(n_r)   = -r(n_r)/(r_cmb**2-r(n_r)**2)
             dbeta(n_r)  = -(r_cmb**2+r(n_r)**2)/(r_cmb**2-r(n_r)**2)**2
-            ekpump(n_r) = ek_pump_fac*sqrt(r_cmb/ek)/ &
+            ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
             &             (r_cmb**2-r(n_r)**2)**(3.0_cp/4.0_cp)
          end do
       end if

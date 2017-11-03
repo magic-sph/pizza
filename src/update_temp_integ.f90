@@ -3,8 +3,7 @@ module update_temp_integ
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, one, ci, half
-   use pre_calculations, only: opr
-   use namelists, only: kbott, ktopt, tadvz_fac, ra, r_cmb, r_icb
+   use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, TdiffFac
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
        &                       rgrav
    use blocking, only: nMstart, nMstop
@@ -112,7 +111,7 @@ contains
             m = idx2m(n_m)
             if ( m /= 0 ) then
                buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*or1(n_r) &
-               &                      *ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               &                      *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -205,7 +204,7 @@ contains
             if ( m /= 0 ) then
                buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-&
                &               tscheme%wimp_lin(1)*rgrav(n_r)*or1(n_r) &
-               &               *ra*opr*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               &               *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
             end if
          end do
       end do
@@ -291,7 +290,7 @@ contains
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                dtemp_imp_Mloc_last(n_m,n_r)=dtemp_imp_Mloc_last(n_m,n_r) &
-               &                            +wimp*opr*work_Mloc(n_m,n_r) 
+               &                            +wimp*TdiffFac*work_Mloc(n_m,n_r) 
             end do
          end do
 
@@ -331,7 +330,7 @@ contains
 
          !-- Define the equations
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-     &
-         &                       tscheme%wimp_lin(1)*opr*        &
+         &                       tscheme%wimp_lin(1)*TdiffFac*   &
          &     intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
 
          !-- Roll the array for band storage
@@ -348,7 +347,7 @@ contains
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-    &
-         &                       tscheme%wimp_lin(1)*opr*       &
+         &                       tscheme%wimp_lin(1)*TdiffFac*  &
          &       intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
 
          !-- Only the lower bands can contribute to the matrix A3

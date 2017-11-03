@@ -3,8 +3,9 @@ module outputs
    use parallel_mod
    use precision_mod
    use mem_alloc, only: bytes_allocated
-   use namelists, only: tag, ra, pr, l_non_rot, l_vphi_balance, ek, &
-       &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv
+   use namelists, only: tag, BuoFac, ra, pr, l_non_rot, l_vphi_balance, ek, &
+       &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
+       &                ViscFac, CorFac, time_scale
    use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, m2idx, n_m_max, idx2m
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
@@ -63,7 +64,11 @@ contains
          open(newunit=n_kin_file, file=kin_file, status='new')
          power_file = 'power.'//tag
          open(newunit=n_power_file, file=power_file, status='new')
-         rey_file = 'reynolds.'//tag
+         if ( index(time_scale, 'ROT') /= 0 ) then
+            rey_file = 'rossby.'//tag
+         else
+            rey_file = 'reynolds.'//tag
+         end if
          open(newunit=n_rey_file,file=rey_file, status='new')
       end if 
 
@@ -289,9 +294,9 @@ contains
          us2_r(n_r)    =us2_r(n_r)*r(n_r)*height(n_r)
          up2_r(n_r)    =up2_r(n_r)*r(n_r)*height(n_r)
          up2_axi_r(n_r)=up2_axi_r(n_r)*r(n_r)*height(n_r)
-         visc_diss(n_r)=visc_diss(n_r)*r(n_r)*height(n_r)
-         buo_power(n_r)=Ra/pr*buo_power(n_r)*rgrav(n_r)*r(n_r)*height(n_r)
-         pump(n_r)     =pump(n_r)*ekpump(n_r)*height(n_r)*r(n_r)
+         visc_diss(n_r)=ViscFac*visc_diss(n_r)*r(n_r)*height(n_r)
+         buo_power(n_r)=BuoFac*buo_power(n_r)*rgrav(n_r)*r(n_r)*height(n_r)
+         pump(n_r)     =pump(n_r)*CorFac*ekpump(n_r)*height(n_r)*r(n_r)
       end do
 
       !-- MPI reductions to get the s-profiles on rank==0
@@ -420,7 +425,7 @@ contains
             ekin(n_r)     =ekin(n_r)*r(n_r)*height(n_r)
             enst(n_r)     =enst(n_r)*r(n_r)*height(n_r)
             buo_power(n_r)=cc22real(us_Mloc(n_m,n_r),temp_Mloc(n_m,n_r), m)
-            buo_power(n_r)=Ra/pr*buo_power(n_r)*rgrav(n_r)*r(n_r)*height(n_r)
+            buo_power(n_r)=BuoFac*buo_power(n_r)*rgrav(n_r)*r(n_r)*height(n_r)
          end do
          ekin_m(n_m)     =pi*rInt_R(ekin, r, rscheme)
          enstrophy_m(n_m)=pi*rInt_R(enst, r, rscheme)

@@ -34,6 +34,7 @@ module namelists
    real(cp), public :: alph1  ! Input parameter for non-linear map to define degree of spacing (0.0:2.0)
    real(cp), public :: alph2  ! Input parameter for non-linear map to define central point of different spacing (-1.0:1.0)
    character(len=72), public :: map_function ! Mapping family: either tangent or arcsin
+   character(len=72), public :: time_scale  ! Time unit
    character(len=72), public :: time_scheme ! Time scheme
    character(len=72), public :: cheb_method ! Chebyshev method: collocation, integration
    logical, public :: l_newmap       ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
@@ -75,7 +76,7 @@ module namelists
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb                     ! OC radius
    real(cp), public :: r_icb                     ! IC radius
-   real(cp), public :: CorFac
+   real(cp), public :: CorFac, BuoFac, TdiffFac, ViscFac
 
    public :: read_namelists, write_namelists
 
@@ -95,7 +96,7 @@ contains
       &                alph1,alph2,dtMax,courfac,tEnd,runHours,     &
       &                runMinutes,runSeconds,l_non_rot,             &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
-      &                l_rerror_fix, rerror_fac
+      &                l_rerror_fix, rerror_fac, time_scale
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz
@@ -245,11 +246,28 @@ contains
          l_cheb_coll = .false.
       end if
 
+      !-- Time unit
+      call capitalize(time_scale) 
+
       if ( l_non_rot ) then
          CorFac = 0.0_cp
+         BuoFac = ra/pr
+         TdiffFac = one/pr
+         viscFac = one
       else
-         CorFac = two/ek
+         if ( index(time_scale, 'ROT') /= 0 ) then
+            CorFac = two
+            BuoFac = ra*ek*ek/pr
+            TdiffFac = ek/pr
+            viscFac = ek
+         else
+            CorFac = two/ek
+            BuoFac = ra/pr
+            TdiffFac = one/pr
+            viscFac = one
+         end if
       end if
+
 
    end subroutine read_namelists
 !--------------------------------------------------------------------------------
@@ -283,6 +301,8 @@ contains
       cheb_method      ='colloc'
       l_rerror_fix     =.true.
       rerror_fac       =500.0_cp
+
+      time_scale       ='VISC' ! viscous units
 
 
       !-- Physcal parameters
@@ -369,6 +389,8 @@ contains
       write(n_out,'(''  l_rerror_fix    ='',l3,'','')') l_rerror_fix
       write(n_out,'(''  rerror_fac      ='',ES14.6,'','')') rerror_fac
       write(n_out,'(''  n_fft_optim_lev ='',i4,'','')') n_fft_optim_lev
+      length=length_to_blank(time_scale)
+      write(n_out,*) " time_scale       = """,time_scale(1:length),""","
       write(n_out,*) "/"
 
       write(n_out,*) "&phys_param"

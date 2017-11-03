@@ -5,9 +5,8 @@ module update_psi_coll
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
-   use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac
-   use radial_functions, only: rscheme, or1, or2, beta, dbeta, &
-       &                       ekpump, oheight
+   use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac
+   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -310,26 +309,27 @@ contains
                m = idx2m(n_m)
                if ( m == 0 ) then
                   dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r)+ &
-                  &                     wimp*(     d2uphi0(n_r)+           &
-                  &                       or1(n_r)* duphi0(n_r)-           &
-                  &       (or2(n_r)+ekpump(n_r))*    uphi0(n_r) )
+                  &                     wimp*(ViscFac*   d2uphi0(n_r)+     &
+                  &                ViscFac*or1(n_r)*      duphi0(n_r)-     &
+                  & (ViscFac*or2(n_r)+CorFac*ekpump(n_r))* uphi0(n_r) )
 
                   if ( l_vphi_bal_calc ) then
-                     vp_bal%visc(n_r)=d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
-                     &                or2(n_r)*uphi0(n_r)
-                     vp_bal%pump(n_r)=-ekpump(n_r)*uphi0(n_r)
+                     vp_bal%visc(n_r)=ViscFac*(d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
+                     &                or2(n_r)*uphi0(n_r))
+                     vp_bal%pump(n_r)=-CorFac*ekpump(n_r)*uphi0(n_r)
                   end if
                else
                   dm2 = real(m,cp)*real(m,cp)
-                  dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r)&
-                  &     +             wimp*  (     work_Mloc(n_m,n_r)    &
-                  &                   +or1(n_r)*    dom_Mloc(n_m,n_r)    &
-                  & -(ekpump(n_r)+dm2*or2(n_r))*     om_Mloc(n_m,n_r)    &
-                  & +half*ekpump(n_r)*beta(n_r)*     up_Mloc(n_m,n_r)    &
-                  & +( CorFac*beta(n_r) +                                &
-                  &  ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+              &
-                  &              5.0_cp*r_cmb*oheight(n_r)) )*           &
-                  &                                  us_Mloc(n_m,n_r))
+                  dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r) &
+                  &     +             wimp*(ViscFac*   work_Mloc(n_m,n_r) &
+                  &           +ViscFac*or1(n_r)*        dom_Mloc(n_m,n_r) &
+                  & -(CorFac*ekpump(n_r)+ViscFac*dm2*or2(n_r))*           &
+                  &                                      om_Mloc(n_m,n_r) &
+                  & +half*CorFac*ekpump(n_r)*beta(n_r)*  up_Mloc(n_m,n_r) &
+                  & +CorFac*( beta(n_r) +                                 &
+                  &  ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+               &
+                  &              5.0_cp*r_cmb*oheight(n_r)) )*            &
+                  &                                      us_Mloc(n_m,n_r))
                end if
             end do
          end do
@@ -408,19 +408,20 @@ contains
          do nR=2,n_r_max-1
             nR_psi=nR+n_r_max
 
-            psiMat(nR,nR_out)= rscheme%rnorm * (                      &
-            &                               rscheme%rMat(nR,nR_out) - &
-            &   tscheme%wimp_lin(1)*(     rscheme%d2rMat(nR,nR_out) + &
-            &          or1(nR)*            rscheme%drMat(nR,nR_out) - &
-            &  (ekpump(nR)+dm2*or2(nR))*    rscheme%rMat(nR,nR_out) ) )
+            psiMat(nR,nR_out)= rscheme%rnorm * (                         &
+            &                                  rscheme%rMat(nR,nR_out) - &
+            &   tscheme%wimp_lin(1)*(ViscFac*rscheme%d2rMat(nR,nR_out) + &
+            &    ViscFac*or1(nR)*             rscheme%drMat(nR,nR_out) - &
+            &  (CorFac*ekpump(nR)+ViscFac*dm2*or2(nR))*                  &
+            &                                  rscheme%rMat(nR,nR_out) ) )
 
-            psiMat(nR,nR_out_psi)=-rscheme%rnorm*tscheme%wimp_lin(1)*(&
-            &    -half*ekpump(nR)*beta(nR)*rscheme%drMat(nR,nR_out)+  &
-            &        ( CorFac*beta(nR)*or1(nR)*ci*real(m,cp)          &
-            &    -half*ekpump(nR)*beta(nR)*beta(nR)                   &
-            &   +ekpump(nR)*beta(nR)*or1(nR)*( dm2+                   &
-            &              5.0_cp*r_cmb*oheight(nR)*ci*real(m,cp)) )* &
-            &                               rscheme%rMat(nR,nR_out) ) 
+            psiMat(nR,nR_out_psi)=-rscheme%rnorm*tscheme%wimp_lin(1)*(   &
+            &-half*CorFac*ekpump(nR)*beta(nR)*rscheme%drMat(nR,nR_out)+  &
+            &  CorFac*( beta(nR)*or1(nR)*ci*real(m,cp)                   &
+            &    -half*ekpump(nR)*beta(nR)*beta(nR)                      &
+            &   +ekpump(nR)*beta(nR)*or1(nR)*( dm2+                      &
+            &              5.0_cp*r_cmb*oheight(nR)*ci*real(m,cp)) )*    &
+            &                                  rscheme%rMat(nR,nR_out) ) 
 
             psiMat(nR_psi,nR_out)= rscheme%rnorm*rscheme%rMat(nR,nR_out)
 
@@ -516,9 +517,10 @@ contains
          do nR=2,n_r_max-1
             uphiMat(nR,nR_out)= rscheme%rnorm * (                     &
             &                               rscheme%rMat(nR,nR_out) - &
-            &tscheme%wimp_lin(1)*(        rscheme%d2rMat(nR,nR_out) + &
-            &          or1(nR)*            rscheme%drMat(nR,nR_out) - &
-            &   (ekpump(nR)+or2(nR))*       rscheme%rMat(nR,nR_out) ) )
+            &tscheme%wimp_lin(1)*(ViscFac*rscheme%d2rMat(nR,nR_out) + &
+            &    ViscFac*or1(nR)*          rscheme%drMat(nR,nR_out) - &
+            &  (CorFac*ekpump(nR)+ViscFac*or2(nR))*                   &
+            &                               rscheme%rMat(nR,nR_out) ) )
          end do
       end do
 

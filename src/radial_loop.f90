@@ -3,7 +3,7 @@ module rloop
    use precision_mod
    use constants, only: ci, one, half
    use mem_alloc, only: bytes_allocated
-   use namelists, only: ek, tadvz_fac
+   use namelists, only: ek, tadvz_fac, CorFac
    use radial_functions, only: or1, r, beta, oheight, dtcond, ekpump
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
@@ -86,7 +86,7 @@ contains
 
             if ( m == 0 ) then ! Add first order contribution for this term
                                ! us(m=0) * vortz(m=0)
-               us_fluct = half*ek*ekpump(n_r)*up_Rloc(n_m,n_r)
+               us_fluct = half*ek*CorFac*ekpump(n_r)*up_Rloc(n_m,n_r)
             else
                us_fluct = us_Rloc(n_m,n_r)
             end if
