@@ -5,7 +5,8 @@ module update_psi_coll
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
-   use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac
+   use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
+       &                l_coriolis_imp
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -100,6 +101,11 @@ contains
             if ( m /= 0 ) then
                dpsi_exp_Mloc(n_m,n_r,1)=  dpsi_exp_Mloc(n_m,n_r,1)-   &
                &                     or1(n_r)*work_Mloc(n_m,n_r)
+               !-- If Coriolis is treated explicitly, add it here:
+               if ( .not. l_coriolis_imp ) then
+                  dpsi_exp_Mloc(n_m,n_r,1)=dpsi_exp_Mloc(n_m,n_r,1) &
+                  &            +CorFac*beta(n_r)*us_Mloc(n_m,n_r)
+               end if
             end if
          end do
       end do
@@ -326,10 +332,14 @@ contains
                   & -(CorFac*ekpump(n_r)+ViscFac*dm2*or2(n_r))*           &
                   &                                      om_Mloc(n_m,n_r) &
                   & +half*CorFac*ekpump(n_r)*beta(n_r)*  up_Mloc(n_m,n_r) &
-                  & +CorFac*( beta(n_r) +                                 &
-                  &  ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+               &
+                  & +CorFac*( ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+      &
                   &              5.0_cp*r_cmb*oheight(n_r)) )*            &
                   &                                      us_Mloc(n_m,n_r))
+
+                  if ( l_coriolis_imp ) then
+                     dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r) &
+                     &        + wimp*CorFac*beta(n_r)*us_Mloc(n_m,n_r)
+                  end if
                end if
             end do
          end do
@@ -417,11 +427,17 @@ contains
 
             psiMat(nR,nR_out_psi)=-rscheme%rnorm*tscheme%wimp_lin(1)*(   &
             &-half*CorFac*ekpump(nR)*beta(nR)*rscheme%drMat(nR,nR_out)+  &
-            &  CorFac*( beta(nR)*or1(nR)*ci*real(m,cp)                   &
-            &    -half*ekpump(nR)*beta(nR)*beta(nR)                      &
+            &  CorFac*( -half*ekpump(nR)*beta(nR)*beta(nR)               &
             &   +ekpump(nR)*beta(nR)*or1(nR)*( dm2+                      &
             &              5.0_cp*r_cmb*oheight(nR)*ci*real(m,cp)) )*    &
             &                                  rscheme%rMat(nR,nR_out) ) 
+
+            if ( l_coriolis_imp ) then
+               psiMat(nR,nR_out_psi) = psiMat(nR,nR_out_psi) -        &
+               &                 rscheme%rnorm*tscheme%wimp_lin(1)*   &
+               &               CorFac*beta(nR)*or1(nR)*ci*real(m,cp)* &
+               &                rscheme%rMat(nR,nR_out)
+            end if
 
             psiMat(nR_psi,nR_out)= rscheme%rnorm*rscheme%rMat(nR,nR_out)
 

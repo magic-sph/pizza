@@ -36,7 +36,8 @@ module namelists
    character(len=72), public :: map_function ! Mapping family: either tangent or arcsin
    character(len=72), public :: time_scale  ! Time unit
    character(len=72), public :: time_scheme ! Time scheme
-   character(len=72), public :: cheb_method ! Chebyshev method: collocation, integration
+   character(len=72) :: cheb_method ! Chebyshev method: collocation, integration
+   character(len=72) :: corio_term   ! Implicit or explicit treatment of Coriolis force
    logical, public :: l_newmap       ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
    logical, public :: l_rerror_fix ! Switch to fix round-off error in derivative calculation
    real(cp), public :: rerror_fac
@@ -73,9 +74,10 @@ module namelists
    logical,  public :: l_AB1
    logical,  public :: l_bridge_step
    logical,  public :: l_cheb_coll     ! Collocation method for Chebs
+   logical,  public :: l_coriolis_imp  ! Implicit treatment of Coriolis force
    real(cp), public :: tadvz_fac
-   real(cp), public :: r_cmb                     ! OC radius
-   real(cp), public :: r_icb                     ! IC radius
+   real(cp), public :: r_cmb           ! Outer core radius
+   real(cp), public :: r_icb           ! Inner core radius
    real(cp), public :: CorFac, BuoFac, TdiffFac, ViscFac
 
    public :: read_namelists, write_namelists
@@ -96,7 +98,7 @@ contains
       &                alph1,alph2,dtMax,courfac,tEnd,runHours,     &
       &                runMinutes,runSeconds,l_non_rot,             &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
-      &                l_rerror_fix, rerror_fac, time_scale
+      &                l_rerror_fix, rerror_fac, time_scale, corio_term
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz
@@ -239,16 +241,22 @@ contains
 
       !-- Determine Cheb method
       call capitalize(cheb_method)
-
       if ( index(cheb_method, 'COLL') /= 0 ) then
          l_cheb_coll = .true.
       else
          l_cheb_coll = .false.
       end if
 
+      !-- Implicit or Explicit treatment of Coriolis force
+      call capitalize(corio_term)
+      if ( index(corio_term, 'IMP') /= 0 ) then
+         l_coriolis_imp = .true.
+      else
+         l_coriolis_imp = .false.
+      end if
+
       !-- Time unit
       call capitalize(time_scale) 
-
       if ( l_non_rot ) then
          CorFac = 0.0_cp
          BuoFac = ra/pr
@@ -301,7 +309,7 @@ contains
       cheb_method      ='colloc'
       l_rerror_fix     =.true.
       rerror_fac       =500.0_cp
-
+      corio_term       ='IMPLICIT' ! Implicit treatment of Coriolis term
       time_scale       ='VISC' ! viscous units
 
 
@@ -373,6 +381,8 @@ contains
       write(n_out,*) " time_scheme     = """,time_scheme(1:length),""","
       length=length_to_blank(cheb_method)
       write(n_out,*) " cheb_method     = """,cheb_method(1:length),""","
+      length=length_to_blank(corio_term)
+      write(n_out,*) " corio_term      = """,corio_term(1:length),""","
       write(n_out,'(''  alpha           ='',ES14.6,'','')')   alpha
       write(n_out,'(''  l_newmap        ='',l3,'','')') l_newmap
       length=length_to_blank(map_function)
