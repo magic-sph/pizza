@@ -10,7 +10,7 @@ module update_temp_coll
    use truncation, only: n_r_max, idx2m
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
-   use algebra, only: sgefa, sgesl
+   use algebra, only: prepare_full_mat, solve_full_mat
    use useful, only: abortRun, roll
    use time_schemes, only: type_tscheme
 
@@ -148,8 +148,8 @@ contains
          end do
 #endif
 
-         call sgesl(tMat(:,:,n_m), n_r_max, n_r_max, tPivot(:, n_m), &
-              &     rhs(:))
+         call solve_full_mat(tMat(:,:,n_m), n_r_max, n_r_max, tPivot(:, n_m), &
+              &              rhs(:))
 
          do n_r_out=1,rscheme%n_max
             temp_Mloc(n_m, n_r_out)=rhs(n_r_out)
@@ -308,7 +308,7 @@ contains
 #endif
 
       !----- LU decomposition:
-      call sgefa(tMat,n_r_max,n_r_max,tPivot,info)
+      call prepare_full_mat(tMat,n_r_max,n_r_max,tPivot,info)
       if ( info /= 0 ) then
          call abortRun('Singular matrix tMat!')
       end if

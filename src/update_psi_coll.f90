@@ -11,7 +11,7 @@ module update_psi_coll
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
-   use algebra, only: cgefa, cgesl, sgefa, rgesl
+   use algebra, only: prepare_full_mat, solve_full_mat
    use time_schemes, only: type_tscheme
    use useful, only: abortRun, roll
 
@@ -146,8 +146,8 @@ contains
                end do
             end if
 
-            call rgesl(uphiMat(:,:), n_r_max, n_r_max, psiPivot(1:n_r_max,n_m), &
-                 &     rhs_m0(:))
+            call solve_full_mat(uphiMat(:,:), n_r_max, n_r_max,   &
+                 &              psiPivot(1:n_r_max,n_m), rhs_m0(:))
 
             do n_cheb=1,rscheme%n_max
                uphi0(n_cheb)=rhs_m0(n_cheb)
@@ -187,8 +187,8 @@ contains
             do n_r=1,2*n_r_max
                rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,1,n_m)
             end do
-            call cgesl(psiMat(:,:,n_m), 2*n_r_max, 2*n_r_max, psiPivot(:, n_m), &
-                 &     rhs(:))
+            call solve_full_mat(psiMat(:,:,n_m), 2*n_r_max, 2*n_r_max, &
+                 &              psiPivot(:, n_m), rhs(:))
             do n_r=1,2*n_r_max
                rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,2,n_m)
             end do
@@ -466,7 +466,7 @@ contains
       end do
 
       !----- LU decomposition:
-      call cgefa(psiMat,2*n_r_max,2*n_r_max,psiPivot,info)
+      call prepare_full_mat(psiMat,2*n_r_max,2*n_r_max,psiPivot,info)
       if ( info /= 0 ) then
          call abortRun('Singular matrix psiMat!')
       end if
@@ -531,7 +531,7 @@ contains
       end do
 
       !----- LU decomposition:
-      call sgefa(uphiMat,n_r_max,n_r_max,uphiPivot,info)
+      call prepare_full_mat(uphiMat,n_r_max,n_r_max,uphiPivot,info)
       if ( info /= 0 ) then
          call abortRun('Singular matrix uphiMat!')
       end if

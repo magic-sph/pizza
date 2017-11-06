@@ -10,7 +10,8 @@ module tests
    use radial_functions, only: rscheme
    use radial_der, only: initialize_der_arrays, finalize_der_arrays, get_ddr
    use radial_scheme, only: type_rscheme
-   use algebra, only: sgefa, rgesl, prepare_bordered_mat, solve_bordered_mat
+   use algebra, only: prepare_full_mat, solve_full_mat, prepare_bordered_mat, &
+       &              solve_bordered_mat
    use useful, only: abortRun
    use chebsparselib, only: intcheb2rmult1, rmult1, intcheb1, intcheb4, &
        &                    intcheb2, eye, intcheb4rmult4,  &
@@ -494,7 +495,7 @@ contains
 
       !----- LU decomposition:
       tStart = MPI_Wtime()
-      call sgefa(mat,n_r_max,n_r_max,pivot,info)
+      call prepare_full_mat(mat,n_r_max,n_r_max,pivot,info)
       tStop = MPI_Wtime()
       timeLu = tStop-tStart
       if ( info /= 0 ) then
@@ -502,7 +503,7 @@ contains
       end if
 
       tStart = MPI_Wtime()
-      call rgesl(mat, n_r_max, n_r_max, pivot, rhs)
+      call solve_full_mat(mat, n_r_max, n_r_max, pivot, rhs)
       tStop = MPI_Wtime()
       timeSolve = tStop-tStart
       call rscheme%costf1(rhs, n_r_max)
@@ -725,7 +726,7 @@ contains
 
       !----- LU decomposition:
       tStart = MPI_Wtime()
-      call sgefa(mat,2*n_r_max,2*n_r_max,pivot,info)
+      call prepare_full_mat(mat,2*n_r_max,2*n_r_max,pivot,info)
       tStop = MPI_Wtime()
       timeLu = tStop-tStart
       if ( info /= 0 ) then
@@ -733,7 +734,7 @@ contains
       end if
 
       tStart = MPI_Wtime()
-      call rgesl(mat, 2*n_r_max, 2*n_r_max, pivot, tmp)
+      call solve_full_mat(mat, 2*n_r_max, 2*n_r_max, pivot, tmp)
       tStop = MPI_Wtime()
       timeSolve = tStop-tStart
       rhs(:)=tmp(1:n_r_max)

@@ -12,17 +12,28 @@ module algebra
       module procedure prepare_bordered_mat_complex
    end interface prepare_bordered_mat
 
+   interface prepare_full_mat
+      module procedure prepare_full_mat_real
+      module procedure prepare_full_mat_complex
+   end interface prepare_full_mat
+
    interface solve_bordered_mat
       module procedure solve_bordered_mat_real
       module procedure solve_bordered_mat_complex
    end interface solve_bordered_mat
 
-   public :: cgefa, sgefa, sgesl, cgesl, rgesl, prepare_bordered_mat, &
+   interface solve_full_mat
+      module procedure solve_full_mat_real_rhs_real
+      module procedure solve_full_mat_real_rhs_complex
+      module procedure solve_full_mat_complex_rhs_complex
+   end interface solve_full_mat
+
+   public :: prepare_full_mat, prepare_bordered_mat, solve_full_mat, &
    &         solve_bordered_mat
 
 contains
 
-   subroutine sgesl(a,len_a,n,pivot,rhs)
+   subroutine solve_full_mat_real_rhs_complex(a,len_a,n,pivot,rhs)
       !
       !  This routine does the backward substitution into a lu-decomposed real 
       !  matrix a (to solve a * x = bc1) were bc1 is the right hand side  
@@ -54,9 +65,9 @@ contains
       ! end do
 #endif
 
-   end subroutine sgesl
+   end subroutine solve_full_mat_real_rhs_complex
 !-----------------------------------------------------------------------------
-   subroutine rgesl(a,len_a,n,pivot,rhs)
+   subroutine solve_full_mat_real_rhs_real(a,len_a,n,pivot,rhs)
       !
       !  This routine does the backward substitution into a lu-decomposed real 
       !  matrix a (to solve a * x = bc1) were bc1 is the right hand side  
@@ -79,9 +90,9 @@ contains
       call dgetrs('N',n,1,a,len_a,pivot,rhs,n,info)
 #endif
 
-   end subroutine rgesl
+   end subroutine solve_full_mat_real_rhs_real
 !-----------------------------------------------------------------------------
-   subroutine cgesl(a,len_a,n,pivot,rhs)
+   subroutine solve_full_mat_complex_rhs_complex(a,len_a,n,pivot,rhs)
       !
       !  This routine does the backward substitution into a lu-decomposed real 
       !  matrix a (to solve a * x = bc1) were bc1 is the right hand side  
@@ -104,9 +115,9 @@ contains
       call zgetrs('N',n,1,a,len_a,pivot,rhs,n,info)
 #endif
 
-   end subroutine cgesl
+   end subroutine solve_full_mat_complex_rhs_complex
 !-----------------------------------------------------------------------------
-   subroutine sgefa(a,len_a,n,pivot,info)
+   subroutine prepare_full_mat_real(a,len_a,n,pivot,info)
       !
       !     like the linpack routine
       !
@@ -127,9 +138,9 @@ contains
       call dgetrf(n,n,a,n,pivot,info)
 #endif
 
-   end subroutine sgefa
+   end subroutine prepare_full_mat_real
 !-----------------------------------------------------------------------------
-   subroutine cgefa(a,len_a,n,pivot,info)
+   subroutine prepare_full_mat_complex(a,len_a,n,pivot,info)
       !
       !     like the linpack routine
       !
@@ -150,7 +161,7 @@ contains
       call zgetrf(n,n,a,n,pivot,info)
 #endif
 
-   end subroutine cgefa
+   end subroutine prepare_full_mat_complex
 !-----------------------------------------------------------------------------
    subroutine prepare_bordered_mat_real(A1,A2,A3,A4,n_boundaries,lenA4,kl,ku, &
               &                         pivotA1, pivotA4)
