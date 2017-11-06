@@ -26,8 +26,10 @@ endif()
 
 if(USE_LAPACKLIB MATCHES MKL)
    add_library(lapack95 ${MKLROOT}/include/lapack.f90)
+   add_library(blas95 ${MKLROOT}/include/blas.f90)
    target_link_libraries(lapack95 ${MKLCORE} ${MKLLAPACK} ${MKLSEQ} ${MKL64})
-   target_link_libraries(${EXEC} lapack95)
+   target_link_libraries(blas95 ${MKLCORE} ${MKLBLAS} ${MKLSEQ} ${MKL64})
+   target_link_libraries(${EXEC} lapack95 blas95)
 endif()
 
 # Link LAPACK
