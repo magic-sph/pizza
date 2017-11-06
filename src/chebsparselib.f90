@@ -67,7 +67,7 @@ contains
       stencil(ku+2)           =half*a ! 1st lower diagonal
       stencil(ku+3:len_stencil)=0.0_cp
 
-      stencil = mirror_stencil(idx, len_stencil)
+      call mirror_stencil(idx, stencil, len_stencil)
 
    end function rmult1
 !------------------------------------------------------------------------------
@@ -98,7 +98,7 @@ contains
       stencil(ku+3)            =0.25_cp*a*a
       stencil(ku+4:len_stencil)=0.0_cp
 
-      stencil = mirror_stencil(idx, len_stencil)
+      call mirror_stencil(idx, stencil, len_stencil)
 
    end function rmult2
 !------------------------------------------------------------------------------
@@ -126,7 +126,7 @@ contains
       stencil(ku+2)            = half*a/real(idx,cp) ! 1st lower diagonal
       stencil(ku+3:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(idx, len_stencil)
+      call mirror_stencil(idx, stencil, len_stencil)
 
    end function intcheb1
 !------------------------------------------------------------------------------
@@ -156,7 +156,7 @@ contains
       stencil(ku+3)            = a*a/4.0_cp/real(idx,cp)/real(idx-1,cp)
       stencil(ku+4:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(idx, len_stencil)
+      call mirror_stencil(idx, stencil, len_stencil)
 
    end function intcheb2
 !------------------------------------------------------------------------------
@@ -195,7 +195,7 @@ contains
       &                          real(idx-2,cp)/real(idx-1,cp)
       stencil(ku+6:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(idx, len_stencil)
+      call mirror_stencil(idx, stencil, len_stencil)
 
    end function intcheb4
 !------------------------------------------------------------------------------
@@ -226,7 +226,7 @@ contains
       stencil(ku+3)            = 0.25_cp*a*a/real(idx,cp)
       stencil(ku+4:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(idx, len_stencil)
+      call mirror_stencil(idx, stencil, len_stencil)
 
    end function intcheb1rmult1
 !------------------------------------------------------------------------------
@@ -259,7 +259,7 @@ contains
       stencil(ku+4)            = a*a*a/8.0_cp/real(idx,cp)/real(idx-1,cp)
       stencil(ku+5:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(idx, len_stencil)
+      call mirror_stencil(idx, stencil, len_stencil)
 
    end function intcheb2rmult1
 !------------------------------------------------------------------------------
@@ -299,7 +299,7 @@ contains
       stencil(ku+5)            = a*a*a*a/16.0_cp/real(idx,cp)/real(idx-1,cp)
       stencil(ku+6:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(idx, len_stencil)
+      call mirror_stencil(idx, stencil, len_stencil)
 
    end function intcheb2rmult2
 !------------------------------------------------------------------------------
@@ -346,7 +346,7 @@ contains
       stencil(ku+7)=-a**6/(64.0_cp*dn*(dn-1.0_cp))
       stencil(ku+8:len_stencil) = 0.0_cp
 
-      stencil = mirror_stencil(n, len_stencil)
+      call mirror_stencil(n, stencil, len_stencil)
 
    end function intcheb2rmult2hmult2
 !------------------------------------------------------------------------------
@@ -382,7 +382,7 @@ contains
       &                          real(4*idx,cp)/real(idx-1,cp)
       stencil(ku+4:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(idx, len_stencil)
+      call mirror_stencil(idx, stencil, len_stencil)
 
    end function intcheb2rmult2lapl
 !------------------------------------------------------------------------------
@@ -437,7 +437,7 @@ contains
       stencil(ku+5)=a**4*(dm-dn+4.0_cp)*(dm+dn-4.0_cp)/(16.0_cp*dn*(dn-1.0_cp))
       stencil(ku+6:len_stencil) = 0.0_cp
 
-      stencil = mirror_stencil(n, len_stencil)
+      call mirror_stencil(n, stencil, len_stencil)
 
    end function intcheb2rmult2hmult2lapl
 !------------------------------------------------------------------------------
@@ -502,7 +502,7 @@ contains
 
       stencil(ku+10:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(n, len_stencil)
+      call mirror_stencil(n, stencil, len_stencil)
 
    end function intcheb4rmult4
 !------------------------------------------------------------------------------
@@ -548,7 +548,7 @@ contains
       stencil(ku+7)=-a**6/(64.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp))
       stencil(ku+8:len_stencil) = 0.0_cp
 
-      stencil = mirror_stencil(n, len_stencil)
+      call mirror_stencil(n, stencil, len_stencil)
 
    end function intcheb4hmult2
 !------------------------------------------------------------------------------
@@ -634,7 +634,7 @@ contains
       &                         (64*dn*(dn - 3)*(dn - 2)*(dn - 1))
       stencil(ku+8:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(n, len_stencil)
+      call mirror_stencil(n, stencil, len_stencil)
 
    end function intcheb4rmult4lapl
 !------------------------------------------------------------------------------
@@ -701,7 +701,7 @@ contains
       &                          /(16*dn*(dn-3)*(dn-2)*(dn-1))
       stencil(ku+6:len_stencil)= 0.0_cp
 
-      stencil = mirror_stencil(n, len_stencil)
+      call mirror_stencil(n, stencil, len_stencil)
 
    end function intcheb4rmult4lapl2
 !------------------------------------------------------------------------------
@@ -867,7 +867,7 @@ contains
       &             -3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp))
       stencil(ku+10:len_stencil) = 0.0_cp
 
-      stencil = mirror_stencil(n, len_stencil)
+      call mirror_stencil(n, stencil, len_stencil)
 
    end function intcheb4rmult4laplrot
 !------------------------------------------------------------------------------
@@ -1022,18 +1022,18 @@ contains
       &             *dn-12.0_cp)/(64.0_cp*dn*(dn-3.0_cp)*(dn-2.0_cp)*(dn-1.0_cp))
       stencil(ku+8:len_stencil) = 0.0_cp
 
-      stencil = mirror_stencil(n, len_stencil)
+      call mirror_stencil(n, stencil, len_stencil)
 
    end function intcheb4rmult4laplrot2
 !------------------------------------------------------------------------------
-   function mirror_stencil(idx, len_stencil) result(stencil)
+   subroutine mirror_stencil(idx, stencil, len_stencil)
 
       !-- Input variables
       integer,  intent(in) :: idx
       integer,  intent(in) :: len_stencil
 
       !-- Output variable
-      real(cp) :: stencil(len_stencil)
+      real(cp), intent(inout) :: stencil(len_stencil)
 
       !-- Local variable
       integer :: n, ku
@@ -1049,6 +1049,6 @@ contains
          end do
       end if
 
-   end function mirror_stencil
+   end subroutine mirror_stencil
 !------------------------------------------------------------------------------
 end module chebsparselib
