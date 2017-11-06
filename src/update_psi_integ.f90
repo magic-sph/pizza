@@ -81,8 +81,12 @@ contains
                call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
             else
                call RHSI_mat(n_m)%initialize(8, 8, n_r_max)
-               call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
                call LHS_mat(n_m)%initialize(8, 8, 4, n_r_max)
+               if ( l_coriolis_imp ) then
+                  call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
+               else
+                  call RHSIL_mat(n_m)%initialize(6, 6, n_r_max)
+               end if
             end if
          end do
       end if
@@ -183,7 +187,7 @@ contains
       !-- Add Ekman pumping as an explicit term if this is requested
       if ( l_ek_pump ) then
 
-         do n_r=2,n_r_max-1
+         do n_r=2,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
@@ -210,6 +214,7 @@ contains
 
       !-- Transform the explicit part to chebyshev space
       call rscheme%costf1(dpsi_exp_Mloc(:,:,1), nMstart, nMstop, n_r_max)
+
 
       !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
       do n_m=nMstart,nMstop
