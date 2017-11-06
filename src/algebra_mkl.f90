@@ -1,6 +1,7 @@
 module algebra
 
    use precision_mod, only: cp
+   use constants, only: one
    use lapack95, only: getrs, getrf
 
    implicit none
@@ -105,7 +106,7 @@ contains
 
    end subroutine prepare_full_mat_real
 !-----------------------------------------------------------------------------
-   subroutine prepapre_full_mat_complex(a,len_a,n,pivot,info)
+   subroutine prepare_full_mat_complex(a,len_a,n,pivot,info)
       !
       !     lu decomposes the real matrix a(n,n) via gaussian elimination
       !
@@ -121,7 +122,6 @@ contains
       call getrf(a(1:n,1:n),pivot(1:n),info)
 
    end subroutine prepare_full_mat_complex
-!-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
    subroutine prepare_bordered_mat_real(A1,A2,A3,A4,n_boundaries,lenA4,kl,ku, &
               &                         pivotA1, pivotA4)
@@ -192,6 +192,8 @@ contains
            &     n_boundaries, A3, lenA4, (one,0.0_cp), A1,  n_boundaries)
       !-- LU factorisation of the Schur complement
       call getrf(A1, pivotA1, info)
+
+   end subroutine prepare_bordered_mat_complex
 !-----------------------------------------------------------------------------
    subroutine solve_bordered_mat_real(A1, A2, A3, A4, n_boundaries, lenA4, kl, &
               &                       ku, pivotA1, pivotA4, rhs, lenRhs)

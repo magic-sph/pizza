@@ -6,7 +6,7 @@ module update_psi_integ
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
-       &                l_ek_pump, ViscFac
+       &                l_ek_pump, ViscFac, l_coriolis_imp
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -14,8 +14,8 @@ module update_psi_integ
    use fields, only: work_Mloc
    use time_schemes, only: type_tscheme
    use useful, only: abortRun, roll
-   use matrix_types, only: type_bandmat_complex, type_bordmat_complex,        &
-   &                       type_bandmat_real
+   use matrix_types, only: type_bandmat_complex, type_bordmat_complex,  &
+       &                   type_bandmat_real
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,    &
        &                    intcheb4rmult4, rmult2, intcheb1rmult1,     &
        &                    intcheb2rmult2, intcheb4rmult4laplrot2,     &
@@ -170,6 +170,12 @@ contains
             if ( m /= 0 ) then
                dpsi_exp_Mloc(n_m,n_r,1)=    dpsi_exp_Mloc(n_m,n_r,1)-   &
                &                       or1(n_r)*work_Mloc(n_m,n_r)
+
+               !-- If Coriolis force is treated explicitly it is added here:
+               if ( .not. l_coriolis_imp ) then
+                  dpsi_exp_Mloc(n_m,n_r,1)=dpsi_exp_Mloc(n_m,n_r,1)-   &
+                  &        CorFac*ci*real(m,cp)*psi_Mloc(n_m,n_r)
+               end if
             end if
          end do
       end do
@@ -604,8 +610,12 @@ contains
                stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)    &
                &           -tscheme%wimp_lin(1)*ViscFac*                      &
                &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
-               CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
-               &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
+               if ( l_coriolis_imp ) then
+                  CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
+                  &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
+               else
+                  CorSten   = 0.0_cp
+               end if
             end if
          end if
 
@@ -647,8 +657,12 @@ contains
                stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)    &
                &           -tscheme%wimp_lin(1)*ViscFac*                      &
                &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
-               CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
-               &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
+               if ( l_coriolis_imp ) then
+                  CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
+                  &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
+               else
+                  CorSten   = 0.0_cp
+               end if
             end if
          end if
 
@@ -931,7 +945,11 @@ contains
                CorSten  = 0.0_cp
             else
                stencilC = ViscFac*intcheb4rmult4laplrot2(a,b,m,i_r-1,Cmat%nbands)
-               CorSten  = -CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,Cmat%nbands)
+               if ( l_coriolis_imp ) then
+                  CorSten  = -CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,Cmat%nbands)
+               else
+                  CorSten  = 0.0_cp
+               end if
             end if
          end if
 
