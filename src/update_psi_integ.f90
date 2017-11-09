@@ -6,10 +6,10 @@ module update_psi_integ
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
-       &                l_ek_pump, ViscFac, l_coriolis_imp
+       &                l_ek_pump, ViscFac, l_coriolis_imp, ek
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
-   use truncation, only: n_r_max, idx2m, m2idx
+   use truncation, only: n_r_max, idx2m, m2idx, n_m_max ! to be removed
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
    use time_schemes, only: type_tscheme
@@ -19,7 +19,10 @@ module update_psi_integ
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,    &
        &                    intcheb4rmult4, rmult2, intcheb1rmult1,     &
        &                    intcheb2rmult2, intcheb4rmult4laplrot2,     &
-       &                    intcheb4rmult4laplrot 
+       &                    intcheb4rmult4laplrot, intcheb4rmult4hmult2,&
+       &                    intcheb4rmult4hmult2laplrot,                &
+       &                    intcheb4rmult4hmult2laplrot2,               &
+       &                    intcheb2rmult2hmult2, intcheb2rmult2hmult2laplm1
 
 
    implicit none
@@ -35,6 +38,8 @@ module update_psi_integ
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
    type(type_bandmat_real) :: RHSE_mat(2)
 
+   integer :: file_handle
+
    public :: update_psi_int, initialize_psi_integ, finalize_psi_integ, &
    &         get_psi_rhs_imp_int
 
@@ -49,6 +54,8 @@ contains
       !-- Local variables
       integer :: n_m, m
 
+      open(newunit=file_handle, file='psi_cheb', form='unformatted')
+
       !-- Allocate array of matrices (this is handy since it can store various bandwidths)
       allocate( RHSI_mat(nMstart:nMstop) )
       allocate( RHSIL_mat(nMstart:nMstop) )
@@ -56,6 +63,7 @@ contains
 
       !-- Initialize matrices
       if ( l_non_rot ) then
+
          call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
          call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
@@ -70,25 +78,53 @@ contains
                call LHS_mat(n_m)%initialize(6, 6, 4, n_r_max)
             end if
          end do
-      else
-         call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-         call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m == 0 ) then
-               call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
-               call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
-               call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
-            else
-               call RHSI_mat(n_m)%initialize(8, 8, n_r_max)
-               call LHS_mat(n_m)%initialize(8, 8, 4, n_r_max)
-               if ( l_coriolis_imp ) then
-                  call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
+
+      else ! if this is rotating
+
+         if ( l_ek_pump ) then
+
+            call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+            call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m == 0 ) then
+                  call RHSI_mat(n_m)%initialize(6, 6, n_r_max)
+                  call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
+                  call LHS_mat(n_m)%initialize(6, 6, 2, n_r_max)
                else
-                  call RHSIL_mat(n_m)%initialize(6, 6, n_r_max)
+                  call RHSI_mat(n_m)%initialize(10, 10, n_r_max)
+                  call LHS_mat(n_m)%initialize(10, 10, 4, n_r_max)
+                  if ( l_coriolis_imp ) then
+                     call RHSIL_mat(n_m)%initialize(10, 10, n_r_max)
+                  else
+                     call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
+                  end if
                end if
-            end if
-         end do
+            end do
+
+
+         else ! if there's no Ekman pumping
+
+            call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+            call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m == 0 ) then
+                  call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
+                  call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
+                  call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
+               else
+                  call RHSI_mat(n_m)%initialize(8, 8, n_r_max)
+                  call LHS_mat(n_m)%initialize(8, 8, 4, n_r_max)
+                  if ( l_coriolis_imp ) then
+                     call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
+                  else
+                     call RHSIL_mat(n_m)%initialize(6, 6, n_r_max)
+                  end if
+               end if
+            end do
+
+         end if
       end if
 
       !-- Fill matrices
@@ -121,6 +157,8 @@ contains
 
       !-- Local variable
       integer :: n_m
+
+      close(file_handle)
 
       call RHSE_mat(2)%finalize()
       call RHSE_mat(1)%finalize()
@@ -158,7 +196,8 @@ contains
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
-      real(cp) :: h2
+      complex(cp) :: rhs1(n_r_max)
+      real(cp) :: h2, ekp_fac
       integer :: n_r, n_m, n_cheb, m, n_o
 
       if ( lMat ) lPsimat(:)=.false.
@@ -184,31 +223,31 @@ contains
          end do
       end do
 
+      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
+         do n_r=1,n_r_max
+            vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(m2idx(0),n_r,1))
+         end do
+      end if
+
+
       !-- Add Ekman pumping as an explicit term if this is requested
       if ( l_ek_pump ) then
-
          do n_r=2,n_r_max
+            h2 = (r_cmb*r_cmb-r(n_r)*r(n_r))
+            ekp_fac = CorFac*half*sqrt(ek*r_cmb)*h2**(0.25_cp)
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  dpsi_exp_Mloc(n_m,n_r,1)=       dpsi_exp_Mloc(n_m,n_r,1) -     &
-                  &                    CorFac*ekpump(n_r)*up_Mloc(n_m,n_r)
-
+                  dpsi_exp_Mloc(n_m,n_r,1)=    h2*dpsi_exp_Mloc(n_m,n_r,1) -     &
+                  &                             ekp_fac*up_Mloc(n_m,n_r)
                else 
-                  dpsi_exp_Mloc(n_m,n_r,1)=       dpsi_exp_Mloc(n_m,n_r,1) +     &
-                  &                 CorFac*ekpump(n_r)*( -om_Mloc(n_m,n_r) +     &
+                  dpsi_exp_Mloc(n_m,n_r,1)=    h2*dpsi_exp_Mloc(n_m,n_r,1) +     &
+                  &                            ekp_fac*( -om_Mloc(n_m,n_r) +     &
                   &                     half*beta(n_r)*   up_Mloc(n_m,n_r) +     &
                   &       beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
                   &                                       us_Mloc(n_m,n_r) )
                end if
             end do
-         end do
-
-      end if
-
-      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
-         do n_r=1,n_r_max
-            vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(m2idx(0),n_r,1))
          end do
       end if
 
@@ -238,6 +277,16 @@ contains
             dpsi_exp_Mloc(n_m,n_r,1)=rhs(n_r)
          end do
       end do
+
+      !-- If Ekman pumping is needed then regularisation is different
+      if ( l_ek_pump ) then
+         do n_r=1,n_r_max
+            h2 = (r_cmb*r_cmb-r(n_r)*r(n_r))
+            do n_m=nMstart,nMstop
+               buo_imp_Mloc(n_m,n_r)=h2*buo_imp_Mloc(n_m,n_r)
+            end do
+         end do
+      end if
 
       !-- Transform buoyancy to Chebyshev space
       call rscheme%costf1(buo_imp_Mloc, nMstart, nMstop, n_r_max)
@@ -304,10 +353,16 @@ contains
             end if
          end do
 
+         ! if ( m == 10 ) then
+            ! write(file_handle) rhs
+         ! end if
+
          !-- Multiply rhs by precond matrix
          do n_r=1,n_r_max
             rhs(n_r)=rhs(n_r)*psifac(n_r,n_m)
          end do
+
+         rhs1(:) = rhs(:)
 
          call LHS_mat(n_m)%solve(rhs, n_r_max)
 
@@ -318,6 +373,7 @@ contains
          else
             do n_cheb=1,rscheme%n_max
                psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
+               work_Mloc(n_m,n_cheb)=rhs1(n_cheb)
             end do
          end if
 
@@ -348,6 +404,10 @@ contains
             end do
          end if
       end if
+
+      write(file_handle) n_m_max, n_r_max
+      write(file_handle) psi_Mloc
+      write(file_handle) work_Mloc
 
       !-- Bring psi back the physical space
       call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
@@ -394,42 +454,6 @@ contains
             end do
          end do
       end if
-
-
-      ! call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
-! 
-      ! do n_r=1,n_r_max
-         ! h2 = r(1)*r(1)-r(n_r)*r(n_r)
-         ! do n_m=nMstart,nMstop
-            ! m = idx2m(n_m)
-! 
-            ! if ( m == 0 ) then
-               ! us_Mloc(n_m,n_r)=0.0_cp
-               ! up_Mloc(n_m,n_r)=uphi0(n_r)
-            ! else
-               ! us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*h2*      psi_Mloc(n_m,n_r)
-               ! up_Mloc(n_m,n_r)=-h2*                           work_Mloc(n_m,n_r) &
-               ! &                +3.0_cp*r(n_r)*                 psi_Mloc(n_m,n_r)
-            ! end if
-         ! end do
-      ! end do
-! 
-      ! call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
-! 
-      ! do n_r=1,n_r_max
-         ! h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
-         ! do n_m=nMstart,nMstop
-            ! m = idx2m(n_m)
-! 
-            ! if ( m == 0 ) then
-               ! om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
-            ! else
-               ! om_Mloc(n_m,n_r)=work_Mloc(n_m,n_r)+or1(n_r)*up_Mloc(n_m,n_r)-  &
-               ! &                ci*real(m,cp)*or1(n_r)*us_Mloc(n_m,n_r)
-            ! end if
-         ! end do
-      ! end do
-
 
       !-- Roll the explicit arrays before filling again the first block
       call roll(dpsi_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
@@ -594,6 +618,7 @@ contains
 
          !-- Define the equations
          if ( l_non_rot ) then
+
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
                &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
@@ -605,23 +630,49 @@ contains
                &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = 0.0_cp
             end if
-         else
-            if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
-               CorSten   = 0.0_cp
-            else
-               stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)    &
-               &           -tscheme%wimp_lin(1)*ViscFac*                      &
-               &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
-               if ( l_coriolis_imp ) then
-                  CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
-                  &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
-               else
+
+         else ! this is rotating
+
+            if ( l_ek_pump ) then
+
+               if ( m == 0 ) then
+                  stencilA4 = intcheb2rmult2hmult2(a,b,i_r-1,A_mat%nbands)-      &
+                  &           tscheme%wimp_lin(1)*ViscFac*                       &
+                  &           intcheb2rmult2hmult2laplm1(a,b,i_r-1,A_mat%nbands)
                   CorSten   = 0.0_cp
+               else
+                  stencilA4 = intcheb4rmult4hmult2laplrot(a,b,m,i_r-1,A_mat%nbands)&
+                  &           -tscheme%wimp_lin(1)*ViscFac*                        &
+                  &           intcheb4rmult4hmult2laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+                  if ( l_coriolis_imp ) then
+                     CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
+                     &           intcheb4rmult4hmult2(a,b,i_r-1,A_mat%nbands)
+                  else
+                     CorSten   = 0.0_cp
+                  end if
                end if
+
+            else ! there's no Ekman pumping
+
+               if ( m == 0 ) then
+                  stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-              &
+                  &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)-&
+                  &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+                  CorSten   = 0.0_cp
+               else
+                  stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)   &
+                  &           -tscheme%wimp_lin(1)*ViscFac*                     &
+                  &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+                  if ( l_coriolis_imp ) then
+                     CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*     &
+                     &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
+                  else
+                     CorSten   = 0.0_cp
+                  end if
+               end if
+
             end if
+
          end if
 
          !-- Roll the array for band storage
@@ -641,6 +692,7 @@ contains
          i_r = n_r+A_mat%ntau
 
          if ( l_non_rot ) then
+
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
                &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
@@ -652,22 +704,47 @@ contains
                &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = 0.0_cp
             end if
-         else
-            if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
-               CorSten   = 0.0_cp
-            else
-               stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)    &
-               &           -tscheme%wimp_lin(1)*ViscFac*                      &
-               &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
-               if ( l_coriolis_imp ) then
-                  CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
-                  &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
-               else
+
+         else ! this is rotating
+
+            if ( l_ek_pump ) then 
+
+               if ( m == 0 ) then
+                  stencilA4 = intcheb2rmult2hmult2(a,b,i_r-1,A_mat%nbands)-    &
+                  &           tscheme%wimp_lin(1)*ViscFac*                     &
+                  &           intcheb2rmult2hmult2laplm1(a,b,i_r-1,A_mat%nbands)
                   CorSten   = 0.0_cp
+               else
+                  stencilA4 = intcheb4rmult4hmult2laplrot(a,b,m,i_r-1,A_mat%nbands)&
+                  &           -tscheme%wimp_lin(1)*ViscFac*                        &
+                  &           intcheb4rmult4hmult2laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+                  if ( l_coriolis_imp ) then
+                     CorSten = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
+                     &         intcheb4rmult4hmult2(a,b,i_r-1,A_mat%nbands)
+                  else
+                     CorSten = 0.0_cp
+                  end if
                end if
+
+            else ! there's no Ekman pumping
+
+               if ( m == 0 ) then
+                  stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-              &
+                  &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)-&
+                  &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+                  CorSten   = 0.0_cp
+               else
+                  stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)   &
+                  &           -tscheme%wimp_lin(1)*ViscFac*                     &
+                  &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+                  if ( l_coriolis_imp ) then
+                     CorSten = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
+                     &         intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
+                  else
+                     CorSten = 0.0_cp
+                  end if
+               end if
+
             end if
          end if
 
@@ -798,6 +875,8 @@ contains
 
       end do
 
+      if ( m == 10 ) call A_mat%write()
+
       !-- LU factorisation
       call A_mat%prepare_LU()
 
@@ -835,7 +914,7 @@ contains
          !-- Define right-hand side equations
          if ( m0 == 1) then
             stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
-         else
+         else ! Non-axisymmetric terms
             stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
          end if
 
@@ -881,17 +960,33 @@ contains
 
          !-- Define right-hand side equations
          if ( l_non_rot ) then
+
             if ( m == 0 ) then
                stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
             else
                stencilB = -intcheb4rmult4lapl(a,b,m,i_r-1,B_mat%nbands)
             end if
-         else
-            if ( m == 0 ) then
-               stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
-            else
-               stencilB = intcheb4rmult4laplrot(a,b,m,i_r-1,B_mat%nbands)
+
+         else ! if this is rotating
+
+            if ( l_ek_pump ) then
+
+               if ( m == 0 ) then
+                  stencilB = intcheb2rmult2hmult2(a,b,i_r-1,B_mat%nbands)
+               else
+                  stencilB = intcheb4rmult4hmult2laplrot(a,b,m,i_r-1,B_mat%nbands)
+               end if
+
+            else ! if there's no Ekman pumping
+
+               if ( m == 0 ) then
+                  stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+               else
+                  stencilB = intcheb4rmult4laplrot(a,b,m,i_r-1,B_mat%nbands)
+               end if
+
             end if
+
          end if
 
          !-- Roll array for band storage
@@ -935,6 +1030,7 @@ contains
 
          !-- Define right-hand side equations
          if ( l_non_rot ) then
+
             if ( m == 0 ) then
                stencilC =  ViscFac * (  rmult2(a,b,i_r-1,Cmat%nbands)- &
                &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands) )
@@ -943,19 +1039,44 @@ contains
                stencilC = -ViscFac*intcheb4rmult4lapl2(a,b,m,i_r-1,Cmat%nbands)
                CorSten  = 0.0_cp
             end if
-         else
-            if ( m == 0 ) then
-               stencilC =    ViscFac* ( rmult2(a,b,i_r-1,Cmat%nbands)- &
-               &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands))
-               CorSten  = 0.0_cp
-            else
-               stencilC = ViscFac*intcheb4rmult4laplrot2(a,b,m,i_r-1,Cmat%nbands)
-               if ( l_coriolis_imp ) then
-                  CorSten  = -CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,Cmat%nbands)
-               else
+
+         else ! if this is rotating
+
+            if ( l_ek_pump ) then
+
+               if ( m == 0 ) then
+                  stencilC = ViscFac*intcheb2rmult2hmult2laplm1(a,b,i_r-1, &
+                  &                                             Cmat%nbands)
                   CorSten  = 0.0_cp
+               else
+                  stencilC = ViscFac*intcheb4rmult4hmult2laplrot2(a,b,m,i_r-1, &
+                  &                                               Cmat%nbands)
+                  if ( l_coriolis_imp ) then
+                     CorSten = -CorFac*real(m,cp)*intcheb4rmult4hmult2(a,b,i_r-1,&
+                     &                                                 Cmat%nbands)
+                  else
+                     CorSten = 0.0_cp
+                  end if
                end if
+
+            else ! if there's no Ekman pumping
+
+               if ( m == 0 ) then
+                  stencilC =    ViscFac* ( rmult2(a,b,i_r-1,Cmat%nbands)- &
+                  &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands))
+                  CorSten  = 0.0_cp
+               else
+                  stencilC = ViscFac*intcheb4rmult4laplrot2(a,b,m,i_r-1,Cmat%nbands)
+                  if ( l_coriolis_imp ) then
+                     CorSten = -CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,&
+                     &                                           Cmat%nbands)
+                  else
+                     CorSten = 0.0_cp
+                  end if
+               end if
+
             end if
+
          end if
 
          !-- Roll array for band storage

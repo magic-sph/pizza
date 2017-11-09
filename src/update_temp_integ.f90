@@ -3,9 +3,9 @@ module update_temp_integ
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, one, ci, half
-   use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, TdiffFac
-   use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
-       &                       rgrav
+   use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, &
+       &                TdiffFac, l_non_rot
+   use radial_functions, only: rscheme, or1, or2, dtcond, tcond, rgrav, r
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m
    use radial_der, only: get_dr
@@ -81,16 +81,16 @@ contains
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
-   subroutine update_temp_int(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc, &
-              &           dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,  &
-              &           tscheme, lMat, l_roll_imp, l_log_next)
+   subroutine update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
+              &               dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,  &
+              &               tscheme, lMat, l_roll_imp, l_log_next)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
       logical,            intent(in) :: lMat
       logical,            intent(in) :: l_roll_imp
       logical,            intent(in) :: l_log_next
-      complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),        intent(in) :: psi_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Output variables
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
@@ -101,6 +101,7 @@ contains
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
+      real(cp) :: h2
       integer :: n_r, n_m, n_r_out, m, n_o
 
       if ( lMat ) lTMat(:)=.false.
@@ -121,14 +122,29 @@ contains
            &       rscheme, nocopy=.true. )
 
       !-- Finish calculation of the explicit part for current time step
-      do n_r=1,n_r_max
-         do n_m=nMstart, nMstop
-            dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
-            &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
-            &                     -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
-            &                     tadvz_fac*beta(n_r)*tcond(n_r))
+      if ( l_non_rot ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart, nMstop
+               m = idx2m(n_m)
+               dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
+               &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
+               &             -ci*real(m,cp)*or1(n_r)*dtcond(n_r)*    &
+               &                                psi_Mloc(n_m,n_r)
+            end do
          end do
-      end do
+      else ! this is rotating
+         do n_r=1,n_r_max
+            h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
+            do n_m=nMstart, nMstop
+               m = idx2m(n_m)
+               dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
+               &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
+               &          -ci*real(m,cp)*(h2*or1(n_r)*dtcond(n_r)+   &
+               &                            tadvz_fac* tcond(n_r))*  &
+               &                                psi_Mloc(n_m,n_r)
+            end do
+         end do
+      end if
 
       !-- Transform the explicit part to chebyshev space
       call rscheme%costf1(dtemp_exp_Mloc(:,:,1), nMstart, nMstop, n_r_max)
