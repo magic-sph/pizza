@@ -160,8 +160,8 @@ contains
          height(1) = 0.0_cp
          beta(1)   = 0.0_cp
          dbeta(1)  = 0.0_cp
-         ekpump(1) = ek_pump_fac*1.0e10_cp
-         oheight(1)= 1.0e10_cp
+         ekpump(1) = ek_pump_fac*0.0e0_cp
+         oheight(1)= 0.0e0_cp
          do n_r=2,n_r_max
             height(n_r) = two * sqrt(r_cmb**2-r(n_r)**2)
             oheight(n_r)= half/sqrt(r_cmb**2-r(n_r)**2)
