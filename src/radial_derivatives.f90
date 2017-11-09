@@ -196,7 +196,7 @@ contains
       do n_m=nMstart, nMstop
          threshold(n_m) = maxval(abs(f(n_m,:)))*thr
       end do
-    
+
       !----- initialize derivatives:
       do n_cheb=n_cheb_max,n_r_max
          do n_m=nMstart,nMstop
