@@ -225,7 +225,7 @@ contains
 
       !-- Add Ekman pumping as an explicit term if this is requested
       if ( l_ek_pump ) then
-         do n_r=2,n_r_max
+         do n_r=2,n_r_max-1
             h2 = (r_cmb*r_cmb-r(n_r)*r(n_r))
             ekp_fac = CorFac*half*sqrt(ek*r_cmb)*h2**(0.25_cp)
             do n_m=nMstart,nMstop
@@ -881,7 +881,7 @@ contains
 
       end do
 
-      if ( m == 10 ) call A_mat%write()
+      ! if ( m == 10 ) call A_mat%write()
 
       !-- LU factorisation
       call A_mat%prepare_LU()
