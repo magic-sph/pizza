@@ -7,7 +7,7 @@ module update_temp_integ
        &                TdiffFac, l_non_rot
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, rgrav, r
    use blocking, only: nMstart, nMstop
-   use truncation, only: n_r_max, idx2m
+   use truncation, only: n_r_max, idx2m, n_cheb_max
    use radial_der, only: get_dr
    use fields, only: work_Mloc
    use useful, only: abortRun, roll
@@ -38,14 +38,14 @@ contains
 
       integer :: n_m, m
 
-      call RHSE_mat%initialize(4, 4, n_r_max)
+      call RHSE_mat%initialize(4, 4, n_cheb_max)
 
       allocate( RHSI_mat(nMstart:nMstop) )
       allocate( LHS_mat(nMstart:nMstop) )
 
       do n_m=nMstart,nMstop
-         call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
-         call LHS_mat(n_m)%initialize(4, 4, n_boundaries, n_r_max)
+         call RHSI_mat(n_m)%initialize(4, 4, n_cheb_max)
+         call LHS_mat(n_m)%initialize(4, 4, n_boundaries, n_cheb_max)
       end do
 
       call get_rhs_exp_mat(RHSE_mat)
@@ -58,11 +58,11 @@ contains
       lTmat(:)=.false.
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
-      allocate( rhs(n_r_max) )
-      bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
+      allocate( rhs(n_cheb_max) )
+      bytes_allocated = bytes_allocated+n_cheb_max*SIZEOF_DEF_COMPLEX
 
-      allocate( tempfac(n_r_max, nMstart:nMstop) )
-      bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
+      allocate( tempfac(n_cheb_max, nMstart:nMstop) )
+      bytes_allocated = bytes_allocated + n_cheb_max*(nMstop-nMstart+1)* &
       &                 SIZEOF_DEF_REAL
 
    end subroutine initialize_temp_integ
@@ -102,7 +102,7 @@ contains
 
       !-- Local variables
       real(cp) :: h2
-      integer :: n_r, n_m, n_r_out, m, n_o
+      integer :: n_r, n_m, m, n_o, n_cheb
 
       if ( lMat ) lTMat(:)=.false.
 
@@ -151,16 +151,20 @@ contains
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
-         do n_r=1,n_r_max
-            rhs(n_r)=dtemp_exp_Mloc(n_m,n_r,1)
+         do n_cheb=1,n_cheb_max
+            rhs(n_cheb)=dtemp_exp_Mloc(n_m,n_cheb,1)
          end do
 
          call RHSE_mat%mat_vec_mul(rhs)
 
          rhs(1)=zero
          rhs(2)=zero
-         do n_r=1,n_r_max
-            dtemp_exp_Mloc(n_m,n_r,1)=rhs(n_r)
+         do n_cheb=1,n_cheb_max
+            dtemp_exp_Mloc(n_m,n_cheb,1)=rhs(n_cheb)
+         end do
+         !-- Pad with zeros
+         do n_cheb=n_cheb_max+1,n_r_max
+            dtemp_exp_Mloc(n_m,n_cheb,1)=zero
          end do
       end do
 
@@ -177,36 +181,38 @@ contains
             lTmat(n_m)=.true.
          end if
 
-         do n_r=1,n_r_max
+         do n_cheb=1,n_cheb_max
             do n_o=1,tscheme%norder_imp-1
                if ( n_o == 1 ) then
-                  rhs(n_r)=tscheme%wimp(n_o+1)*dtemp_imp_Mloc(n_m,n_r,n_o)
+                  rhs(n_cheb)=tscheme%wimp(n_o+1)*dtemp_imp_Mloc(n_m,n_cheb,n_o)
                else
-                  rhs(n_r)=rhs(n_r)+tscheme%wimp(n_o+1)*dtemp_imp_Mloc(n_m,n_r,n_o)
+                  rhs(n_cheb)=rhs(n_cheb)+tscheme%wimp(n_o+1)* &
+                  &                       dtemp_imp_Mloc(n_m,n_cheb,n_o)
                end if
             end do
             do n_o=1,tscheme%norder_exp
-               rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*dtemp_exp_Mloc(n_m,n_r,n_o)
+               rhs(n_cheb)=rhs(n_cheb)+tscheme%wexp(n_o)*   &
+               &                       dtemp_exp_Mloc(n_m,n_cheb,n_o)
             end do
          end do
 
          !-- Multiply rhs by precond matrix
-         do n_r=1,n_r_max
-            rhs(n_r)=rhs(n_r)*tempfac(n_r,n_m)
+         do n_cheb=1,n_cheb_max
+            rhs(n_cheb)=rhs(n_cheb)*tempfac(n_cheb,n_m)
          end do
 
-         call LHS_mat(n_m)%solve(rhs, n_r_max)
+         call LHS_mat(n_m)%solve(rhs, n_cheb_max)
 
-         do n_r_out=1,rscheme%n_max
-            temp_Mloc(n_m, n_r_out)=rhs(n_r_out)
+         do n_cheb=1,n_cheb_max
+            temp_Mloc(n_m, n_cheb)=rhs(n_cheb)
          end do
 
       end do
 
-      !-- set cheb modes > rscheme%n_max to zero (dealiazing)
-      do n_r_out=rscheme%n_max+1,n_r_max
+      !-- set cheb modes > n_cheb_max to zero (dealiazing)
+      do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
-            temp_Mloc(n_m,n_r_out)=zero
+            temp_Mloc(n_m,n_cheb)=zero
          end do
       end do
 
@@ -248,7 +254,7 @@ contains
       complex(cp), intent(out) :: dtemp_imp_Mloc_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m
+      integer :: n_r, n_m, n_cheb
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
@@ -262,8 +268,8 @@ contains
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
 
-         do n_r=1,n_r_max
-            rhs(n_r)= dtemp_imp_Mloc_last(n_m,n_r)
+         do n_cheb=1,n_cheb_max
+            rhs(n_cheb)= dtemp_imp_Mloc_last(n_m,n_cheb)
          end do
 
          call RHSE_mat%mat_vec_mul(rhs)
@@ -271,8 +277,13 @@ contains
          rhs(1)=zero
          rhs(2)=zero
 
-         do n_r=1,n_r_max
-            dtemp_imp_Mloc_last(n_m,n_r)=rhs(n_r)
+         do n_cheb=1,n_cheb_max
+            dtemp_imp_Mloc_last(n_m,n_cheb)=rhs(n_cheb)
+         end do
+
+         !-- Pad with zeros
+         do n_cheb=n_cheb_max+1,n_r_max
+            dtemp_imp_Mloc_last(n_m,n_cheb)=zero
          end do
 
       end do
@@ -291,22 +302,33 @@ contains
 
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
-            do n_r=1,n_r_max
-               rhs(n_r)=work_Mloc(n_m,n_r)
+            do n_cheb=1,n_cheb_max
+               rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             end do
             call RHSI_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero
             rhs(2)=zero
-            do n_r=1,n_r_max
-               work_Mloc(n_m,n_r)=rhs(n_r)
+            do n_cheb=1,n_cheb_max
+               work_Mloc(n_m,n_cheb)=rhs(n_cheb)
+            end do
+            !-- Pad with zeros
+            do n_cheb=n_cheb_max+1,n_r_max
+               work_Mloc(n_m,n_cheb)=zero
             end do
          end do
 
          !-- Finally assemble the right hand side
-         do n_r=1,n_r_max
+         do n_cheb=1,n_cheb_max
             do n_m=nMstart,nMstop
-               dtemp_imp_Mloc_last(n_m,n_r)=dtemp_imp_Mloc_last(n_m,n_r) &
-               &                            +wimp*TdiffFac*work_Mloc(n_m,n_r) 
+               dtemp_imp_Mloc_last(n_m,n_cheb)=dtemp_imp_Mloc_last(n_m,n_cheb) &
+               &                          +wimp*TdiffFac*work_Mloc(n_m,n_cheb) 
+            end do
+         end do
+
+         !-- Pad with zeros
+         do n_cheb=n_cheb_max+1,n_r_max
+            do n_m=nMstart,nMstop
+               dtemp_imp_Mloc_last(n_m,n_cheb)=zero
             end do
          end do
 
@@ -322,7 +344,7 @@ contains
 
       !-- Output variables
       type(type_bordmat_real), intent(inout) :: A_mat
-      real(cp),                intent(inout) :: tempMat_fac(n_r_max)
+      real(cp),                intent(inout) :: tempMat_fac(A_mat%nlines)
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands)
@@ -418,7 +440,7 @@ contains
          A_mat%A2(n_r,:) = A_mat%A2(n_r,:)*tempMat_fac(n_r)
       end do
 
-      do n_r=A_mat%ntau+1, n_r_max
+      do n_r=A_mat%ntau+1,A_mat%nlines
          A_mat%A3(n_r-A_mat%ntau,:) = A_mat%A3(n_r-A_mat%ntau,:)* tempMat_fac(n_r)
       end do
 

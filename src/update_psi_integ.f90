@@ -9,7 +9,7 @@ module update_psi_integ
        &                l_ek_pump, ViscFac, l_coriolis_imp, ek
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
-   use truncation, only: n_r_max, idx2m, m2idx, n_m_max ! to be removed
+   use truncation, only: n_r_max, idx2m, m2idx, n_m_max, n_cheb_max ! to be removed
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
    use time_schemes, only: type_tscheme
@@ -38,8 +38,6 @@ module update_psi_integ
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
    type(type_bandmat_real) :: RHSE_mat(2)
 
-   integer :: file_handle
-
    public :: update_psi_int, initialize_psi_integ, finalize_psi_integ, &
    &         get_psi_rhs_imp_int
 
@@ -54,8 +52,6 @@ contains
       !-- Local variables
       integer :: n_m, m
 
-      open(newunit=file_handle, file='psi_cheb', form='unformatted')
-
       !-- Allocate array of matrices (this is handy since it can store various bandwidths)
       allocate( RHSI_mat(nMstart:nMstop) )
       allocate( RHSIL_mat(nMstart:nMstop) )
@@ -64,18 +60,18 @@ contains
       !-- Initialize matrices
       if ( l_non_rot ) then
 
-         call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-         call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
+         call RHSE_mat(1)%initialize(4, 4, n_cheb_max) ! This is m  = 0
+         call RHSE_mat(2)%initialize(8, 8, n_cheb_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
-               call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
-               call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
-               call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
+               call RHSI_mat(n_m)%initialize(4, 4, n_cheb_max)
+               call RHSIL_mat(n_m)%initialize(2, 2, n_cheb_max)
+               call LHS_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
             else
-               call RHSI_mat(n_m)%initialize(6, 6, n_r_max)
-               call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
-               call LHS_mat(n_m)%initialize(6, 6, 4, n_r_max)
+               call RHSI_mat(n_m)%initialize(6, 6, n_cheb_max)
+               call RHSIL_mat(n_m)%initialize(4, 4, n_cheb_max)
+               call LHS_mat(n_m)%initialize(6, 6, 4, n_cheb_max)
             end if
          end do
 
@@ -83,21 +79,21 @@ contains
 
          if ( l_ek_pump ) then
 
-            call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-            call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
+            call RHSE_mat(1)%initialize(4, 4, n_cheb_max) ! This is m  = 0
+            call RHSE_mat(2)%initialize(8, 8, n_cheb_max) ! This is m /= 0
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  call RHSI_mat(n_m)%initialize(6, 6, n_r_max)
-                  call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
-                  call LHS_mat(n_m)%initialize(6, 6, 2, n_r_max)
+                  call RHSI_mat(n_m)%initialize(6, 6, n_cheb_max)
+                  call RHSIL_mat(n_m)%initialize(4, 4, n_cheb_max)
+                  call LHS_mat(n_m)%initialize(6, 6, 2, n_cheb_max)
                else
-                  call RHSI_mat(n_m)%initialize(10, 10, n_r_max)
-                  call LHS_mat(n_m)%initialize(10, 10, 4, n_r_max)
+                  call RHSI_mat(n_m)%initialize(10, 10, n_cheb_max)
+                  call LHS_mat(n_m)%initialize(10, 10, 4, n_cheb_max)
                   if ( l_coriolis_imp ) then
-                     call RHSIL_mat(n_m)%initialize(10, 10, n_r_max)
+                     call RHSIL_mat(n_m)%initialize(10, 10, n_cheb_max)
                   else
-                     call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
+                     call RHSIL_mat(n_m)%initialize(8, 8, n_cheb_max)
                   end if
                end if
             end do
@@ -105,21 +101,21 @@ contains
 
          else ! if there's no Ekman pumping
 
-            call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-            call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
+            call RHSE_mat(1)%initialize(4, 4, n_cheb_max) ! This is m  = 0
+            call RHSE_mat(2)%initialize(8, 8, n_cheb_max) ! This is m /= 0
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
-                  call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
-                  call LHS_mat(n_m)%initialize(4, 4, 2, n_r_max)
+                  call RHSI_mat(n_m)%initialize(4, 4, n_cheb_max)
+                  call RHSIL_mat(n_m)%initialize(2, 2, n_cheb_max)
+                  call LHS_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
                else
-                  call RHSI_mat(n_m)%initialize(8, 8, n_r_max)
-                  call LHS_mat(n_m)%initialize(8, 8, 4, n_r_max)
+                  call RHSI_mat(n_m)%initialize(8, 8, n_cheb_max)
+                  call LHS_mat(n_m)%initialize(8, 8, 4, n_cheb_max)
                   if ( l_coriolis_imp ) then
-                     call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
+                     call RHSIL_mat(n_m)%initialize(8, 8, n_cheb_max)
                   else
-                     call RHSIL_mat(n_m)%initialize(6, 6, n_r_max)
+                     call RHSIL_mat(n_m)%initialize(6, 6, n_cheb_max)
                   end if
                end if
             end do
@@ -140,12 +136,12 @@ contains
       lPsimat(:)=.false.
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
-      allocate( rhs(n_r_max) )
+      allocate( rhs(n_cheb_max) )
       rhs(:)=zero
-      bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
+      bytes_allocated = bytes_allocated+n_cheb_max*SIZEOF_DEF_COMPLEX
 
-      allocate( psifac(n_r_max, nMstart:nMstop) )
-      bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
+      allocate( psifac(n_cheb_max, nMstart:nMstop) )
+      bytes_allocated = bytes_allocated + n_cheb_max*(nMstop-nMstart+1)* &
       &                 SIZEOF_DEF_REAL
 
    end subroutine initialize_psi_integ
@@ -157,8 +153,6 @@ contains
 
       !-- Local variable
       integer :: n_m
-
-      close(file_handle)
 
       call RHSE_mat(2)%finalize()
       call RHSE_mat(1)%finalize()
@@ -196,7 +190,6 @@ contains
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
-      complex(cp) :: rhs1(n_r_max)
       real(cp) :: h2, ekp_fac
       integer :: n_r, n_m, n_cheb, m, n_o
 
@@ -254,13 +247,12 @@ contains
       !-- Transform the explicit part to chebyshev space
       call rscheme%costf1(dpsi_exp_Mloc(:,:,1), nMstart, nMstop, n_r_max)
 
-
       !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
-         do n_r=1,n_r_max
-            rhs(n_r)=dpsi_exp_Mloc(n_m,n_r,1)
+         do n_cheb=1,n_cheb_max
+            rhs(n_cheb)=dpsi_exp_Mloc(n_m,n_cheb,1)
          end do
 
          if ( m == 0 ) then
@@ -273,12 +265,18 @@ contains
          rhs(1)=zero
          rhs(2)=zero
 
-         do n_r=1,n_r_max
-            dpsi_exp_Mloc(n_m,n_r,1)=rhs(n_r)
+         do n_cheb=1,n_cheb_max
+            dpsi_exp_Mloc(n_m,n_cheb,1)=rhs(n_cheb)
+         end do
+
+         !-- Deliasing
+         do n_cheb=n_cheb_max+1,n_r_max
+            dpsi_exp_Mloc(n_m,n_cheb,1)=zero
          end do
       end do
 
       !-- If Ekman pumping is needed then regularisation is different
+      !-- Hence buoyancy has to be multiplied by h^2
       if ( l_ek_pump ) then
          do n_r=1,n_r_max
             h2 = (r_cmb*r_cmb-r(n_r)*r(n_r))
@@ -296,8 +294,8 @@ contains
          m = idx2m(n_m)
 
          if ( m > 0 ) then
-            do n_r=1,n_r_max
-               rhs(n_r)=buo_imp_Mloc(n_m,n_r)
+            do n_cheb=1,n_cheb_max
+               rhs(n_cheb)=buo_imp_Mloc(n_m,n_cheb)
             end do
 
             call RHSE_mat(2)%mat_vec_mul(rhs)
@@ -306,17 +304,20 @@ contains
             rhs(2)=zero
             rhs(3)=zero
             rhs(4)=zero
-            do n_r=1,n_r_max
-               buo_imp_Mloc(n_m,n_r)=rhs(n_r)
+            do n_cheb=1,n_cheb_max
+               buo_imp_Mloc(n_m,n_cheb)=rhs(n_cheb)
+            end do
+
+            !-- Deliasing
+            do n_cheb=n_cheb_max+1,n_r_max
+               buo_imp_Mloc(n_m,n_cheb)=zero
             end do
          end if
       end do
 
-
       !-- Calculation of the implicit part
       call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, tscheme%wimp_lin(2), &
            &                   dpsi_imp_Mloc(:,:,1), vp_bal, l_vphi_bal_calc)
-
 
       do n_m=nMstart,nMstop
 
@@ -335,53 +336,47 @@ contains
          end if
 
          !-- Assemble RHS
-         do n_r=1,n_r_max
+         do n_cheb=1,n_cheb_max
             do n_o=1,tscheme%norder_imp-1
                if ( n_o == 1 ) then
-                  rhs(n_r)=tscheme%wimp(n_o+1)*dpsi_imp_Mloc(n_m,n_r,n_o)
+                  rhs(n_cheb)=tscheme%wimp(n_o+1)*dpsi_imp_Mloc(n_m,n_cheb,n_o)
                else
-                  rhs(n_r)=rhs(n_r)+tscheme%wimp(n_o+1)* &
-                  &        dpsi_imp_Mloc(n_m,n_r,n_o)
+                  rhs(n_cheb)=rhs(n_cheb)+tscheme%wimp(n_o+1)* &
+                  &                       dpsi_imp_Mloc(n_m,n_cheb,n_o)
                end if
             end do
             do n_o=1,tscheme%norder_exp
-               rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*dpsi_exp_Mloc(n_m,n_r,n_o)
+               rhs(n_cheb)=rhs(n_cheb)+tscheme%wexp(n_o)*  &
+               &                       dpsi_exp_Mloc(n_m,n_cheb,n_o)
             end do
             !-- Add buoyancy
             if ( m /= 0 ) then
-               rhs(n_r)=rhs(n_r)+buo_imp_Mloc(n_m,n_r)
+               rhs(n_cheb)=rhs(n_cheb)+buo_imp_Mloc(n_m,n_cheb)
             end if
          end do
 
-         ! if ( m == 10 ) then
-            ! write(file_handle) rhs
-         ! end if
-
          !-- Multiply rhs by precond matrix
-         do n_r=1,n_r_max
-            rhs(n_r)=rhs(n_r)*psifac(n_r,n_m)
+         do n_cheb=1,n_cheb_max
+            rhs(n_cheb)=rhs(n_cheb)*psifac(n_cheb,n_m)
          end do
 
-         rhs1(:) = rhs(:)
-
-         call LHS_mat(n_m)%solve(rhs, n_r_max)
+         call LHS_mat(n_m)%solve(rhs,n_cheb_max)
 
          if ( m == 0 ) then
-            do n_cheb=1,rscheme%n_max
+            do n_cheb=1,n_cheb_max
                uphi0(n_cheb)=real(rhs(n_cheb))
             end do
          else
-            do n_cheb=1,rscheme%n_max
+            do n_cheb=1,n_cheb_max
                psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
-               work_Mloc(n_m,n_cheb)=rhs1(n_cheb)
             end do
          end if
 
       end do
 
-      !-- set cheb modes > rscheme%n_max to zero (dealiazing)
-      if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
-         do n_cheb=rscheme%n_max+1,n_r_max
+      !-- set cheb modes > n_cheb_max to zero (dealiazing)
+      if ( n_cheb_max < n_r_max ) then ! fill with zeros !
+         do n_cheb=n_cheb_max+1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
@@ -404,10 +399,6 @@ contains
             end do
          end if
       end if
-
-      write(file_handle) n_m_max, n_r_max
-      write(file_handle) psi_Mloc
-      write(file_handle) work_Mloc
 
       !-- Bring psi back the physical space
       call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
@@ -478,7 +469,7 @@ contains
 
       !-- Local variables
       real(cp) :: duphi0(n_r_max), d2uphi0(n_r_max), uphi0(n_r_max)
-      integer :: n_r, n_m, m, m0
+      integer :: n_r, n_m, m, m0, n_cheb
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
@@ -498,8 +489,8 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
-         do n_r=1,n_r_max
-            rhs(n_r)= dpsi_imp_Mloc_last(n_m,n_r)
+         do n_cheb=1,n_cheb_max
+            rhs(n_cheb)= dpsi_imp_Mloc_last(n_m,n_cheb)
          end do
 
          call RHSI_mat(n_m)%mat_vec_mul(rhs)
@@ -511,8 +502,13 @@ contains
             rhs(4)=zero
          end if
 
-         do n_r=1,n_r_max
-            dpsi_imp_Mloc_last(n_m,n_r)=rhs(n_r)
+         do n_cheb=1,n_cheb_max
+            dpsi_imp_Mloc_last(n_m,n_cheb)=rhs(n_cheb)
+         end do
+
+         !-- Pad with zeros
+         do n_cheb=n_cheb_max+1,n_r_max
+            dpsi_imp_Mloc_last(n_m,n_cheb)=zero
          end do
 
       end do
@@ -551,8 +547,8 @@ contains
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
-            do n_r=1,n_r_max
-               rhs(n_r)=work_Mloc(n_m,n_r)
+            do n_cheb=1,n_cheb_max
+               rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             end do
             call RHSIL_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero ! vphi equation has only 2 BCs
@@ -561,17 +557,27 @@ contains
                rhs(3)=zero
                rhs(4)=zero
             end if
-            do n_r=1,n_r_max
-               work_Mloc(n_m,n_r)=rhs(n_r)
+            do n_cheb=1,n_cheb_max
+               work_Mloc(n_m,n_cheb)=rhs(n_cheb)
+            end do
+            !-- Pad with zeros
+            do n_cheb=n_cheb_max+1,n_r_max
+               work_Mloc(n_m,n_cheb)=zero
             end do
          end do
 
          !-- Finally assemble the right hand side
-         do n_r=1,n_r_max
+         do n_cheb=1,n_cheb_max
             do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r) &
-               &                              +wimp*work_Mloc(n_m,n_r)
+               dpsi_imp_Mloc_last(n_m,n_cheb)=dpsi_imp_Mloc_last(n_m,n_cheb) &
+               &                                 +wimp*work_Mloc(n_m,n_cheb)
+            end do
+         end do
+
+         !-- Pad with zeros
+         do n_cheb=n_cheb_max+1,n_r_max
+            do n_m=nMstart,nMstop
+               dpsi_imp_Mloc_last(n_m,n_cheb)=zero
             end do
          end do
 
@@ -587,15 +593,15 @@ contains
 
       !-- Output variables
       type(type_bordmat_complex), intent(inout) :: A_mat
-      real(cp),                   intent(inout) :: psiMat_fac(n_r_max)
+      real(cp),                   intent(inout) :: psiMat_fac(A_mat%nlines)
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands), CorSten(A_mat%nbands)
       integer :: n_r, i_r, n_band, n_b
       real(cp) :: a, b, dn2
-      real(cp) :: d4top(n_r_max)
+      real(cp) :: d4top(A_mat%nlines)
 
-      do n_r=1,n_r_max
+      do n_r=1,A_mat%nlines
          dn2 = real(n_r-1,cp)*real(n_r-1,cp)
          d4top(n_r)=16.0_cp/105.0_cp*dn2*(dn2-one)*(dn2-4.0_cp)*(dn2-9.0_cp)
       end do
@@ -857,7 +863,7 @@ contains
          A_mat%A2(n_r,:) = A_mat%A2(n_r,:)*psiMat_fac(n_r)
       end do
 
-      do n_r=A_mat%ntau+1, n_r_max
+      do n_r=A_mat%ntau+1, A_mat%nlines
          A_mat%A3(n_r-A_mat%ntau,:) = A_mat%A3(n_r-A_mat%ntau,:)* psiMat_fac(n_r)
       end do
 

@@ -1,4 +1,7 @@
 module matrix_types
+   !
+   ! This module defines several types for handling band and bordered matrices
+   !
 
    use precision_mod
    use constants, only: one, zero
