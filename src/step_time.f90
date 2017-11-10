@@ -44,7 +44,6 @@ contains
       type(type_tscheme), intent(inout) :: tscheme
 
       !-- Local variables
-      real(cp) :: w1, timeLast
       integer :: n_time_step, n_time_steps_go, n_time_steps_run
       integer :: nPercent
       real(cp) :: tenth_n_time_steps
@@ -136,18 +135,14 @@ contains
          !-------------------
          !-- Determine whether we will need outputs at this time step
          !-------------------
-         l_log = l_correct_step(n_time_step-1,timeLast,n_time_steps, &
-                 &              n_log_step,0)
+         l_log = l_correct_step(n_time_step-1,n_time_steps,n_log_step,0)
          if ( n_time_step+1 <= n_time_steps+1 ) then
-            l_log_next = l_correct_step(n_time_step,timeLast,n_time_steps, &
-                    &                   n_log_step,0)
+            l_log_next = l_correct_step(n_time_step,n_time_steps,n_log_step,0)
          end if
-         l_rst = l_correct_step(n_time_step-1,timeLast,n_time_steps, &
-                 &              n_checkpoint_step,n_checkpoints)
-         l_frame = l_correct_step(n_time_step-1,timeLast,n_time_steps, &
-                   &              n_frame_step,n_frames)
-         l_spec = l_correct_step(n_time_step-1,timeLast,n_time_steps, &
-                   &             n_spec_step,n_specs)
+         l_rst = l_correct_step(n_time_step-1,n_time_steps,n_checkpoint_step, &
+                 &              n_checkpoints)
+         l_frame = l_correct_step(n_time_step-1,n_time_steps,n_frame_step,n_frames)
+         l_spec = l_correct_step(n_time_step-1,n_time_steps,n_spec_step,n_specs)
          l_vphi_bal_write = l_log .and. l_vphi_balance
          l_vphi_bal_calc = l_log_next .and. l_vphi_balance
 
@@ -232,8 +227,7 @@ contains
          if ( tscheme%wimp_lin(1) /= wimp_old ) lMatNext = .true.
 
          !----- Advancing time:
-         timeLast=time               ! Time of the previous timestep
-         time    =time+tscheme%dt(1) ! Update time
+         time=time+tscheme%dt(1) ! Update time
 
          lMat=lMatNext
          if ( l_new_dt .or. lMat ) then
@@ -281,8 +275,7 @@ contains
 
          if ( l_AB1 .and. n_time_step == 1 ) then
             if (rank == 0 ) write(*,*) '! 1st order Adams-Bashforth for 1st time step'
-            w1 = one
-            tscheme%wexp(1)=one
+            tscheme%wexp(1)=tscheme%dt(1) ! Instead of one
             tscheme%wexp(2:tscheme%norder_exp)=0.0_cp
             l_AB1 = .false.
          end if

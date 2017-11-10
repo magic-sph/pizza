@@ -176,7 +176,7 @@ contains
 
    end subroutine polynomial_interpolation_real
 !----------------------------------------------------------------------------
-   logical function l_correct_step(n,t_last,n_max,n_step,n_intervals)
+   logical function l_correct_step(n,n_max,n_step,n_intervals)
       !
       ! Suppose we have a (loop) maximum of n_max steps!
       ! If n_intervals times in these steps a certain action should be carried out
@@ -189,7 +189,6 @@ contains
 
       !-- Input variables:
       integer,  intent(in) :: n            ! current step
-      real(cp), intent(in) :: t_last       ! last time at current step
       integer,  intent(in) :: n_max        ! max number of steps
       integer,  intent(in) :: n_step       ! action interval
       integer,  intent(in) :: n_intervals ! number of actions

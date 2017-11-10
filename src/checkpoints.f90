@@ -311,6 +311,13 @@ contains
          l_bridge_step = .false.
       end if
 
+      !-- If old and new radial schemes differ, one has to use AB1 for the first
+      !-- time step and a bridging CN step for the implicit part.
+      if ( l_coll_old .neqv. l_cheb_coll ) then
+         l_AB1 = .true.
+         l_bridge_step = .true.
+      end if
+
       !-- Read fields with rank0 and scatter them
 
       !-- us
