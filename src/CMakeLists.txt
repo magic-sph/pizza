@@ -1,20 +1,9 @@
 file(GLOB srcfiles "*.f90")
-list(REMOVE_ITEM srcfiles "${SRC}/algebra_mkl.f90")
-list(REMOVE_ITEM srcfiles "${SRC}/algebra_lapack.f90")
-
 list(REMOVE_ITEM srcfiles "${SRC}/pizza.f90")
 
 set_source_files_properties(mpimod.f90 PROPERTIES COMPILE_FLAGS ${FFLAG_NO_STD})
 
-# Lapack
-if(USE_LAPACKLIB MATCHES MKL)
-   set(lapack algebra_mkl.f90)
-endif()
-if(USE_LAPACKLIB MATCHES LAPACK)
-   set(lapack algebra_lapack.f90)
-endif()
-
-add_executable(pizza.exe pizza.f90 ${srcfiles} ${lapack})
+add_executable(pizza.exe pizza.f90 ${srcfiles})
 set_property(TARGET ${EXEC} PROPERTY LINKER_LANGUAGE Fortran)
 
 # Link MPI
