@@ -10,7 +10,6 @@
    alph1      =0.8d0,
  n_time_steps =1000,
    dtMax      =1d-4,
-  l_rerror_fix=.false.
 /
  &phys_param
   ra          =5.0E+04,
