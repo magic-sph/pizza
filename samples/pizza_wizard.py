@@ -9,6 +9,7 @@ import numpy as np
 import unittest
 import NonRotRa2e3.unitTest
 import RotE1e3EkPump.unitTest
+import RotInteg.unitTest
 import TestRestart.unitTest
 import TestChebMap.unitTest
 import TimeStepChange.unitTest
@@ -175,6 +176,11 @@ def getSuite(startdir, cmd, precision, args):
                                                   '%s/RotE1e3EkPump' % startdir, 
                                                   execCmd=cmd,
                                                   precision=precision))
+        # QG case with Cheb integration method
+        suite.addTest(RotInteg.unitTest.RotInteg('outputFileDiff',
+                                                 '%s/RotInteg' % startdir, 
+                                                 execCmd=cmd,
+                                                 precision=precision))
         # Test restart from a checkpoint
         suite.addTest(TestRestart.unitTest.TestRestart('outputFileDiff',
                                                   '%s/TestRestart' % startdir, 

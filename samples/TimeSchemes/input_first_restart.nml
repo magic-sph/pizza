@@ -10,6 +10,7 @@
    time_scheme="CNAB2",
  n_time_steps =200,
    dtMax      =1d-4,
+  l_rerror_fix=.false.,
 /
  &phys_param
   ra          =4.0E+04,
