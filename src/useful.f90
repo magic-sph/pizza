@@ -2,14 +2,16 @@ module useful
 
    use parallel_mod
    use precision_mod
-   use constants, only: tiny_number, two
+   use constants, only: tiny_number, two, one, pi, three, half
    
    implicit none
 
    private
 
-   public :: abortRun, logWrite, formatTime, polynomial_interpolation, &
-   &         l_correct_step, round_off, cc2real, cc22real, getMSD2, roll
+   public :: abortRun, logWrite, formatTime, polynomial_interpolation, & 
+   &         l_correct_step, round_off, cc2real, cc22real, getMSD2,    &
+   &         roll, gausslike_compact_edge, gausslike_compact_center,   &
+   &         gausslike_compact_middle
 
 contains
 
@@ -313,5 +315,53 @@ contains
       end do
 
    end subroutine roll
+!----------------------------------------------------------------------------
+   real(cp) function gausslike_compact_center(c,L) result(gasp3)
+      !
+      ! This defines the central point of a compact-support Gaussian-like
+      ! profile. This is adapted from a Gaspari & Cohn, QJRMS, 1999, Eq. 4.7c
+      !
+
+      !-- Input variables
+      real(cp), intent(in) :: c
+      real(cp), intent(in) :: L
+
+      gasp3 = pi*L*L*L*(one-exp(-two*c/L))-two*pi*c*L*(c+L)*exp(-two*c/L)
+
+   end function gausslike_compact_center
+!----------------------------------------------------------------------------
+   real(cp) function gausslike_compact_middle(r,c,L) result(gasp1)
+      !
+      ! This defines the first part of a compact-support Gaussian-like
+      ! profile. This is adapted from a Gaspari & Cohn, QJRMS, 1999, Eq. 4.7b
+      !
+
+      !-- Input variables
+      real(cp), intent(in) :: r
+      real(cp), intent(in) :: c
+      real(cp), intent(in) :: L
+
+      gasp1 = pi/three*L*r*(r+three*L)*exp(-r/L)+(two*pi*L*L*(c+L)**2)/r *   &
+      &       exp(-two*c/L)*(one-(one-r/(c+L))*exp(r/L))+pi*L*L*L*(exp(-r/L)-&
+      &       exp((r-two*c)/L))
+
+
+   end function gausslike_compact_middle
+!----------------------------------------------------------------------------
+   real(cp) function gausslike_compact_edge(r,c,L) result(gasp2)
+      !
+      ! This defines the second part of a compact-support Gaussian-like
+      ! profile. This is adapted from a Gaspari & Cohn, QJRMS, 1999, Eq. 4.7a
+      !
+
+      !-- Input variables
+      real(cp), intent(in) :: r
+      real(cp), intent(in) :: c
+      real(cp), intent(in) :: L
+
+      gasp2 = two*pi*L/r*exp(-r/L)*(half*(r*(r+L)*(two*c-r))+one/three*( &
+      &       (r-c)**3-c**3)-L*(c+L)*(r-c+L)+L*(c+L)**2*exp((r-two*c)/L))
+
+   end function gausslike_compact_edge
 !----------------------------------------------------------------------------
 end module useful

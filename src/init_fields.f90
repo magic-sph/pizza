@@ -1,6 +1,6 @@
 module init_fields
 
-   use constants, only: zero, one, two, three, ci, pi
+   use constants, only: zero, one, two, three, ci, pi, half
    use blocking, only: nRstart, nRstop
    use communications, only: transp_r2m, r2m_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta
@@ -10,7 +10,8 @@ module init_fields
    use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max
-   use useful, only: logWrite, abortRun
+   use useful, only: logWrite, abortRun, gausslike_compact_center, &
+       &             gausslike_compact_middle, gausslike_compact_edge
    use radial_der, only: get_dr
    use fourier, only: fft
    use checkpoints, only: read_checkpoint
@@ -114,9 +115,9 @@ contains
       complex(cp), intent(inout) :: temp_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
-      integer :: m_pertu, n_r, idx, n_phi, n_m
-      real(cp) :: x, c_r, rdm
-      real(cp) :: t1(n_r_max)
+      integer :: m_pertu, n_r, idx, n_phi, n_m, ir
+      real(cp) :: x, c_r, rdm, c1, c2, rc, L, sigma_r
+      real(cp) :: t1(n_r_max), gasp(n_r_max)
       real(cp) :: phi, phi0
       real(cp) :: phi_func(n_phi_max)
 
@@ -151,9 +152,49 @@ contains
 
       else if ( init_t == -1 ) then ! bubble = Gaussian in r and phi
 
+         sigma_r = 0.1_cp/sqrt(two)
+         ir = n_r_max/2+1 ! middle radius
+         rc = half*(r_cmb+r_icb)
+         !-- Find the closest point to the middle radius
+         ir=minloc(abs(r-rc),1)
+         !-- Overwrite rc to be on the grid
+         rc = r(ir)
+         c1 = half*(r(1)-rc)
+         c2 = half*(rc-r(n_r_max))
+         L = half * sigma_r
+
+         !-- Piecewise-definition of a compact-support Gaussian-like profile
+         !-- From Eq. (4.7) from Gaspari et al. (1999)
+         !-- This ensures that the BCs will always be fulfilled
+         do n_r=1,n_r_max
+            if ( n_r == ir ) then ! Middle point
+               gasp(n_r)=one
+            else ! Middle and Edge parts
+               if ( r(n_r) < rc-c2 ) then
+                  gasp(n_r) = gausslike_compact_edge(rc-r(n_r),c2,L)
+               else if ( r(n_r) >= rc-c2 .and. r(n_r) < rc ) then
+                  gasp(n_r) = gausslike_compact_middle(rc-r(n_r),c2,L)
+               else if ( r(n_r) > rc .and. r(n_r) <= rc+c1 ) then
+                  gasp(n_r) = gausslike_compact_middle(r(n_r)-rc,c1,L)
+               else if ( r(n_r) > rc+c1 ) then
+                  gasp(n_r) = gausslike_compact_edge(r(n_r)-rc,c1,L)
+               end if
+            end if
+         end do
+
+         !-- Normalisation of the two branches by the middle value
+         do n_r=1,n_r_max
+            if ( n_r < ir ) then
+               gasp(n_r) = gasp(n_r)/gausslike_compact_center(c1,L)
+            else if ( n_r > ir ) then
+               gasp(n_r) = gasp(n_r)/gausslike_compact_center(c2,L)
+            end if
+         end do
+
+         !-- Now finally define the bubble
          phi0 = pi/minc
          do n_r=nRstart,nRstop
-            c_r = amp_t*exp(-(r(n_r)-r_cmb+0.5_cp)**2/0.1_cp**2)
+            c_r = amp_t*gasp(n_r)
             do n_phi=1,n_phi_max
                phi = (n_phi-1)*two*pi/minc/(n_phi_max)
                phi_func(n_phi)=c_r*exp(-(phi-phi0)**2/(0.2_cp/minc)**2)
