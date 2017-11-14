@@ -1,13 +1,49 @@
 from .npfile import *
 import numpy as np
+from scipy.fftpack import dct
 import glob
 import os
 
+def costf(f):
+    """
+    This routine transform an input array from real to Chebyshev space
+
+    :param f: the input array
+    :type f: numpy.ndarray
+    :returns: a transformed array
+    :rtype: numpy.ndarray
+    """
+    fac = np.sqrt(0.5/(f.shape[-1]-1))
+    fhat = fac*dct(f, type=1, axis=-1)
+    return fhat
+
 def spat_spec(arr_grid, n_m_max):
+    """
+    This routine computes a spectral transform from a spatial represenation
+    to a spectral representation.
+
+    :param f: the input array
+    :type f: numpy.ndarray
+    :param n_m_max: the number of modes
+    :type n_m_max: int
+    :returns: an array in the spectral space
+    :rtype: numpy.ndarray
+    """
     n_phi = arr_grid.shape[0]
     return np.fft.fft(arr_grid, axis=0)[:n_m_max]/n_phi
 
 def spec_spat(arr_M, n_phi_max):
+    """
+    This routine computes a spectral transform from a spectral represenation
+    to a spatial representation.
+
+    :param f: the input array
+    :type f: numpy.ndarray
+    :param n_phi_max: the number of azimuthal grid points
+    :type n_phi_max: int
+    :returns: an array in the physical space
+    :rtype: numpy.ndarray
+    """
     n_m = arr_M.shape[0]
     tmp = np.zeros((int(n_phi_max/2)+1, arr_M.shape[-1]), 'Complex64')
     tmp[:n_m, :] = arr_M
