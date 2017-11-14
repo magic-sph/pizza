@@ -153,7 +153,6 @@ contains
       else if ( init_t == -1 ) then ! bubble = Gaussian in r and phi
 
          sigma_r = 0.1_cp/sqrt(two)
-         ir = n_r_max/2+1 ! middle radius
          rc = half*(r_cmb+r_icb)
          !-- Find the closest point to the middle radius
          ir=minloc(abs(r-rc),1)
