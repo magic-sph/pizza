@@ -32,9 +32,9 @@ contains
       real(cp), intent(in) :: up(n_phi_max)   ! azimuthal velocity
     
       !-- Output:
-      real(cp), intent(inout) :: dtrkc    ! Courant step (based on radial advection)
-                                          ! for the range of points covered
-      real(cp), intent(inout) :: dthkc    ! Courant step based on horizontal advection
+      real(cp), intent(out) :: dtrkc    ! Courant step (based on radial advection)
+                                        ! for the range of points covered
+      real(cp), intent(out) :: dthkc    ! Courant step based on horizontal advection
     
       integer :: n_phi
       real(cp) :: vr2max,vh2max
@@ -43,6 +43,8 @@ contains
     
       vr2max=0.0_cp
       vh2max=0.0_cp
+      dtrkc =1.0e10_cp
+      dthkc =1.0e10_cp
       cf2=courfac*courfac
     
       do n_phi=1,n_phi_max
