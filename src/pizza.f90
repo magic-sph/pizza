@@ -4,6 +4,7 @@ program pizza
    use precision_mod
    use mem_alloc
    use step_time, only: time_loop
+   use courant_mod, only: initialize_courant, finalize_courant
    use radial_der, only: initialize_der_arrays, finalize_der_arrays
    use init_fields, only: get_start_fields
    use fields, only: initialize_fields, finalize_fields
@@ -121,6 +122,9 @@ program pizza
    !-- Start fields
    call get_start_fields(time, tscheme)
 
+   !-- Open time step file
+   call initialize_courant(time, tscheme%dt(1))
+
    !--- Write starting time to SDTOUT and logfile:
    if ( rank == 0 ) then
       do n=1,2
@@ -172,6 +176,7 @@ program pizza
    call finalize_fields()
    call finalize_communications()
    call destroy_mpi_domains()
+   call finalize_courant()
    call finalize_outputs()
    call tscheme%finalize()
    call finalize_truncation()

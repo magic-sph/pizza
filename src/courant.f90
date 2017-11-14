@@ -3,7 +3,7 @@ module courant_mod
    use parallel_mod
    use precision_mod
    use outputs, only: n_log_file
-   use namelists, only: courfac, dt_fac
+   use namelists, only: courfac, dt_fac, tag
    use truncation, only: n_phi_max, n_r_max
    use blocking, only: nRstart, nRstop
    use radial_functions, only: delxr2, delxh2, beta
@@ -14,10 +14,31 @@ module courant_mod
 
    private
 
-   public :: courant, dt_courant
+   integer :: file_handle
+
+   public :: courant, dt_courant, initialize_courant, finalize_courant
 
 contains
 
+   subroutine initialize_courant(time, dt)
+
+      !-- Input variables
+      real(cp), intent(in) :: time ! time
+      real(cp), intent(in) :: dt   ! timestep
+
+      if ( rank == 0 ) then
+         open(newunit=file_handle, file='timestep.'//tag, status='new')
+         write(file_handle, '(1p, es20.12, es16.8)')  time, dt
+      end if
+
+   end subroutine initialize_courant
+!------------------------------------------------------------------------------
+   subroutine finalize_courant()
+
+      if ( rank == 0 ) close(file_handle)
+
+   end subroutine finalize_courant
+!------------------------------------------------------------------------------
    subroutine courant(n_r,dtrkc,dthkc,ur,up)
       !
       !  courant condition check: calculates Courant                      
@@ -62,7 +83,7 @@ contains
     
    end subroutine courant
 !------------------------------------------------------------------------------
-   subroutine dt_courant(dt_r,dt_h,l_new_dt,dt,dt_new,dtMax,dtrkc,dthkc)
+   subroutine dt_courant(dt_r,dt_h,l_new_dt,dt,dt_new,dtMax,dtrkc,dthkc,time)
       !
       ! Check if Courant criterion based on combined
       ! fluid velocity is satisfied
@@ -82,7 +103,9 @@ contains
       !-- Input variables:
       real(cp), intent(in) :: dt
       real(cp), intent(in) :: dtMax
-      real(cp), intent(in) :: dtrkc(nRstart:nRstop),dthkc(nRstart:nRstop)
+      real(cp), intent(in) :: dtrkc(nRstart:nRstop)
+      real(cp), intent(in) :: dthkc(nRstart:nRstop)
+      real(cp), intent(in) :: time
     
       !-- Output variables:
       logical,  intent(out) :: l_new_dt
@@ -110,7 +133,7 @@ contains
       dt_rh=min(dt_r,dt_h)
       dt_2 =min(half*(one/dt_fac+one)*dt_rh,dtMax)
 
-      if ( dt > dtMax ) then
+      if ( dt > dtMax ) then ! Timestep larger than dtMax from Namelist
     
          l_new_dt=.true.
          dt_new=dtMax
@@ -118,15 +141,18 @@ contains
               &" ! Think about changing dtMax !"
          call logWrite(message,n_log_file)
     
-      else if ( dt > dt_rh ) then
+      else if ( dt > dt_rh ) then ! Timestep decrease
     
          l_new_dt=.true.
          dt_new  =dt_2
          write(message,'(1P," ! COURANT: dt=",ES11.4," > dt_r=",ES12.4, &
               &       " and dt_h=",ES12.4)') dt,dt_r,dt_h
          call logWrite(message,n_log_file)
+         if ( rank == 0 ) then
+            write(file_handle, '(1p, es20.12, es16.8)')  time, dt_new
+         end if
     
-      else if ( dt_fac*dt < dt_rh .and. dt < dtMax ) then
+      else if ( dt_fac*dt < dt_rh .and. dt < dtMax ) then ! Timestep increase
     
          l_new_dt=.true.
          dt_new=dt_2
@@ -134,15 +160,17 @@ contains
               &     " < dt_r=",ES12.4," and dt_h=",ES12.4)') &
               &     dt_fac,dt_fac*dt,dt_r,dt_h
          call logWrite(message,n_log_file)
+         if ( rank == 0 ) then
+            write(file_handle, '(1p, es20.12, es16.8)')  time, dt_new
+         end if
 
       else 
 
+         l_new_dt=.false.
          dt_new=dt
     
       end if
-    
-      if ( dt == dt_new ) l_new_dt= .false. 
-       
+
    end subroutine dt_courant
 !-----------------------------------------------------------------------
 end module courant_mod
