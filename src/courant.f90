@@ -3,7 +3,7 @@ module courant_mod
    use parallel_mod
    use precision_mod
    use outputs, only: n_log_file
-   use namelists, only: courfac
+   use namelists, only: courfac, dt_fac
    use truncation, only: n_phi_max, n_r_max
    use blocking, only: nRstart, nRstop
    use radial_functions, only: delxr2, delxh2, beta
@@ -90,12 +90,9 @@ contains
       !-- Local:
       integer :: n_r
       real(cp) :: dt_rh,dt_2
-      real(cp) :: dt_fac
     
       character(len=200) :: message
     
-    
-      dt_fac=two
       dt_r  =1000.0_cp*dtMax
       dt_h  =dt_r
       do n_r=nRstart,nRstop

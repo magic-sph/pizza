@@ -38,13 +38,14 @@ module namelists
    character(len=72), public :: time_scheme ! Time scheme
    character(len=72) :: cheb_method ! Chebyshev method: collocation, integration
    character(len=72) :: corio_term   ! Implicit or explicit treatment of Coriolis force
-   logical, public :: l_newmap       ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
-   logical, public :: l_rerror_fix ! Switch to fix round-off error in derivative calculation
+   logical, public :: l_newmap      ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
+   logical, public :: l_rerror_fix  ! Switch to fix round-off error in derivative calculation
    real(cp), public :: rerror_fac
-   real(cp), public :: dtMin           ! Minimum allowed time step
-   real(cp), public :: dtMax           ! Maximum allowed time step
-   real(cp), public :: alpha           ! Weight for implicit time step
-   real(cp), public :: courfac   ! Courant factor
+   real(cp), public :: dtMin        ! Minimum allowed time step
+   real(cp), public :: dtMax        ! Maximum allowed time step
+   real(cp), public :: alpha        ! Weight for implicit time step
+   real(cp), public :: courfac      ! Courant factor
+   real(cp), public :: dt_fac       ! factor to control time step change
    real(cp), public :: tEND
    integer,  public :: n_time_steps
    integer :: runHours,runMinutes,runSeconds
@@ -96,7 +97,7 @@ contains
       namelist/grid/n_r_max,n_cheb_max,m_max,minc
       namelist/control/tag,n_time_steps,alpha,l_newmap,map_function,&
       &                alph1,alph2,dtMax,courfac,tEnd,runHours,     &
-      &                runMinutes,runSeconds,l_non_rot,             &
+      &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale, corio_term
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
@@ -298,6 +299,7 @@ contains
       map_function     ='arcsin' ! By default Kosloff and Tal-Ezer mapping when l_newmap=.true.
       dtMax            =1.0e-5_cp
       courfac          =2.5_cp
+      dt_fac           =2.0_cp
       tEND             =0.0_cp    ! numerical time where run should end
       runHours         =0
       runMinutes       =10
@@ -311,7 +313,6 @@ contains
       rerror_fac       =500.0_cp
       corio_term       ='IMPLICIT' ! Implicit treatment of Coriolis term
       time_scale       ='VISC' ! viscous units
-
 
       !-- Physcal parameters
       l_non_rot        =.false.
@@ -347,7 +348,7 @@ contains
 
       !----- Output namelist
       n_log_step       =50
-      n_frames         =1
+      n_frames         =0
       n_frame_step     =0
       n_checkpoints    =1
       n_checkpoint_step=0
@@ -391,6 +392,7 @@ contains
       write(n_out,'(''  alph2           ='',ES14.6,'','')') alph2
       write(n_out,'(''  dtMax           ='',ES14.6,'','')') dtMax
       write(n_out,'(''  courfac         ='',ES14.6,'','')') courfac
+      write(n_out,'(''  dt_fac          ='',ES14.6,'','')') dt_fac
       write(n_out,'(''  runHours        ='',i4,'','')') runHours
       write(n_out,'(''  runMinutes      ='',i4,'','')') runMinutes
       write(n_out,'(''  runSeconds      ='',i4,'','')') runSeconds

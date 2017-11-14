@@ -225,7 +225,7 @@ contains
 
       !-- Add Ekman pumping as an explicit term if this is requested
       if ( l_ek_pump ) then
-         do n_r=2,n_r_max-1
+         do n_r=1,n_r_max
             h2 = (r_cmb*r_cmb-r(n_r)*r(n_r))
             ekp_fac = CorFac*half*sqrt(ek*r_cmb)*h2**(0.25_cp)
             do n_m=nMstart,nMstop

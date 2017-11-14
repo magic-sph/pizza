@@ -170,6 +170,7 @@ contains
             ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
             &             (r_cmb**2-r(n_r)**2)**(3.0_cp/4.0_cp)
          end do
+
       end if
 
    end subroutine radial

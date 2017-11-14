@@ -329,7 +329,7 @@ contains
          !---------------------
          if ( real(n_time_step,cp)+tenth_n_time_steps*real(nPercent,cp) >=  &
             & real(n_time_steps,cp)  .or. n_time_steps < 31 ) then
-            write(message,'(" ! Time step finished:",i6)') n_time_step
+            write(message,'(" ! Time step finished:",i8)') n_time_step
             call logWrite(message, n_log_file)
 
             if ( real(n_time_step,cp)+tenth_n_time_steps*real(nPercent,cp) >= &
