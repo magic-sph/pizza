@@ -17,7 +17,7 @@ contains
 
 #ifdef WITH_OMP
       required_level = MPI_THREAD_FUNNELED
-      ! required_level = MPI_THREAD_MULTIPLE
+      !required_level = MPI_THREAD_MULTIPLE
       call MPI_init_thread(required_level, provided_level, ierr)
 
       if ( provided_level < required_level ) then

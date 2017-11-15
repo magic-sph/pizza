@@ -105,7 +105,7 @@ program pizza
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('Radial functions', local_bytes_used)
    local_bytes_used = bytes_allocated
-   call initialize_fourier(n_phi_max)
+   call initialize_fourier(n_phi_max, n_threads)
    call initialize_radial_loop(n_phi_max)
    call memWrite('R loop', local_bytes_used)
    local_bytes_used = bytes_allocated-local_bytes_used

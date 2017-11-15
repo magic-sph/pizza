@@ -78,8 +78,10 @@ contains
     
       end do
     
+      !$OMP CRITICAL
       if ( vr2max /= 0.0_cp ) dtrkc=min(dtrkc,sqrt(delxr2(n_r)/vr2max))
       if ( vh2max /= 0.0_cp ) dthkc=min(dthkc,sqrt(delxh2(n_r)/vh2max))
+      !$OMP END CRITICAL
     
    end subroutine courant
 !------------------------------------------------------------------------------

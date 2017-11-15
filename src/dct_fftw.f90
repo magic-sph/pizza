@@ -6,6 +6,9 @@ module dct_fftw
    use mem_alloc, only: bytes_allocated
    use blocking, only: nm_per_rank
    use constants, only: half
+#ifdef WITH_OMP
+   use omp_lib
+#endif
 
    implicit none
 
@@ -48,6 +51,9 @@ contains
       real(cp) :: array_in_1d(n_r_max)
       real(cp) :: array_out_1d(n_r_max)
       logical :: l_work_array
+#ifdef WITH_OMP
+      integer :: n_threads
+#endif
 
       inembed(1) = 0
       onembed(1) = 0
@@ -59,7 +65,8 @@ contains
       odist   = 1
 
 #ifdef WITH_OMP
-      call fftw_plan_with_nthreads(2)
+      n_threads = omp_get_max_threads()
+      call fftw_plan_with_nthreads(n_threads)
 #endif
 
       this%plan = fftw_plan_many_r2r(1, plan_size, 2*nM_per_rank, array_in, &

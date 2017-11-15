@@ -18,17 +18,18 @@ module fourier
 
 contains
 
-   subroutine initialize_fourier(n_phi_max)
+   subroutine initialize_fourier(n_phi_max, n_threads)
 
-      !-- Input variable
+      !-- Input variables
       integer, intent(in) :: n_phi_max
+      integer, intent(in) :: n_threads
 
       !-- Local variables
       real(cp) :: real_array(n_phi_max)
       complex(cp) :: complex_array(n_phi_max/2+1)
 
 #ifdef WITH_OMP
-      call fftw_plan_with_nthreads(2)
+      call fftw_plan_with_nthreads(n_threads)
 #endif
 
       plan_forward = fftw_plan_dft_r2c_1d(n_phi_max,real_array,complex_array, &
