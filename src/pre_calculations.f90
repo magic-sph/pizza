@@ -67,6 +67,9 @@ contains
       write(n_out,*) '! MPI ranks:'
       write(n_out,'(''  n_procs      ='',i6)') n_procs
 
+      write(n_out,*) '! OpenMP threads:'
+      write(n_out,'(''  n_threads    ='',i6)') n_threads
+
       write(n_out,*) ''
       write(n_out,*) '! Grid parameters:'
       write(n_out,'(''  n_r_max      ='',i6, &

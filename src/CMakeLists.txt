@@ -26,4 +26,9 @@ if(USE_LAPACKLIB MATCHES LAPACK)
    target_link_libraries(${EXEC} ${LAPACK_LIBRARIES})
 endif()
 
+
+# FFTW3
 target_link_libraries(${EXEC} ${FFTW3})
+if(USE_OMP)
+   target_link_libraries(${EXEC} ${FFTW3_OMP})
+endif()

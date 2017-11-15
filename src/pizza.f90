@@ -1,5 +1,8 @@
 program pizza
 
+#ifdef WITH_OMP
+   use iso_c_binding
+#endif
    use parallel_mod
    use precision_mod
    use mem_alloc
@@ -31,16 +34,24 @@ program pizza
 
    implicit none
 
+#ifdef WITH_OMP
+   include 'fftw3.f03'
+#endif
+
    real(cp) :: time
    type(type_tscheme) :: tscheme
    real(cp) :: runStop, runStart
    integer(lip) :: local_bytes_used
    integer :: values(8)
-   integer :: n, n_out
+   integer :: n, n_out, ier
    character(len=72) :: date
 
    !-- Initialize MPI
    call initialize_mpi()
+
+#ifdef WITH_OMP
+   ier = fftw_init_threads()
+#endif
 
    runStart = MPI_Wtime()
 

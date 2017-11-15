@@ -27,6 +27,10 @@ contains
       real(cp) :: real_array(n_phi_max)
       complex(cp) :: complex_array(n_phi_max/2+1)
 
+#ifdef WITH_OMP
+      call fftw_plan_with_nthreads(2)
+#endif
+
       plan_forward = fftw_plan_dft_r2c_1d(n_phi_max,real_array,complex_array, &
                      &                    fftw_plan_flag)
       plan_backward = fftw_plan_dft_c2r_1d(n_phi_max,complex_array,real_array, &
@@ -39,6 +43,10 @@ contains
       call fftw_destroy_plan(plan_forward)
       call fftw_destroy_plan(plan_backward)
 
+#ifdef WITH_OMP
+      call fftw_cleanup_threads()
+#endif
+
    end subroutine finalize_fourier
 !------------------------------------------------------------------------------
    subroutine fft(array_in, array_out)
@@ -48,7 +56,7 @@ contains
 
       complex(cp) :: tmp(n_phi_max/2+1)
       integer :: n_m
-      
+
       call fftw_execute_dft_r2c(plan_forward, array_in, tmp)
 
       do n_m=1,n_m_max

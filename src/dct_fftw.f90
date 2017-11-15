@@ -58,6 +58,10 @@ contains
       idist   = 1
       odist   = 1
 
+#ifdef WITH_OMP
+      call fftw_plan_with_nthreads(2)
+#endif
+
       this%plan = fftw_plan_many_r2r(1, plan_size, 2*nM_per_rank, array_in, &
                   &                  inembed, istride, idist, array_out,    &
                   &                  onembed, ostride, odist,               &
@@ -103,6 +107,10 @@ contains
       if ( l_work_array ) then
          deallocate( work )
       end if
+
+#ifdef WITH_OMP
+      call fftw_cleanup_threads()
+#endif
 
       call fftw_destroy_plan(this%plan_1d)
       call fftw_destroy_plan(this%plan)
