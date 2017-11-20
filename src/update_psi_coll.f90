@@ -64,7 +64,8 @@ contains
    subroutine update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,    &
               &              dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,         &
               &              buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp,  &
-              &              l_vphi_bal_calc)
+              &              l_vphi_bal_calc, time_solve, n_solve_calls,       &
+              &              time_lu, n_lu_calls, time_dct, n_dct_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -83,9 +84,15 @@ contains
       complex(cp),       intent(inout) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      real(cp),          intent(inout) :: time_solve
+      integer,           intent(inout) :: n_solve_calls
+      real(cp),          intent(inout) :: time_lu
+      integer,           intent(inout) :: n_lu_calls
+      real(cp),          intent(inout) :: time_dct
+      integer,           intent(inout) :: n_dct_calls
 
       !-- Local variables
-      real(cp) :: uphi0(n_r_max), om0(n_r_max)
+      real(cp) :: uphi0(n_r_max), om0(n_r_max), runStart, runStop
       integer :: n_r, n_m, n_cheb, m, n_o
 
       if ( lMat ) lPsimat(:)=.false.
@@ -163,7 +170,7 @@ contains
          
             if ( .not. lPsimat(n_m) ) then
                call get_psiMat(tscheme, m, psiMat(:,:,n_m), psiPivot(:,n_m), &
-                    &          psiMat_fac(:,:,n_m))
+                    &          psiMat_fac(:,:,n_m), time_lu, n_lu_calls)
                lPsimat(n_m)=.true.
             end if
 
@@ -193,8 +200,14 @@ contains
             do n_r=1,2*n_r_max
                rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,1,n_m)
             end do
+            runStart = MPI_Wtime()
             call solve_full_mat(psiMat(:,:,n_m), 2*n_r_max, 2*n_r_max, &
                  &              psiPivot(:, n_m), rhs(:))
+            runStop = MPI_Wtime()
+            if ( runStop > runStart ) then
+               time_solve = time_solve + (runStop-runStart)
+               n_solve_calls = n_solve_calls+1
+            end if
             do n_r=1,2*n_r_max
                rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,2,n_m)
             end do
@@ -236,8 +249,14 @@ contains
       end if
 
       !-- Bring psi and omega to the physical space
+      runStart = MPI_Wtime()
       call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
       call rscheme%costf1(om_Mloc, nMstart, nMstop, n_r_max)
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         time_dct = time_dct + (runStop-runStart)
+         n_dct_calls = n_dct_calls + 2
+      end if
 
       !-- Get the radial derivative of psi to calculate uphi
       call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
@@ -348,7 +367,8 @@ contains
 
    end subroutine get_psi_rhs_imp_coll
 !------------------------------------------------------------------------------
-   subroutine get_psiMat(tscheme, m, psiMat, psiPivot, psiMat_fac)
+   subroutine get_psiMat(tscheme, m, psiMat, psiPivot, psiMat_fac, time_lu, &
+              &          n_lu_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -356,12 +376,14 @@ contains
 
       !-- Output variables
       complex(cp), intent(out) :: psiMat(2*n_r_max,2*n_r_max)
-      integer,  intent(out) :: psiPivot(2*n_r_max)
-      real(cp),intent(out) :: psiMat_fac(2*n_r_max,2)
+      integer,     intent(out) :: psiPivot(2*n_r_max)
+      real(cp),    intent(out) :: psiMat_fac(2*n_r_max,2)
+      real(cp),    intent(inout) :: time_lu
+      integer,     intent(inout) :: n_lu_calls
 
       !-- Local variables
       integer :: nR_out, nR, nR_psi, nR_out_psi, info
-      real(cp) :: dm2
+      real(cp) :: dm2, runStart, runStop
 
       dm2 = real(m,cp)*real(m,cp)
 
@@ -482,7 +504,13 @@ contains
       end do
 
       !----- LU decomposition:
+      runStart = MPI_Wtime()
       call prepare_full_mat(psiMat,2*n_r_max,2*n_r_max,psiPivot,info)
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         time_lu = time_lu+(runStop-runStart)
+         n_lu_calls = n_lu_calls+1
+      end if
       if ( info /= 0 ) then
          call abortRun('Singular matrix psiMat!')
       end if

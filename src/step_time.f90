@@ -56,10 +56,12 @@ contains
 
       !-- Timings:
       integer :: n_r_loops, n_mpi_comms, n_m_loops, n_m_loops_mat
-      integer :: n_io_calls
+      integer :: n_io_calls, n_fft_calls, n_solve_calls, n_dct_calls
+      integer :: n_lu_calls
       real(cp) :: run_time_r_loop, run_time_mpi_comms
-      real(cp) :: run_time_m_loop, run_time_m_loop_mat
-      real(cp) :: run_time_tot, run_time_io, run_time_passed
+      real(cp) :: run_time_m_loop, run_time_m_loop_mat, run_time_fft
+      real(cp) :: run_time_tot, run_time_io, run_time_passed, run_time_solve
+      real(cp) :: run_time_dct, run_time_lu
       real(cp) :: runStart, runStop, runStartT, runStopT
       real(cp) :: wimp_old
 
@@ -97,11 +99,19 @@ contains
       n_m_loops_mat = 0
       n_mpi_comms   = 0
       n_io_calls    = 0
+      n_fft_calls   = 0
+      n_solve_calls = 0
+      n_dct_calls   = 0
+      n_lu_calls    = 0
       run_time_r_loop     = 0.0_cp
       run_time_m_loop     = 0.0_cp
       run_time_io         = 0.0_cp
       run_time_mpi_comms  = 0.0_cp
       run_time_m_loop_mat = 0.0_cp
+      run_time_fft        = 0.0_cp
+      run_time_lu         = 0.0_cp
+      run_time_solve      = 0.0_cp
+      run_time_dct        = 0.0_cp
       run_time_tot        = 0.0_cp
 
       !!!!! Time loop starts !!!!!!
@@ -150,9 +160,9 @@ contains
          !-- Radial loop
          !-------------------
          runStart = MPI_Wtime()
-         call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc,  &
-              &            dtempdt_Rloc, dVsT_Rloc, dpsidt_Rloc,  &
-              &            dVsOm_Rloc, dtr_Rloc, dth_Rloc )
+         call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc, &
+              &            dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,       &
+              &            dth_Rloc, run_time_fft, n_fft_calls )
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             n_r_loops  =n_r_loops+1
@@ -291,14 +301,19 @@ contains
             call update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,   &
                  &              dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,        &
                  &              buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp, &
-                 &              l_vphi_bal_calc)
+                 &              l_vphi_bal_calc, run_time_solve, n_solve_calls,  &
+                 &              run_time_lu, n_lu_calls, run_time_dct,           &
+                 &              n_dct_calls)
          else
             call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,     &
                  &               dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,   &
                  &               tscheme, lMat, l_roll_imp, l_log_next)
             call update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc, dVsOm_Mloc, &
                  &              dpsi_exp_Mloc, dpsi_imp_Mloc, buo_imp_Mloc,      &
-                 &              vp_bal, tscheme, lMat, l_roll_imp, l_vphi_bal_calc)
+                 &              vp_bal, tscheme, lMat, l_roll_imp,               &
+                 &              l_vphi_bal_calc, run_time_solve, n_solve_calls,  &
+                 &              run_time_lu, n_lu_calls, run_time_dct,           &
+                 &              n_dct_calls)
          end if
 
          runStop = MPI_Wtime()
@@ -373,6 +388,14 @@ contains
          run_time_tot       = run_time_tot/n_time_steps_go
          call my_reduce_mean(run_time_tot, 0)
       end if
+      run_time_fft = run_time_fft/n_fft_calls
+      call my_reduce_mean(run_time_fft, 0)
+      run_time_lu = run_time_lu/n_lu_calls
+      call my_reduce_mean(run_time_lu, 0)
+      run_time_solve = run_time_solve/n_solve_calls
+      call my_reduce_mean(run_time_solve, 0)
+      run_time_dct = run_time_dct/n_dct_calls
+      call my_reduce_mean(run_time_dct, 0)
 
       if ( rank == 0 ) then
          call formatTime(6, &
@@ -386,6 +409,14 @@ contains
          call formatTime(6, &
          &    '! Mean wall time for output writting        :',run_time_io)
          call formatTime(6, &
+         &    '! Mean wall time for one single FFT (rloop) :',run_time_fft)
+         call formatTime(6, &
+         &    '! Mean wall time for one single 2D-DCT      :',run_time_dct)
+         call formatTime(6, &
+         &    '! Mean wall time for one LU factor. (psi)   :',run_time_lu)
+         call formatTime(6, &
+         &    '! Mean wall time for one linear solve (psi) :',run_time_solve)
+         call formatTime(6, &
          &    '! Mean wall time for one time step          :',run_time_tot)
 
          call formatTime(n_log_file, &
@@ -398,6 +429,14 @@ contains
          &    '! Mean wall time for m loop with matrix calc:',run_time_m_loop_mat)
          call formatTime(n_log_file, &
          &    '! Mean wall time for output writting        :',run_time_io)
+         call formatTime(n_log_file, &
+         &    '! Mean wall time for one single FFT (rloop) :',run_time_fft)
+         call formatTime(n_log_file, &
+         &    '! Mean wall time for one single 2D-DCT      :',run_time_dct)
+         call formatTime(n_log_file, &
+         &    '! Mean wall time for one LU factor. (psi)   :',run_time_lu)
+         call formatTime(n_log_file, &
+         &    '! Mean wall time for one linear solve (psi) :',run_time_solve)
          call formatTime(n_log_file,  &
          &    '! Mean wall time for one time step          :',run_time_tot)
       end if

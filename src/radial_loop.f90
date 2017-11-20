@@ -1,6 +1,7 @@
 module rloop
 
    use precision_mod
+   use parallel_mod
    use constants, only: ci, one, half
    use mem_alloc, only: bytes_allocated
    use namelists, only: ek, tadvz_fac, CorFac
@@ -54,7 +55,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc, &
               &           dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,       &
-              &           dth_Rloc)
+              &           dth_Rloc, time_fft, n_fft_calls)
 
       !-- Input variables
       complex(cp), intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
@@ -69,9 +70,11 @@ contains
       complex(cp), intent(out) :: dVsOm_Rloc(n_m_max, nRstart:nRstop)
       real(cp),    intent(out) :: dtr_Rloc(nRstart:nRstop)
       real(cp),    intent(out) :: dth_Rloc(nRstart:nRstop)
+      real(cp),    intent(inout) :: time_fft
+      integer,     intent(inout) :: n_fft_calls
 
       !-- Local variables
-      real(cp) :: usom
+      real(cp) :: usom, runStart, runStop
       complex(cp) :: us_fluct
       integer :: n_r, n_phi, n_m, m, idx_m0
 
@@ -96,10 +99,16 @@ contains
          !-----------------
          !-- Bring data on the grid
          !-----------------
+         runStart = MPI_Wtime()
          call ifft(us_Rloc(:,n_r), us_grid)
          call ifft(up_Rloc(:,n_r), up_grid)
          call ifft(om_Rloc(:,n_r), om_grid)
          call ifft(temp_Rloc(:,n_r), temp_grid)
+         runStop = MPI_Wtime()
+         if ( runStop > runStart ) then
+            time_fft = time_fft + (runStop-runStart)
+            n_fft_calls = n_fft_calls + 4
+         end if
 
          !-- Courant condition
          call courant(n_r, dtr_Rloc(n_r), dth_Rloc(n_r), us_grid, up_grid)
@@ -113,10 +122,16 @@ contains
          end do
 
          !-- Bring data back on the spectral domain
+         runStart = MPI_Wtime()
          call fft(upT_grid, dtempdt_Rloc(:,n_r))
          call fft(usT_grid, dVsT_Rloc(:,n_r))
          call fft(upOm_grid, dpsidt_Rloc(:,n_r))
          call fft(usOm_grid, dVsOm_Rloc(:,n_r))
+         runStop = MPI_Wtime()
+         if ( runStop > runStart ) then
+            time_fft = time_fft + (runStop-runStart)
+            n_fft_calls = n_fft_calls + 4
+         end if
 
          do n_m=1,n_m_max
             m = idx2m(n_m)

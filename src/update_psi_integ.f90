@@ -169,7 +169,8 @@ contains
    subroutine update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,            &
               &              dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,       &
               &              buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp,&
-              &              l_vphi_bal_calc)
+              &              l_vphi_bal_calc, time_solve, n_solve_calls,     &
+              &              time_lu, n_lu_calls, time_dct, n_dct_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -187,10 +188,16 @@ contains
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
       complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
+      real(cp),          intent(inout) :: time_solve
+      integer,           intent(inout) :: n_solve_calls
+      real(cp),          intent(inout) :: time_lu
+      integer,           intent(inout) :: n_lu_calls
+      real(cp),          intent(inout) :: time_dct
+      integer,           intent(inout) :: n_dct_calls
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
-      real(cp) :: h2, ekp_fac
+      real(cp) :: h2, ekp_fac, runStart, runStop
       integer :: n_r, n_m, n_cheb, m, n_o
 
       if ( lMat ) lPsimat(:)=.false.
@@ -245,7 +252,13 @@ contains
       end if
 
       !-- Transform the explicit part to chebyshev space
+      runStart = MPI_Wtime()
       call rscheme%costf1(dpsi_exp_Mloc(:,:,1), nMstart, nMstop, n_r_max)
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         time_dct = time_dct + (runStop-runStart)
+         n_dct_calls = n_dct_calls + 1
+      end if
 
       !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
       do n_m=nMstart,nMstop
@@ -287,7 +300,13 @@ contains
       end if
 
       !-- Transform buoyancy to Chebyshev space
+      runStart = MPI_Wtime()
       call rscheme%costf1(buo_imp_Mloc, nMstart, nMstop, n_r_max)
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         time_dct = time_dct + (runStop-runStart)
+         n_dct_calls = n_dct_calls + 1
+      end if
 
       !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
       do n_m=nMstart,nMstop
@@ -324,7 +343,8 @@ contains
          m = idx2m(n_m)
 
          if ( .not. lPsimat(n_m) ) then
-            call get_lhs_mat(tscheme, LHS_mat(n_m), psifac(:, n_m), m)
+            call get_lhs_mat(tscheme, LHS_mat(n_m), psifac(:, n_m), m, time_lu, &
+                 &           n_lu_calls)
             lPsimat(n_m)=.true.
          end if
 
@@ -360,7 +380,13 @@ contains
             rhs(n_cheb)=rhs(n_cheb)*psifac(n_cheb,n_m)
          end do
 
+         runStart = MPI_Wtime()
          call LHS_mat(n_m)%solve(rhs,n_cheb_max)
+         runStop = MPI_Wtime()
+         if ( runStop > runStart ) then
+            time_solve = time_solve + (runStop-runStart)
+            n_solve_calls = n_solve_calls+1
+         end if
 
          if ( m == 0 ) then
             do n_cheb=1,n_cheb_max
@@ -401,7 +427,13 @@ contains
       end if
 
       !-- Bring psi back the physical space
+      runStart = MPI_Wtime()
       call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         time_dct = time_dct + (runStop-runStart)
+         n_dct_calls = n_dct_calls + 1
+      end if
 
       !-- Get the radial derivative of psi to calculate uphi, us and omega
       call get_ddr(psi_Mloc, work_Mloc, om_Mloc, nMstart, nMstop, n_r_max, rscheme)
@@ -585,7 +617,7 @@ contains
 
    end subroutine get_psi_rhs_imp_int
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat(tscheme, A_mat, psiMat_fac, m)
+   subroutine get_lhs_mat(tscheme, A_mat, psiMat_fac, m, time_lu, n_lu_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme    ! time step
@@ -594,11 +626,13 @@ contains
       !-- Output variables
       type(type_bordmat_complex), intent(inout) :: A_mat
       real(cp),                   intent(inout) :: psiMat_fac(A_mat%nlines)
+      real(cp),                   intent(inout) :: time_lu
+      integer,                    intent(inout) :: n_lu_calls
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands), CorSten(A_mat%nbands)
       integer :: n_r, i_r, n_band, n_b
-      real(cp) :: a, b, dn2
+      real(cp) :: a, b, dn2, runStart, runStop
       real(cp) :: d4top(A_mat%nlines)
 
       do n_r=1,A_mat%nlines
@@ -884,7 +918,13 @@ contains
       ! if ( m == 10 ) call A_mat%write()
 
       !-- LU factorisation
+      runStart = MPI_Wtime()
       call A_mat%prepare_LU()
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         time_lu = time_lu + (runStop-runStart)
+         n_lu_calls = n_lu_calls + 1
+      end if
 
    end subroutine get_lhs_mat
 !------------------------------------------------------------------------------
