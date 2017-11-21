@@ -128,7 +128,7 @@ contains
       real(cp),         intent(in) :: time
 
       !-- Local variables
-      integer :: version, header_size, fh, filetype
+      integer :: version, header_size, fh, filetype, info
       integer :: istat(MPI_STATUS_SIZE)
       integer(kind=MPI_OFFSET_KIND) :: disp
 
@@ -138,8 +138,24 @@ contains
       &             5*SIZEOF_INTEGER+8+n_r_max*SIZEOF_DEF_REAL+8+n_r_max*  &
       &             SIZEOF_DEF_REAL+8+n_m_max*SIZEOF_INTEGER
 
+      call MPI_Info_create(info, ierr)
+
+      !-- Enable collective buffering
+      call MPI_Info_set(info, "romio_cb_write", "automatic", ierr)
+      call MPI_Info_set(info, "romio_cb_read", "automatic", ierr)
+
+      !-- Disable data sieving (let the filesystem handles it)
+      call MPI_Info_set(info, "romio_ds_write", "disable", ierr)
+      call MPI_Info_set(info, "romio_ds_read", "disable", ierr)
+
+      !-- Set the stripping unit to 4M
+      call MPI_Info_set(info, "stripping_unit", "4194304", ierr)
+
+      !-- Set the buffer size to 4M
+      call MPI_Info_set(info,"cb_buffer_size","4194304", ierr)
+
       call MPI_File_Open(MPI_COMM_WORLD, filename, ior(MPI_MODE_WRONLY, &
-           &             MPI_MODE_CREATE), MPI_INFO_NULL, fh, ierr)
+           &             MPI_MODE_CREATE), info, fh, ierr)
 
       if ( rank == 0 ) then
          disp = 0
@@ -207,20 +223,21 @@ contains
       !-- Set the view after the header
       disp = 8+header_size+4
       call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
-           &                  MPI_INFO_NULL, ierr)
+           &                 info, ierr)
   
-      call MPI_File_Write(fh, arr_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-           &              istat, ierr)
+      call MPI_File_Write_all(fh, arr_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
+           &                  istat, ierr)
 
       !-- Record marker
       disp = 8+header_size+4+n_m_max*n_r_max*SIZEOF_DEF_COMPLEX
       call MPI_File_Set_View(fh, disp, MPI_BYTE, MPI_BYTE,"native", &
-           &                  MPI_INFO_NULL, ierr)
+           &                 info, ierr)
       if ( rank == n_procs-1 ) then
          call MPI_File_Write(fh, n_m_max*n_r_max*SIZEOF_DEF_COMPLEX,1, &
               &              MPI_INTEGER, istat, ierr)
       end if
 
+      call MPI_Info_free(info, ierr)
       call MPI_File_close(fh, ierr)
 
    end subroutine write_snapshot_mloc
