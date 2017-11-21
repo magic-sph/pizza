@@ -130,6 +130,7 @@ contains
       !-- Local variables
       integer :: version, header_size, fh, filetype, info
       integer :: istat(MPI_STATUS_SIZE)
+      integer :: arr_size(2), arr_loc_size(2), arr_start(2)
       integer(kind=MPI_OFFSET_KIND) :: disp
 
       version = 1
@@ -215,9 +216,15 @@ contains
               &              MPI_INTEGER, istat, ierr)
       end if
 
-      call MPI_Type_Create_Subarray(2,[n_m_max,n_r_max],[nm_per_rank,n_r_max], &
-           &                        [nMstart-1,0], MPI_ORDER_FORTRAN,          &
-           &                        MPI_DEF_COMPLEX, filetype, ierr)
+      arr_size(1) = n_m_max
+      arr_size(2) = n_r_max
+      arr_loc_size(1) = nm_per_rank
+      arr_loc_size(2) = n_r_max
+      arr_start(1) = nMstart-1
+      arr_start(2) = 0
+      call MPI_Type_Create_Subarray(2,arr_size, arr_loc_size, arr_start, &
+           &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,  &
+           &                        filetype, ierr)
       call MPI_Type_Commit(filetype, ierr)
 
       !-- Set the view after the header
