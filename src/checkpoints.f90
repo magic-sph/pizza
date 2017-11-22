@@ -4,7 +4,7 @@ module checkpoints
    use precision_mod
    use constants, only: zero, two
    use char_manip, only: dble2str
-   use blocking, only: nMstart,nMstop
+   use blocking, only: nMstart,nMstop,nm_per_rank
    use communications, only: gather_from_mloc_to_rank0, &
        &                     scatter_from_rank0_to_mloc
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
@@ -21,7 +21,7 @@ module checkpoints
 
    private
 
-   public :: write_checkpoint, read_checkpoint
+   public :: write_checkpoint, read_checkpoint, write_checkpoint_mloc
 
    class(type_rscheme), pointer :: rscheme_old
 
@@ -63,7 +63,7 @@ contains
 
       if ( rank == 0 ) then
          open(newunit=n_rst_file, file=rst_file, status='unknown', &
-         &    form='unformatted')
+         &    form='unformatted', access='stream')
 
          !-- Write the header of the file
          write(n_rst_file) version
@@ -154,6 +154,180 @@ contains
 
    end subroutine write_checkpoint
 !------------------------------------------------------------------------------
+   subroutine write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
+              &                     l_stop_time, t_Mloc, us_Mloc, up_Mloc,    &
+              &                     dtemp_exp_Mloc, dtemp_imp_Mloc,           &
+              &                     dpsi_exp_Mloc, dpsi_imp_Mloc )
+      !
+      ! This subroutine writes the checkpoint files using MPI-IO. For the sake
+      ! of simplicity we do not include the record marker. Classical Fortran can
+      ! hence only read it when using access='stream'
+      !
+
+
+      !-- Input variables
+      real(cp),           intent(in) :: time
+      type(type_tscheme), intent(in) :: tscheme
+      integer,            intent(in) :: n_time_step
+      integer,            intent(in) :: n_log_file
+      logical,            intent(in) :: l_stop_time
+      complex(cp),        intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),        intent(in) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
+      complex(cp),        intent(in) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
+      complex(cp),        intent(in) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp),        intent(in) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+
+      !-- Local variables
+      integer :: info, fh, filetype, n_o
+      integer :: version, header_size
+      integer :: istat(MPI_STATUS_SIZE)
+      integer :: arr_size(2), arr_loc_size(2), arr_start(2)
+      integer(kind=MPI_OFFSET_KIND) :: disp
+      character(len=100) :: rst_file, string
+
+      if ( l_stop_time ) then
+         rst_file="checkpoint_end."//tag
+      else
+         call dble2str(time,string)
+         rst_file='checkpoint_t='//trim(string)//'.'//tag
+      end if
+
+      version = 3
+
+      header_size = SIZEOF_INTEGER+SIZEOF_DEF_REAL+SIZEOF_LOGICAL+       &
+      &             2*SIZEOF_INTEGER+SIZEOF_DEF_REAL+size(tscheme%dt)*   &
+      &             SIZEOF_DEF_REAL+6*SIZEOF_DEF_REAL+3*SIZEOF_INTEGER   &
+      &             +2*SIZEOF_INTEGER+2*SIZEOF_DEF_REAL+                 &
+      &             len(rscheme%version)+n_r_max*SIZEOF_DEF_REAL+        &
+      &             2*SIZEOF_LOGICAL
+
+      call MPI_Info_create(info, ierr)
+
+      !-- Enable collective buffering
+      call MPI_Info_set(info, "romio_cb_write", "automatic", ierr)
+      call MPI_Info_set(info, "romio_cb_read", "automatic", ierr)
+
+      !-- Disable data sieving (let the filesystem handles it)
+      call MPI_Info_set(info, "romio_ds_write", "disable", ierr)
+      call MPI_Info_set(info, "romio_ds_read", "disable", ierr)
+
+      !-- Set the stripping unit to 4M
+      call MPI_Info_set(info, "stripping_unit", "4194304", ierr)
+
+      !-- Set the buffer size to 4M
+      call MPI_Info_set(info,"cb_buffer_size","4194304", ierr)
+
+      !-- Open file
+      call MPI_File_Open(MPI_COMM_WORLD, rst_file, ior(MPI_MODE_WRONLY, &
+           &             MPI_MODE_CREATE), info, fh, ierr)
+
+      !-- Only rank=0 writes the header of the file
+      if ( rank == 0 ) then
+         call MPI_File_Write(fh, version, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, time, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, l_cheb_coll, 1, MPI_LOGICAL, istat, ierr)
+         call MPI_File_Write(fh, tscheme%norder_exp, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, tscheme%norder_imp, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, tscheme%dt, size(tscheme%dt), MPI_DEF_REAL, &
+              &              istat, ierr)
+         call MPI_File_Write(fh, ra, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, pr, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, raxi, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, sc, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, ek, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, radratio, 1, MPI_DEF_REAL, istat, ierr)
+
+         call MPI_File_Write(fh, n_r_max, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, m_max, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, minc, 1, MPI_INTEGER, istat, ierr)
+
+         call MPI_File_Write(fh, rscheme%version, len(rscheme%version),  &
+              &              MPI_CHARACTER, istat, ierr)
+         call MPI_File_Write(fh, rscheme%n_max, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, rscheme%order_boundary, 1, MPI_INTEGER, istat, &
+              &              ierr)
+         call MPI_File_Write(fh, alph1, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, alph2, 1, MPI_DEF_REAL, istat, ierr)
+
+         call MPI_File_Write(fh, r, n_r_max, MPI_DEF_REAL, istat, ierr)
+
+         call MPI_File_Write(fh, l_heat, 1, MPI_LOGICAL, istat, ierr)
+         call MPI_File_Write(fh, l_chem, 1, MPI_LOGICAL, istat, ierr)
+      end if
+
+      arr_size(1) = n_m_max
+      arr_size(2) = n_r_max
+      arr_loc_size(1) = nm_per_rank
+      arr_loc_size(2) = n_r_max
+      arr_start(1) = nMstart-1
+      arr_start(2) = 0
+      call MPI_Type_Create_Subarray(2,arr_size, arr_loc_size, arr_start, &
+           &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,  &
+           &                        filetype, ierr)
+      call MPI_Type_Commit(filetype, ierr)
+
+      !-- Set the view after the header
+      disp = header_size-8 ! I'm not sure why there's a -8 factor here...
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
+
+      !-- Now finally write the fields
+      call MPI_File_Write_all(fh, us_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
+           &                  istat, ierr)
+      call MPI_File_Write_all(fh, up_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
+           &                  istat, ierr)
+      do n_o=2,tscheme%norder_exp
+         call MPI_File_Write_all(fh, dpsi_exp_Mloc(:,:,n_o), nm_per_rank*n_r_max, &
+              &                  MPI_DEF_COMPLEX, istat, ierr)
+      end do
+      do n_o=2,tscheme%norder_imp-1
+         call MPI_File_Write_all(fh, dpsi_imp_Mloc(:,:,n_o), nm_per_rank*n_r_max, &
+              &                  MPI_DEF_COMPLEX, istat, ierr)
+      end do
+
+      !-- Temperature
+      if ( l_heat ) then
+         call MPI_File_Write_all(fh, t_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
+              &                  istat, ierr)
+         do n_o=2,tscheme%norder_exp
+            call MPI_File_Write_all(fh, dtemp_exp_Mloc(:,:,n_o),          &
+                 &                  nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
+                 &                  istat, ierr)
+         end do
+
+         do n_o=2,tscheme%norder_imp-1
+            call MPI_File_Write_all(fh, dtemp_imp_Mloc(:,:,n_o),          &
+                 &                  nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
+                 &                  istat, ierr)
+         end do
+      end if
+
+      call MPI_Info_free(info, ierr)
+      call MPI_File_close(fh, ierr)
+
+      !-- Close checkpoint file and display a message in the log file
+      if ( rank == 0 ) then
+
+         write(*,'(/,1P,A,/,A,ES20.10,/,A,I15,/,A,A)')&
+         &    " ! Storing checkpoint file:",          &
+         &    "             at time=",time,           &
+         &    "            step no.=",n_time_step,    &
+         &    "           into file=",rst_file
+
+         write(n_log_file,'(/,1P,A,/,A,ES20.10,/,A,I15,/,A,A)') &
+         &    " ! Storing checkpoint file:",                    &
+         &    "             at time=",time,                     &
+         &    "            step no.=",n_time_step,              &
+         &    "           into file=",rst_file
+
+      end if
+
+
+
+   end subroutine write_checkpoint_mloc
+!------------------------------------------------------------------------------
    subroutine read_checkpoint(us_Mloc, up_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc, &
               &               temp_Mloc, dtemp_exp_Mloc, dtemp_imp_Mloc,      &
               &               time, tscheme)
@@ -189,7 +363,7 @@ contains
 
          if ( startfile_does_exist ) then
             open(newunit=n_start_file, file=start_file, status='old', &
-            &    form='unformatted')
+            &    form='unformatted', access='stream')
          else
             call abortRun('! The restart file does not exist !')
          end if
@@ -288,7 +462,8 @@ contains
       call MPI_Bcast(norder_exp_old,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(norder_imp_old,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
       if ( rank /= 0 ) allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp)) )
-      call MPI_Bcast(dt_array_old,2,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(dt_array_old,max(norder_exp_old,tscheme%norder_exp), &
+           &         MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(ek_old,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_heat_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_chem_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
@@ -296,7 +471,13 @@ contains
 
       !-- Fill the time step array
       do n_o=1,tscheme%norder_exp
-         tscheme%dt(n_o)=dt_array_old(n_o)
+         !-- If the new scheme has higher order one fill the missing dt values
+         !-- with the oldest
+         if ( n_o > norder_exp_old ) then
+            tscheme%dt(n_o)=dt_array_old(norder_exp_old)
+         else
+            tscheme%dt(n_o)=dt_array_old(n_o)
+         end if
       end do
 
       !-- If new Ekman and old Ekman differ, we use AB1 for the first time step.

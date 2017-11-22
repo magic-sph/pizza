@@ -15,7 +15,7 @@ module outputs
    use integration, only: rInt_R
    use useful, only: round_off, cc2real, cc22real, getMSD2, abortRun
    use constants, only: pi, two, four, surf, vol_otc, one
-   use checkpoints, only: write_checkpoint
+   use checkpoints, only: write_checkpoint_mloc
    use output_frames, only: write_snapshot_mloc
    use time_schemes, only: type_tscheme
 
@@ -161,10 +161,14 @@ contains
       timeAvg = timeAvg + tscheme%dt(1)
 
       if ( l_rst ) then
-         call write_checkpoint(time, tscheme, n_time_step, n_log_file,   &
-              &                l_stop_time, temp_Mloc, us_Mloc, up_Mloc, &
-              &                dtemp_exp_Mloc, dtemp_imp_Mloc,           &
-              &                dpsi_exp_Mloc, dpsi_imp_Mloc)
+         ! call write_checkpoint(time, tscheme, n_time_step, n_log_file,   &
+              ! &                l_stop_time, temp_Mloc, us_Mloc, up_Mloc, &
+              ! &                dtemp_exp_Mloc, dtemp_imp_Mloc,           &
+              ! &                dpsi_exp_Mloc, dpsi_imp_Mloc)
+         call write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
+              &                     l_stop_time, temp_Mloc, us_Mloc, up_Mloc, &
+              &                     dtemp_exp_Mloc, dtemp_imp_Mloc,           &
+              &                     dpsi_exp_Mloc, dpsi_imp_Mloc)
       end if
 
       if ( l_spec ) then
