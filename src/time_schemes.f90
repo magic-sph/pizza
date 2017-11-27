@@ -43,6 +43,14 @@ contains
          this%time_scheme = 'CNAB2'
          this%norder_imp = 2
          this%norder_exp = 2
+      else if ( index(time_scheme, 'MODCNAB') /= 0 ) then
+         this%time_scheme = 'MODCNAB'
+         this%norder_imp = 3
+         this%norder_exp = 2
+      else if ( index(time_scheme, 'CNLF') /= 0 ) then
+         this%time_scheme = 'CNLF'
+         this%norder_imp = 3
+         this%norder_exp = 2
       else if ( index(time_scheme, 'BDF2AB2') /= 0 ) then
          this%time_scheme = 'BDF2AB2'
          this%norder_imp = 3
@@ -51,6 +59,10 @@ contains
          this%time_scheme = 'BDF3AB3'
          this%norder_imp = 4
          this%norder_exp = 3
+      else if ( index(time_scheme, 'BDF4AB4') /= 0 ) then
+         this%time_scheme = 'BDF4AB4'
+         this%norder_imp = 5
+         this%norder_exp = 4
       end if
 
       allocate ( this%dt(this%norder_exp) )
@@ -80,8 +92,8 @@ contains
 
       class(type_tscheme) :: this
 
-      real(cp) :: delta, delta_n, delta_n_1
-      real(cp) :: a0, a1, a2, a3, b0, b1, b2 
+      real(cp) :: delta, delta_n, delta_n_1, delta_n_2
+      real(cp) :: a0, a1, a2, a3, a4, b0, b1, b2, b3, c1, c2, c3
 
       select case ( this%time_scheme )
          case ('CNAB2') 
@@ -92,6 +104,28 @@ contains
 
             this%wexp(1)=(one+half*this%dt(1)/this%dt(2))*this%dt(1)
             this%wexp(2)=-half*this%dt(1)*this%dt(1)/this%dt(2)
+         case ('CNLF')
+            delta = this%dt(1)/this%dt(2)
+            this%wimp(1)    =one
+            this%wimp(2)    =(one-delta)*(one+delta)
+            this%wimp(3)    =delta*delta
+            this%wimp_lin(1)=half*(one+delta)/delta*this%dt(1)
+            this%wimp_lin(2)=half*(one+delta)*(delta-one)/delta*this%dt(1)
+            this%wimp_lin(3)=half*(one+delta)*this%dt(1)
+
+            this%wexp(1)=(one+delta)*this%dt(1)
+            this%wexp(2)=0.0_cp
+         case ('MODCNAB') 
+            delta = this%dt(1)/this%dt(2)
+            this%wimp(1)    =one
+            this%wimp(2)    =one
+            this%wimp(3)    =0.0_cp
+            this%wimp_lin(1)=(half+delta/16.0_cp)*this%dt(1)
+            this%wimp_lin(2)=(7.0_cp/16.0_cp-delta/16.0_cp)*this%dt(1)
+            this%wimp_lin(3)=1.0_cp/16.0_cp*this%dt(1)
+
+            this%wexp(1)=(one+half*delta)*this%dt(1)
+            this%wexp(2)=-half*delta*this%dt(1)
          case ('BDF2AB2')
             delta = this%dt(1)/this%dt(2)
             this%wimp_lin(1)=(one+delta)/(one+two*delta)*this%dt(1)
@@ -131,7 +165,48 @@ contains
             this%wexp(1)=b0/a0 * this%dt(1)
             this%wexp(2)=b1/a0 * this%dt(1)
             this%wexp(3)=b2/a0 * this%dt(1)
+         case ('BDF4AB4')
+            delta_n = this%dt(1)/this%dt(2)
+            delta_n_1 = this%dt(2)/this%dt(3)
+            delta_n_2 = this%dt(3)/this%dt(4)
 
+            c1 = one+delta_n_2*(one+delta_n_1)
+            c2 = one+delta_n_1*(one+delta_n)
+            c3 = one+delta_n_2*c2
+
+            a4 = (one+delta_n)/(one+delta_n_2) * c2/c1/c3 *(delta_n_2**4* &
+            &    delta_n_1**3*delta_n**2)
+            a3 = -delta_n_1**3*delta_n**2*(one+delta_n)/(one+delta_n_1) * c3/c2
+            a2 = delta_n*(delta_n/(one+delta_n)+delta_n_1*delta_n * (c3+delta_n_2)/&
+            &    (one+delta_n_2))
+            a1 = -one-delta_n*(one+delta_n_1*(one+delta_n)*(one+delta_n_2*c2/c1)/ &
+            &    (one+delta_n_1))
+            a0 = one + delta_n/(one+delta_n)+delta_n_1*delta_n/c2+delta_n_2* &
+            &    delta_n_1*delta_n/c3
+
+            b3 = -delta_n_2**3*delta_n_1**2*delta_n*(one+delta_n)/(one+delta_n_2)* &
+            &    c2/c1
+            b2 = delta_n_1**2*delta_n*(one+delta_n)/(one+delta_n_1)*c3
+            b1 = -c2*c3 * delta_n/(one+delta_n_2)
+            b0 = delta_n_1*(one+delta_n)/(one+delta_n_1) * ((one+delta_n) * &
+            &    (c3+delta_n_2)+(one+delta_n_2)/delta_n_1)/c1
+
+            this%wimp_lin(1)=one/a0 * this%dt(1)
+            this%wimp_lin(2)=0.0_cp
+            this%wimp_lin(3)=0.0_cp
+            this%wimp_lin(4)=0.0_cp
+            this%wimp_lin(5)=0.0_cp
+
+            this%wimp(1)=one
+            this%wimp(2)=-a1/a0
+            this%wimp(3)=-a2/a0
+            this%wimp(4)=-a3/a0
+            this%wimp(5)=-a4/a0
+
+            this%wexp(1)=b0/a0 * this%dt(1)
+            this%wexp(2)=b1/a0 * this%dt(1)
+            this%wexp(3)=b2/a0 * this%dt(1)
+            this%wexp(4)=b3/a0 * this%dt(1)
       end select
 
    end subroutine set_weights
