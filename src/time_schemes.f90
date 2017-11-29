@@ -28,12 +28,8 @@ module time_schemes
       procedure :: finalize
       procedure :: set_weights
       procedure :: set_dt_array
-      procedure :: set_imex_rhs_old
-      procedure :: set_imex_rhs_new
-      generic :: set_imex_rhs => set_imex_rhs_old, set_imex_rhs_new
-      procedure :: rotate_imex_old
-      procedure :: rotate_imex_new
-      generic :: rotate_imex => rotate_imex_old, rotate_imex_new
+      procedure :: set_imex_rhs
+      procedure :: rotate_imex
    end type type_tscheme
 
 contains
@@ -289,62 +285,7 @@ contains
 
    end subroutine set_dt_array
 !------------------------------------------------------------------------------
-   subroutine set_imex_rhs_old(this, rhs, fimp, fexp, fold, nMstart, nMstop, len_rhs)
-      !
-      ! This subroutine assembles the right-hand-side of an IMEX scheme
-      !
-
-      class(type_tscheme) :: this
-
-      !-- Input variables:
-      integer,     intent(in) :: nMstart
-      integer,     intent(in) :: nMstop
-      integer,     intent(in) :: len_rhs
-      complex(cp), intent(in) :: fimp(nMstart:nMstop,len_rhs,this%norder_imp_lin-1)
-      complex(cp), intent(in) :: fexp(nMstart:nMstop,len_rhs,this%norder_exp)
-      complex(cp), intent(in) :: fold(nMstart:nMstop,len_rhs,this%norder_imp-1)
-
-      !-- Output variable
-      complex(cp), intent(out) :: rhs(nMstart:nMstop,len_rhs)
-
-      !-- Local variables
-      integer :: n_o, n_r, n_m
-
-      do n_o=1,this%norder_imp-1
-         if ( n_o == 1 ) then
-            do n_r=1,len_rhs
-               do n_m=nMstart,nMstop
-                  rhs(n_m,n_r)=this%wimp(n_o+1)*fold(n_m,n_r,n_o)
-               end do
-            end do
-         else
-            do n_r=1,len_rhs
-               do n_m=nMstart,nMstop
-                  rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp(n_o+1)*fold(n_m,n_r,n_o)
-               end do
-            end do
-         end if
-      end do
-
-      do n_o=1,this%norder_imp_lin-1
-         do n_r=1,len_rhs
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp_lin(n_o+1)*fimp(n_m,n_r,n_o)
-            end do
-         end do
-      end do
-
-      do n_o=1,this%norder_exp
-         do n_r=1,len_rhs
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%wexp(n_o)*fexp(n_m,n_r,n_o)
-            end do
-         end do
-      end do
-
-   end subroutine set_imex_rhs_old
-!------------------------------------------------------------------------------
-   subroutine set_imex_rhs_new(this, rhs, dfdt, nMstart, nMstop, len_rhs)
+   subroutine set_imex_rhs(this, rhs, dfdt, nMstart, nMstop, len_rhs)
       !
       ! This subroutine assembles the right-hand-side of an IMEX scheme
       !
@@ -395,55 +336,9 @@ contains
          end do
       end do
 
-   end subroutine set_imex_rhs_new
+   end subroutine set_imex_rhs
 !------------------------------------------------------------------------------
-   subroutine rotate_imex_old(this, fimp, fexp, fold, nMstart, nMstop, n_r_max)
-      !
-      ! This subroutine is used to roll the time arrays from one time step
-      !
-
-      class(type_tscheme) :: this
-
-      !-- Input variables:
-      integer,     intent(in) :: nMstart
-      integer,     intent(in) :: nMstop
-      integer,     intent(in) :: n_r_max
-
-      !-- Output variables:
-      complex(cp), intent(inout) :: fimp(nMstart:nMstop,n_r_max,this%norder_imp_lin-1)
-      complex(cp), intent(inout) :: fexp(nMstart:nMstop,n_r_max,this%norder_exp)
-      complex(cp), intent(inout) :: fold(nMstart:nMstop,n_r_max,this%norder_imp-1)
-
-      !-- Local variables:
-      integer :: n_o, n_m, n_r
-
-      do n_o=this%norder_exp,2,-1
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               fexp(n_m,n_r,n_o)=fexp(n_m,n_r,n_o-1)
-            end do
-         end do
-      end do
-
-      do n_o=this%norder_imp-1,2,-1
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               fold(n_m,n_r,n_o)=fold(n_m,n_r,n_o-1)
-            end do
-         end do
-      end do
-
-      do n_o=this%norder_imp_lin-1,2,-1
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               fimp(n_m,n_r,n_o)=fimp(n_m,n_r,n_o-1)
-            end do
-         end do
-      end do
-
-   end subroutine rotate_imex_old
-!------------------------------------------------------------------------------
-   subroutine rotate_imex_new(this, dfdt, nMstart, nMstop, n_r_max)
+   subroutine rotate_imex(this, dfdt, nMstart, nMstop, n_r_max)
       !
       ! This subroutine is used to roll the time arrays from one time step
       !
@@ -485,6 +380,6 @@ contains
          end do
       end do
 
-   end subroutine rotate_imex_new
+   end subroutine rotate_imex
 !------------------------------------------------------------------------------
 end module time_schemes
