@@ -5,7 +5,7 @@
    minc       =1,
 /
 &control
-   tag        ="continue",
+   tag        ="first_continue",
    l_newmap   =.false.,
    time_scheme="CNAB2",
  n_time_steps =200,

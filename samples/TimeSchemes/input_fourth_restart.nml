@@ -5,9 +5,9 @@
    minc       =1,
 /
 &control
-   tag        ="second_continue",
+   tag        ="fourth_continue",
    l_newmap   =.false.,
-   time_scheme="BDF2AB2",
+   time_scheme="CNLF",
  n_time_steps =100,
    dtMax      =1d-4,
   l_rerror_fix=.false.,
@@ -28,7 +28,7 @@
  /
  &start_field
   l_start_file=.true.,
-  start_file  ="checkpoint_end.first_continue",
+  start_file  ="checkpoint_end.third_continue",
   init_t      =0,
   amp_t       =2.5e-4,
   init_u      =0,

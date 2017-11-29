@@ -49,7 +49,13 @@ class TestTimeScheme(unittest.TestCase):
         cleanDir(self.dir)
         for f in glob.glob('%s/*.start' % self.dir):
             os.remove(f)
-        for f in glob.glob('%s/*.continue' % self.dir):
+        for f in glob.glob('%s/*.first_continue' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.second_continue' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.third_continue' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.fourth_continue' % self.dir):
             os.remove(f)
         for f in glob.glob('%s/*.final' % self.dir):
             os.remove(f)
@@ -64,7 +70,16 @@ class TestTimeScheme(unittest.TestCase):
         cmd = '%s %s/input_second_restart.nml' % (self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = 'cat e_kin.start e_kin.continue e_kin.final > e_kin.test'
+        cmd = '%s %s/input_third_restart.nml' % (self.execCmd, self.dir)
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
+                stderr=open(os.devnull, 'wb'))
+        cmd = '%s %s/input_fourth_restart.nml' % (self.execCmd, self.dir)
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
+                stderr=open(os.devnull, 'wb'))
+        cmd = '%s %s/input_final.nml' % (self.execCmd, self.dir)
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
+                stderr=open(os.devnull, 'wb'))
+        cmd = 'cat e_kin.start e_kin.first_continue e_kin.second_continue e_kin.third_continue e_kin.fourth_continue e_kin.final > e_kin.test'
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'))
 
     def tearDown(self):
@@ -73,7 +88,13 @@ class TestTimeScheme(unittest.TestCase):
         cleanDir(self.dir)
         for f in glob.glob('%s/*.start' % self.dir):
             os.remove(f)
-        for f in glob.glob('%s/*.continue' % self.dir):
+        for f in glob.glob('%s/*.first_continue' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.second_continue' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.third_continue' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.fourth_continue' % self.dir):
             os.remove(f)
         for f in glob.glob('%s/*.final' % self.dir):
             os.remove(f)
