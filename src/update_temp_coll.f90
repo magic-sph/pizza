@@ -13,6 +13,7 @@ module update_temp_coll
    use algebra, only: prepare_full_mat, solve_full_mat
    use useful, only: abortRun
    use time_schemes, only: type_tscheme
+   use time_array, only: type_tarray
 
    implicit none
    
@@ -62,8 +63,7 @@ contains
    end subroutine finalize_temp_coll
 !------------------------------------------------------------------------------
    subroutine update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,      &
-              &              dtemp_exp_Mloc, temp_old_Mloc, dtemp_imp_Mloc,  &
-              &              buo_imp_Mloc, tscheme, lMat, l_log_next)
+              &              buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -74,9 +74,7 @@ contains
       !-- Output variables
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(inout) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp), intent(inout) :: temp_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
+      type(type_tarray), intent(inout) :: dTdt
       complex(cp), intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
@@ -92,7 +90,7 @@ contains
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
-            dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
+            dTdt%expl(n_m,n_r,1)=dTdt%expl(n_m,n_r,1)             &
             &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
             &                     -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
             &                     tadvz_fac*beta(n_r)*tcond(n_r))
@@ -100,12 +98,11 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, temp_old_Mloc(:,:,1), &
-           &                     dtemp_imp_Mloc(:,:,1), tscheme%l_calc_lin_rhs)
+      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt%old(:,:,1), &
+           &                     dTdt%impl(:,:,1), tscheme%l_calc_lin_rhs)
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc, &
-           &                    temp_old_Mloc, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
 
       do n_m=nMstart, nMstop
 
@@ -163,15 +160,14 @@ contains
                   buo_imp_Mloc(n_m,n_r)=buo_imp_Mloc(n_m,n_r)-             &
                   &                     tscheme%wimp_lin(n_o+1)*rgrav(n_r)*&
                   &                     or1(n_r)*BuoFac*ci*real(m,cp)*     &
-                  &                     temp_old_Mloc(n_m,n_r,n_o)
+                  &                     dTdt%old(n_m,n_r,n_o)
                end do
             end if
          end do
       end do
 
       !-- Roll the arrays before filling again the first block
-      call tscheme%rotate_imex(dtemp_imp_Mloc, dtemp_exp_Mloc, temp_old_Mloc, &
-           &                   nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(dTdt, nMstart, nMstop, n_r_max)
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       if ( l_log_next ) then

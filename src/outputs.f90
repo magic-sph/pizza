@@ -18,6 +18,7 @@ module outputs
    use checkpoints, only: write_checkpoint_mloc
    use output_frames, only: write_snapshot_mloc
    use time_schemes, only: type_tscheme
+   use time_array, only: type_tarray
 
    implicit none
 
@@ -131,8 +132,7 @@ contains
    subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst,        &
               &             l_spec, l_frame, l_vphi_bal_write, l_stop_time,  &
               &             us_Mloc, up_Mloc, om_Mloc, temp_Mloc, dtemp_Mloc,&
-              &             dtemp_exp_Mloc, temp_old_Mloc, dtemp_imp_Mloc,   &
-              &             dpsi_exp_Mloc, psi_old_Mloc, dpsi_imp_Mloc)
+              &             dpsidt, dTdt)
 
       !-- Input variables
       real(cp),           intent(in) :: time
@@ -149,12 +149,8 @@ contains
       complex(cp),        intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp),        intent(in) :: temp_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp),        intent(in) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
-      complex(cp),        intent(in) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp),        intent(in) :: psi_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp),        intent(in) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
+      type(type_tarray),  intent(in) :: dpsidt
+      type(type_tarray),  intent(in) :: dTdt
 
       !-- Local variable
       character(len=144) :: frame_name
@@ -165,9 +161,7 @@ contains
       if ( l_rst ) then
          call write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
               &                     l_stop_time, temp_Mloc, us_Mloc, up_Mloc, &
-              &                     dtemp_exp_Mloc, temp_old_Mloc,            &
-              &                     dtemp_imp_Mloc, dpsi_exp_Mloc,            &
-              &                     psi_old_Mloc, dpsi_imp_Mloc)
+              &                     dTdt, dpsidt)
       end if
 
       if ( l_spec ) then

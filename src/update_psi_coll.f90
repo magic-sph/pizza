@@ -14,6 +14,7 @@ module update_psi_coll
    use fields, only: work_Mloc
    use algebra, only: prepare_full_mat, solve_full_mat
    use time_schemes, only: type_tscheme
+   use time_array
    use useful, only: abortRun
 
    implicit none
@@ -61,10 +62,9 @@ contains
 
    end subroutine finalize_om_coll
 !------------------------------------------------------------------------------
-   subroutine update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,    &
-              &              dVsOm_Mloc, dpsi_exp_Mloc, psi_old_Mloc,          &
-              &              dpsi_imp_Mloc, buo_imp_Mloc, vp_bal, tscheme,     &
-              &              lMat, l_vphi_bal_calc, time_solve, n_solve_calls, &
+   subroutine update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,      &
+              &              dVsOm_Mloc,  buo_imp_Mloc, dpsidt, vp_bal, tscheme, &
+              &              lMat, l_vphi_bal_calc, time_solve, n_solve_calls,   &
               &              time_lu, n_lu_calls, time_dct, n_dct_calls)
 
       !-- Input variables
@@ -80,10 +80,8 @@ contains
       complex(cp),       intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
       type(vp_bal_type), intent(inout) :: vp_bal
-      complex(cp),       intent(inout) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
+      type(type_tarray), intent(inout) :: dpsidt
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(inout) :: psi_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
       real(cp),          intent(inout) :: time_solve
       integer,           intent(inout) :: n_solve_calls
       real(cp),          intent(inout) :: time_lu
@@ -106,11 +104,11 @@ contains
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_Mloc(n_m,n_r,1)=  dpsi_exp_Mloc(n_m,n_r,1)-   &
+               dpsidt%expl(n_m,n_r,1)=  dpsidt%expl(n_m,n_r,1)-   &
                &                     or1(n_r)*work_Mloc(n_m,n_r)
                !-- If Coriolis is treated explicitly, add it here:
                if ( .not. l_coriolis_imp ) then
-                  dpsi_exp_Mloc(n_m,n_r,1)=dpsi_exp_Mloc(n_m,n_r,1) &
+                  dpsidt%expl(n_m,n_r,1)=dpsidt%expl(n_m,n_r,1) &
                   &            +CorFac*beta(n_r)*us_Mloc(n_m,n_r)
                end if
             end if
@@ -119,12 +117,11 @@ contains
 
       !-- Calculation of the implicit part
       call get_psi_rhs_imp_coll(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,       &
-           &                    psi_old_Mloc(:,:,1), dpsi_imp_Mloc(:,:,1), &
+           &                    dpsidt%old(:,:,1), dpsidt%impl(:,:,1),     &
            &                    vp_bal, l_vphi_bal_calc, tscheme%l_calc_lin_rhs)
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, dpsi_imp_Mloc, dpsi_exp_Mloc, &
-           &                    psi_old_Mloc, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
 
 
       do n_m=nMstart,nMstop
@@ -147,7 +144,7 @@ contains
             if ( l_vphi_bal_calc ) then
                do n_r=1,n_r_max
                   vp_bal%dvpdt(n_r)     =real(up_Mloc(n_m,n_r))/tscheme%dt(1)
-                  vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(n_m,n_r,1))
+                  vp_bal%rey_stress(n_r)=real(dpsidt%expl(n_m,n_r,1))
                end do
             end if
 
@@ -257,8 +254,7 @@ contains
       end do
 
       !-- Roll the time arrays before filling again the first block
-      call tscheme%rotate_imex(dpsi_imp_Mloc, dpsi_exp_Mloc, psi_old_Mloc, &
-           &                   nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
 
    end subroutine update_om_coll
 !------------------------------------------------------------------------------

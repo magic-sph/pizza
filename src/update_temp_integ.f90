@@ -12,6 +12,7 @@ module update_temp_integ
    use fields, only: work_Mloc
    use useful, only: abortRun
    use time_schemes, only: type_tscheme
+   use time_array, only: type_tarray
    use matrix_types, only: type_bandmat_real, type_bordmat_real
    use chebsparselib, only: intcheb2rmult2, intcheb2rmult2lapl
 
@@ -82,8 +83,7 @@ contains
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
    subroutine update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
-              &               dtemp_exp_Mloc, temp_old_Mloc, dtemp_imp_Mloc, &
-              &               buo_imp_Mloc, tscheme, lMat, l_log_next)
+              &               buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -92,13 +92,11 @@ contains
       complex(cp),        intent(in) :: psi_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Output variables
-      complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(inout) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp), intent(inout) :: temp_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
-      complex(cp), intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
+      type(type_tarray), intent(inout) :: dTdt
+      complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
       real(cp) :: h2
@@ -126,7 +124,7 @@ contains
          do n_r=1,n_r_max
             do n_m=nMstart, nMstop
                m = idx2m(n_m)
-               dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
+               dTdt%expl(n_m,n_r,1)=dTdt%expl(n_m,n_r,1)             &
                &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
                &             -ci*real(m,cp)*or1(n_r)*dtcond(n_r)*    &
                &                                psi_Mloc(n_m,n_r)
@@ -137,7 +135,7 @@ contains
             h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
             do n_m=nMstart, nMstop
                m = idx2m(n_m)
-               dtemp_exp_Mloc(n_m,n_r,1)=dtemp_exp_Mloc(n_m,n_r,1)   &
+               dTdt%expl(n_m,n_r,1)=dTdt%expl(n_m,n_r,1)             &
                &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
                &          -ci*real(m,cp)*(h2*or1(n_r)*dtcond(n_r)+   &
                &                            tadvz_fac* tcond(n_r))*  &
@@ -147,12 +145,12 @@ contains
       end if
 
       !-- Transform the explicit part to chebyshev space
-      call rscheme%costf1(dtemp_exp_Mloc(:,:,1), nMstart, nMstop, n_r_max)
+      call rscheme%costf1(dTdt%expl(:,:,1), nMstart, nMstop, n_r_max)
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
          do n_cheb=1,n_cheb_max
-            rhs(n_cheb)=dtemp_exp_Mloc(n_m,n_cheb,1)
+            rhs(n_cheb)=dTdt%expl(n_m,n_cheb,1)
          end do
 
          call RHSE_mat%mat_vec_mul(rhs)
@@ -160,21 +158,20 @@ contains
          rhs(1)=zero
          rhs(2)=zero
          do n_cheb=1,n_cheb_max
-            dtemp_exp_Mloc(n_m,n_cheb,1)=rhs(n_cheb)
+            dTdt%expl(n_m,n_cheb,1)=rhs(n_cheb)
          end do
          !-- Pad with zeros
          do n_cheb=n_cheb_max+1,n_r_max
-            dtemp_exp_Mloc(n_m,n_cheb,1)=zero
+            dTdt%expl(n_m,n_cheb,1)=zero
          end do
       end do
 
       !-- Calculation of the implicit part
-      call get_temp_rhs_imp_int(temp_Mloc, temp_old_Mloc(:,:,1), &
-           &                    dtemp_imp_Mloc(:,:,1), tscheme%l_calc_lin_rhs)
+      call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,1), dTdt%impl(:,:,1), &
+           &                    tscheme%l_calc_lin_rhs)
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc, &
-           &                    temp_old_Mloc, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
 
       do n_m=nMstart, nMstop
 
@@ -225,8 +222,7 @@ contains
       end do
 
       !-- Roll the arrays before filling again the first block
-      call tscheme%rotate_imex(dtemp_imp_Mloc, dtemp_exp_Mloc, temp_old_Mloc, &
-           &                   nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(dTdt, nMstart, nMstop, n_r_max)
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       !-- This is needed to estimate the heat fluxes

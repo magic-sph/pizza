@@ -10,7 +10,8 @@ program pizza
    use fields, only: initialize_fields, finalize_fields
    use fieldsLast, only: initialize_fieldsLast, finalize_fieldsLast
    use communications, only: initialize_communications, finalize_communications
-   use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains
+   use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains, &
+       &               nRstart, nRstop
    use namelists, only: read_namelists, write_namelists, tag, time_scheme, &
        &                l_cheb_coll, l_rerror_fix, rerror_fac
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
@@ -18,7 +19,7 @@ program pizza
    use radial_functions, only: initialize_radial_functions, &
        &                       finalize_radial_functions
    use truncation, only: initialize_truncation, n_r_max, n_phi_max, & 
-       &                 finalize_truncation
+       &                 finalize_truncation, n_m_max
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop
    use update_temp_coll, only: initialize_temp_coll, finalize_temp_coll
@@ -85,7 +86,8 @@ program pizza
 
    local_bytes_used = bytes_allocated
    call initialize_fields()
-   call initialize_fieldsLast(tscheme%norder_exp, tscheme%norder_imp, &
+   call initialize_fieldsLast(nMstart, nMstop, n_m_max, nRstart, nRstop, n_r_max, &
+        &                     tscheme%norder_imp, tscheme%norder_exp,             &
         &                     tscheme%norder_imp_lin)
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('Fields', local_bytes_used)

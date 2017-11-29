@@ -16,6 +16,7 @@ module checkpoints
    use chebyshev, only: type_cheb
    use useful, only: abortRun, polynomial_interpolation
    use time_schemes, only: type_tscheme
+   use time_array, only: type_tarray
 
    implicit none
 
@@ -29,9 +30,7 @@ contains
 
    subroutine write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
               &                     l_stop_time, t_Mloc, us_Mloc, up_Mloc,    &
-              &                     dtemp_exp_Mloc, temp_old_Mloc,            &
-              &                     dtemp_imp_Mloc, dpsi_exp_Mloc,            &
-              &                     psi_old_Mloc, dpsi_imp_Mloc )
+              &                     dTdt, dpsidt)
       !
       ! This subroutine writes the checkpoint files using MPI-IO. For the sake
       ! of simplicity we do not include the record marker. Classical Fortran can
@@ -48,12 +47,8 @@ contains
       complex(cp),        intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp),        intent(in) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp),        intent(in) :: temp_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp),        intent(in) :: psi_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp),        intent(in) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
-      complex(cp),        intent(in) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
+      type(type_tarray),  intent(in) :: dTdt
+      type(type_tarray),  intent(in) :: dpsidt
 
       !-- Local variables
       integer :: info, fh, filetype, n_o
@@ -156,15 +151,15 @@ contains
       call MPI_File_Write_all(fh, up_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
            &                  istat, ierr)
       do n_o=2,tscheme%norder_exp
-         call MPI_File_Write_all(fh, dpsi_exp_Mloc(:,:,n_o), nm_per_rank*n_r_max, &
+         call MPI_File_Write_all(fh, dpsidt%expl(:,:,n_o), nm_per_rank*n_r_max, &
               &                  MPI_DEF_COMPLEX, istat, ierr)
       end do
       do n_o=2,tscheme%norder_imp_lin-1
-         call MPI_File_Write_all(fh, dpsi_imp_Mloc(:,:,n_o), nm_per_rank*n_r_max, &
+         call MPI_File_Write_all(fh, dpsidt%impl(:,:,n_o), nm_per_rank*n_r_max, &
               &                  MPI_DEF_COMPLEX, istat, ierr)
       end do
       do n_o=2,tscheme%norder_imp-1
-         call MPI_File_Write_all(fh, psi_old_Mloc(:,:,n_o), nm_per_rank*n_r_max, &
+         call MPI_File_Write_all(fh, dpsidt%old(:,:,n_o), nm_per_rank*n_r_max, &
               &                  MPI_DEF_COMPLEX, istat, ierr)
       end do
 
@@ -173,19 +168,16 @@ contains
          call MPI_File_Write_all(fh, t_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
               &                  istat, ierr)
          do n_o=2,tscheme%norder_exp
-            call MPI_File_Write_all(fh, dtemp_exp_Mloc(:,:,n_o),          &
-                 &                  nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-                 &                  istat, ierr)
+            call MPI_File_Write_all(fh, dTdt%expl(:,:,n_o), nm_per_rank*n_r_max, &
+                 &                  MPI_DEF_COMPLEX, istat, ierr)
          end do
          do n_o=2,tscheme%norder_imp_lin-1
-            call MPI_File_Write_all(fh, dtemp_imp_Mloc(:,:,n_o),          &
-                 &                  nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-                 &                  istat, ierr)
+            call MPI_File_Write_all(fh, dTdt%impl(:,:,n_o), nm_per_rank*n_r_max, &
+                 &                  MPI_DEF_COMPLEX, istat, ierr)
          end do
          do n_o=2,tscheme%norder_imp-1
-            call MPI_File_Write_all(fh, temp_old_Mloc(:,:,n_o),           &
-                 &                  nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-                 &                  istat, ierr)
+            call MPI_File_Write_all(fh, dTdt%old(:,:,n_o), nm_per_rank*n_r_max, &
+                 &                  MPI_DEF_COMPLEX, istat, ierr)
          end do
       end if
 
@@ -213,22 +205,17 @@ contains
 
    end subroutine write_checkpoint_mloc
 !------------------------------------------------------------------------------
-   subroutine read_checkpoint(us_Mloc, up_Mloc, dpsi_exp_Mloc, psi_old_Mloc,  &
-              &               dpsi_imp_Mloc, temp_Mloc, dtemp_exp_Mloc,       &
-              &               temp_old_Mloc, dtemp_imp_Mloc, time, tscheme)
+   subroutine read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, dpsidt, dTdt, &
+              &               time, tscheme)
 
       !-- Output variables
       type(type_tscheme), intent(inout) :: tscheme
-      complex(cp), intent(out) :: us_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(out) :: up_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(out) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp), intent(out) :: psi_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp), intent(out) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
-      complex(cp), intent(out) :: dtemp_exp_Mloc(nMstart:nMstop, n_r_max,tscheme%norder_exp)
-      complex(cp), intent(out) :: temp_old_Mloc(nMstart:nMstop, n_r_max,tscheme%norder_imp-1)
-      complex(cp), intent(out) :: dtemp_imp_Mloc(nMstart:nMstop, n_r_max,tscheme%norder_imp_lin-1)
-      real(cp),    intent(out) :: time
+      complex(cp),        intent(out) :: us_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),        intent(out) :: up_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),        intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
+      type(type_tarray),  intent(inout) :: dpsidt
+      type(type_tarray),  intent(inout) :: dTdt
+      real(cp),           intent(out) :: time
 
       !-- Local variables
       logical :: startfile_does_exist, l_heat_old, l_chem_old
@@ -433,7 +420,7 @@ contains
                  &         lBc=.true.,l_phys_space=l_coll_old)
          end if
          if ( n_o <= tscheme%norder_exp ) then
-            call scatter_from_rank0_to_mloc(work, dpsi_exp_Mloc(:,:,n_o))
+            call scatter_from_rank0_to_mloc(work, dpsidt%expl(:,:,n_o))
          end if
       end do
 
@@ -446,7 +433,7 @@ contains
                  &         lBc=.true.,l_phys_space=l_coll_old)
          end if
          if ( n_o <= tscheme%norder_imp_lin-1 ) then
-            call scatter_from_rank0_to_mloc(work, dpsi_imp_Mloc(:,:,n_o))
+            call scatter_from_rank0_to_mloc(work, dpsidt%impl(:,:,n_o))
          end if
       end do
       if ( version > 3 ) then
@@ -458,7 +445,7 @@ contains
                     &         lBc=.false.,l_phys_space=l_coll_old)
             end if
             if ( n_o <= tscheme%norder_imp-1 ) then
-               call scatter_from_rank0_to_mloc(work, psi_old_Mloc(:,:,n_o))
+               call scatter_from_rank0_to_mloc(work, dpsidt%old(:,:,n_o))
             end if
          end do
       end if
@@ -482,7 +469,7 @@ contains
                     &         lBc=.true.,l_phys_space=l_coll_old)
             end if
             if ( n_o <= tscheme%norder_exp ) then
-               call scatter_from_rank0_to_mloc(work, dtemp_exp_Mloc(:,:,n_o))
+               call scatter_from_rank0_to_mloc(work, dTdt%expl(:,:,n_o))
             end if
          end do
 
@@ -495,7 +482,7 @@ contains
                     &         lBc=.true.,l_phys_space=l_coll_old)
             end if
             if ( n_o <= tscheme%norder_imp_lin-1 ) then
-               call scatter_from_rank0_to_mloc(work, dtemp_imp_Mloc(:,:,n_o))
+               call scatter_from_rank0_to_mloc(work, dTdt%impl(:,:,n_o))
             end if
          end do
          if ( version > 3 ) then
@@ -507,7 +494,7 @@ contains
                        &         lBc=.false.,l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%norder_imp-1 ) then
-                  call scatter_from_rank0_to_mloc(work, temp_old_Mloc(:,:,n_o))
+                  call scatter_from_rank0_to_mloc(work, dTdt%old(:,:,n_o))
                end if
             end do
          end if

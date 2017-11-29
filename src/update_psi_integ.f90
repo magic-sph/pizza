@@ -13,6 +13,7 @@ module update_psi_integ
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
    use time_schemes, only: type_tscheme
+   use time_array, only: type_tarray
    use useful, only: abortRun
    use matrix_types, only: type_bandmat_complex, type_bordmat_complex,  &
        &                   type_bandmat_real
@@ -166,9 +167,8 @@ contains
 
    end subroutine finalize_psi_integ
 !------------------------------------------------------------------------------
-   subroutine update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,             &
-              &              dVsOm_Mloc, dpsi_exp_Mloc, psi_old_Mloc,         &
-              &              dpsi_imp_Mloc, buo_imp_Mloc, vp_bal, tscheme,    &
+   subroutine update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc, dVsOm_Mloc, &
+              &              buo_imp_Mloc, dpsidt, vp_bal, tscheme,           &
               &              lMat, l_vphi_bal_calc, time_solve, n_solve_calls,&
               &              time_lu, n_lu_calls, time_dct, n_dct_calls)
 
@@ -183,10 +183,8 @@ contains
       complex(cp),       intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
       type(vp_bal_type), intent(inout) :: vp_bal
-      complex(cp),       intent(inout) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
+      type(type_tarray), intent(inout) :: dpsidt
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(inout) :: psi_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
-      complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
       complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
       real(cp),          intent(inout) :: time_solve
       integer,           intent(inout) :: n_solve_calls
@@ -211,12 +209,12 @@ contains
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_Mloc(n_m,n_r,1)=    dpsi_exp_Mloc(n_m,n_r,1)-   &
+               dpsidt%expl(n_m,n_r,1)=    dpsidt%expl(n_m,n_r,1)-   &
                &                       or1(n_r)*work_Mloc(n_m,n_r)
 
                !-- If Coriolis force is treated explicitly it is added here:
                if ( .not. l_coriolis_imp ) then
-                  dpsi_exp_Mloc(n_m,n_r,1)=dpsi_exp_Mloc(n_m,n_r,1)-   &
+                  dpsidt%expl(n_m,n_r,1)=dpsidt%expl(n_m,n_r,1)-   &
                   &        CorFac*ci*real(m,cp)*psi_Mloc(n_m,n_r)
                end if
             end if
@@ -225,7 +223,7 @@ contains
 
       if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
          do n_r=1,n_r_max
-            vp_bal%rey_stress(n_r)=real(dpsi_exp_Mloc(m2idx(0),n_r,1))
+            vp_bal%rey_stress(n_r)=real(dpsidt%expl(m2idx(0),n_r,1))
          end do
       end if
 
@@ -238,10 +236,10 @@ contains
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  dpsi_exp_Mloc(n_m,n_r,1)=    h2*dpsi_exp_Mloc(n_m,n_r,1) -     &
+                  dpsidt%expl(n_m,n_r,1)=    h2*dpsidt%expl(n_m,n_r,1) -     &
                   &                             ekp_fac*up_Mloc(n_m,n_r)
                else 
-                  dpsi_exp_Mloc(n_m,n_r,1)=    h2*dpsi_exp_Mloc(n_m,n_r,1) +     &
+                  dpsidt%expl(n_m,n_r,1)=    h2*dpsidt%expl(n_m,n_r,1) +     &
                   &                            ekp_fac*( -om_Mloc(n_m,n_r) +     &
                   &                     half*beta(n_r)*   up_Mloc(n_m,n_r) +     &
                   &       beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
@@ -253,7 +251,7 @@ contains
 
       !-- Transform the explicit part to chebyshev space
       runStart = MPI_Wtime()
-      call rscheme%costf1(dpsi_exp_Mloc(:,:,1), nMstart, nMstop, n_r_max)
+      call rscheme%costf1(dpsidt%expl(:,:,1), nMstart, nMstop, n_r_max)
       runStop = MPI_Wtime()
       if ( runStop > runStart ) then
          time_dct = time_dct + (runStop-runStart)
@@ -265,7 +263,7 @@ contains
          m = idx2m(n_m)
 
          do n_cheb=1,n_cheb_max
-            rhs(n_cheb)=dpsi_exp_Mloc(n_m,n_cheb,1)
+            rhs(n_cheb)=dpsidt%expl(n_m,n_cheb,1)
          end do
 
          if ( m == 0 ) then
@@ -279,12 +277,12 @@ contains
          rhs(2)=zero
 
          do n_cheb=1,n_cheb_max
-            dpsi_exp_Mloc(n_m,n_cheb,1)=rhs(n_cheb)
+            dpsidt%expl(n_m,n_cheb,1)=rhs(n_cheb)
          end do
 
          !-- Deliasing
          do n_cheb=n_cheb_max+1,n_r_max
-            dpsi_exp_Mloc(n_m,n_cheb,1)=zero
+            dpsidt%expl(n_m,n_cheb,1)=zero
          end do
       end do
 
@@ -335,14 +333,13 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, psi_old_Mloc(:,:,1),        &
-           &                   dpsi_imp_Mloc(:,:,1), vp_bal, l_vphi_bal_calc, &
+      call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, dpsidt%old(:,:,1),        &
+           &                   dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc, &
            &                   tscheme%l_calc_lin_rhs)
 
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, dpsi_imp_Mloc, dpsi_exp_Mloc, &
-           &                    psi_old_Mloc, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
 
       do n_m=nMstart,nMstop
 
@@ -472,8 +469,7 @@ contains
       end if
 
       !-- Roll the arrays before filling again the first block
-      call tscheme%rotate_imex(dpsi_imp_Mloc, dpsi_exp_Mloc, psi_old_Mloc, &
-           &                   nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
 
    end subroutine update_psi_int
 !------------------------------------------------------------------------------
