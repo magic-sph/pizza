@@ -167,10 +167,11 @@ contains
    end subroutine finalize_psi_integ
 !------------------------------------------------------------------------------
    subroutine update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,            &
-              &              dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,       &
-              &              buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp,&
-              &              l_vphi_bal_calc, time_solve, n_solve_calls,     &
-              &              time_lu, n_lu_calls, time_dct, n_dct_calls)
+              &              dVsOm_Mloc, dpsi_exp_Mloc, psi_old_Mloc,        &
+              &              dpsi_imp_Mloc, buo_imp_Mloc, vp_bal, tscheme,   &
+              &              lMat, l_roll_imp, l_vphi_bal_calc, time_solve,  &
+              &              n_solve_calls, time_lu, n_lu_calls, time_dct,   &
+              &              n_dct_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -186,7 +187,8 @@ contains
       type(vp_bal_type), intent(inout) :: vp_bal
       complex(cp),       intent(inout) :: dpsi_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp),       intent(inout) :: psi_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp),       intent(inout) :: dpsi_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
       complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
       real(cp),          intent(inout) :: time_solve
       integer,           intent(inout) :: n_solve_calls
@@ -198,7 +200,7 @@ contains
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
       real(cp) :: h2, ekp_fac, runStart, runStop
-      integer :: n_r, n_m, n_cheb, m, n_o
+      integer :: n_r, n_m, n_cheb, m
 
       if ( lMat ) lPsimat(:)=.false.
 
@@ -335,8 +337,14 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, tscheme%wimp_lin(2), &
-           &                   dpsi_imp_Mloc(:,:,1), vp_bal, l_vphi_bal_calc)
+      call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, psi_old_Mloc(:,:,1),        &
+           &                   dpsi_imp_Mloc(:,:,1), vp_bal, l_vphi_bal_calc, &
+           &                   tscheme%l_calc_lin_rhs)
+
+
+      !-- Now assemble the right hand side and store it in work_Mloc
+      call tscheme%set_imex_rhs(work_Mloc, dpsi_imp_Mloc, dpsi_exp_Mloc, &
+           &                    psi_old_Mloc, nMstart, nMstop, n_r_max)
 
       do n_m=nMstart,nMstop
 
@@ -357,22 +365,9 @@ contains
 
          !-- Assemble RHS
          do n_cheb=1,n_cheb_max
-            do n_o=1,tscheme%norder_imp-1
-               if ( n_o == 1 ) then
-                  rhs(n_cheb)=tscheme%wimp(n_o+1)*dpsi_imp_Mloc(n_m,n_cheb,n_o)
-               else
-                  rhs(n_cheb)=rhs(n_cheb)+tscheme%wimp(n_o+1)* &
-                  &                       dpsi_imp_Mloc(n_m,n_cheb,n_o)
-               end if
-            end do
-            do n_o=1,tscheme%norder_exp
-               rhs(n_cheb)=rhs(n_cheb)+tscheme%wexp(n_o)*  &
-               &                       dpsi_exp_Mloc(n_m,n_cheb,n_o)
-            end do
+            rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             !-- Add buoyancy
-            if ( m /= 0 ) then
-               rhs(n_cheb)=rhs(n_cheb)+buo_imp_Mloc(n_m,n_cheb)
-            end if
+            if ( m /=  0 ) rhs(n_cheb)=rhs(n_cheb)+buo_imp_Mloc(n_m,n_cheb)
          end do
 
          !-- Multiply rhs by precond matrix
@@ -481,22 +476,24 @@ contains
       !-- Roll the explicit arrays before filling again the first block
       call roll(dpsi_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
       if ( l_roll_imp ) then
-         call roll(dpsi_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
+         call roll(dpsi_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp_lin-1)
+         call roll(psi_old_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
       end if
 
    end subroutine update_psi_int
 !------------------------------------------------------------------------------
-   subroutine get_psi_rhs_imp_int(psi_Mloc, up_Mloc, wimp, dpsi_imp_Mloc_last, &
-              &                   vp_bal, l_vphi_bal_calc)
+   subroutine get_psi_rhs_imp_int(psi_Mloc, up_Mloc, psi_old, dpsi_imp_Mloc_last, &
+              &                   vp_bal, l_vphi_bal_calc, l_calc_lin_rhs)
 
       !-- Input variables
       complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      real(cp),    intent(in) :: wimp
       logical,     intent(in) :: l_vphi_bal_calc
+      logical,     intent(in) :: l_calc_lin_rhs
 
       !-- Output variables
-      complex(cp), intent(inout) :: dpsi_imp_Mloc_last(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(inout) :: dpsi_imp_Mloc_last(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(inout) :: psi_old(nMstart:nMstop,n_r_max)
       type(vp_bal_type), intent(inout) :: vp_bal
 
       !-- Local variables
@@ -507,22 +504,22 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
-               dpsi_imp_Mloc_last(n_m,n_r)=up_Mloc(n_m,n_r)
+               psi_old(n_m,n_r)=up_Mloc(n_m,n_r)
             else
-               dpsi_imp_Mloc_last(n_m,n_r)=psi_Mloc(n_m,n_r)
+               psi_old(n_m,n_r)=psi_Mloc(n_m,n_r)
             end if
          end do
       end do
 
       !-- Transform the implicit part to chebyshev space
-      call rscheme%costf1(dpsi_imp_Mloc_last, nMstart, nMstop, n_r_max)
+      call rscheme%costf1(psi_old, nMstart, nMstop, n_r_max)
 
       !-- Matrix-vector multiplication by the operator -\int^4 r^4 \Delta .
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
          do n_cheb=1,n_cheb_max
-            rhs(n_cheb)= dpsi_imp_Mloc_last(n_m,n_cheb)
+            rhs(n_cheb)= psi_old(n_m,n_cheb)
          end do
 
          call RHSI_mat(n_m)%mat_vec_mul(rhs)
@@ -535,12 +532,12 @@ contains
          end if
 
          do n_cheb=1,n_cheb_max
-            dpsi_imp_Mloc_last(n_m,n_cheb)=rhs(n_cheb)
+            psi_old(n_m,n_cheb)=rhs(n_cheb)
          end do
 
          !-- Pad with zeros
          do n_cheb=n_cheb_max+1,n_r_max
-            dpsi_imp_Mloc_last(n_m,n_cheb)=zero
+            psi_old(n_m,n_cheb)=zero
          end do
 
       end do
@@ -559,7 +556,7 @@ contains
          end do
       end if
 
-      if ( wimp /= 0.0_cp ) then
+      if ( l_calc_lin_rhs ) then
 
          !-- Copy psi_Mloc into work_Mloc
          do n_r=1,n_r_max
@@ -601,8 +598,7 @@ contains
          !-- Finally assemble the right hand side
          do n_cheb=1,n_cheb_max
             do n_m=nMstart,nMstop
-               dpsi_imp_Mloc_last(n_m,n_cheb)=dpsi_imp_Mloc_last(n_m,n_cheb) &
-               &                                 +wimp*work_Mloc(n_m,n_cheb)
+               dpsi_imp_Mloc_last(n_m,n_cheb)=work_Mloc(n_m,n_cheb)
             end do
          end do
 
@@ -613,7 +609,7 @@ contains
             end do
          end do
 
-      end if ! if wimp /= 0
+      end if 
 
    end subroutine get_psi_rhs_imp_int
 !------------------------------------------------------------------------------

@@ -30,25 +30,32 @@ module fieldsLast
    complex(cp), public, allocatable :: dtempdt_Rloc(:,:)
    complex(cp), public, allocatable :: dVsT_Rloc(:,:)
    complex(cp), public, allocatable :: dVsOm_Rloc(:,:)
+   complex(cp), public, allocatable :: psi_old_Mloc(:,:,:)
+   complex(cp), public, allocatable :: temp_old_Mloc(:,:,:)
 
    public :: initialize_fieldsLast, finalize_fieldsLast
 
 contains
 
-   subroutine initialize_fieldsLast(norder_exp,norder_imp)
+   subroutine initialize_fieldsLast(norder_exp,norder_imp,norder_imp_lin)
 
       integer, intent(in) :: norder_exp
       integer, intent(in) :: norder_imp
+      integer, intent(in) :: norder_imp_lin
 
-      allocate( dtemp_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp-1) )
+      allocate( dtemp_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp_lin-1) )
       allocate( dtemp_exp_Mloc(nMStart:nMstop,n_r_max,norder_exp) )
-      allocate( dpsi_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp-1) )
+      allocate( dpsi_imp_Mloc(nMStart:nMstop,n_r_max,norder_imp_lin-1) )
+      allocate( temp_old_Mloc(nMstart:nMstop,n_r_max,norder_imp-1) )
+      allocate( psi_old_Mloc(nMstart:nMstop,n_r_max,norder_imp-1) )
       allocate( buo_imp_Mloc(nMStart:nMstop,n_r_max) )
       allocate( dpsi_exp_Mloc(nMStart:nMstop,n_r_max,norder_exp) )
       allocate( dVsT_Mloc(nMStart:nMstop,n_r_max) )
       allocate( dVsOm_Mloc(nMStart:nMstop,n_r_max) )
-      bytes_allocated = bytes_allocated + (3+2*norder_exp+2*(norder_exp-1))*&
-      &                 (nMstop-nMStart+1)*n_r_max*SIZEOF_DEF_COMPLEX
+      bytes_allocated = bytes_allocated + (3+2*norder_exp+2*(norder_imp_lin-1))*&
+      &                 (nMstop-nMStart+1)*n_r_max*SIZEOF_DEF_COMPLEX+          &
+      &                 2*(nMstop-nMStart+1)*n_r_max*(norder_imp-1)*            &
+      &                 SIZEOF_DEF_COMPLEX
 
       dtemp_imp_Mloc(:,:,:)=zero
       dtemp_exp_Mloc(:,:,:)=zero
@@ -57,6 +64,8 @@ contains
       dpsi_exp_Mloc(:,:,:) =zero
       dVsT_Mloc(:,:)       =zero
       dVsOm_Mloc(:,:)      =zero
+      psi_old_Mloc(:,:,:)  =zero
+      temp_old_Mloc(:,:,:) =zero
 
       allocate( dpsidt_Rloc(n_m_max,nRstart:nRstop) )
       allocate( dtempdt_Rloc(n_m_max,nRstart:nRstop) )
@@ -76,6 +85,7 @@ contains
 
       deallocate( dVsOm_Rloc, dVsOm_Mloc )
       deallocate( dVsT_Rloc, dVsT_Mloc )
+      deallocate( temp_old_Mloc, psi_old_Mloc )
       deallocate( dtemp_imp_Mloc, dtemp_exp_Mloc )
       deallocate( dpsi_imp_Mloc, dpsi_exp_Mloc, buo_imp_Mloc )
       deallocate( dpsidt_Rloc, dtempdt_Rloc )

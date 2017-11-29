@@ -6,9 +6,9 @@ module step_time
    use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
        &             dom_Mloc
-   use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc,              &
-       &                 dVsT_Rloc, dVsT_Mloc, dVsOm_Rloc,       &
-       &                 dVsOm_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc, &
+   use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, temp_old_Mloc,      &
+       &                 dVsT_Rloc, dVsT_Mloc, dVsOm_Rloc, psi_old_Mloc,&
+       &                 dVsOm_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc,    &
        &                 dpsi_imp_Mloc, dpsi_exp_Mloc, buo_imp_Mloc
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
@@ -49,6 +49,7 @@ contains
       real(cp) :: tenth_n_time_steps
       character(len=255) :: message
       character(len=8) :: old_scheme
+      integer :: old_order
 
       !-- Courant
       real(cp) :: dtr,dth,dt_new
@@ -211,8 +212,8 @@ contains
          call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_spec,  &
               &             l_frame, l_vphi_bal_write, l_stop_time, us_Mloc,   &
               &             up_Mloc, om_Mloc, temp_Mloc, dtemp_Mloc,           &
-              &             dtemp_exp_Mloc, dtemp_imp_Mloc, dpsi_exp_Mloc,     &
-              &             dpsi_imp_Mloc)
+              &             dtemp_exp_Mloc, temp_old_Mloc, dtemp_imp_Mloc,     &
+              &             dpsi_exp_Mloc, psi_old_Mloc, dpsi_imp_Mloc)
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             n_io_calls  =n_io_calls+1
@@ -254,32 +255,34 @@ contains
          lMatNext = .false.
          if ( l_bridge_step .and. tscheme%time_scheme /= 'CNAB2' .and.  &
               n_time_step <= tscheme%norder_imp-2 ) then
+            old_order          =tscheme%norder_imp_lin
+            tscheme%norder_imp_lin=2
             if (rank == 0 ) write(*,*) '! Crank-Nicolson for this time-step'
 
             if ( l_cheb_coll ) then
-               call get_temp_rhs_imp_coll(temp_Mloc,dtemp_Mloc,tscheme%wimp_lin(2),&
-                    &         dtemp_imp_Mloc(:,:,tscheme%norder_imp-n_time_step))
-               call get_psi_rhs_imp_coll(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,   &
-                    &               tscheme%wimp_lin(2),                        &
-                    &       dpsi_imp_Mloc(:,:,tscheme%norder_imp-n_time_step),  &
-                    &               vp_bal, l_vphi_bal_calc)
+               call get_temp_rhs_imp_coll(temp_Mloc,dtemp_Mloc,                    &
+                    &                  temp_old_Mloc(:,:,1), dtemp_imp_Mloc(:,:,1),&
+                    &                  .true.)
+               call get_psi_rhs_imp_coll(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,     &
+                    &                    psi_old_Mloc(:,:,1),dpsi_imp_Mloc(:,:,1),&
+                    &                    vp_bal, l_vphi_bal_calc,                 &
+                    &                    .true.)
             else
-               call get_temp_rhs_imp_int(temp_Mloc, tscheme%wimp_lin(2),&
-                    &         dtemp_imp_Mloc(:,:,tscheme%norder_imp-n_time_step))
-
-               call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, tscheme%wimp_lin(2), &
-                    &       dpsi_imp_Mloc(:,:,tscheme%norder_imp-n_time_step),  &
-                    &               vp_bal, l_vphi_bal_calc)
+               call get_temp_rhs_imp_int(temp_Mloc, temp_old_Mloc(:,:,1), &
+                    &                    dtemp_imp_Mloc(:,:,1), .true.)
+               call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, psi_old_Mloc(:,:,1), &
+                    &       dpsi_imp_Mloc(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
             end if
             old_scheme         =tscheme%time_scheme
             tscheme%time_scheme='CNAB2'
             call tscheme%set_weights()
             !-- Since CN has only two coefficients, one has to set the remainings to zero
             tscheme%wimp(3:size(tscheme%wimp))=0.0_cp
+            tscheme%wimp_lin(3:size(tscheme%wimp_lin))=0.0_cp
             tscheme%wexp(3:size(tscheme%wexp))=0.0_cp
-            !-- One does not want to roll the implicit part in that case
-            l_roll_imp = .false.
+            l_roll_imp = .true.
             tscheme%time_scheme=old_scheme
+            tscheme%norder_imp_lin=old_order
             lMatNext = .true.
          end if
 
@@ -296,21 +299,23 @@ contains
          runStart = MPI_Wtime()
          if ( l_cheb_coll ) then
             call update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,       &
-                 &              dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,    &
-                 &              tscheme, lMat, l_roll_imp, l_log_next)
-            call update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,   &
-                 &              dVsOm_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc,        &
-                 &              buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp, &
-                 &              l_vphi_bal_calc, run_time_solve, n_solve_calls,  &
-                 &              run_time_lu, n_lu_calls, run_time_dct,           &
-                 &              n_dct_calls)
+                 &              dtemp_exp_Mloc, temp_old_Mloc, dtemp_imp_Mloc,   &
+                 &              buo_imp_Mloc, tscheme, lMat, l_roll_imp,         &
+                 &              l_log_next)
+            call update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,    &
+                 &              dVsOm_Mloc, dpsi_exp_Mloc, psi_old_Mloc,          &
+                 &              dpsi_imp_Mloc, buo_imp_Mloc, vp_bal, tscheme,     &
+                 &              lMat, l_roll_imp, l_vphi_bal_calc, run_time_solve,&
+                 &              n_solve_calls, run_time_lu, n_lu_calls,           &
+                 &              run_time_dct, n_dct_calls)
          else
             call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,     &
-                 &               dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,   &
-                 &               tscheme, lMat, l_roll_imp, l_log_next)
+                 &               dtemp_exp_Mloc, temp_old_Mloc, dtemp_imp_Mloc,  &
+                 &               buo_imp_Mloc, tscheme, lMat, l_roll_imp,        &
+                 &               l_log_next)
             call update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc, dVsOm_Mloc, &
-                 &              dpsi_exp_Mloc, dpsi_imp_Mloc, buo_imp_Mloc,      &
-                 &              vp_bal, tscheme, lMat, l_roll_imp,               &
+                 &              dpsi_exp_Mloc, psi_old_Mloc, dpsi_imp_Mloc,      &
+                 &              buo_imp_Mloc, vp_bal, tscheme, lMat, l_roll_imp, &
                  &              l_vphi_bal_calc, run_time_solve, n_solve_calls,  &
                  &              run_time_lu, n_lu_calls, run_time_dct,           &
                  &              n_dct_calls)

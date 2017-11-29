@@ -2,7 +2,7 @@ module time_schemes
 
    use precision_mod
    use parallel_mod
-   use namelists, only: alpha
+   use namelists, only: alpha, l_cheb_coll
    use constants, only: one, half, two
    use mem_alloc, only: bytes_allocated
    use char_manip, only: capitalize
@@ -15,17 +15,19 @@ module time_schemes
    type, public :: type_tscheme
       integer :: norder_exp
       integer :: norder_imp
+      integer :: norder_imp_lin
       character(len=8) :: time_scheme
       real(cp), allocatable :: dt(:)
       real(cp), allocatable :: wimp(:)
       real(cp), allocatable :: wimp_lin(:)
       real(cp), allocatable :: wexp(:)
-
+      logical :: l_calc_lin_rhs ! Do we need to calculate the linear op in the past
    contains
       procedure :: initialize
       procedure :: finalize
       procedure :: set_weights
       procedure :: set_dt_array
+      procedure :: set_imex_rhs
    end type type_tscheme
 
 contains
@@ -41,33 +43,51 @@ contains
 
       if ( index(time_scheme, 'CNAB2') /= 0 ) then
          this%time_scheme = 'CNAB2'
+         this%norder_imp_lin = 2
          this%norder_imp = 2
          this%norder_exp = 2
+         this%l_calc_lin_rhs = .true.
       else if ( index(time_scheme, 'MODCNAB') /= 0 ) then
          this%time_scheme = 'MODCNAB'
          this%norder_imp = 3
+         this%norder_imp_lin = 3
          this%norder_exp = 2
+         this%l_calc_lin_rhs = .true.
       else if ( index(time_scheme, 'CNLF') /= 0 ) then
          this%time_scheme = 'CNLF'
          this%norder_imp = 3
+         this%norder_imp_lin = 3
          this%norder_exp = 2
+         this%l_calc_lin_rhs = .true.
       else if ( index(time_scheme, 'BDF2AB2') /= 0 ) then
          this%time_scheme = 'BDF2AB2'
          this%norder_imp = 3
+         this%norder_imp_lin = 2 ! it should be one but we need to restart
          this%norder_exp = 2
+         this%l_calc_lin_rhs = .false.
       else if ( index(time_scheme, 'BDF3AB3') /= 0 ) then
          this%time_scheme = 'BDF3AB3'
          this%norder_imp = 4
+         this%norder_imp_lin = 2 ! it should be one but we need to restart
          this%norder_exp = 3
+         this%l_calc_lin_rhs = .false.
       else if ( index(time_scheme, 'BDF4AB4') /= 0 ) then
          this%time_scheme = 'BDF4AB4'
          this%norder_imp = 5
+         this%norder_imp_lin = 2 ! it should be one but we need to restart
          this%norder_exp = 4
+         this%l_calc_lin_rhs = .false.
+      end if
+
+      if ( (this%time_scheme == 'CNLF'.or. this%time_scheme=='MODCNAB') .and. &
+      &    (.not. l_cheb_coll) ) then
+           call abortRun('! Integration method does not work with the chosen &
+           &              time scheme. It would require to store buoyancy as well')
       end if
 
       allocate ( this%dt(this%norder_exp) )
       allocate ( this%wimp(this%norder_imp) )
-      allocate ( this%wimp_lin(this%norder_imp) )
+      allocate ( this%wimp_lin(this%norder_imp_lin) )
       allocate ( this%wexp(this%norder_exp) )
 
       this%dt(:)       = 0.0_cp
@@ -75,8 +95,8 @@ contains
       this%wimp_lin(:) = 0.0_cp
       this%wexp(:)     = 0.0_cp
 
-      bytes_allocated = bytes_allocated+(2*this%norder_exp+2*this%norder_imp)* &
-      &                 SIZEOF_DEF_REAL
+      bytes_allocated = bytes_allocated+(2*this%norder_exp+this%norder_imp+&
+      &                 this%norder_imp_lin)*SIZEOF_DEF_REAL
 
    end subroutine initialize
 !------------------------------------------------------------------------------
@@ -120,8 +140,8 @@ contains
             this%wimp(1)    =one
             this%wimp(2)    =one
             this%wimp(3)    =0.0_cp
-            this%wimp_lin(1)=(half+delta/16.0_cp)*this%dt(1)
-            this%wimp_lin(2)=(7.0_cp/16.0_cp-delta/16.0_cp)*this%dt(1)
+            this%wimp_lin(1)=(half+1.0_cp/delta/16.0_cp)*this%dt(1)
+            this%wimp_lin(2)=(7.0_cp/16.0_cp-1.0_cp/delta/16.0_cp)*this%dt(1)
             this%wimp_lin(3)=1.0_cp/16.0_cp*this%dt(1)
 
             this%wexp(1)=(one+half*delta)*this%dt(1)
@@ -130,7 +150,6 @@ contains
             delta = this%dt(1)/this%dt(2)
             this%wimp_lin(1)=(one+delta)/(one+two*delta)*this%dt(1)
             this%wimp_lin(2)=0.0_cp
-            this%wimp_lin(3)=0.0_cp
             this%wimp(1)=one
             this%wimp(2)=(one+delta)*(one+delta)/(one+two*delta)
             this%wimp(3)=-delta*delta/(one+two*delta)
@@ -154,8 +173,6 @@ contains
 
             this%wimp_lin(1)=one/a0 * this%dt(1)
             this%wimp_lin(2)=0.0_cp
-            this%wimp_lin(3)=0.0_cp
-            this%wimp_lin(4)=0.0_cp
 
             this%wimp(1)=one
             this%wimp(2)=a1/a0
@@ -193,9 +210,6 @@ contains
 
             this%wimp_lin(1)=one/a0 * this%dt(1)
             this%wimp_lin(2)=0.0_cp
-            this%wimp_lin(3)=0.0_cp
-            this%wimp_lin(4)=0.0_cp
-            this%wimp_lin(5)=0.0_cp
 
             this%wimp(1)=one
             this%wimp(2)=-a1/a0
@@ -213,6 +227,9 @@ contains
 !------------------------------------------------------------------------------
    subroutine set_dt_array(this, dt_new, dt_min, time, n_log_file,  &
               &            n_time_step, l_new_dtNext)
+      !
+      ! This subroutine adjusts the time step
+      !
 
       class(type_tscheme) :: this
 
@@ -265,5 +282,60 @@ contains
       end if
 
    end subroutine set_dt_array
+!------------------------------------------------------------------------------
+   subroutine set_imex_rhs(this, rhs, fimp, fexp, fold, nMstart, nMstop, len_rhs)
+      !
+      ! This subroutine assembles the right-hand-side of an IMEX scheme
+      !
+
+      class(type_tscheme) :: this
+
+      !-- Input variables:
+      integer,     intent(in) :: nMstart
+      integer,     intent(in) :: nMstop
+      integer,     intent(in) :: len_rhs
+      complex(cp), intent(in) :: fimp(nMstart:nMstop,len_rhs,this%norder_imp_lin-1)
+      complex(cp), intent(in) :: fexp(nMstart:nMstop,len_rhs,this%norder_exp)
+      complex(cp), intent(in) :: fold(nMstart:nMstop,len_rhs,this%norder_imp-1)
+
+      !-- Output variable
+      complex(cp), intent(out) :: rhs(nMstart:nMstop,len_rhs)
+
+      !-- Local variables
+      integer :: n_o, n_r, n_m
+
+      do n_o=1,this%norder_imp-1
+         if ( n_o == 1 ) then
+            do n_r=1,len_rhs
+               do n_m=nMstart,nMstop
+                  rhs(n_m,n_r)=this%wimp(n_o+1)*fold(n_m,n_r,n_o)
+               end do
+            end do
+         else
+            do n_r=1,len_rhs
+               do n_m=nMstart,nMstop
+                  rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp(n_o+1)*fold(n_m,n_r,n_o)
+               end do
+            end do
+         end if
+      end do
+
+      do n_o=1,this%norder_imp_lin-1
+         do n_r=1,len_rhs
+            do n_m=nMstart,nMstop
+               rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp_lin(n_o+1)*fimp(n_m,n_r,n_o)
+            end do
+         end do
+      end do
+
+      do n_o=1,this%norder_exp
+         do n_r=1,len_rhs
+            do n_m=nMstart,nMstop
+               rhs(n_m,n_r)=rhs(n_m,n_r)+this%wexp(n_o)*fexp(n_m,n_r,n_o)
+            end do
+         end do
+      end do
+
+   end subroutine set_imex_rhs
 !------------------------------------------------------------------------------
 end module time_schemes

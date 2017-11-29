@@ -40,9 +40,9 @@ contains
       character(len=76) :: message
 
       if ( l_start_file ) then
-         call read_checkpoint(us_Mloc, up_Mloc, dpsi_exp_Mloc, dpsi_imp_Mloc, &
-              &               temp_Mloc, dtemp_exp_Mloc, dtemp_imp_Mloc,      &
-              &               time, tscheme)
+         call read_checkpoint(us_Mloc, up_Mloc, dpsi_exp_Mloc, psi_old_Mloc,  &
+              &               dpsi_imp_Mloc, temp_Mloc, dtemp_exp_Mloc,       &
+              &               temp_old_Mloc, dtemp_imp_Mloc, time, tscheme)
 
          !-- If integration method is used, since u_s is stored, one needs to
          !-- reconstruct psi(m/=0)
@@ -78,6 +78,8 @@ contains
          dtemp_exp_Mloc(:,:,:)=zero
          dpsi_imp_Mloc(:,:,:) =zero
          dtemp_imp_Mloc(:,:,:)=zero
+         temp_old_Mloc(:,:,:) =zero
+         psi_old_Mloc(:,:,:)  =zero
 
          time=0.0_cp
          do n_o=1,tscheme%norder_exp

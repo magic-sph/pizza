@@ -82,8 +82,9 @@ contains
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
    subroutine update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
-              &               dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc,  &
-              &               tscheme, lMat, l_roll_imp, l_log_next)
+              &               dtemp_exp_Mloc, temp_old_Mloc, dtemp_imp_Mloc, &
+              &               buo_imp_Mloc, tscheme, lMat, l_roll_imp,       &
+              &               l_log_next)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -96,13 +97,14 @@ contains
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(inout) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp), intent(inout) :: temp_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
       complex(cp), intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
       real(cp) :: h2
-      integer :: n_r, n_m, m, n_o, n_cheb
+      integer :: n_r, n_m, m, n_cheb
 
       if ( lMat ) lTMat(:)=.false.
 
@@ -169,8 +171,12 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_temp_rhs_imp_int(temp_Mloc, tscheme%wimp_lin(2), &
-           &                    dtemp_imp_Mloc(:,:,1))
+      call get_temp_rhs_imp_int(temp_Mloc, temp_old_Mloc(:,:,1), &
+           &                    dtemp_imp_Mloc(:,:,1), tscheme%l_calc_lin_rhs)
+
+      !-- Now assemble the right hand side and store it in work_Mloc
+      call tscheme%set_imex_rhs(work_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc, &
+           &                    temp_old_Mloc, nMstart, nMstop, n_r_max)
 
       do n_m=nMstart, nMstop
 
@@ -182,18 +188,7 @@ contains
          end if
 
          do n_cheb=1,n_cheb_max
-            do n_o=1,tscheme%norder_imp-1
-               if ( n_o == 1 ) then
-                  rhs(n_cheb)=tscheme%wimp(n_o+1)*dtemp_imp_Mloc(n_m,n_cheb,n_o)
-               else
-                  rhs(n_cheb)=rhs(n_cheb)+tscheme%wimp(n_o+1)* &
-                  &                       dtemp_imp_Mloc(n_m,n_cheb,n_o)
-               end if
-            end do
-            do n_o=1,tscheme%norder_exp
-               rhs(n_cheb)=rhs(n_cheb)+tscheme%wexp(n_o)*   &
-               &                       dtemp_exp_Mloc(n_m,n_cheb,n_o)
-            end do
+            rhs(n_cheb)=work_Mloc(n_m,n_cheb)
          end do
 
          !-- Multiply rhs by precond matrix
@@ -219,7 +214,7 @@ contains
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Assemble second buoyancy part from T^{n+1}
+      !-- Finish assembling buoyancy 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
@@ -234,23 +229,27 @@ contains
       !-- Roll the arrays before filling again the first block
       call roll(dtemp_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
       if ( l_roll_imp ) then
-         call roll(dtemp_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
+         call roll(dtemp_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp_lin-1)
+         call roll(temp_old_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
       end if
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
+      !-- This is needed to estimate the heat fluxes
       if ( l_log_next ) then
          call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, n_r_max, rscheme)
       end if
 
    end subroutine update_temp_int
 !------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp_int(temp_Mloc, wimp, dtemp_imp_Mloc_last)
+   subroutine get_temp_rhs_imp_int(temp_Mloc, temp_old, dtemp_imp_Mloc_last,  &
+              &                    l_calc_rhs_lin)
 
       !-- Input variables
       complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
-      real(cp),    intent(in) :: wimp
+      logical,     intent(in) :: l_calc_rhs_lin
 
       !-- Output variable
+      complex(cp), intent(out) :: temp_old(nMstart:nMstop,n_r_max)
       complex(cp), intent(out) :: dtemp_imp_Mloc_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
@@ -258,18 +257,18 @@ contains
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
-            dtemp_imp_Mloc_last(n_m,n_r)=temp_Mloc(n_m,n_r)
+            temp_old(n_m,n_r)=temp_Mloc(n_m,n_r)
          end do
       end do
 
       !-- Transform the implicit part to chebyshev space
-      call rscheme%costf1(dtemp_imp_Mloc_last, nMstart, nMstop, n_r_max)
+      call rscheme%costf1(temp_old, nMstart, nMstop, n_r_max)
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
 
          do n_cheb=1,n_cheb_max
-            rhs(n_cheb)= dtemp_imp_Mloc_last(n_m,n_cheb)
+            rhs(n_cheb)= temp_old(n_m,n_cheb)
          end do
 
          call RHSE_mat%mat_vec_mul(rhs)
@@ -278,17 +277,17 @@ contains
          rhs(2)=zero
 
          do n_cheb=1,n_cheb_max
-            dtemp_imp_Mloc_last(n_m,n_cheb)=rhs(n_cheb)
+            temp_old(n_m,n_cheb)=rhs(n_cheb)
          end do
 
          !-- Pad with zeros
          do n_cheb=n_cheb_max+1,n_r_max
-            dtemp_imp_Mloc_last(n_m,n_cheb)=zero
+            temp_old(n_m,n_cheb)=zero
          end do
 
       end do
 
-      if ( wimp /= 0.0_cp ) then
+      if ( l_calc_rhs_lin ) then
 
          !-- Copy temp_Mloc into work_Mloc
          do n_r=1,n_r_max
@@ -320,8 +319,7 @@ contains
          !-- Finally assemble the right hand side
          do n_cheb=1,n_cheb_max
             do n_m=nMstart,nMstop
-               dtemp_imp_Mloc_last(n_m,n_cheb)=dtemp_imp_Mloc_last(n_m,n_cheb) &
-               &                          +wimp*TdiffFac*work_Mloc(n_m,n_cheb) 
+               dtemp_imp_Mloc_last(n_m,n_cheb)=TdiffFac*work_Mloc(n_m,n_cheb) 
             end do
          end do
 

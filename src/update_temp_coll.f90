@@ -61,9 +61,10 @@ contains
 
    end subroutine finalize_temp_coll
 !------------------------------------------------------------------------------
-   subroutine update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
-              &              dtemp_exp_Mloc, dtemp_imp_Mloc, buo_imp_Mloc, &
-              &              tscheme, lMat, l_roll_imp, l_log_next)
+   subroutine update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,      &
+              &              dtemp_exp_Mloc, temp_old_Mloc, dtemp_imp_Mloc,  &
+              &              buo_imp_Mloc, tscheme, lMat, l_roll_imp,        &
+              &              l_log_next)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -76,7 +77,8 @@ contains
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(inout) :: dtemp_exp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_exp)
-      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp), intent(inout) :: temp_old_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp-1)
+      complex(cp), intent(inout) :: dtemp_imp_Mloc(nMstart:nMstop,n_r_max,tscheme%norder_imp_lin-1)
       complex(cp), intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
@@ -84,17 +86,6 @@ contains
       integer :: n_r, n_m, n_r_out, m, n_o
 
       if ( lMat ) lTMat(:)=.false.
-
-      !-- Assemble first buoyancy part from T^{n}
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*or1(n_r) &
-               &                      *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-            end if
-         end do
-      end do
 
       !-- Finish calculation of advection
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
@@ -111,8 +102,12 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, tscheme%wimp_lin(2), &
-           &                     dtemp_imp_Mloc(:,:,1))
+      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, temp_old_Mloc(:,:,1), &
+           &                     dtemp_imp_Mloc(:,:,1), tscheme%l_calc_lin_rhs)
+
+      !-- Now assemble the right hand side and store it in work_Mloc
+      call tscheme%set_imex_rhs(work_Mloc, dtemp_imp_Mloc, dtemp_exp_Mloc, &
+           &                    temp_old_Mloc, nMstart, nMstop, n_r_max)
 
       do n_m=nMstart, nMstop
 
@@ -130,16 +125,7 @@ contains
          rhs(1)      =zero
          rhs(n_r_max)=zero
          do n_r=2,n_r_max-1
-            do n_o=1,tscheme%norder_imp-1
-               if ( n_o == 1 ) then
-                  rhs(n_r)=tscheme%wimp(n_o+1)*dtemp_imp_Mloc(n_m,n_r,n_o)
-               else
-                  rhs(n_r)=rhs(n_r)+tscheme%wimp(n_o+1)*dtemp_imp_Mloc(n_m,n_r,n_o)
-               end if
-            end do
-            do n_o=1,tscheme%norder_exp
-               rhs(n_r)=rhs(n_r)+tscheme%wexp(n_o)*dtemp_exp_Mloc(n_m,n_r,n_o)
-            end do
+            rhs(n_r)=work_Mloc(n_m,n_r)
          end do
 
 #ifdef WITH_PRECOND_S
@@ -167,14 +153,20 @@ contains
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Assemble second buoyancy part from T^{n+1}
+      !-- Assemble buoyancy
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-&
-               &               tscheme%wimp_lin(1)*rgrav(n_r)*or1(n_r) &
-               &               *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(1)*rgrav(n_r)*   &
+               &                     or1(n_r)*BuoFac*ci*real(m,cp)*     &
+               &                     temp_Mloc(n_m,n_r)
+               do n_o = 1,tscheme%norder_imp_lin-1
+                  buo_imp_Mloc(n_m,n_r)=buo_imp_Mloc(n_m,n_r)-             &
+                  &                     tscheme%wimp_lin(n_o+1)*rgrav(n_r)*&
+                  &                     or1(n_r)*BuoFac*ci*real(m,cp)*     &
+                  &                     temp_old_Mloc(n_m,n_r,n_o)
+               end do
             end if
          end do
       end do
@@ -182,7 +174,8 @@ contains
       !-- Roll the arrays before filling again the first block
       call roll(dtemp_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
       if ( l_roll_imp ) then
-         call roll(dtemp_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
+         call roll(dtemp_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp_lin-1)
+         call roll(temp_old_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
       end if
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
@@ -192,15 +185,16 @@ contains
 
    end subroutine update_temp_co
 !------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, wimp, &
-              &                     dtemp_imp_Mloc_last)
+   subroutine get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, temp_last, &
+              &                     dtemp_imp_Mloc_last, l_calc_lin_rhs)
 
       !-- Input variables
       complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
-      real(cp),    intent(in) :: wimp
+      logical,     intent(in) :: l_calc_lin_rhs
 
       !-- Output variable
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: temp_last(nMstart:nMstop,n_r_max)
       complex(cp), intent(out) :: dtemp_imp_Mloc_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
@@ -209,11 +203,11 @@ contains
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
-            dtemp_imp_Mloc_last(n_m,n_r)=temp_Mloc(n_m,n_r)
+            temp_last(n_m,n_r)=temp_Mloc(n_m,n_r)
          end do
       end do
 
-      if ( wimp /= 0.0_cp ) then
+      if ( l_calc_lin_rhs ) then
 
          call get_ddr(temp_Mloc, dtemp_Mloc, work_Mloc, nMstart, nMstop, &
               &       n_r_max, rscheme)
@@ -221,10 +215,9 @@ contains
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                dm2 = real(m,cp)*real(m,cp)
-               dtemp_imp_Mloc_last(n_m,n_r)=dtemp_imp_Mloc_last(n_m,n_r) &
-               &                     +wimp*TdiffFac*( work_Mloc(n_m,n_r) &
-               &                         +or1(n_r)*  dtemp_Mloc(n_m,n_r) &
-               &                     -dm2*or2(n_r)*   temp_Mloc(n_m,n_r) )
+               dtemp_imp_Mloc_last(n_m,n_r)=TdiffFac*( work_Mloc(n_m,n_r)  &
+               &                         +or1(n_r)*   dtemp_Mloc(n_m,n_r)  &
+               &                     -dm2*or2(n_r)*    temp_Mloc(n_m,n_r) )
             end do
          end do
 
