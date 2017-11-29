@@ -14,7 +14,7 @@ module update_psi_coll
    use fields, only: work_Mloc
    use algebra, only: prepare_full_mat, solve_full_mat
    use time_schemes, only: type_tscheme
-   use useful, only: abortRun, roll
+   use useful, only: abortRun
 
    implicit none
    
@@ -64,15 +64,13 @@ contains
    subroutine update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,    &
               &              dVsOm_Mloc, dpsi_exp_Mloc, psi_old_Mloc,          &
               &              dpsi_imp_Mloc, buo_imp_Mloc, vp_bal, tscheme,     &
-              &              lMat, l_roll_imp, l_vphi_bal_calc, time_solve,    &
-              &              n_solve_calls, time_lu, n_lu_calls, time_dct,     &
-              &              n_dct_calls)
+              &              lMat, l_vphi_bal_calc, time_solve, n_solve_calls, &
+              &              time_lu, n_lu_calls, time_dct, n_dct_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
       logical,            intent(in) :: lMat
       logical,            intent(in) :: l_vphi_bal_calc
-      logical,            intent(in) :: l_roll_imp
       complex(cp),        intent(in) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
@@ -258,12 +256,9 @@ contains
          end do
       end do
 
-      !-- Roll the explicit arrays before filling again the first block
-      call roll(dpsi_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
-      if ( l_roll_imp ) then
-         call roll(dpsi_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp_lin-1)
-         call roll(psi_old_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
-      end if
+      !-- Roll the time arrays before filling again the first block
+      call tscheme%rotate_imex(dpsi_imp_Mloc, dpsi_exp_Mloc, psi_old_Mloc, &
+           &                   nMstart, nMstop, n_r_max)
 
    end subroutine update_om_coll
 !------------------------------------------------------------------------------

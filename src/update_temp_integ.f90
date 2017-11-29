@@ -10,7 +10,7 @@ module update_temp_integ
    use truncation, only: n_r_max, idx2m, n_cheb_max
    use radial_der, only: get_dr
    use fields, only: work_Mloc
-   use useful, only: abortRun, roll
+   use useful, only: abortRun
    use time_schemes, only: type_tscheme
    use matrix_types, only: type_bandmat_real, type_bordmat_real
    use chebsparselib, only: intcheb2rmult2, intcheb2rmult2lapl
@@ -83,13 +83,11 @@ contains
 !------------------------------------------------------------------------------
    subroutine update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
               &               dtemp_exp_Mloc, temp_old_Mloc, dtemp_imp_Mloc, &
-              &               buo_imp_Mloc, tscheme, lMat, l_roll_imp,       &
-              &               l_log_next)
+              &               buo_imp_Mloc, tscheme, lMat, l_log_next)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
       logical,            intent(in) :: lMat
-      logical,            intent(in) :: l_roll_imp
       logical,            intent(in) :: l_log_next
       complex(cp),        intent(in) :: psi_Mloc(nMstart:nMstop, n_r_max)
 
@@ -227,11 +225,8 @@ contains
       end do
 
       !-- Roll the arrays before filling again the first block
-      call roll(dtemp_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
-      if ( l_roll_imp ) then
-         call roll(dtemp_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp_lin-1)
-         call roll(temp_old_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
-      end if
+      call tscheme%rotate_imex(dtemp_imp_Mloc, dtemp_exp_Mloc, temp_old_Mloc, &
+           &                   nMstart, nMstop, n_r_max)
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       !-- This is needed to estimate the heat fluxes

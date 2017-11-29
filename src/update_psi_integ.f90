@@ -13,7 +13,7 @@ module update_psi_integ
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
    use time_schemes, only: type_tscheme
-   use useful, only: abortRun, roll
+   use useful, only: abortRun
    use matrix_types, only: type_bandmat_complex, type_bordmat_complex,  &
        &                   type_bandmat_real
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,    &
@@ -166,18 +166,16 @@ contains
 
    end subroutine finalize_psi_integ
 !------------------------------------------------------------------------------
-   subroutine update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,            &
-              &              dVsOm_Mloc, dpsi_exp_Mloc, psi_old_Mloc,        &
-              &              dpsi_imp_Mloc, buo_imp_Mloc, vp_bal, tscheme,   &
-              &              lMat, l_roll_imp, l_vphi_bal_calc, time_solve,  &
-              &              n_solve_calls, time_lu, n_lu_calls, time_dct,   &
-              &              n_dct_calls)
+   subroutine update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,             &
+              &              dVsOm_Mloc, dpsi_exp_Mloc, psi_old_Mloc,         &
+              &              dpsi_imp_Mloc, buo_imp_Mloc, vp_bal, tscheme,    &
+              &              lMat, l_vphi_bal_calc, time_solve, n_solve_calls,&
+              &              time_lu, n_lu_calls, time_dct, n_dct_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
       logical,            intent(in) :: lMat
       logical,            intent(in) :: l_vphi_bal_calc
-      logical,            intent(in) :: l_roll_imp
 
       !-- Output variables
       complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -473,12 +471,9 @@ contains
          end do
       end if
 
-      !-- Roll the explicit arrays before filling again the first block
-      call roll(dpsi_exp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_exp)
-      if ( l_roll_imp ) then
-         call roll(dpsi_imp_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp_lin-1)
-         call roll(psi_old_Mloc, nMstart, nMstop, n_r_max, tscheme%norder_imp-1)
-      end if
+      !-- Roll the arrays before filling again the first block
+      call tscheme%rotate_imex(dpsi_imp_Mloc, dpsi_exp_Mloc, psi_old_Mloc, &
+           &                   nMstart, nMstop, n_r_max)
 
    end subroutine update_psi_int
 !------------------------------------------------------------------------------

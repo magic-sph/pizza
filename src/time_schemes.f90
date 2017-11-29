@@ -28,6 +28,7 @@ module time_schemes
       procedure :: set_weights
       procedure :: set_dt_array
       procedure :: set_imex_rhs
+      procedure :: rotate_imex
    end type type_tscheme
 
 contains
@@ -337,5 +338,51 @@ contains
       end do
 
    end subroutine set_imex_rhs
+!------------------------------------------------------------------------------
+   subroutine rotate_imex(this, fimp, fexp, fold, nMstart, nMstop, n_r_max)
+      !
+      ! This subroutine is used to roll the time arrays from one time step
+      !
+
+      class(type_tscheme) :: this
+
+      !-- Input variables:
+      integer,     intent(in) :: nMstart
+      integer,     intent(in) :: nMstop
+      integer,     intent(in) :: n_r_max
+
+      !-- Output variables:
+      complex(cp), intent(inout) :: fimp(nMstart:nMstop,n_r_max,this%norder_imp_lin-1)
+      complex(cp), intent(inout) :: fexp(nMstart:nMstop,n_r_max,this%norder_exp)
+      complex(cp), intent(inout) :: fold(nMstart:nMstop,n_r_max,this%norder_imp-1)
+
+      !-- Local variables:
+      integer :: n_o, n_m, n_r
+
+      do n_o=this%norder_exp,2,-1
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               fexp(n_m,n_r,n_o)=fexp(n_m,n_r,n_o-1)
+            end do
+         end do
+      end do
+
+      do n_o=this%norder_imp-1,2,-1
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               fold(n_m,n_r,n_o)=fold(n_m,n_r,n_o-1)
+            end do
+         end do
+      end do
+
+      do n_o=this%norder_imp_lin-1,2,-1
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               fimp(n_m,n_r,n_o)=fimp(n_m,n_r,n_o-1)
+            end do
+         end do
+      end do
+
+   end subroutine rotate_imex
 !------------------------------------------------------------------------------
 end module time_schemes
