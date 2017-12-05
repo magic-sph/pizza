@@ -210,7 +210,7 @@ contains
       logical, intent(in) :: l_cheb_coll
 
       !-- Local variables:
-      real(cp) :: dn2
+      real(cp) :: dn2, monen
       integer :: n,k   ! counter
 
       if ( l_cheb_coll ) then
@@ -254,11 +254,16 @@ contains
          do n=1,n_r_max
             dn2 = real(n-1,cp)*real(n-1,cp)
             this%rMat(1,n)  = one
-            this%rMat(2,n)  = (-one)**(n-1)
+            if ( mod(n,2)==1 ) then
+               monen = one
+            else
+               monen = -one
+            end if
+            this%rMat(2,n)  = monen
             this%drMat(1,n) = two*dn2 ! Replace by drx maybe
-            this%drMat(2,n) = two*dn2*(-one)**n ! drx
+            this%drMat(2,n) = two*dn2*(-one)*monen ! drx
             this%d2rMat(1,n)= four*third*dn2*(dn2-one) ! drx
-            this%d2rMat(2,n)= four*third*dn2*(dn2-one)*(-one)**(n-1)
+            this%d2rMat(2,n)= four*third*dn2*(dn2-one)*monen
          end do
 
       end if
