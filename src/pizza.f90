@@ -25,7 +25,7 @@ program pizza
    use update_temp_coll, only: initialize_temp_coll, finalize_temp_coll
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
    use update_psi_coll, only: initialize_om_coll, finalize_om_coll
-   use update_psi_integ, only: initialize_psi_integ, finalize_psi_integ
+   use update_psi_integ_tmp, only: initialize_psi_integ, finalize_psi_integ
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
    use tests, only: solve_laplacian, test_radial_der, solve_biharmo, test_i4
@@ -102,13 +102,6 @@ program pizza
    call memWrite('R loop', local_bytes_used)
    local_bytes_used = bytes_allocated-local_bytes_used
    local_bytes_used = bytes_allocated
-   if ( l_cheb_coll ) then
-      call initialize_om_coll()
-      call initialize_temp_coll()
-   else
-      call initialize_psi_integ()
-      call initialize_temp_integ()
-   end if
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
 
@@ -121,6 +114,14 @@ program pizza
 
    !-- Pre calculations
    call preCalc()
+
+   if ( l_cheb_coll ) then
+      call initialize_om_coll()
+      call initialize_temp_coll()
+   else
+      call initialize_psi_integ()
+      call initialize_temp_integ()
+   end if
 
    !-- Start fields
    call get_start_fields(time, tscheme)

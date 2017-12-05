@@ -45,7 +45,7 @@ contains
       allocate( LHS_mat(nMstart:nMstop) )
 
       do n_m=nMstart,nMstop
-         call RHSI_mat(n_m)%initialize(4, 4, n_cheb_max)
+         call RHSI_mat(n_m)%initialize(2, 2, n_cheb_max)
          call LHS_mat(n_m)%initialize(4, 4, n_boundaries, n_cheb_max)
       end do
 

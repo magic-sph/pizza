@@ -13,7 +13,8 @@ module step_time
    use constants, only: half, one
    use update_temp_coll, only: update_temp_co, get_temp_rhs_imp_coll
    use update_temp_integ, only: update_temp_int, get_temp_rhs_imp_int
-   use update_psi_integ, only: update_psi_int, get_psi_rhs_imp_int
+   ! use update_psi_integ, only: update_psi_int, get_psi_rhs_imp_int
+   use update_psi_integ_tmp, only: update_psi_int, get_psi_rhs_imp_int
    use update_psi_coll, only: update_om_coll, get_psi_rhs_imp_coll
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
@@ -245,6 +246,7 @@ contains
             end if
          end if
 
+
          !-- If the scheme is not Crank-Nicolson we have to use a different scheme
          lMatNext = .false.
          if ( l_bridge_step .and. tscheme%time_scheme /= 'CNAB2' .and.  &
@@ -262,7 +264,7 @@ contains
             else
                call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,1), &
                     &                    dTdt%impl(:,:,1), .true.)
-               call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, dpsidt%old(:,:,1), &
+               call get_psi_rhs_imp_int(om_Mloc, up_Mloc, dpsidt%old(:,:,1), &
                     &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
             end if
             old_scheme         =tscheme%time_scheme
