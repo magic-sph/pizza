@@ -18,7 +18,8 @@ module chebsparselib
    &         intcheb4rmult4laplrot, intcheb4rmult4laplrot2, intcheb4hmult2, &
    &         intcheb2rmult2hmult2, intcheb2rmult2hmult2lapl,                &
    &         intcheb4rmult4hmult2, intcheb4rmult4hmult2laplrot,             &
-   &         intcheb4rmult4hmult2laplrot2, intcheb2rmult2hmult2laplm1
+   &         intcheb4rmult4hmult2laplrot2, intcheb2rmult2hmult2laplm1,      &
+   &         intcheb2rmult2laplrot
 
 contains
 
@@ -387,6 +388,62 @@ contains
       call mirror_stencil(idx, stencil, len_stencil)
 
    end function intcheb2rmult2lapl
+!------------------------------------------------------------------------------
+   function intcheb2rmult2laplrot(a, b, m, n, len_stencil) result(stencil)
+
+      !-- Input variables
+      real(cp), intent(in) :: a
+      real(cp), intent(in) :: b
+      integer,  intent(in) :: m 
+      integer,  intent(in) :: n
+      integer,  intent(in) :: len_stencil
+
+      !-- Output variable 
+      real(cp) :: stencil(len_stencil)
+
+      !-- Local variables
+      real(cp) :: dm
+      real(cp) :: dn
+      integer :: ku
+
+      dm = real(m, cp)
+      dn = real(n, cp)
+      ku = (len_stencil-1)/2
+
+      stencil(1:ku-4) = 0.0_cp
+      stencil(ku-3)=a**4*(dm**2-dn**2-3.0_cp*dn-2.0_cp)/(16.0_cp*dn*(dn+1.0_cp &
+      &             ))
+      stencil(ku-2)=a**3*b*(dm**2-2.0_cp*dn**2-5.0_cp*dn-3.0_cp)/(4.0_cp*dn &
+      &             *(dn+1.0_cp))
+      stencil(ku-1)=-a**2*(2.0_cp*a**2*dm**2*dn-a**2*dm**2-4.0_cp*a**2*dn**2 &
+      &             -2.0_cp*a**2*dn+6.0_cp*a**2+4.0_cp*a*b*dm**2*dn-4.0_cp*a*b*dm**2-4.0_cp &
+      &             *a*b*dn**3-12.0_cp*a*b*dn**2+16.0_cp*a*b+10.0_cp*b**2*dn**3+6.0_cp* &
+      &             b**2*dn**2-12.0_cp*b**2*dn-4.0_cp*b**2)/(8.0_cp*dn*(dn-1.0_cp)*(dn+1.0_cp &
+      &             ))
+      stencil(ku)=-a*b*(a**2*dm**2+2.0_cp*a**2*dn**2-5.0_cp*a**2*dn+3.0_cp &
+      &             *a**2-8.0_cp*a*b*dn**2-4.0_cp*a*b*dn+12.0_cp*a*b+4.0_cp*b**2*dn**2-6.0_cp &
+      &             *b**2*dn+2.0_cp*b**2)/(4.0_cp*dn*(dn-1.0_cp))
+      stencil(ku+1)=a*(3.0_cp*a**3*dm**2+a**3*dn**2-5.0_cp*a**3+8.0_cp*a**2* &
+      &             b*dm**2+8.0_cp*a**2*b*dn**2-16.0_cp*a**2*b-12.0_cp*a*b**2*dn**2+8.0_cp &
+      &             *a*b**2+16.0_cp*b**3*dn**2-16.0_cp*b**3)/(8.0_cp*(dn-1.0_cp)*(dn+1.0_cp &
+      &             ))
+      stencil(ku+2)=-a*b*(a**2*dm**2+2.0_cp*a**2*dn**2+5.0_cp*a**2*dn+3.0_cp &
+      &             *a**2-8.0_cp*a*b*dn**2+4.0_cp*a*b*dn+12.0_cp*a*b+4.0_cp*b**2*dn**2+6.0_cp &
+      &             *b**2*dn+2.0_cp*b**2)/(4.0_cp*dn*(dn+1.0_cp))
+      stencil(ku+3)=-a**2*(2.0_cp*a**2*dm**2*dn+a**2*dm**2+4.0_cp*a**2*dn**2 &
+      &             -2.0_cp*a**2*dn-6.0_cp*a**2+4.0_cp*a*b*dm**2*dn+4.0_cp*a*b*dm**2-4.0_cp &
+      &             *a*b*dn**3+12.0_cp*a*b*dn**2-16.0_cp*a*b+10.0_cp*b**2*dn**3-6.0_cp* &
+      &             b**2*dn**2-12.0_cp*b**2*dn+4.0_cp*b**2)/(8.0_cp*dn*(dn-1.0_cp)*(dn+1.0_cp &
+      &             ))
+      stencil(ku+4)=a**3*b*(dm**2-2.0_cp*dn**2+5.0_cp*dn-3.0_cp)/(4.0_cp*dn &
+      &             *(dn-1.0_cp))
+      stencil(ku+5)=a**4*(dm**2-dn**2+3.0_cp*dn-2.0_cp)/(16.0_cp*dn*(dn-1.0_cp &
+      &             ))
+      stencil(ku+6:len_stencil) = 0.0_cp
+
+      call mirror_stencil(n, stencil, len_stencil)
+
+   end function intcheb2rmult2laplrot
 !------------------------------------------------------------------------------
    function intcheb2rmult2hmult2laplm1(a, b, n, len_stencil) result(stencil)
 
