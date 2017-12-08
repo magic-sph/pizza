@@ -102,6 +102,13 @@ program pizza
    call memWrite('R loop', local_bytes_used)
    local_bytes_used = bytes_allocated-local_bytes_used
    local_bytes_used = bytes_allocated
+   if ( l_cheb_coll ) then
+      call initialize_om_coll()
+      call initialize_temp_coll()
+   else
+      call initialize_psi_integ()
+      call initialize_temp_integ()
+   end if
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
 
@@ -114,14 +121,6 @@ program pizza
 
    !-- Pre calculations
    call preCalc()
-
-   if ( l_cheb_coll ) then
-      call initialize_om_coll()
-      call initialize_temp_coll()
-   else
-      call initialize_psi_integ()
-      call initialize_temp_integ()
-   end if
 
    !-- Start fields
    call get_start_fields(time, tscheme)

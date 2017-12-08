@@ -880,7 +880,7 @@ contains
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands)
       integer :: n_r, i_r, n_band, n_b
-      real(cp) :: a, b
+      real(cp) :: a, b, monen
 
       !-- We have to fill A3 with zeros again otherwise on the next iteration
       !-- with a different dt there might be some issues with spurious values
@@ -937,12 +937,18 @@ contains
 
       !-- Add the tau Lines for boundary conditions into A1 and A2
       do n_r=1,A_mat%nlines
-         if ( n_r <= A_mat%ntau ) then
-            A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
-            A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
+         if ( mod(n_r,2)==1 ) then
+            monen = one
          else
-            A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
-            A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
+            monen = -one
+         end if
+
+         if ( n_r <= A_mat%ntau ) then
+            A_mat%A1(1,n_r)=rscheme%rnorm
+            A_mat%A1(2,n_r)=rscheme%rnorm*monen
+         else
+            A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm
+            A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*monen
          end if
       end do
 
