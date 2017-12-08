@@ -16,10 +16,8 @@ module update_psi_integ_tmp
    use time_array, only: type_tarray
    use useful, only: abortRun
    use matrix_types, only: type_bordmat_real, type_bandmat_real
-   use chebsparselib, only: rmult2, intcheb1rmult1,     &
-       &                    intcheb2rmult2,  &
-       &                    intcheb2rmult2laplrot, &
-       &                    intcheb2rmult2hmult2lapl,&
+   use chebsparselib, only: rmult2, intcheb1rmult1, intcheb2rmult2,           &
+       &                    intcheb2rmult2laplrot, intcheb2rmult2hmult2lapl,  &
        &                    intcheb2rmult2hmult2, intcheb2rmult2hmult2laplm1, &
        &                    intcheb2rmult2lapl
 
@@ -224,13 +222,19 @@ contains
       !-- Add Ekman pumping as an explicit term if this is requested
       if ( l_ek_pump ) then
          do n_r=1,n_r_max
-            h2 = (r_cmb*r_cmb-r(n_r)*r(n_r))
+            !-- The following statement is required to make sure
+            !-- that h2 remains 0+ even when -O3 is used at the compilation
+            if ( n_r == 1 ) then
+               h2 = 0.0_cp
+            else
+               h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
+            end if
             ekp_fac = CorFac*half*sqrt(ek*r_cmb)*h2**(0.25_cp)
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  domdt%expl(n_m,n_r,1)=    h2*domdt%expl(n_m,n_r,1) -  &
-                  &                       ekp_fac*up_Mloc(n_m,n_r)
+                  ! domdt%expl(n_m,n_r,1)=    h2*domdt%expl(n_m,n_r,1) -  &
+                  ! &                       ekp_fac*up_Mloc(n_m,n_r)
                else 
                   domdt%expl(n_m,n_r,1)=          h2*domdt%expl(n_m,n_r,1) +     &
                   &                            ekp_fac*( -om_Mloc(n_m,n_r) +     &
@@ -277,7 +281,7 @@ contains
       !-- Hence buoyancy has to be multiplied by h^2
       if ( l_ek_pump ) then
          do n_r=1,n_r_max
-            h2 = (r_cmb*r_cmb-r(n_r)*r(n_r))
+            h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
             do n_m=nMstart,nMstop
                buo_imp_Mloc(n_m,n_r)=h2*buo_imp_Mloc(n_m,n_r)
             end do
