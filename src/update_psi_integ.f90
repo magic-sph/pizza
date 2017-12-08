@@ -9,7 +9,7 @@ module update_psi_integ
        &                l_ek_pump, ViscFac, l_coriolis_imp, ek
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
-   use truncation, only: n_r_max, idx2m, m2idx, n_m_max, n_cheb_max ! to be removed
+   use truncation, only: n_r_max, idx2m, m2idx, n_cheb_max
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
    use time_schemes, only: type_tscheme
