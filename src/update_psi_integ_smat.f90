@@ -1,4 +1,4 @@
-module update_psi_integ
+module update_psi_integ_smat
 
    use precision_mod
    use parallel_mod
@@ -39,12 +39,12 @@ module update_psi_integ
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
    type(type_bandmat_real) :: RHSE_mat(2)
 
-   public :: update_psi_int, initialize_psi_integ, finalize_psi_integ, &
-   &         get_psi_rhs_imp_int
+   public :: update_psi_int_smat, initialize_psi_integ_smat,  &
+   &         finalize_psi_integ_smat, get_psi_rhs_imp_int_smat
 
 contains
 
-   subroutine initialize_psi_integ
+   subroutine initialize_psi_integ_smat
       !
       ! Memory allocation
       !
@@ -145,9 +145,9 @@ contains
       bytes_allocated = bytes_allocated + n_cheb_max*(nMstop-nMstart+1)* &
       &                 SIZEOF_DEF_REAL
 
-   end subroutine initialize_psi_integ
+   end subroutine initialize_psi_integ_smat
 !------------------------------------------------------------------------------
-   subroutine finalize_psi_integ
+   subroutine finalize_psi_integ_smat
       !
       ! Memory deallocation
       ! 
@@ -165,12 +165,13 @@ contains
       deallocate( LHS_mat, RHSIL_mat, RHSI_mat )
       deallocate( psifac, rhs, lPsimat )
 
-   end subroutine finalize_psi_integ
+   end subroutine finalize_psi_integ_smat
 !------------------------------------------------------------------------------
-   subroutine update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc, dVsOm_Mloc, &
-              &              buo_imp_Mloc, dpsidt, vp_bal, tscheme,           &
-              &              lMat, l_vphi_bal_calc, time_solve, n_solve_calls,&
-              &              time_lu, n_lu_calls, time_dct, n_dct_calls)
+   subroutine update_psi_int_smat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,         &
+              &                   dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal,    &
+              &                   tscheme, lMat, l_vphi_bal_calc, time_solve,  &
+              &                   n_solve_calls, time_lu, n_lu_calls, time_dct,&
+              &                   n_dct_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -339,9 +340,9 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp_int(psi_Mloc, up_Mloc, dpsidt%old(:,:,1),        &
-           &                   dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc, &
-           &                   tscheme%l_calc_lin_rhs)
+      call get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc, dpsidt%old(:,:,1),        &
+           &                        dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc, &
+           &                        tscheme%l_calc_lin_rhs)
 
 
       !-- Now assemble the right hand side and store it in work_Mloc
@@ -477,10 +478,11 @@ contains
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
 
-   end subroutine update_psi_int
+   end subroutine update_psi_int_smat
 !------------------------------------------------------------------------------
-   subroutine get_psi_rhs_imp_int(psi_Mloc, up_Mloc, psi_old, dpsi_imp_Mloc_last, &
-              &                   vp_bal, l_vphi_bal_calc, l_calc_lin_rhs)
+   subroutine get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc, psi_old,   &
+              &                        dpsi_imp_Mloc_last, vp_bal,   &
+              &                        l_vphi_bal_calc, l_calc_lin_rhs)
 
       !-- Input variables
       complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -608,7 +610,7 @@ contains
 
       end if 
 
-   end subroutine get_psi_rhs_imp_int
+   end subroutine get_psi_rhs_imp_int_smat
 !------------------------------------------------------------------------------
    subroutine get_lhs_mat(tscheme, A_mat, psiMat_fac, m, time_lu, n_lu_calls)
 
@@ -876,7 +878,7 @@ contains
       !-- Cheb factor for boundary conditions
       do n_r=1,A_mat%ntau
          A_mat%A1(n_r,1)                =rscheme%boundary_fac*A_mat%A1(n_r,1)
-         A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
+         ! A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
       end do
 
       !-- Continue to assemble precond matrix
@@ -1129,4 +1131,4 @@ contains
 
    end subroutine get_rhs_imp_lin_mat
 !------------------------------------------------------------------------------
-end module update_psi_integ
+end module update_psi_integ_smat

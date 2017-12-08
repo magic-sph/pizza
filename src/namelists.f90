@@ -37,6 +37,7 @@ module namelists
    character(len=72), public :: time_scale  ! Time unit
    character(len=72), public :: time_scheme ! Time scheme
    character(len=72) :: cheb_method ! Chebyshev method: collocation, integration
+   character(len=72) :: matrix_solve ! Either direct or influence matrix
    character(len=72) :: corio_term   ! Implicit or explicit treatment of Coriolis force
    logical, public :: l_newmap      ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
    logical, public :: l_rerror_fix  ! Switch to fix round-off error in derivative calculation
@@ -75,6 +76,7 @@ module namelists
    logical,  public :: l_AB1
    logical,  public :: l_bridge_step
    logical,  public :: l_cheb_coll     ! Collocation method for Chebs
+   logical,  public :: l_direct_solve  ! Direct solve or influence matrix method
    logical,  public :: l_coriolis_imp  ! Implicit treatment of Coriolis force
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb           ! Outer core radius
@@ -99,7 +101,8 @@ contains
       &                alph1,alph2,dtMax,courfac,tEnd,runHours,     &
       &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
-      &                l_rerror_fix, rerror_fac, time_scale, corio_term
+      &                l_rerror_fix, rerror_fac, time_scale,        &
+      &                matrix_solve,corio_term
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz
@@ -248,12 +251,40 @@ contains
          l_cheb_coll = .false.
       end if
 
+      !-- Determine solver method
+      call capitalize(matrix_solve)
+      if ( index(matrix_solve, 'DIRECT') /= 0 ) then
+         l_direct_solve = .true.
+      else
+         l_direct_solve = .false.
+      end if
+
+      if ( .not. l_direct_solve .and. l_cheb_coll ) then
+         l_direct_solve = .true.
+         if ( rank == 0 ) then
+            write(6, &
+            &    '(" ! Influence matrix method not implemented for collocation")')
+            write(6, &
+            &    '(" ! I switch to direct method")')
+         end if
+      end if
+
       !-- Implicit or Explicit treatment of Coriolis force
       call capitalize(corio_term)
       if ( index(corio_term, 'IMP') /= 0 ) then
          l_coriolis_imp = .true.
       else
          l_coriolis_imp = .false.
+      end if
+
+      if ( .not. l_direct_solve .and. l_coriolis_imp ) then
+         l_coriolis_imp = .false.
+         if ( rank == 0 ) then
+            write(6, &
+            &    '(" ! Implicit Coriolis term not compatible with influence matrix method")')
+            write(6, &
+            &    '(" ! Coriolis term will be treated explicitly")')
+         end if
       end if
 
       !-- Time unit
@@ -309,6 +340,7 @@ contains
                           ! 3: FFTW_EXHAUSTIVE
       time_scheme      ='CNAB2'
       cheb_method      ='colloc'
+      matrix_solve     ='DIRECT'
       l_rerror_fix     =.true.
       rerror_fac       =500.0_cp
       corio_term       ='IMPLICIT' ! Implicit treatment of Coriolis term
@@ -382,6 +414,8 @@ contains
       write(n_out,*) " time_scheme     = """,time_scheme(1:length),""","
       length=length_to_blank(cheb_method)
       write(n_out,*) " cheb_method     = """,cheb_method(1:length),""","
+      length=length_to_blank(matrix_solve)
+      write(n_out,*) " matrix_solve    = """,matrix_solve(1:length),""","
       length=length_to_blank(corio_term)
       write(n_out,*) " corio_term      = """,corio_term(1:length),""","
       write(n_out,'(''  alpha           ='',ES14.6,'','')')   alpha

@@ -1,4 +1,4 @@
-module update_psi_integ_tmp
+module update_psi_integ_dmat
 
    use precision_mod
    use parallel_mod
@@ -46,12 +46,12 @@ module update_psi_integ_tmp
       module procedure get_bc_influence_matrix_real
    end interface get_bc_influence_matrix
 
-   public :: update_psi_int, initialize_psi_integ, finalize_psi_integ, &
-   &         get_psi_rhs_imp_int
+   public :: update_psi_int_dmat, initialize_psi_integ_dmat, &
+   &         finalize_psi_integ_dmat, get_psi_rhs_imp_int_dmat
 
 contains
 
-   subroutine initialize_psi_integ
+   subroutine initialize_psi_integ_dmat
       !
       ! Memory allocation
       !
@@ -132,9 +132,9 @@ contains
       bytes_allocated = bytes_allocated+n_cheb_max*SIZEOF_DEF_COMPLEX
 
 
-   end subroutine initialize_psi_integ
+   end subroutine initialize_psi_integ_dmat
 !------------------------------------------------------------------------------
-   subroutine finalize_psi_integ
+   subroutine finalize_psi_integ_dmat
       !
       ! Memory deallocation
       ! 
@@ -156,12 +156,13 @@ contains
       deallocate( influence_matrix_Mloc )
       deallocate( om2_Mloc, om3_Mloc, psi2_Mloc, psi3_Mloc )
 
-   end subroutine finalize_psi_integ
+   end subroutine finalize_psi_integ_dmat
 !------------------------------------------------------------------------------
-   subroutine update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc, dVsOm_Mloc, &
-              &              buo_imp_Mloc, domdt, vp_bal, tscheme,            &
-              &              lMat, l_vphi_bal_calc, time_solve, n_solve_calls,&
-              &              time_lu, n_lu_calls, time_dct, n_dct_calls)
+   subroutine update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,         &
+              &                   dVsOm_Mloc, buo_imp_Mloc, domdt, vp_bal,     &
+              &                   tscheme, lMat, l_vphi_bal_calc, time_solve,  &
+              &                   n_solve_calls, time_lu, n_lu_calls, time_dct,&
+              &                   n_dct_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -187,7 +188,7 @@ contains
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
       real(cp) :: h2, ekp_fac, runStart, runStop
-      integer :: n_r, n_m, n_cheb, m, file_handle
+      integer :: n_r, n_m, n_cheb, m
 
       if ( lMat ) lPsimat(:)=.false.
 
@@ -322,9 +323,9 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp_int(om_Mloc, up_Mloc, domdt%old(:,:,1),         &
-           &                   domdt%impl(:,:,1), vp_bal, l_vphi_bal_calc, &
-           &                   tscheme%l_calc_lin_rhs)
+      call get_psi_rhs_imp_int_dmat(om_Mloc, up_Mloc, domdt%old(:,:,1),         &
+           &                        domdt%impl(:,:,1), vp_bal, l_vphi_bal_calc, &
+           &                        tscheme%l_calc_lin_rhs)
 
 
       !-- Now assemble the right hand side and store it in work_Mloc
@@ -452,24 +453,11 @@ contains
          call get_influence_matrix(psi2_Mloc, psi3_Mloc, influence_matrix_Mloc)
       end if
 
-      ! open(newunit=file_handle, file='myOms', form='unformatted')
-      ! write(file_handle) r
-      ! write(file_handle) psi_Mloc(4,:)
-      ! write(file_handle) psi2_Mloc(4,:)
-      ! write(file_handle) psi3_Mloc(4,:)
-      ! write(file_handle) om_Mloc(4,:)
-      ! write(file_handle) om2_Mloc(4,:)
-      ! write(file_handle) om3_Mloc(4,:)
-
       !-- Finally assemble psi and omega from intermediate solutions:
       !-- \omega = \omega + c1*\omega_2 + c2*\omega_3
       !-- \psi = \psi + c1*\psi_2 + c2*\psi_3
       call solve_influence_matrix(psi_Mloc, psi2_Mloc, psi3_Mloc, om_Mloc, &
            &                      om2_Mloc, om3_Mloc, influence_matrix_Mloc)
-
-      ! write(file_handle) psi_Mloc(4,:)
-      ! write(file_handle) om_Mloc(4,:)
-      ! close(file_handle)
 
       !-- Bring \psi and \omega back the physical space using DCTs
       runStart = MPI_Wtime()
@@ -522,10 +510,11 @@ contains
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(domdt, nMstart, nMstop, n_r_max)
 
-   end subroutine update_psi_int
+   end subroutine update_psi_int_dmat
 !------------------------------------------------------------------------------
-   subroutine get_psi_rhs_imp_int(om_Mloc, up_Mloc, om_old, dom_imp_Mloc_last, &
-              &                   vp_bal, l_vphi_bal_calc, l_calc_lin_rhs)
+   subroutine get_psi_rhs_imp_int_dmat(om_Mloc, up_Mloc, om_old,  &
+              &                        dom_imp_Mloc_last, vp_bal, &
+              &                        l_vphi_bal_calc, l_calc_lin_rhs)
 
       !-- Input variables
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
@@ -644,7 +633,7 @@ contains
 
       end if 
 
-   end subroutine get_psi_rhs_imp_int
+   end subroutine get_psi_rhs_imp_int_dmat
 !------------------------------------------------------------------------------
    subroutine get_lhs_om_mat(tscheme, A_mat, omMat_fac, m, time_lu, n_lu_calls)
 
@@ -1415,4 +1404,4 @@ contains
 
    end subroutine get_bc_influence_matrix_complex
 !------------------------------------------------------------------------------
-end module update_psi_integ_tmp
+end module update_psi_integ_dmat

@@ -13,15 +13,15 @@ module step_time
    use constants, only: half, one
    use update_temp_coll, only: update_temp_co, get_temp_rhs_imp_coll
    use update_temp_integ, only: update_temp_int, get_temp_rhs_imp_int
-   ! use update_psi_integ, only: update_psi_int, get_psi_rhs_imp_int
-   use update_psi_integ_tmp, only: update_psi_int, get_psi_rhs_imp_int
+   use update_psi_integ_smat, only: update_psi_int_smat, get_psi_rhs_imp_int_smat
+   use update_psi_integ_dmat, only: update_psi_int_dmat, get_psi_rhs_imp_int_dmat
    use update_psi_coll, only: update_om_coll, get_psi_rhs_imp_coll
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
-       &                l_cheb_coll
+       &                l_cheb_coll, l_direct_solve
    use outputs, only: n_log_file, write_outputs, vp_bal
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
    use time_schemes, only: type_tscheme
@@ -264,8 +264,13 @@ contains
             else
                call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,1), &
                     &                    dTdt%impl(:,:,1), .true.)
-               call get_psi_rhs_imp_int(om_Mloc, up_Mloc, dpsidt%old(:,:,1), &
-                    &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
+               if ( l_direct_solve ) then
+                  call get_psi_rhs_imp_int_smat(psi_Mloc,up_Mloc,dpsidt%old(:,:,1),&
+                       &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
+               else
+                  call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,dpsidt%old(:,:,1), &
+                       &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
+               end if
             end if
             old_scheme         =tscheme%time_scheme
             tscheme%time_scheme='CNAB2'
@@ -301,11 +306,21 @@ contains
          else
             call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,     &
                  &               buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
-            call update_psi_int(psi_Mloc, om_Mloc, us_Mloc, up_Mloc, dVsOm_Mloc, &
-                 &              buo_imp_Mloc, dpsidt, vp_bal, tscheme, lMat,     &
-                 &              l_vphi_bal_calc, run_time_solve, n_solve_calls,  &
-                 &              run_time_lu, n_lu_calls, run_time_dct,           &
-                 &              n_dct_calls)
+            if ( l_direct_solve ) then
+               call update_psi_int_smat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
+                 &                      dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal,&
+                 &                      tscheme, lMat, l_vphi_bal_calc,          &
+                 &                      run_time_solve, n_solve_calls,           &
+                 &                      run_time_lu, n_lu_calls, run_time_dct,   &
+                 &                      n_dct_calls)
+            else
+               call update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
+                 &                      dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal,&
+                 &                      tscheme, lMat, l_vphi_bal_calc,          &
+                 &                      run_time_solve, n_solve_calls,           &
+                 &                      run_time_lu, n_lu_calls, run_time_dct,   &
+                 &                      n_dct_calls)
+            end if
          end if
 
          runStop = MPI_Wtime()

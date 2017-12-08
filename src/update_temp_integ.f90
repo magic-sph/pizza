@@ -415,7 +415,7 @@ contains
       !-- Cheb factor for boundary conditions
       do n_r=1,A_mat%ntau
          A_mat%A1(n_r,1)                =rscheme%boundary_fac*A_mat%A1(n_r,1)
-         A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
+         ! A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
       end do
 
       !-- Continue to assemble precond matrix

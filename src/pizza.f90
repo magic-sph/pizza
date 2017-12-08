@@ -13,7 +13,7 @@ program pizza
    use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains, &
        &               nRstart, nRstop
    use namelists, only: read_namelists, write_namelists, tag, time_scheme, &
-       &                l_cheb_coll, l_rerror_fix, rerror_fac
+       &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use radial_functions, only: initialize_radial_functions, &
@@ -25,7 +25,10 @@ program pizza
    use update_temp_coll, only: initialize_temp_coll, finalize_temp_coll
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
    use update_psi_coll, only: initialize_om_coll, finalize_om_coll
-   use update_psi_integ_tmp, only: initialize_psi_integ, finalize_psi_integ
+   use update_psi_integ_smat, only: initialize_psi_integ_smat, &
+       &                            finalize_psi_integ_smat
+   use update_psi_integ_dmat, only: initialize_psi_integ_dmat, &
+       &                            finalize_psi_integ_dmat
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
    use tests, only: solve_laplacian, test_radial_der, solve_biharmo, test_i4
@@ -106,8 +109,12 @@ program pizza
       call initialize_om_coll()
       call initialize_temp_coll()
    else
-      call initialize_psi_integ()
       call initialize_temp_integ()
+      if ( l_direct_solve ) then
+         call initialize_psi_integ_smat()
+      else
+         call initialize_psi_integ_dmat()
+      end if
    end if
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
@@ -169,7 +176,11 @@ program pizza
       call finalize_om_coll()
    else
       call finalize_temp_integ()
-      call finalize_psi_integ()
+      if ( l_direct_solve ) then
+         call finalize_psi_integ_smat()
+      else
+         call finalize_psi_integ_dmat()
+      end if
    end if
    call finalize_radial_loop()
    call finalize_fourier()
