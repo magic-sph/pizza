@@ -10,6 +10,10 @@ import subprocess as sp
 def cleanDir(dir):
     for f in glob.glob('%s/*.test' % dir):
         os.remove(f)
+    for f in glob.glob('%s/*.start' % dir):
+        os.remove(f)
+    for f in glob.glob('%s/*.continue' % dir):
+        os.remove(f)
     if os.path.exists('%s/stdout.out' % dir):
         os.remove('%s/stdout.out' % dir)
     for f in glob.glob('%s/*.pyc' % dir):
@@ -44,9 +48,15 @@ class RotInteg(unittest.TestCase):
         self.startTime = time.time()
         cleanDir(self.dir)
         os.chdir(self.dir)
-        cmd = '%s %s/input.nml' % (self.execCmd, self.dir)
+        cmd = '%s %s/input_start.nml' % (self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
+        cmd = '%s %s/input_continue.nml' % (self.execCmd, self.dir)
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
+                stderr=open(os.devnull, 'wb'))
+        cmd = 'cat e_kin.start e_kin.continue > e_kin.test'
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'))
+
 
     def tearDown(self):
         # Cleaning when leaving

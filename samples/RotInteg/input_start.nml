@@ -5,12 +5,13 @@
  minc       =1,
 /
 &control
- tag        ="test",
+ tag        ="start",
 time_scheme ="CNAB2",
  l_newmap   =.false.,
 n_time_steps=4000,
  dtMax      =1d-1,
  cheb_method="integ",
+ matrix_solve="direct",
 l_rerror_fix=.true.,
  rerror_fac =5d2,
  runMinutes =20,
