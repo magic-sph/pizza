@@ -878,7 +878,9 @@ contains
       !-- Cheb factor for boundary conditions
       do n_r=1,A_mat%ntau
          A_mat%A1(n_r,1)                =rscheme%boundary_fac*A_mat%A1(n_r,1)
-         ! A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
+         if ( A_mat%nlines_band == n_r_max ) then
+            A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
+         end if
       end do
 
       !-- Continue to assemble precond matrix
