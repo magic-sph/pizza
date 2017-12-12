@@ -10,6 +10,7 @@
  n_time_steps =1000,
    dtMax      =1d-3,
    l_non_rot  =.true.,
+  matrix_solve="influence",
 n_fft_optim_lev=2,
 /
  &phys_param
