@@ -15,7 +15,8 @@ module step_time
    use update_temp_integ, only: update_temp_int, get_temp_rhs_imp_int
    use update_psi_integ_smat, only: update_psi_int_smat, get_psi_rhs_imp_int_smat
    use update_psi_integ_dmat, only: update_psi_int_dmat, get_psi_rhs_imp_int_dmat
-   use update_psi_coll, only: update_om_coll, get_psi_rhs_imp_coll
+   use update_psi_coll_dmat, only: update_om_coll_dmat, get_psi_rhs_imp_coll_dmat
+   use update_psi_coll_smat, only: update_om_coll_smat, get_psi_rhs_imp_coll_smat
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
@@ -258,9 +259,17 @@ contains
             if ( l_cheb_coll ) then
                call get_temp_rhs_imp_coll(temp_Mloc,dtemp_Mloc, dTdt%old(:,:,1), &
                     &                     dTdt%impl(:,:,1),.true.)
-               call get_psi_rhs_imp_coll(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,    &
-                    &                    dpsidt%old(:,:,1),dpsidt%impl(:,:,1),   &
-                    &                    vp_bal, l_vphi_bal_calc, .true.)
+               if ( l_direct_solve ) then
+                  call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc,   &
+                       &                         dom_Mloc, dpsidt%old(:,:,1), &
+                       &                         dpsidt%impl(:,:,1), vp_bal,  &
+                       &                         l_vphi_bal_calc, .true.)
+               else
+                  call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc,  &
+                       &                         dpsidt%old(:,:,1),           &
+                       &                         dpsidt%impl(:,:,1), vp_bal,  &
+                       &                         l_vphi_bal_calc, .true.)
+               end if
             else
                call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,1), &
                     &                    dTdt%impl(:,:,1), .true.)
@@ -298,11 +307,21 @@ contains
          if ( l_cheb_coll ) then
             call update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,       &
                  &              buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
-            call update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,    &
-                 &              dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal, tscheme,&
-                 &              lMat, l_vphi_bal_calc, run_time_solve,            &
-                 &              n_solve_calls, run_time_lu, n_lu_calls,           &
-                 &              run_time_dct, n_dct_calls)
+            if ( l_direct_solve ) then
+               call update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,     &
+                    &                   up_Mloc, dVsOm_Mloc, buo_imp_Mloc, dpsidt,&
+                    &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,   &
+                    &                   run_time_solve, n_solve_calls,            &
+                    &                   run_time_lu, n_lu_calls, run_time_dct,    &
+                    &                   n_dct_calls)
+            else
+               call update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,     &
+                    &                   up_Mloc, dVsOm_Mloc, buo_imp_Mloc, dpsidt,&
+                    &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,   &
+                    &                   run_time_solve, n_solve_calls,            &
+                    &                   run_time_lu, n_lu_calls, run_time_dct,    &
+                    &                   n_dct_calls)
+            end if
          else
             call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,     &
                  &               buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)

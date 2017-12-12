@@ -259,16 +259,6 @@ contains
          l_direct_solve = .false.
       end if
 
-      if ( .not. l_direct_solve .and. l_cheb_coll ) then
-         l_direct_solve = .true.
-         if ( rank == 0 ) then
-            write(6, &
-            &    '(" ! Influence matrix method not implemented for collocation")')
-            write(6, &
-            &    '(" ! I switch to direct method")')
-         end if
-      end if
-
       !-- Implicit or Explicit treatment of Coriolis force
       call capitalize(corio_term)
       if ( index(corio_term, 'IMP') /= 0 ) then

@@ -204,7 +204,7 @@ contains
                domdt%expl(n_m,n_r,1)=    domdt%expl(n_m,n_r,1)-   &
                &                     or1(n_r)*work_Mloc(n_m,n_r)
 
-               !-- If Coriolis force is treated explicitly it is added here:
+               !-- If Coriolis force is required it is added here:
                if ( .not. l_non_rot ) then
                   domdt%expl(n_m,n_r,1)=domdt%expl(n_m,n_r,1)-   &
                   &        CorFac*ci*real(m,cp)*psi_Mloc(n_m,n_r)

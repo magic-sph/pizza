@@ -1,4 +1,4 @@
-module update_psi_coll
+module update_psi_coll_smat
 
    use precision_mod
    use parallel_mod
@@ -29,12 +29,12 @@ module update_psi_coll
    complex(cp), allocatable :: rhs(:)
    real(cp), allocatable :: rhs_m0(:)
 
-   public :: update_om_coll, initialize_om_coll, finalize_om_coll, &
-   &         get_psi_rhs_imp_coll
+   public :: update_om_coll_smat, initialize_om_coll_smat, finalize_om_coll_smat, &
+   &         get_psi_rhs_imp_coll_smat
 
 contains
 
-   subroutine initialize_om_coll
+   subroutine initialize_om_coll_smat
 
       allocate( lPsimat(nMstart:nMstop) )
       lPsimat(:)=.false.
@@ -53,19 +53,20 @@ contains
       allocate( uphiMat(n_r_max,n_r_max) )
       bytes_allocated = bytes_allocated+n_r_max*n_r_max*SIZEOF_DEF_REAL
 
-   end subroutine initialize_om_coll
+   end subroutine initialize_om_coll_smat
 !------------------------------------------------------------------------------
-   subroutine finalize_om_coll
+   subroutine finalize_om_coll_smat
 
       deallocate( rhs_m0, rhs, psiMat_fac )
       deallocate( lPsimat, psiMat, uphiMat, psiPivot )
 
-   end subroutine finalize_om_coll
+   end subroutine finalize_om_coll_smat
 !------------------------------------------------------------------------------
-   subroutine update_om_coll(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc,      &
-              &              dVsOm_Mloc,  buo_imp_Mloc, dpsidt, vp_bal, tscheme, &
-              &              lMat, l_vphi_bal_calc, time_solve, n_solve_calls,   &
-              &              time_lu, n_lu_calls, time_dct, n_dct_calls)
+   subroutine update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc, &
+              &                   dVsOm_Mloc,  buo_imp_Mloc, dpsidt, vp_bal,     &
+              &                   tscheme, lMat, l_vphi_bal_calc, time_solve,    &
+              &                   n_solve_calls, time_lu, n_lu_calls, time_dct,  &
+              &                   n_dct_calls)
 
       !-- Input variables
       type(type_tscheme), intent(in) :: tscheme
@@ -116,9 +117,10 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp_coll(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,       &
-           &                    dpsidt%old(:,:,1), dpsidt%impl(:,:,1),     &
-           &                    vp_bal, l_vphi_bal_calc, tscheme%l_calc_lin_rhs)
+      call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,    &
+           &                         dpsidt%old(:,:,1), dpsidt%impl(:,:,1),  &
+           &                         vp_bal, l_vphi_bal_calc,                &
+           &                         tscheme%l_calc_lin_rhs)
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
@@ -256,11 +258,11 @@ contains
       !-- Roll the time arrays before filling again the first block
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
 
-   end subroutine update_om_coll
+   end subroutine update_om_coll_smat
 !------------------------------------------------------------------------------
-   subroutine get_psi_rhs_imp_coll(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,     &
-              &                    psi_last, dpsi_imp_Mloc_last, vp_bal,    &
-              &                    l_vphi_bal_calc, l_calc_lin_rhs)
+   subroutine get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,  &
+              &                         psi_last, dpsi_imp_Mloc_last, vp_bal, &
+              &                         l_vphi_bal_calc, l_calc_lin_rhs)
 
       !-- Input variables
       complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
@@ -339,7 +341,7 @@ contains
 
       end if ! if wimp /= .or. l_vphi_bal_calc
 
-   end subroutine get_psi_rhs_imp_coll
+   end subroutine get_psi_rhs_imp_coll_smat
 !------------------------------------------------------------------------------
    subroutine get_psiMat(tscheme, m, psiMat, psiPivot, psiMat_fac, time_lu, &
               &          n_lu_calls)
@@ -556,4 +558,4 @@ contains
 
    end subroutine get_uphiMat
 !------------------------------------------------------------------------------
-end module update_psi_coll
+end module update_psi_coll_smat

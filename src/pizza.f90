@@ -24,7 +24,8 @@ program pizza
    use rloop, only: initialize_radial_loop, finalize_radial_loop
    use update_temp_coll, only: initialize_temp_coll, finalize_temp_coll
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
-   use update_psi_coll, only: initialize_om_coll, finalize_om_coll
+   use update_psi_coll_smat, only: initialize_om_coll_smat, finalize_om_coll_smat
+   use update_psi_coll_dmat, only: initialize_om_coll_dmat, finalize_om_coll_dmat
    use update_psi_integ_smat, only: initialize_psi_integ_smat, &
        &                            finalize_psi_integ_smat
    use update_psi_integ_dmat, only: initialize_psi_integ_dmat, &
@@ -104,10 +105,24 @@ program pizza
    call initialize_radial_loop(n_phi_max)
    call memWrite('R loop', local_bytes_used)
    local_bytes_used = bytes_allocated-local_bytes_used
+
+
+   if ( rank == 0 ) then
+      call write_namelists(6)
+      call write_namelists(n_log_file)
+   end if
+
+   !-- Pre calculations has to be done before matrix initialisation
+   call preCalc()
+
    local_bytes_used = bytes_allocated
    if ( l_cheb_coll ) then
-      call initialize_om_coll()
       call initialize_temp_coll()
+      if ( l_direct_solve ) then
+         call initialize_om_coll_smat()
+      else
+         call initialize_om_coll_dmat()
+      end if
    else
       call initialize_temp_integ()
       if ( l_direct_solve ) then
@@ -118,16 +133,7 @@ program pizza
    end if
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
-
    call finalize_memory_counter()
-
-   if ( rank == 0 ) then
-      call write_namelists(6)
-      call write_namelists(n_log_file)
-   end if
-
-   !-- Pre calculations
-   call preCalc()
 
    !-- Start fields
    call get_start_fields(time, tscheme)
@@ -173,7 +179,11 @@ program pizza
    !-- Close files
    if ( l_cheb_coll ) then
       call finalize_temp_coll()
-      call finalize_om_coll()
+      if ( l_direct_solve ) then
+         call finalize_om_coll_smat()
+      else
+         call finalize_om_coll_dmat()
+      end if
    else
       call finalize_temp_integ()
       if ( l_direct_solve ) then
