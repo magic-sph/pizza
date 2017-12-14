@@ -153,3 +153,4 @@ def fast_read(file, skiplines=0, binary=False, precision='Float64'):
         X = np.array(X, dtype=precision)
         f.close()
     return X
+

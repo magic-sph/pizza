@@ -234,8 +234,8 @@ contains
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  ! domdt%expl(n_m,n_r,1)=    h2*domdt%expl(n_m,n_r,1) -  &
-                  ! &                       ekp_fac*up_Mloc(n_m,n_r)
+                  domdt%expl(n_m,n_r,1)=    h2*domdt%expl(n_m,n_r,1) -  &
+                  &                       ekp_fac*up_Mloc(n_m,n_r)
                else 
                   domdt%expl(n_m,n_r,1)=          h2*domdt%expl(n_m,n_r,1) +     &
                   &                            ekp_fac*( -om_Mloc(n_m,n_r) +     &

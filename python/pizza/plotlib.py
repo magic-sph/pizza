@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import matplotlib.pyplot as plt
-
+from mpl_toolkits.mplot3d import Axes3D
 
 def cut(dat, vmax=None, vmin=None):
     """
@@ -153,3 +153,48 @@ def equatContour(data, radius, minc=1, label=None, levels=65,
                      max(abs(data.max()), abs(data.min())))
 
     return fig, xx, yy
+
+def spec2D(field_m, n_cheb_max=None):
+    """
+    This subroutine allows to display one 2-D spectrum in the Fourier/Chebyshev
+    space
+
+    :param field_m: the input array in Fourier/Chebyshev space
+    :type field_m: numpy.ndarray
+    :param n_cheb_max: the maximum Chebyshev degree (in case one does not want
+                       to display up to n_r_max)
+    :type n_cheb_max: int
+
+    >>> f = PizzaFields(tag='test', ivar=1)
+    >>> om_hat = costf(f.vortz_m)
+    >>> spec2D(om_hat)
+    """
+    n_m_max, n_r_max = field_m.shape
+    if n_cheb_max is None:
+        n_cheb_max = n_r_max
+
+    x = np.arange(n_m_max-1)+1
+    x = np.log10(x)
+    y = np.arange(n_cheb_max)+1
+    y = np.log10(y)
+
+    xx, yy = np.meshgrid(y, x)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    eps = 1e-15
+    eps = 1e-15
+    dat = np.log10(abs(field_m[1:,:n_cheb_max])+eps)
+    im = ax.plot_surface(xx, yy, dat, cmap=plt.get_cmap('magma'),
+                         antialiased=False, linewidth=0.)
+    ax.set_ylabel(r'$\log_{10}(m)$')
+    ax.set_xlabel(r'$\log_{10}(N_c+1)$')
+    ax.set_zlabel(r'$\log_{10}(|\hat{f}_m|)$')
+    vmax = dat.max()
+    vmin = dat.min()
+    ax.set_zlim(vmin+0.5, vmax+0.5)
+    ax.view_init(30, 60)
+    fig.colorbar(im)
+    fig.tight_layout()
+
+

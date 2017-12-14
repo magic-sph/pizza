@@ -35,7 +35,7 @@ class RotInteg(unittest.TestCase):
         self.precision = precision
         self.execCmd = execCmd
         self.startDir = os.getcwd()
-        self.description = "QG calculation without Ek-pumping, Cheb integration method"
+        self.description = "QG calculations, Cheb integration method"
 
     def list2reason(self, exc_list):
         if exc_list and exc_list[-1][0] is self:
