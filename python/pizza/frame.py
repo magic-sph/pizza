@@ -3,6 +3,18 @@ from .npfile import *
 import numpy as np
 from .plotlib import equatContour
 from .libpizza import spec_spat, symmetrize
+import scipy.interpolate as inp
+
+def my_interp2d(f, rad, radnew):
+    r = rad[::-1]
+    rnew = radnew[::-1]
+    fnew = np.zeros_like(f)
+    for i in range(f.shape[0]):
+        val = f[i, ::-1]
+        tckp = inp.splrep(r, val)
+        fnew[i, :] = inp.splev(rnew, tckp)
+    
+    return fnew[:, ::-1]
 
 
 class Frame:
@@ -74,7 +86,8 @@ class PizzaFields:
         self.vortz = spec_spat(self.vortz_m, self.n_phi_max)
 
     def equat(self, field='vort', cm='seismic', levels=65, deminc=True,
-              normed=True, vmax=None, vmin=None, normRad=False):
+              normed=True, vmax=None, vmin=None, normRad=False, stream=False,
+              streamNorm='vel', streamDensity=1.5):
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
             data = self.vortz
@@ -88,6 +101,35 @@ class PizzaFields:
         if deminc:
             data = symmetrize(data, ms=self.minc)
 
-        equatContour(data, self.radius, minc=self.minc, levels=levels,
-                     cm=cm, deminc=deminc, normed=normed, vmax=vmax, vmin=vmin,
-                     normRad=normRad)
+        fig, xx, yy = equatContour(data, self.radius, minc=self.minc, levels=levels,
+                          cm=cm, deminc=deminc, normed=normed, vmax=vmax, vmin=vmin,
+                          normRad=normRad)
+        if stream:
+            ax = fig.get_axes()[0]
+            bbox = ax.get_position()
+            ax1 = fig.add_axes(bbox, polar=True)
+            ax1.axis('off')
+
+            if deminc:
+                theta = np.linspace(-np.pi, np.pi, data.shape[0])
+            else:
+                theta = np.linspace(-np.pi/minc, np.pi/minc, data.shape[0])
+
+            rad = np.linspace(self.radius[0], self.radius[-1], data.shape[1])
+            rr, ttheta = np.meshgrid(rad, theta)
+            if deminc:
+                u = symmetrize(self.us, self.minc)
+                v = symmetrize(self.uphi,self.minc)
+            v /= self.radius
+            
+            u = my_interp2d(u, self.radius, rad)
+            v = my_interp2d(v, self.radius, rad)
+            speed = np.sqrt(u**2+v**2)
+
+            if streamNorm == 'vel':
+                lw = 3.*speed.T/speed.max()
+            else:
+                lw = 3.*abs(data.T)/abs(self.vortz).max()
+            ax1.streamplot(ttheta.T, rr.T, v.T, u.T, density=streamDensity,
+                           linewidth=lw, color='k')
+            ax1.set_ylim(0., rad.max())
