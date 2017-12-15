@@ -87,12 +87,14 @@ class PizzaFields:
 
     def equat(self, field='vort', cm='seismic', levels=65, deminc=True,
               normed=True, vmax=None, vmin=None, normRad=False, stream=False,
-              streamNorm='vel', streamDensity=1.5):
+              streamNorm='vel', streamDensity=1.5, cbar=True, label=None):
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
             data = self.vortz
         elif field in ('temperature', 'Temperature', 'temp', 'Temp', 't', 'T'):
             data = self.temp
+        elif field in ('tfluct', 'tempfluct'):
+            data = self.temp-self.temp_m[0,:]
         elif field in ('us', 'Us', 'ur', 'Ur', 'vs', 'Vs', 'Vr', 'vr'):
             data = self.us
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
@@ -101,25 +103,42 @@ class PizzaFields:
         if deminc:
             data = symmetrize(data, ms=self.minc)
 
-        fig, xx, yy = equatContour(data, self.radius, minc=self.minc, levels=levels,
+        self.fig, xx, yy = equatContour(data, self.radius, minc=self.minc, levels=levels,
                           cm=cm, deminc=deminc, normed=normed, vmax=vmax, vmin=vmin,
-                          normRad=normRad)
+                          normRad=normRad, cbar=cbar, label=label)
         if stream:
-            ax = fig.get_axes()[0]
+            ax = self.fig.get_axes()[0]
             bbox = ax.get_position()
-            ax1 = fig.add_axes(bbox, polar=True)
+            # For now matplotlib polar plots do not handle theta_min
+            # theta_max (set_xlim does not work)
+            # As a trick I simply shift the polar Axes outside the domain
+            # when minc /= 1
+            if not deminc:
+                a = bbox.bounds[0]
+                b = bbox.bounds[1]
+                c = bbox.bounds[2]
+                d = bbox.bounds[3]
+                if self.minc == 2:
+                    bbox.bounds = (a, b-d, c, 2*d)
+                elif self.minc == 4:
+                    bbox.bounds = (a-c, b-d, 2*c, 2*d)
+            ax1 = self.fig.add_axes(bbox, polar=True)
             ax1.axis('off')
 
             if deminc:
-                theta = np.linspace(-np.pi, np.pi, data.shape[0])
+                #theta = np.linspace(-np.pi, np.pi, data.shape[0])
+                theta = np.linspace(0., 2.*np.pi, data.shape[0])
             else:
-                theta = np.linspace(-np.pi/minc, np.pi/minc, data.shape[0])
+                theta = np.linspace(0., 2*np.pi/self.minc, data.shape[0])
 
             rad = np.linspace(self.radius[0], self.radius[-1], data.shape[1])
             rr, ttheta = np.meshgrid(rad, theta)
             if deminc:
                 u = symmetrize(self.us, self.minc)
                 v = symmetrize(self.uphi,self.minc)
+            else:
+                u = self.us
+                v = self.uphi
             v /= self.radius
             
             u = my_interp2d(u, self.radius, rad)

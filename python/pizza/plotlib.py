@@ -34,7 +34,7 @@ def cut(dat, vmax=None, vmin=None):
 
 def equatContour(data, radius, minc=1, label=None, levels=65,
                  cm='seismic', normed=True, vmax=None, vmin=None, cbar=True,
-                 tit=True, normRad=False, deminc=True):
+                 tit=True, normRad=False, deminc=True, stream=False):
     """
     Plot the equatorial cut of a given field
 
@@ -99,6 +99,11 @@ def equatContour(data, radius, minc=1, label=None, levels=65,
         else:
             fig = plt.figure(figsize=(5, 5))
             ax = fig.add_axes([0.01, 0.01, 0.98, 0.98])
+
+    if not deminc:
+        if minc == 2:
+            w, h = fig.get_size_inches()
+            fig.set_size_inches((2*w, h))
 
     cmap = plt.get_cmap(cm)
     if vmax is not None or vmin is not None:
