@@ -193,7 +193,7 @@ contains
             c_r = amp_t*gasp(n_r)
             do n_phi=1,n_phi_max
                phi = (n_phi-1)*two*pi/minc/(n_phi_max)
-               phi_func(n_phi)=c_r*exp(-(phi-phi0)**2/(0.2_cp/minc)**2)
+               phi_func(n_phi)=c_r*exp(-(phi-phi0)**2/0.2_cp**2)
             end do
 
             !-- temp_Rloc is used as a work r-distributed array here
