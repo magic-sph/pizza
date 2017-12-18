@@ -48,21 +48,21 @@ contains
 
       !-- Output variables
       complex(cp), intent(inout) :: rhs(n) ! on input RHS of problem
-      !real(cp) :: tmp_real(n), tmp_imag(n)
-      integer :: info!, n_r
+      real(cp) :: tmp_real(n), tmp_imag(n)
+      integer :: info, n_r
 
 #if (DEFAULT_PRECISION==sngl)
       call cgetrs('N',n,1,cmplx(a,0.0_cp,kind=cp),len_a,pivot,rhs,n,info)
 #elif (DEFAULT_PRECISION==dble)
-      call zgetrs('N',n,1,cmplx(a,0.0_cp,kind=cp),len_a,pivot,rhs,n,info)
-      ! tmp_real(:)=real(rhs(:))
-      ! tmp_imag(:)=aimag(rhs(:))
-      ! call dgetrs('N',n,1,a,len_a,pivot,tmp_real,n,info)
-      ! call dgetrs('N',n,1,a,len_a,pivot,tmp_imag,n,info)
-! 
-      ! do n_r=1,n
-         ! rhs(n_r)=cmplx(tmp_real(n_r), tmp_imag(n_r), kind=cp)
-      ! end do
+      ! call zgetrs('N',n,1,cmplx(a,0.0_cp,kind=cp),len_a,pivot,rhs,n,info)
+      tmp_real(:)=real(rhs(:))
+      tmp_imag(:)=aimag(rhs(:))
+      call dgetrs('N',n,1,a,len_a,pivot,tmp_real,n,info)
+      call dgetrs('N',n,1,a,len_a,pivot,tmp_imag,n,info)
+
+      do n_r=1,n
+         rhs(n_r)=cmplx(tmp_real(n_r), tmp_imag(n_r), kind=cp)
+      end do
 #endif
 
    end subroutine solve_full_mat_real_rhs_complex
