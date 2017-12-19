@@ -14,7 +14,6 @@ module truncation
    integer, public :: n_m_max
    integer, public :: n_phi_max
    integer, public :: n_phi_tot
-   integer, public :: n_m_max_real
    integer, allocatable, public :: idx2m(:)
    integer, allocatable, public :: m2idx(:)
 
@@ -27,7 +26,6 @@ contains
       integer :: n_m, m
 
       n_m_max = m_max/minc+1
-      n_m_max_real = 2*n_m_max
 
       n_phi_tot = 3*m_max!+1
       n_phi_max = n_phi_tot/minc
