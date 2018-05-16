@@ -221,14 +221,14 @@ contains
 !----------------------------------------------------------------------------
    real(cp) function round_off(param)
 
-   !-- Input variable
-   real(cp), intent(in) :: param
+      !-- Input variable
+      real(cp), intent(in) :: param
 
-   if ( abs(param) < tiny_number ) then
-      round_off = 0.0_cp
-   else
-      round_off = param
-   end if
+      if ( abs(param) < tiny_number ) then
+         round_off = 0.0_cp
+      else
+         round_off = param
+      end if
 
    end function round_off
 !----------------------------------------------------------------------------
