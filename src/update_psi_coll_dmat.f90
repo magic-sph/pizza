@@ -199,7 +199,6 @@ contains
 
             if ( l_vphi_bal_calc ) then
                do n_r=1,n_r_max
-                  vp_bal%dvpdt(n_r)     =real(up_Mloc(n_m,n_r))/tscheme%dt(1)
                   vp_bal%rey_stress(n_r)=real(dpsidt%expl(n_m,n_r,tscheme%istage))
                end do
             end if
@@ -281,12 +280,6 @@ contains
       if ( l_rank_has_m0 ) then
          call rscheme%costf1(uphi0, n_r_max)
          call get_dr(uphi0, om0, n_r_max, rscheme)
-
-         if ( l_vphi_bal_calc ) then
-            do n_r=1,n_r_max
-               vp_bal%dvpdt(n_r)=uphi0(n_r)/tscheme%dt(1)-vp_bal%dvpdt(n_r)
-            end do
-         end if
       end if
 
       !-- Copy omega into work (it allows to keep omega in Cheb space)

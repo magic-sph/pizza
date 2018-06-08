@@ -46,7 +46,7 @@ module outputs
    type(vp_bal_type), public :: vp_bal
 
    public :: initialize_outputs, finalize_outputs, get_time_series, &
-   &         write_outputs
+   &         write_outputs, terminate_vp_bal
 
 contains
 
@@ -129,10 +129,10 @@ contains
 
    end subroutine finalize_outputs
 !------------------------------------------------------------------------------
-   subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst,        &
-              &             l_spec, l_frame, l_vphi_bal_write, l_stop_time,  &
-              &             us_Mloc, up_Mloc, om_Mloc, temp_Mloc, dtemp_Mloc,&
-              &             dpsidt, dTdt)
+   subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst,          &
+              &             l_spec, l_frame, l_vphi_bal_calc, l_vphi_bal_write,&
+              &             l_stop_time,  us_Mloc, up_Mloc, om_Mloc, temp_Mloc,&
+              &             dtemp_Mloc, dpsidt, dTdt)
 
       !-- Input variables
       real(cp),            intent(in) :: time
@@ -142,17 +142,19 @@ contains
       logical,             intent(in) :: l_rst
       logical,             intent(in) :: l_spec
       logical,             intent(in) :: l_frame
+      logical,             intent(in) :: l_vphi_bal_calc
       logical,             intent(in) :: l_vphi_bal_write
       logical,             intent(in) :: l_stop_time
       complex(cp),         intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
-      type(type_tarray),  intent(in) :: dpsidt
-      type(type_tarray),  intent(in) :: dTdt
+      complex(cp),         intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      type(type_tarray),   intent(in) :: dpsidt
+      type(type_tarray),   intent(in) :: dTdt
 
       !-- Local variable
+      integer :: m0, n_r
       character(len=144) :: frame_name
       character(len=144) :: spec_name
 
@@ -192,6 +194,13 @@ contains
               &               dtemp_Mloc)
 
          call get_radial_averages(timeAvg, l_stop_time, up_Mloc, temp_Mloc)
+      end if
+
+      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
+         m0 = m2idx(0)
+         do n_r=1,n_r_max
+            vp_bal%dvpdt(n_r)=real(up_Mloc(m0,n_r))/tscheme%dt(1)
+         end do
       end if
 
    end subroutine write_outputs
@@ -459,5 +468,26 @@ contains
       end if
 
    end subroutine write_spectra
+!------------------------------------------------------------------------------
+   subroutine terminate_vp_bal(up_Mloc, vphi_bal, tscheme)
+
+      !-- Input variable
+      complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      class(type_tscheme), intent(in) :: tscheme
+
+      !-- Output variable
+      type(vp_bal_type), intent(inout) :: vphi_bal
+
+      !-- Local variables
+      integer :: n_r, m0
+
+      if ( l_rank_has_m0 ) then
+         m0 = m2idx(0)
+         do n_r=1,n_r_max
+            vphi_bal%dvpdt(n_r)=real(up_Mloc(m0,n_r))/tscheme%dt(1)-vphi_bal%dvpdt(n_r)
+         end do
+      end if
+
+   end subroutine terminate_vp_bal
 !------------------------------------------------------------------------------
 end module outputs
