@@ -1,0 +1,41 @@
+&grid
+   n_r_max    =32,
+   n_cheb_max =32,
+   m_max      =32,
+   minc       =1,
+/
+&control
+   tag        ="final",
+   l_newmap   =.false.,
+   time_scheme="MODCNAB",
+ n_time_steps =300,
+   dtMax      =1d-4,
+  l_rerror_fix=.false.,
+/
+ &phys_param
+  ra          =4.0E+04,
+  pr          =1.0E+00,
+  ek          =1.00E-03,
+  radratio    =3.50E-01,
+  g0          =0.00E+00,
+  g1          =1.00E+00,
+  g2          =0.00E+00,
+  ktopt       =1,
+  kbott       =1,
+  ktopv       =2,
+  kbotv       =2,
+  l_ek_pump   =.true.,
+ /
+ &start_field
+  l_start_file=.true.,
+  start_file  ="checkpoint_end.fourth_continue",
+  init_t      =0,
+  amp_t       =2.5e-4,
+  init_u      =0,
+  amp_u       =3.0e-4,
+/
+&output_control
+  n_log_step  =1,
+  n_frames    =1,
+  n_specs     =1,
+/
