@@ -66,10 +66,10 @@ contains
               &              buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme
-      logical,            intent(in) :: lMat
-      logical,            intent(in) :: l_log_next
-      complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
+      class(type_tscheme), intent(in) :: tscheme
+      logical,             intent(in) :: lMat
+      logical,             intent(in) :: l_log_next
+      complex(cp),         intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Output variables
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
@@ -90,16 +90,16 @@ contains
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
-            dTdt%expl(n_m,n_r,1)=dTdt%expl(n_m,n_r,1)             &
-            &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
-            &                     -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
-            &                     tadvz_fac*beta(n_r)*tcond(n_r))
+            dTdt%expl(n_m,n_r,tscheme%istage)=dTdt%expl(n_m,n_r,tscheme%istage)    &
+            &                                      -or1(n_r)*work_Mloc(n_m,n_r)    &
+            &                                      -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
+            &                                   tadvz_fac*beta(n_r)*tcond(n_r))
          end do
       end do
 
       !-- Calculation of the implicit part
-      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt%old(:,:,1), &
-           &                     dTdt%impl(:,:,1), tscheme%l_calc_lin_rhs)
+      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt%old(:,:,tscheme%istage), &
+           &                     dTdt%impl(:,:,tscheme%istage), tscheme%l_calc_lin_rhs)
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
@@ -129,8 +129,7 @@ contains
          end do
 #endif
 
-         call solve_full_mat(tMat(:,:,n_m), n_r_max, n_r_max, tPivot(:, n_m), &
-              &              rhs(:))
+         call solve_full_mat(tMat(:,:,n_m), n_r_max, n_r_max, tPivot(:, n_m), rhs(:))
 
          do n_r_out=1,rscheme%n_max
             temp_Mloc(n_m, n_r_out)=rhs(n_r_out)
@@ -149,22 +148,8 @@ contains
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Assemble buoyancy
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(1)*rgrav(n_r)*   &
-               &                     or1(n_r)*BuoFac*ci*real(m,cp)*     &
-               &                     temp_Mloc(n_m,n_r)
-               do n_o = 1,tscheme%norder_imp_lin-1
-                  buo_imp_Mloc(n_m,n_r)=buo_imp_Mloc(n_m,n_r)-             &
-                  &                     tscheme%wimp_lin(n_o+1)*rgrav(n_r)*&
-                  &                     or1(n_r)*BuoFac*ci*real(m,cp)*     &
-                  &                     dTdt%old(n_m,n_r,n_o)
-               end do
-            end if
-         end do
-      end do
+      call tscheme%assemble_implicit_buo(buo_imp_Mloc, temp_Mloc, dTdt, BuoFac, &
+           &                             rgrav, nMstart, nMstop, n_r_max)
 
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dTdt, nMstart, nMstop, n_r_max)
@@ -223,8 +208,8 @@ contains
 #endif
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme        ! time step
-      integer,            intent(in) :: m
+      class(type_tscheme), intent(in) :: tscheme        ! time step
+      integer,             intent(in) :: m
 
       !-- Output variables
       real(cp), intent(out) :: tMat(n_r_max,n_r_max)
@@ -247,14 +232,11 @@ contains
             tMat(1,nR_out)=rscheme%rnorm*rscheme%drMat(1,nR_out)
          end if
          if ( kbott == 1 ) then
-            tMat(n_r_max,nR_out)=rscheme%rnorm* &
-            &                     rscheme%rMat(n_r_max,nR_out)
+            tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
          else
-            tMat(n_r_max,nR_out)=rscheme%rnorm* &
-            &                     rscheme%drMat(n_r_max,nR_out)
+            tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
          end if
       end do
-
 
       if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
          do nR_out=rscheme%n_max+1,n_r_max

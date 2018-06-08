@@ -30,6 +30,7 @@ program pizza
        &                            finalize_psi_integ_smat
    use update_psi_integ_dmat, only: initialize_psi_integ_dmat, &
        &                            finalize_psi_integ_dmat
+   use select_time_scheme
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
    use tests, only: solve_laplacian, test_radial_der, solve_biharmo, test_i4
@@ -37,7 +38,7 @@ program pizza
    implicit none
 
    real(cp) :: time
-   type(type_tscheme) :: tscheme
+   class(type_tscheme), pointer :: tscheme
    real(cp) :: runStop, runStart
    integer(lip) :: local_bytes_used
    integer :: values(8)
@@ -62,6 +63,9 @@ program pizza
 
    !-- Read input parameters
    call read_namelists()
+
+   !-- Select the kind of time-integrator (multi-step or implicit R-K):
+   call select_tscheme(time_scheme, tscheme)
 
    !-- Init memory counter
    call initialize_memory_counter(tag)

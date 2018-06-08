@@ -135,18 +135,18 @@ contains
               &             dpsidt, dTdt)
 
       !-- Input variables
-      real(cp),           intent(in) :: time
-      type(type_tscheme), intent(in) :: tscheme
-      integer,            intent(in) :: n_time_step
-      logical,            intent(in) :: l_log
-      logical,            intent(in) :: l_rst
-      logical,            intent(in) :: l_spec
-      logical,            intent(in) :: l_frame
-      logical,            intent(in) :: l_vphi_bal_write
-      logical,            intent(in) :: l_stop_time
-      complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
+      real(cp),            intent(in) :: time
+      class(type_tscheme), intent(in) :: tscheme
+      integer,             intent(in) :: n_time_step
+      logical,             intent(in) :: l_log
+      logical,             intent(in) :: l_rst
+      logical,             intent(in) :: l_spec
+      logical,             intent(in) :: l_frame
+      logical,             intent(in) :: l_vphi_bal_write
+      logical,             intent(in) :: l_stop_time
+      complex(cp),         intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
       type(type_tarray),  intent(in) :: dpsidt

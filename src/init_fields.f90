@@ -31,11 +31,12 @@ contains
    subroutine get_start_fields(time, tscheme)
 
       !-- Output variables
-      real(cp),           intent(out) :: time
-      type(type_tscheme), intent(inout) :: tscheme
+      real(cp),            intent(out) :: time
+      class(type_tscheme), intent(inout) :: tscheme
 
       !-- Local variables
-      integer :: m, n_r, n_m, n_o
+      integer :: m, n_r, n_m
+      logical :: lMat
       real(cp) :: h2
       character(len=76) :: message
 
@@ -77,9 +78,7 @@ contains
          call dTdt%set_initial_values()
 
          time=0.0_cp
-         do n_o=1,tscheme%norder_exp
-            tscheme%dt(n_o)=dtMax
-         end do
+         tscheme%dt(:)=dtMax
 
          if (rank == 0) write(message,'(''! Using dtMax time step:'',ES16.6)') dtMax
          call logWrite(message, n_log_file)
@@ -87,7 +86,7 @@ contains
       end if
 
       !-- Initialize the weights of the time scheme
-      call tscheme%set_weights()
+      call tscheme%set_weights(lMat)
 
       if ( init_t /= 0 ) call initT(temp_Mloc)
 

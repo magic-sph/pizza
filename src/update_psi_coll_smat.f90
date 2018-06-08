@@ -69,10 +69,10 @@ contains
               &                   n_dct_calls)
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme
-      logical,            intent(in) :: lMat
-      logical,            intent(in) :: l_vphi_bal_calc
-      complex(cp),        intent(in) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
+      class(type_tscheme), intent(in) :: tscheme
+      logical,             intent(in) :: lMat
+      logical,             intent(in) :: l_vphi_bal_calc
+      complex(cp),         intent(in) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -105,12 +105,12 @@ contains
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsidt%expl(n_m,n_r,1)=  dpsidt%expl(n_m,n_r,1)-   &
-               &                     or1(n_r)*work_Mloc(n_m,n_r)
+               dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage)-  &
+               &                                   or1(n_r)*work_Mloc(n_m,n_r)
                !-- If Coriolis is treated explicitly, add it here:
                if ( .not. l_coriolis_imp ) then
-                  dpsidt%expl(n_m,n_r,1)=dpsidt%expl(n_m,n_r,1) &
-                  &            +CorFac*beta(n_r)*us_Mloc(n_m,n_r)
+                  dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage) &
+                  &                                   +CorFac*beta(n_r)*us_Mloc(n_m,n_r)
                end if
             end if
          end do
@@ -118,13 +118,13 @@ contains
 
       !-- Calculation of the implicit part
       call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,    &
-           &                         dpsidt%old(:,:,1), dpsidt%impl(:,:,1),  &
+           &                         dpsidt%old(:,:,tscheme%istage),         &
+           &                         dpsidt%impl(:,:,tscheme%istage),        &
            &                         vp_bal, l_vphi_bal_calc,                &
            &                         tscheme%l_calc_lin_rhs)
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
-
 
       do n_m=nMstart,nMstop
 
@@ -146,7 +146,7 @@ contains
             if ( l_vphi_bal_calc ) then
                do n_r=1,n_r_max
                   vp_bal%dvpdt(n_r)     =real(up_Mloc(n_m,n_r))/tscheme%dt(1)
-                  vp_bal%rey_stress(n_r)=real(dpsidt%expl(n_m,n_r,1))
+                  vp_bal%rey_stress(n_r)=real(dpsidt%expl(n_m,n_r,tscheme%istage))
                end do
             end if
 
@@ -347,8 +347,8 @@ contains
               &          n_lu_calls)
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme
-      integer,  intent(in) :: m
+      class(type_tscheme), intent(in) :: tscheme
+      integer,             intent(in) :: m
 
       !-- Output variables
       complex(cp), intent(out) :: psiMat(2*n_r_max,2*n_r_max)
@@ -497,7 +497,7 @@ contains
    subroutine get_uphiMat(tscheme, uphiMat, uphiPivot)
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme
+      class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
       real(cp), intent(out) :: uphiMat(n_r_max,n_r_max)

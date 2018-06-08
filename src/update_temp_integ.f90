@@ -86,10 +86,10 @@ contains
               &               buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme
-      logical,            intent(in) :: lMat
-      logical,            intent(in) :: l_log_next
-      complex(cp),        intent(in) :: psi_Mloc(nMstart:nMstop, n_r_max)
+      class(type_tscheme), intent(in) :: tscheme
+      logical,             intent(in) :: lMat
+      logical,             intent(in) :: l_log_next
+      complex(cp),         intent(in) :: psi_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Output variables
       complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
@@ -124,10 +124,9 @@ contains
          do n_r=1,n_r_max
             do n_m=nMstart, nMstop
                m = idx2m(n_m)
-               dTdt%expl(n_m,n_r,1)=dTdt%expl(n_m,n_r,1)             &
-               &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
-               &             -ci*real(m,cp)*or1(n_r)*dtcond(n_r)*    &
-               &                                psi_Mloc(n_m,n_r)
+               dTdt%expl(n_m,n_r,tscheme%istage)=dTdt%expl(n_m,n_r,tscheme%istage)   &
+               &                                      -or1(n_r)*work_Mloc(n_m,n_r)   &
+               &             -ci*real(m,cp)*or1(n_r)*dtcond(n_r)*psi_Mloc(n_m,n_r)
             end do
          end do
       else ! this is rotating
@@ -135,22 +134,21 @@ contains
             h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
             do n_m=nMstart, nMstop
                m = idx2m(n_m)
-               dTdt%expl(n_m,n_r,1)=dTdt%expl(n_m,n_r,1)             &
-               &                     -or1(n_r)*work_Mloc(n_m,n_r)    &
-               &          -ci*real(m,cp)*(h2*or1(n_r)*dtcond(n_r)+   &
-               &                            tadvz_fac* tcond(n_r))*  &
-               &                                psi_Mloc(n_m,n_r)
+               dTdt%expl(n_m,n_r,tscheme%istage)=dTdt%expl(n_m,n_r,tscheme%istage)   &
+               &                                      -or1(n_r)*work_Mloc(n_m,n_r)   &
+               &                          -ci*real(m,cp)*(h2*or1(n_r)*dtcond(n_r)+   &
+               &                          tadvz_fac* tcond(n_r))* psi_Mloc(n_m,n_r)
             end do
          end do
       end if
 
       !-- Transform the explicit part to chebyshev space
-      call rscheme%costf1(dTdt%expl(:,:,1), nMstart, nMstop, n_r_max)
+      call rscheme%costf1(dTdt%expl(:,:,tscheme%istage), nMstart, nMstop, n_r_max)
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
          do n_cheb=1,n_cheb_max
-            rhs(n_cheb)=dTdt%expl(n_m,n_cheb,1)
+            rhs(n_cheb)=dTdt%expl(n_m,n_cheb,tscheme%istage)
          end do
 
          call RHSE_mat%mat_vec_mul(rhs)
@@ -158,16 +156,17 @@ contains
          rhs(1)=zero
          rhs(2)=zero
          do n_cheb=1,n_cheb_max
-            dTdt%expl(n_m,n_cheb,1)=rhs(n_cheb)
+            dTdt%expl(n_m,n_cheb,tscheme%istage)=rhs(n_cheb)
          end do
          !-- Pad with zeros
          do n_cheb=n_cheb_max+1,n_r_max
-            dTdt%expl(n_m,n_cheb,1)=zero
+            dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
          end do
       end do
 
       !-- Calculation of the implicit part
-      call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,1), dTdt%impl(:,:,1), &
+      call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,tscheme%istage),  &
+           &                    dTdt%impl(:,:,tscheme%istage),            &
            &                    tscheme%l_calc_lin_rhs)
 
       !-- Now assemble the right hand side and store it in work_Mloc
@@ -328,8 +327,8 @@ contains
    subroutine get_lhs_mat(tscheme, A_mat, tempMat_fac, m)
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme    ! time step
-      integer,            intent(in) :: m          ! Azimuthal wavenumber
+      class(type_tscheme), intent(in) :: tscheme    ! time step
+      integer,             intent(in) :: m          ! Azimuthal wavenumber
 
       !-- Output variables
       type(type_bordmat_real), intent(inout) :: A_mat

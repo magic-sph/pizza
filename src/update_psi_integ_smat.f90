@@ -174,9 +174,9 @@ contains
               &                   n_dct_calls)
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme
-      logical,            intent(in) :: lMat
-      logical,            intent(in) :: l_vphi_bal_calc
+      class(type_tscheme), intent(in) :: tscheme
+      logical,             intent(in) :: lMat
+      logical,             intent(in) :: l_vphi_bal_calc
 
       !-- Output variables
       complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -210,13 +210,13 @@ contains
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsidt%expl(n_m,n_r,1)=    dpsidt%expl(n_m,n_r,1)-   &
-               &                       or1(n_r)*work_Mloc(n_m,n_r)
+               dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage)-&
+               &                                   or1(n_r)*work_Mloc(n_m,n_r)
 
                !-- If Coriolis force is treated explicitly it is added here:
                if ( .not. l_coriolis_imp ) then
-                  dpsidt%expl(n_m,n_r,1)=dpsidt%expl(n_m,n_r,1)-   &
-                  &        CorFac*ci*real(m,cp)*psi_Mloc(n_m,n_r)
+                  dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage)-&
+                  &                                   CorFac*ci*real(m,cp)*psi_Mloc(n_m,n_r)
                end if
             end if
          end do
@@ -224,7 +224,7 @@ contains
 
       if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
          do n_r=1,n_r_max
-            vp_bal%rey_stress(n_r)=real(dpsidt%expl(m2idx(0),n_r,1))
+            vp_bal%rey_stress(n_r)=real(dpsidt%expl(m2idx(0),n_r,tscheme%istage))
          end do
       end if
 
@@ -243,14 +243,14 @@ contains
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  dpsidt%expl(n_m,n_r,1)=    h2*dpsidt%expl(n_m,n_r,1) -     &
-                  &                         ekp_fac*up_Mloc(n_m,n_r)
+                  dpsidt%expl(n_m,n_r,tscheme%istage)=h2*dpsidt%expl(n_m,n_r,tscheme%istage)- &
+                  &                                   ekp_fac*up_Mloc(n_m,n_r)
                else 
-                  dpsidt%expl(n_m,n_r,1)=        h2*dpsidt%expl(n_m,n_r,1) +     &
-                  &                            ekp_fac*( -om_Mloc(n_m,n_r) +     &
-                  &                     half*beta(n_r)*   up_Mloc(n_m,n_r) +     &
-                  &       beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
-                  &                                       us_Mloc(n_m,n_r) )
+                  dpsidt%expl(n_m,n_r,tscheme%istage)=h2*dpsidt%expl(n_m,n_r,tscheme%istage)+ &
+                  &                                         ekp_fac*( -om_Mloc(n_m,n_r) +     &
+                  &                                  half*beta(n_r)*   up_Mloc(n_m,n_r) +     &
+                  &                    beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
+                  &                                                    us_Mloc(n_m,n_r) )
                end if
             end do
          end do
@@ -258,7 +258,7 @@ contains
 
       !-- Transform the explicit part to chebyshev space
       runStart = MPI_Wtime()
-      call rscheme%costf1(dpsidt%expl(:,:,1), nMstart, nMstop, n_r_max)
+      call rscheme%costf1(dpsidt%expl(:,:,tscheme%istage), nMstart, nMstop, n_r_max)
       runStop = MPI_Wtime()
       if ( runStop > runStart ) then
          time_dct = time_dct + (runStop-runStart)
@@ -270,7 +270,7 @@ contains
          m = idx2m(n_m)
 
          do n_cheb=1,n_cheb_max
-            rhs(n_cheb)=dpsidt%expl(n_m,n_cheb,1)
+            rhs(n_cheb)=dpsidt%expl(n_m,n_cheb,tscheme%istage)
          end do
 
          if ( m == 0 ) then
@@ -284,12 +284,12 @@ contains
          rhs(2)=zero
 
          do n_cheb=1,n_cheb_max
-            dpsidt%expl(n_m,n_cheb,1)=rhs(n_cheb)
+            dpsidt%expl(n_m,n_cheb,tscheme%istage)=rhs(n_cheb)
          end do
 
          !-- Deliasing
          do n_cheb=n_cheb_max+1,n_r_max
-            dpsidt%expl(n_m,n_cheb,1)=zero
+            dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
          end do
       end do
 
@@ -340,9 +340,9 @@ contains
       end do
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc, dpsidt%old(:,:,1),        &
-           &                        dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc, &
-           &                        tscheme%l_calc_lin_rhs)
+      call get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc, dpsidt%old(:,:,tscheme%istage),  &
+           &                        dpsidt%impl(:,:,tscheme%istage), vp_bal,            &
+           &                        l_vphi_bal_calc, tscheme%l_calc_lin_rhs)
 
 
       !-- Now assemble the right hand side and store it in work_Mloc
@@ -615,8 +615,8 @@ contains
    subroutine get_lhs_mat(tscheme, A_mat, psiMat_fac, m, time_lu, n_lu_calls)
 
       !-- Input variables
-      type(type_tscheme), intent(in) :: tscheme    ! time step
-      integer,            intent(in) :: m          ! Azimuthal wavenumber
+      class(type_tscheme), intent(in) :: tscheme    ! time step
+      integer,             intent(in) :: m          ! Azimuthal wavenumber
 
       !-- Output variables
       type(type_bordmat_complex), intent(inout) :: A_mat

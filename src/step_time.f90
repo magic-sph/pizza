@@ -40,16 +40,14 @@ contains
    subroutine time_loop(time, tscheme)
 
       !-- Output variables
-      real(cp),           intent(inout) :: time
-      type(type_tscheme), intent(inout) :: tscheme
+      real(cp),            intent(inout) :: time
+      class(type_tscheme), intent(inout) :: tscheme
 
       !-- Local variables
       integer :: n_time_step, n_time_steps_go, n_time_steps_run
       integer :: nPercent
       real(cp) :: tenth_n_time_steps
       character(len=255) :: message
-      character(len=8) :: old_scheme
-      integer :: old_order
 
       !-- Courant
       real(cp) :: dtr,dth,dt_new
@@ -58,13 +56,12 @@ contains
       !-- Timings:
       integer :: n_r_loops, n_mpi_comms, n_m_loops, n_m_loops_mat
       integer :: n_io_calls, n_fft_calls, n_solve_calls, n_dct_calls
-      integer :: n_lu_calls
+      integer :: n_lu_calls, n_stage
       real(cp) :: run_time_r_loop, run_time_mpi_comms
       real(cp) :: run_time_m_loop, run_time_m_loop_mat, run_time_fft
       real(cp) :: run_time_tot, run_time_io, run_time_passed, run_time_solve
       real(cp) :: run_time_dct, run_time_lu
       real(cp) :: runStart, runStop, runStartT, runStopT
-      real(cp) :: wimp_old
 
       logical :: l_new_dt
       logical :: l_rst
@@ -128,20 +125,6 @@ contains
       outer: do n_time_step=1,n_time_steps_run
 
          !-------------------
-         !-- MPI transpositions from m-distributed to r-distributed
-         !-------------------
-         runStartT = MPI_Wtime()
-         call transp_m2r(m2r_fields, us_Mloc, us_Rloc)
-         call transp_m2r(m2r_fields, up_Mloc, up_Rloc)
-         call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
-         call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
-         runStop = MPI_Wtime()
-         if (runStop>runStartT) then
-            n_mpi_comms  =n_mpi_comms+1
-            run_time_mpi_comms=run_time_mpi_comms+(runStop-runStartT)
-         end if
-
-         !-------------------
          !-- Determine whether we will need outputs at this time step
          !-------------------
          l_log = l_correct_step(n_time_step-1,n_time_steps,n_log_step,0)
@@ -155,214 +138,222 @@ contains
          l_vphi_bal_write = l_log .and. l_vphi_balance
          l_vphi_bal_calc = l_log_next .and. l_vphi_balance
 
-         !-------------------
-         !-- Radial loop
-         !-------------------
-         runStart = MPI_Wtime()
-         call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc, &
-              &            dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,       &
-              &            dth_Rloc, run_time_fft, n_fft_calls )
-         runStop = MPI_Wtime()
-         if (runStop>runStart) then
-            n_r_loops  =n_r_loops+1
-            run_time_r_loop=run_time_r_loop+(runStop-runStart)
-         end if
-
-         !------------------
-         !-- MPI transpositions from r-distributed to m-distributed
-         !------------------
-         runStart = MPI_Wtime()
-         call transp_r2m(r2m_fields, dtempdt_Rloc, dTdt%expl(:,:,1))
-         call transp_r2m(r2m_fields, dpsidt_Rloc, dpsidt%expl(:,:,1))
-         call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
-         call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
-         runStop = MPI_Wtime()
-         if (runStop>runStart) then
-            run_time_mpi_comms=run_time_mpi_comms+(runStop-runStart)
-         end if
-
-         !-------------------
-         !-- Check whether the run is not getting out of time
-         !-------------------
-         call MPI_Allreduce(MPI_IN_PLACE,run_time_tot,1,MPI_INTEGER8, &
-              &             MPI_MAX,MPI_COMM_WORLD,ierr)
-         if ( run_time_tot > run_time_requested ) then
-            write(message,'("! Run time limit exeeded !")')
-            call logWrite(message, n_log_file)
-            l_stop_time=.true.
-         end if
-         !-- Some reasons to stop the run
-         if ( n_time_step == n_time_steps_run ) l_stop_time=.true.
-         if ( time > tEND .and. tEND /= 0.0_cp ) l_stop_time=.true.
-
-         if ( n_time_step == 1 ) l_log=.true.
-
-         if ( l_stop_time ) then             
-            l_rst=.true.           
-            l_log=.true.
-         end if
-
-         !-------------------
-         !-- Outputs
-         !-------------------
-         !-- Get time series
-         runStart = MPI_Wtime()
-         call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_spec,  &
-              &             l_frame, l_vphi_bal_write, l_stop_time, us_Mloc,   &
-              &             up_Mloc, om_Mloc, temp_Mloc, dtemp_Mloc,           &
-              &             dpsidt, dTdt)
-         runStop = MPI_Wtime()
-         if (runStop>runStart) then
-            n_io_calls  =n_io_calls+1
-            run_time_io=run_time_io+(runStop-runStart)
-         end if
-
-         if ( l_stop_time ) exit outer
-
-         !-------------------
-         !------ Checking Courant criteria, l_new_dt and dt_new are output
-         !-------------------
-         call dt_courant(dtr,dth,l_new_dt,tscheme%dt(1),dt_new,dtMax, &
-              &          dtr_Rloc,dth_Rloc,time)
-
-         call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step, &
-              &                    l_new_dt)
-         !-- Store the old weight factor of matrices
-         !-- it it changes because of dt factors moving
-         !-- matrix also needs to be rebuilt
-         wimp_old = tscheme%wimp_lin(1)
-         call tscheme%set_weights()
-         if ( tscheme%wimp_lin(1) /= wimp_old ) lMatNext = .true.
-
-         !----- Advancing time:
-         time=time+tscheme%dt(1) ! Update time
-
-         lMat=lMatNext
-         if ( l_new_dt .or. lMat ) then
-            !----- Calculate matricies for new time step if dt /= dtLast
-            lMat=.true.
-            if ( rank == 0 ) then
-               write(*,'(1p,'' ! Building matricies at time step:'',   &
-                    &              i8,ES16.6)') n_time_step,time
+         !-- Now loop over the stages
+         tscheme%istage = 1
+         runStartT = MPI_Wtime()
+         do n_stage=1,tscheme%nstages
+            !-------------------
+            !-- MPI transpositions from m-distributed to r-distributed
+            !-------------------
+            runStart = MPI_Wtime()
+            call transp_m2r(m2r_fields, us_Mloc, us_Rloc)
+            call transp_m2r(m2r_fields, up_Mloc, up_Rloc)
+            call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
+            call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
+            runStop = MPI_Wtime()
+            if (runStop>runStart) then
+               n_mpi_comms  =n_mpi_comms+1
+               run_time_mpi_comms=run_time_mpi_comms+(runStop-runStart)
             end if
-         end if
 
+            !-------------------
+            !-- Radial loop
+            !-------------------
+            runStart = MPI_Wtime()
+            call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc, &
+                 &            dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,       &
+                 &            dth_Rloc, run_time_fft, n_fft_calls, tscheme )
+            runStop = MPI_Wtime()
+            if (runStop>runStart) then
+               n_r_loops  =n_r_loops+1
+               run_time_r_loop=run_time_r_loop+(runStop-runStart)
+            end if
 
-         !-- If the scheme is not Crank-Nicolson we have to use a different scheme
-         lMatNext = .false.
-         if ( l_bridge_step .and. tscheme%time_scheme /= 'CNAB2' .and.  &
-              n_time_step <= tscheme%norder_imp-2 ) then
-            old_order          =tscheme%norder_imp_lin
-            tscheme%norder_imp_lin=2
-            if (rank == 0 ) write(*,*) '! Crank-Nicolson for this time-step'
+            !------------------
+            !-- MPI transpositions from r-distributed to m-distributed
+            !------------------
+            runStart = MPI_Wtime()
+            call transp_r2m(r2m_fields, dtempdt_Rloc, dTdt%expl(:,:,tscheme%istage))
+            call transp_r2m(r2m_fields, dpsidt_Rloc, dpsidt%expl(:,:,tscheme%istage))
+            call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
+            call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
+            runStop = MPI_Wtime()
+            if (runStop>runStart) then
+               run_time_mpi_comms=run_time_mpi_comms+(runStop-runStart)
+            end if
 
+            if ( tscheme%istage == tscheme%nstages ) then
+               !-------------------
+               !-- Check whether the run is not getting out of time
+               !-------------------
+               call MPI_Allreduce(MPI_IN_PLACE,run_time_tot,1,MPI_INTEGER8, &
+                    &             MPI_MAX,MPI_COMM_WORLD,ierr)
+               if ( run_time_tot > run_time_requested ) then
+                  write(message,'("! Run time limit exeeded !")')
+                  call logWrite(message, n_log_file)
+                  l_stop_time=.true.
+               end if
+               !-- Some reasons to stop the run
+               if ( n_time_step == n_time_steps_run ) l_stop_time=.true.
+               if ( time > tEND .and. tEND /= 0.0_cp ) l_stop_time=.true.
+
+               if ( n_time_step == 1 ) l_log=.true.
+
+               if ( l_stop_time ) then             
+                  l_rst=.true.           
+                  l_log=.true.
+               end if
+
+               !-------------------
+               !-- Outputs
+               !-------------------
+               !-- Get time series
+               runStart = MPI_Wtime()
+               call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_spec,  &
+                    &             l_frame, l_vphi_bal_write, l_stop_time, us_Mloc,   &
+                    &             up_Mloc, om_Mloc, temp_Mloc, dtemp_Mloc,           &
+                    &             dpsidt, dTdt)
+               runStop = MPI_Wtime()
+               if (runStop>runStart) then
+                  n_io_calls  =n_io_calls+1
+                  run_time_io=run_time_io+(runStop-runStart)
+               end if
+
+               if ( l_stop_time ) exit outer
+
+               !-------------------
+               !------ Checking Courant criteria, l_new_dt and dt_new are output
+               !-------------------
+               call dt_courant(dtr,dth,l_new_dt,tscheme%dt(1),dt_new,dtMax, &
+                    &          dtr_Rloc,dth_Rloc,time)
+
+               call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step, l_new_dt)
+               !-- Store the old weight factor of matrices
+               !-- it it changes because of dt factors moving
+               !-- matrix also needs to be rebuilt
+               call tscheme%set_weights(lMatNext)
+
+               !----- Advancing time:
+               time=time+tscheme%dt(1) ! Update time
+
+               lMat=lMatNext
+               if ( l_new_dt .or. lMat ) then
+                  !----- Calculate matricies for new time step if dt /= dtLast
+                  lMat=.true.
+                  if ( rank == 0 ) then
+                     write(*,'(1p,'' ! Building matricies at time step:'',   &
+                          &              i8,ES16.6)') n_time_step,time
+                  end if
+               end if
+
+               !-- If the scheme is not Crank-Nicolson we have to use a different scheme
+               lMatNext = .false.
+               if ( l_bridge_step .and. tscheme%time_scheme /= 'CNAB2' .and.  &
+                    n_time_step <= tscheme%norder_imp-2 .and. tscheme%nstages==1 ) then
+
+                  if ( l_cheb_coll ) then
+                     call get_temp_rhs_imp_coll(temp_Mloc,dtemp_Mloc, dTdt%old(:,:,1), &
+                          &                     dTdt%impl(:,:,1),.true.)
+                     if ( l_direct_solve ) then
+                        call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc,   &
+                             &                         dom_Mloc, dpsidt%old(:,:,1), &
+                             &                         dpsidt%impl(:,:,1), vp_bal,  &
+                             &                         l_vphi_bal_calc, .true.)
+                     else
+                        call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc,  &
+                             &                         dpsidt%old(:,:,1),           &
+                             &                         dpsidt%impl(:,:,1), vp_bal,  &
+                             &                         l_vphi_bal_calc, .true.)
+                     end if
+                  else
+                     call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,1), &
+                          &                    dTdt%impl(:,:,1), .true.)
+                     if ( l_direct_solve ) then
+                        call get_psi_rhs_imp_int_smat(psi_Mloc,up_Mloc,dpsidt%old(:,:,1),&
+                             &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
+                     else
+                        call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,dpsidt%old(:,:,1), &
+                             &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
+                     end if
+                  end if
+
+                  call tscheme%bridge_with_cnab2()
+
+               end if
+
+               if ( l_AB1 .and. n_time_step == 1 ) then
+                  call tscheme%start_with_ab1()
+                  l_AB1 = .false.
+               end if
+
+            end if
+
+            !--------------------
+            !-- M-loop (update routines)
+            !--------------------
+            runStart = MPI_Wtime()
             if ( l_cheb_coll ) then
-               call get_temp_rhs_imp_coll(temp_Mloc,dtemp_Mloc, dTdt%old(:,:,1), &
-                    &                     dTdt%impl(:,:,1),.true.)
+               call update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,       &
+                    &              buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
                if ( l_direct_solve ) then
-                  call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc,   &
-                       &                         dom_Mloc, dpsidt%old(:,:,1), &
-                       &                         dpsidt%impl(:,:,1), vp_bal,  &
-                       &                         l_vphi_bal_calc, .true.)
+                  call update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,     &
+                       &                   up_Mloc, dVsOm_Mloc, buo_imp_Mloc, dpsidt,&
+                       &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,   &
+                       &                   run_time_solve, n_solve_calls,            &
+                       &                   run_time_lu, n_lu_calls, run_time_dct,    &
+                       &                   n_dct_calls)
                else
-                  call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc,  &
-                       &                         dpsidt%old(:,:,1),           &
-                       &                         dpsidt%impl(:,:,1), vp_bal,  &
-                       &                         l_vphi_bal_calc, .true.)
+                  call update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,     &
+                       &                   up_Mloc, dVsOm_Mloc, buo_imp_Mloc, dpsidt,&
+                       &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,   &
+                       &                   run_time_solve, n_solve_calls,            &
+                       &                   run_time_lu, n_lu_calls, run_time_dct,    &
+                       &                   n_dct_calls)
                end if
             else
-               call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,1), &
-                    &                    dTdt%impl(:,:,1), .true.)
+               call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,     &
+                    &               buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
                if ( l_direct_solve ) then
-                  call get_psi_rhs_imp_int_smat(psi_Mloc,up_Mloc,dpsidt%old(:,:,1),&
-                       &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
+                  call update_psi_int_smat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
+                    &                      dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal,&
+                    &                      tscheme, lMat, l_vphi_bal_calc,          &
+                    &                      run_time_solve, n_solve_calls,           &
+                    &                      run_time_lu, n_lu_calls, run_time_dct,   &
+                    &                      n_dct_calls)
                else
-                  call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,dpsidt%old(:,:,1), &
-                       &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
+                  call update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
+                    &                      dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal,&
+                    &                      tscheme, lMat, l_vphi_bal_calc,          &
+                    &                      run_time_solve, n_solve_calls,           &
+                    &                      run_time_lu, n_lu_calls, run_time_dct,   &
+                    &                      n_dct_calls)
                end if
             end if
-            old_scheme         =tscheme%time_scheme
-            tscheme%time_scheme='CNAB2'
-            call tscheme%set_weights()
-            !-- Since CN has only two coefficients, one has to set the remainings to zero
-            tscheme%wimp(3:size(tscheme%wimp))=0.0_cp
-            tscheme%wimp_lin(3:size(tscheme%wimp_lin))=0.0_cp
-            tscheme%wexp(3:size(tscheme%wexp))=0.0_cp
-            tscheme%time_scheme=old_scheme
-            tscheme%norder_imp_lin=old_order
-            lMatNext = .true.
-         end if
 
-         if ( l_AB1 .and. n_time_step == 1 ) then
-            if (rank == 0 ) write(*,*) '! 1st order Adams-Bashforth for 1st time step'
-            tscheme%wexp(1)=tscheme%dt(1) ! Instead of one
-            tscheme%wexp(2:tscheme%norder_exp)=0.0_cp
-            l_AB1 = .false.
-         end if
-
-         !--------------------
-         !-- M-loop (update routines)
-         !--------------------
-         runStart = MPI_Wtime()
-         if ( l_cheb_coll ) then
-            call update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,       &
-                 &              buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
-            if ( l_direct_solve ) then
-               call update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,     &
-                    &                   up_Mloc, dVsOm_Mloc, buo_imp_Mloc, dpsidt,&
-                    &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,   &
-                    &                   run_time_solve, n_solve_calls,            &
-                    &                   run_time_lu, n_lu_calls, run_time_dct,    &
-                    &                   n_dct_calls)
+            runStop = MPI_Wtime()
+            if ( .not. lMat ) then
+               if (runStop>runStart) then
+                  n_m_loops  =n_m_loops+1
+                  run_time_m_loop=run_time_m_loop+(runStop-runStart)
+               end if
             else
-               call update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,     &
-                    &                   up_Mloc, dVsOm_Mloc, buo_imp_Mloc, dpsidt,&
-                    &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,   &
-                    &                   run_time_solve, n_solve_calls,            &
-                    &                   run_time_lu, n_lu_calls, run_time_dct,    &
-                    &                   n_dct_calls)
+               if (runStop>runStart) then
+                  n_m_loops_mat  =n_m_loops_mat+1
+                  run_time_m_loop_mat=run_time_m_loop_mat+(runStop-runStart)
+               end if
             end if
-         else
-            call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,     &
-                 &               buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
-            if ( l_direct_solve ) then
-               call update_psi_int_smat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
-                 &                      dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal,&
-                 &                      tscheme, lMat, l_vphi_bal_calc,          &
-                 &                      run_time_solve, n_solve_calls,           &
-                 &                      run_time_lu, n_lu_calls, run_time_dct,   &
-                 &                      n_dct_calls)
-            else
-               call update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
-                 &                      dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal,&
-                 &                      tscheme, lMat, l_vphi_bal_calc,          &
-                 &                      run_time_solve, n_solve_calls,           &
-                 &                      run_time_lu, n_lu_calls, run_time_dct,   &
-                 &                      n_dct_calls)
-            end if
-         end if
 
-         runStop = MPI_Wtime()
-         if ( .not. lMat ) then
-            if (runStop>runStart) then
-               n_m_loops  =n_m_loops+1
-               run_time_m_loop=run_time_m_loop+(runStop-runStart)
-            end if
-         else
-            if (runStop>runStart) then
-               n_m_loops_mat  =n_m_loops_mat+1
-               run_time_m_loop_mat=run_time_m_loop_mat+(runStop-runStart)
-            end if
-         end if
+            ! Increment current stage
+            tscheme%istage = tscheme%istage+1
 
+         end do ! Finish loop over stages
          !---------------------
          !-- Timings
          !---------------------
          runStopT = MPI_Wtime()
-         if (runStop>runStart) then
+         if (runStopT>runStartT) then
             run_time_tot=run_time_tot+(runStopT-runStartT)
          end if
-
          n_time_steps_go = n_time_steps_go+1
 
          !---------------------

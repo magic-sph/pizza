@@ -11,6 +11,7 @@ module rloop
    use courant_mod, only: courant
    use fourier, only: fft, ifft
    use useful, only: cc22real
+   use time_schemes, only: type_tscheme
 
    implicit none
 
@@ -55,13 +56,14 @@ contains
 !------------------------------------------------------------------------------
    subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc, &
               &           dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,       &
-              &           dth_Rloc, time_fft, n_fft_calls)
+              &           dth_Rloc, time_fft, n_fft_calls, tscheme)
 
       !-- Input variables
-      complex(cp), intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp), intent(in) :: up_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp), intent(in) :: om_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp), intent(in) :: temp_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: up_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: om_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: temp_Rloc(n_m_max, nRstart:nRstop)
+      class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
       complex(cp), intent(out) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
@@ -111,7 +113,9 @@ contains
          end if
 
          !-- Courant condition
-         call courant(n_r, dtr_Rloc(n_r), dth_Rloc(n_r), us_grid, up_grid)
+         if ( tscheme%istage == tscheme%nstages ) then
+            call courant(n_r, dtr_Rloc(n_r), dth_Rloc(n_r), us_grid, up_grid)
+         end if
 
          !-- Get nonlinear products
          do n_phi=1,n_phi_max

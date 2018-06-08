@@ -39,11 +39,11 @@ contains
 
 
       !-- Input variables
-      real(cp),           intent(in) :: time
-      type(type_tscheme), intent(in) :: tscheme
-      integer,            intent(in) :: n_time_step
-      integer,            intent(in) :: n_log_file
-      logical,            intent(in) :: l_stop_time
+      real(cp),            intent(in) :: time
+      class(type_tscheme), intent(in) :: tscheme
+      integer,             intent(in) :: n_time_step
+      integer,             intent(in) :: n_log_file
+      logical,             intent(in) :: l_stop_time
       complex(cp),        intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
@@ -209,13 +209,13 @@ contains
               &               time, tscheme)
 
       !-- Output variables
-      type(type_tscheme), intent(inout) :: tscheme
-      complex(cp),        intent(out) :: us_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp),        intent(out) :: up_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp),        intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
-      type(type_tarray),  intent(inout) :: dpsidt
-      type(type_tarray),  intent(inout) :: dTdt
-      real(cp),           intent(out) :: time
+      class(type_tscheme), intent(inout) :: tscheme
+      complex(cp),         intent(out) :: us_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),         intent(out) :: up_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),         intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
+      type(type_tarray),   intent(inout) :: dpsidt
+      type(type_tarray),   intent(inout) :: dTdt
+      real(cp),            intent(out) :: time
 
       !-- Local variables
       logical :: startfile_does_exist, l_heat_old, l_chem_old
