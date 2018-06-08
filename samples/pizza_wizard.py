@@ -13,7 +13,8 @@ import RotInteg.unitTest
 import TestRestart.unitTest
 import TestChebMap.unitTest
 import TimeStepChange.unitTest
-import TimeSchemes.unitTest
+import MultistepSchemes.unitTest
+import DIRKSchemes.unitTest
 
 __version__ = '1.0'
 
@@ -191,9 +192,14 @@ def getSuite(startdir, cmd, precision, args):
                                                   '%s/TestChebMap' % startdir, 
                                                   execCmd=cmd,
                                                   precision=precision))
-        # Test several time schemes
-        suite.addTest(TimeSchemes.unitTest.TestTimeScheme('outputFileDiff',
-                                                  '%s/TimeSchemes' % startdir, 
+        # Test several multistep schemes
+        suite.addTest(MultistepSchemes.unitTest.TestMultistepSchemes('outputFileDiff',
+                                                  '%s/MultistepSchemes' % startdir, 
+                                                  execCmd=cmd,
+                                                  precision=precision))
+        # Test several DIRK schemes
+        suite.addTest(DIRKSchemes.unitTest.TestDIRKSchemes('outputFileDiff',
+                                                  '%s/DIRKSchemes' % startdir, 
                                                   execCmd=cmd,
                                                   precision=precision))
         # Test a timestep change

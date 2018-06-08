@@ -26,16 +26,16 @@ def readStack(file):
         out = np.append(out, dat)
     return out
 
-class TestTimeScheme(unittest.TestCase):
+class TestDIRKSchemes(unittest.TestCase):
 
     def __init__(self, testName, dir, execCmd='mpirun -n 8 ../tmp/pizza.exe', 
                  precision=1e-8):
-        super(TestTimeScheme, self).__init__(testName)
+        super(TestDIRKSchemes, self).__init__(testName)
         self.dir = dir
         self.precision = precision
         self.execCmd = execCmd
         self.startDir = os.getcwd()
-        self.description = "Test several time schemes"
+        self.description = "Test several DIRK schemes"
 
     def list2reason(self, exc_list):
         if exc_list and exc_list[-1][0] is self:
@@ -53,10 +53,6 @@ class TestTimeScheme(unittest.TestCase):
             os.remove(f)
         for f in glob.glob('%s/*.second_continue' % self.dir):
             os.remove(f)
-        for f in glob.glob('%s/*.third_continue' % self.dir):
-            os.remove(f)
-        for f in glob.glob('%s/*.fourth_continue' % self.dir):
-            os.remove(f)
         for f in glob.glob('%s/*.final' % self.dir):
             os.remove(f)
 
@@ -70,16 +66,10 @@ class TestTimeScheme(unittest.TestCase):
         cmd = '%s %s/input_second_restart.nml' % (self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = '%s %s/input_third_restart.nml' % (self.execCmd, self.dir)
-        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
-                stderr=open(os.devnull, 'wb'))
-        cmd = '%s %s/input_fourth_restart.nml' % (self.execCmd, self.dir)
-        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
-                stderr=open(os.devnull, 'wb'))
         cmd = '%s %s/input_final.nml' % (self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = 'cat e_kin.start e_kin.first_continue e_kin.second_continue e_kin.third_continue e_kin.fourth_continue e_kin.final > e_kin.test'
+        cmd = 'cat e_kin.start e_kin.first_continue e_kin.second_continue e_kin.final > e_kin.test'
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'))
 
     def tearDown(self):
@@ -91,10 +81,6 @@ class TestTimeScheme(unittest.TestCase):
         for f in glob.glob('%s/*.first_continue' % self.dir):
             os.remove(f)
         for f in glob.glob('%s/*.second_continue' % self.dir):
-            os.remove(f)
-        for f in glob.glob('%s/*.third_continue' % self.dir):
-            os.remove(f)
-        for f in glob.glob('%s/*.fourth_continue' % self.dir):
             os.remove(f)
         for f in glob.glob('%s/*.final' % self.dir):
             os.remove(f)
