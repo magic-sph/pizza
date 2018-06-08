@@ -425,8 +425,6 @@ contains
          end do
       end do
 
-      buo(:,:)=0.0_cp
-
    end subroutine assemble_implicit_buo
 !------------------------------------------------------------------------------
    subroutine bridge_with_cnab2(this)

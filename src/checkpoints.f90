@@ -201,8 +201,6 @@ contains
 
       end if
 
-
-
    end subroutine write_checkpoint_mloc
 !------------------------------------------------------------------------------
    subroutine read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, dpsidt, dTdt, &
