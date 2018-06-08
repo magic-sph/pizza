@@ -79,7 +79,7 @@ contains
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m, n_r_out, m, n_o
+      integer :: n_r, n_m, n_r_out, m
 
       if ( lMat ) lTMat(:)=.false.
 

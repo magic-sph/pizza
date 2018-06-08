@@ -10,6 +10,7 @@ module time_schemes
    type, abstract, public :: type_tscheme
 
       logical :: l_calc_lin_rhs
+      character(len=10) :: family
       integer :: nstages
       integer :: istage
       integer :: norder_exp

@@ -42,6 +42,7 @@ contains
       !-- Number of stages per iteration is always one in this case
       this%nstages = 1
       this%istage = 1
+      this%family = 'MULTISTEP'
 
       if ( index(time_scheme, 'CNAB2') /= 0 ) then
          this%time_scheme = 'CNAB2'

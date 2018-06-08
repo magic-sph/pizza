@@ -65,9 +65,10 @@ contains
          rst_file='checkpoint_t='//trim(string)//'.'//tag
       end if
 
-      version = 4
+      version = 5
 
       header_size = SIZEOF_INTEGER+SIZEOF_DEF_REAL+SIZEOF_LOGICAL+       &
+      &             len(tscheme%family)+                                 &
       &             3*SIZEOF_INTEGER+SIZEOF_DEF_REAL+size(tscheme%dt)*   &
       &             SIZEOF_DEF_REAL+6*SIZEOF_DEF_REAL+3*SIZEOF_INTEGER   &
       &             +2*SIZEOF_INTEGER+2*SIZEOF_DEF_REAL+                 &
@@ -99,6 +100,8 @@ contains
          call MPI_File_Write(fh, version, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, time, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, l_cheb_coll, 1, MPI_LOGICAL, istat, ierr)
+         call MPI_File_Write(fh, tscheme%family, len(tscheme%family), MPI_CHARACTER, &
+              &              istat, ierr)
          call MPI_File_Write(fh, tscheme%norder_exp, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, tscheme%norder_imp_lin, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, tscheme%norder_imp, 1, MPI_INTEGER, istat, ierr)
@@ -150,35 +153,42 @@ contains
            &                  istat, ierr)
       call MPI_File_Write_all(fh, up_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
            &                  istat, ierr)
-      do n_o=2,tscheme%norder_exp
-         call MPI_File_Write_all(fh, dpsidt%expl(:,:,n_o), nm_per_rank*n_r_max, &
-              &                  MPI_DEF_COMPLEX, istat, ierr)
-      end do
-      do n_o=2,tscheme%norder_imp_lin-1
-         call MPI_File_Write_all(fh, dpsidt%impl(:,:,n_o), nm_per_rank*n_r_max, &
-              &                  MPI_DEF_COMPLEX, istat, ierr)
-      end do
-      do n_o=2,tscheme%norder_imp-1
-         call MPI_File_Write_all(fh, dpsidt%old(:,:,n_o), nm_per_rank*n_r_max, &
-              &                  MPI_DEF_COMPLEX, istat, ierr)
-      end do
+
+      if ( tscheme%family == 'MULTISTEP' ) then
+         do n_o=2,tscheme%norder_exp
+            call MPI_File_Write_all(fh, dpsidt%expl(:,:,n_o), nm_per_rank*n_r_max, &
+                 &                  MPI_DEF_COMPLEX, istat, ierr)
+         end do
+         do n_o=2,tscheme%norder_imp_lin-1
+            call MPI_File_Write_all(fh, dpsidt%impl(:,:,n_o), nm_per_rank*n_r_max, &
+                 &                  MPI_DEF_COMPLEX, istat, ierr)
+         end do
+         do n_o=2,tscheme%norder_imp-1
+            call MPI_File_Write_all(fh, dpsidt%old(:,:,n_o), nm_per_rank*n_r_max, &
+                 &                  MPI_DEF_COMPLEX, istat, ierr)
+         end do
+      end if
 
       !-- Temperature
       if ( l_heat ) then
          call MPI_File_Write_all(fh, t_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
               &                  istat, ierr)
-         do n_o=2,tscheme%norder_exp
-            call MPI_File_Write_all(fh, dTdt%expl(:,:,n_o), nm_per_rank*n_r_max, &
-                 &                  MPI_DEF_COMPLEX, istat, ierr)
-         end do
-         do n_o=2,tscheme%norder_imp_lin-1
-            call MPI_File_Write_all(fh, dTdt%impl(:,:,n_o), nm_per_rank*n_r_max, &
-                 &                  MPI_DEF_COMPLEX, istat, ierr)
-         end do
-         do n_o=2,tscheme%norder_imp-1
-            call MPI_File_Write_all(fh, dTdt%old(:,:,n_o), nm_per_rank*n_r_max, &
-                 &                  MPI_DEF_COMPLEX, istat, ierr)
-         end do
+
+         if ( tscheme%family == 'MULTISTEP' ) then
+            do n_o=2,tscheme%norder_exp
+               call MPI_File_Write_all(fh, dTdt%expl(:,:,n_o), nm_per_rank*n_r_max, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end do
+            do n_o=2,tscheme%norder_imp_lin-1
+               call MPI_File_Write_all(fh, dTdt%impl(:,:,n_o), nm_per_rank*n_r_max, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end do
+            do n_o=2,tscheme%norder_imp-1
+               call MPI_File_Write_all(fh, dTdt%old(:,:,n_o), nm_per_rank*n_r_max, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end do
+         end if
+
       end if
 
       call MPI_Info_free(info, ierr)
@@ -224,6 +234,7 @@ contains
       real(cp) :: ra_old, raxi_old, sc_old, pr_old, radratio_old, ek_old
       integer :: n_r_max_old, m_max_old, minc_old, n_m_max_old
       character(len=72) :: rscheme_version_old
+      character(len=10) :: tscheme_family_old
       real(cp) :: ratio1, ratio2
       integer :: n_in, n_in_2, m, n_m, n_r_max_max, m_max_max
       integer :: norder_imp_lin_old, norder_exp_old, n_o, norder_imp_old
@@ -249,6 +260,7 @@ contains
             norder_imp_old = 2
             norder_exp_old = 2
             l_coll_old = .true.
+            tscheme_family_old = 'MULTISTEP'
          else if ( version == 2 ) then ! This was without l_cheb_coll
             read(n_start_file) time
             read(n_start_file) norder_exp_old, norder_imp_old
@@ -257,6 +269,7 @@ contains
             dt_array_old(:)=0.0_cp
             read(n_start_file) dt_array_old(1:norder_exp_old)
             l_coll_old = .true.
+            tscheme_family_old = 'MULTISTEP'
          else if ( version == 3 ) then
             read(n_start_file) time
             read(n_start_file) l_coll_old
@@ -265,6 +278,7 @@ contains
             allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp) ) )
             dt_array_old(:)=0.0_cp
             read(n_start_file) dt_array_old(1:norder_exp_old)
+            tscheme_family_old = 'MULTISTEP'
          else if ( version == 4 ) then
             read(n_start_file) time
             read(n_start_file) l_coll_old
@@ -272,8 +286,27 @@ contains
             allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp) ) )
             dt_array_old(:)=0.0_cp
             read(n_start_file) dt_array_old(1:norder_exp_old)
+            tscheme_family_old = 'MULTISTEP'
+         else if ( version == 5 ) then
+            read(n_start_file) time
+            read(n_start_file) l_coll_old
+            read(n_start_file) tscheme_family_old
+            read(n_start_file) norder_exp_old, norder_imp_lin_old, norder_imp_old
+            if ( tscheme_family_old == 'MULTISTEP' ) then
+               allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp) ) )
+               dt_array_old(:)=0.0_cp
+               read(n_start_file) dt_array_old(1:norder_exp_old)
+            else if ( tscheme_family_old == 'DIRK' ) then
+               allocate( dt_array_old(max(1,size(tscheme%dt))) )
+               dt_array_old(:)=0.0_cp
+               read(n_start_file) dt_array_old(1)
+            end if
          end if
-         dt_array_old(norder_exp_old:tscheme%norder_exp)=dt_array_old(norder_exp_old)
+         if ( tscheme_family_old == 'MULTISTEP' ) then
+            dt_array_old(norder_exp_old:size(tscheme%dt))=dt_array_old(norder_exp_old)
+         else if ( tscheme_family_old == 'DIRK' ) then
+            dt_array_old(1:size(tscheme%dt))=dt_array_old(1)
+         end if
          read(n_start_file) ra_old,pr_old,raxi_old,sc_old,ek_old,radratio_old
          read(n_start_file) n_r_max_old,m_max_old,minc_old
 
@@ -345,20 +378,25 @@ contains
       call MPI_Bcast(norder_exp_old,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(norder_imp_old,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(norder_imp_lin_old,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
-      if ( rank /= 0 ) allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp)) )
-      call MPI_Bcast(dt_array_old,max(norder_exp_old,tscheme%norder_exp), &
-           &         MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(tscheme_family_old,len(tscheme_family_old),MPI_CHARACTER,0, &
+           &         MPI_COMM_WORLD,ierr)
+      if ( tscheme_family_old == 'MULTISTEP' ) then
+         if ( rank /= 0 ) allocate( dt_array_old(max(norder_exp_old,size(tscheme%dt))) )
+      else if ( tscheme_family_old == 'DIRK' ) then
+         if ( rank /= 0 ) allocate( dt_array_old(max(1,size(tscheme%dt))) )
+      end if
+      call MPI_Bcast(dt_array_old,size(dt_array_old),MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(ek_old,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_heat_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_chem_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_coll_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
 
       !-- Fill the time step array
-      do n_o=1,tscheme%norder_exp
+      do n_o=1,size(tscheme%dt)
          !-- If the new scheme has higher order one fill the missing dt values
          !-- with the oldest
-         if ( n_o > norder_exp_old ) then
-            tscheme%dt(n_o)=dt_array_old(norder_exp_old)
+         if ( n_o > size(dt_array_old) ) then
+            tscheme%dt(n_o)=dt_array_old(size(dt_array_old))
          else
             tscheme%dt(n_o)=dt_array_old(n_o)
          end if
@@ -370,23 +408,35 @@ contains
       end if
 
       !-- If old and new schemes differ in precision, one has to use a bridging step
-      if ( tscheme%norder_imp > norder_imp_old .or. tscheme%norder_imp_lin > norder_imp_lin_old ) then
-         l_bridge_step = .true.
-      else
+      if ( tscheme%family == 'MULTISTEP' ) then
+         if ( tscheme_family_old == 'DIRK' ) then
+            l_bridge_step = .true.
+         else
+            if ( tscheme%norder_imp > norder_imp_old .or. tscheme%norder_imp_lin > norder_imp_lin_old ) then
+               l_bridge_step = .true.
+            else
+               l_bridge_step = .false.
+            end if
+         end if
+      else if ( tscheme%family == 'DIRK' ) then
          l_bridge_step = .false.
       end if
 
       !-- If old and new radial schemes differ, one has to use AB1 for the first
       !-- time step and a bridging CN step for the implicit part.
-      if ( l_coll_old .neqv. l_cheb_coll ) then
-         l_AB1 = .true.
-         l_bridge_step = .true.
+      if ( tscheme%family == 'MULTISTEP' ) then
+         if ( l_coll_old .neqv. l_cheb_coll ) then
+            l_AB1 = .true.
+            l_bridge_step = .true.
+         end if
       end if
 
       !-- If version of the old file is < 4 we have to bridge the steps as well
-      if ( version < 4 .and. norder_imp_old > 2 ) then
-         l_AB1 = .true.
-         l_bridge_step = .true.
+      if ( tscheme%family == 'MULTISTEP' ) then
+         if ( version < 4 .and. norder_imp_old > 2 ) then
+            l_AB1 = .true.
+            l_bridge_step = .true.
+         end if
       end if
 
       !-- Read fields with rank0 and scatter them
@@ -409,43 +459,45 @@ contains
       end if
       call scatter_from_rank0_to_mloc(work, up_Mloc)
 
-      !-- Explicit time step
-      do n_o=2,norder_exp_old
-         if ( rank == 0 ) then
-            read( n_start_file ) work_old
-            call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-                 &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                 &         lBc=.true.,l_phys_space=l_coll_old)
-         end if
-         if ( n_o <= tscheme%norder_exp ) then
-            call scatter_from_rank0_to_mloc(work, dpsidt%expl(:,:,n_o))
-         end if
-      end do
-
-      !-- Implicit time step
-      do n_o=2,norder_imp_lin_old-1
-         if ( rank == 0 ) then
-            read( n_start_file ) work_old
-            call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-                 &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                 &         lBc=.true.,l_phys_space=l_coll_old)
-         end if
-         if ( n_o <= tscheme%norder_imp_lin-1 ) then
-            call scatter_from_rank0_to_mloc(work, dpsidt%impl(:,:,n_o))
-         end if
-      end do
-      if ( version > 3 ) then
-         do n_o=2,norder_imp_old-1
+      if ( tscheme_family_old == 'MULTISTEP' ) then
+         !-- Explicit time step
+         do n_o=2,norder_exp_old
             if ( rank == 0 ) then
                read( n_start_file ) work_old
                call map_field(work_old, work, r_old, m2idx_old, scale_u, &
                     &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                    &         lBc=.false.,l_phys_space=l_coll_old)
+                    &         lBc=.true.,l_phys_space=l_coll_old)
             end if
-            if ( n_o <= tscheme%norder_imp-1 ) then
-               call scatter_from_rank0_to_mloc(work, dpsidt%old(:,:,n_o))
+            if ( n_o <= tscheme%norder_exp ) then
+               call scatter_from_rank0_to_mloc(work, dpsidt%expl(:,:,n_o))
             end if
          end do
+
+         !-- Implicit time step
+         do n_o=2,norder_imp_lin_old-1
+            if ( rank == 0 ) then
+               read( n_start_file ) work_old
+               call map_field(work_old, work, r_old, m2idx_old, scale_u, &
+                    &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+                    &         lBc=.true.,l_phys_space=l_coll_old)
+            end if
+            if ( n_o <= tscheme%norder_imp_lin-1 ) then
+               call scatter_from_rank0_to_mloc(work, dpsidt%impl(:,:,n_o))
+            end if
+         end do
+         if ( version > 3 ) then
+            do n_o=2,norder_imp_old-1
+               if ( rank == 0 ) then
+                  read( n_start_file ) work_old
+                  call map_field(work_old, work, r_old, m2idx_old, scale_u, &
+                       &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+                       &         lBc=.false.,l_phys_space=l_coll_old)
+               end if
+               if ( n_o <= tscheme%norder_imp-1 ) then
+                  call scatter_from_rank0_to_mloc(work, dpsidt%old(:,:,n_o))
+               end if
+            end do
+         end if
       end if
 
       if ( l_heat_old ) then
@@ -458,44 +510,47 @@ contains
          end if
          call scatter_from_rank0_to_mloc(work, temp_Mloc)
 
-         !-- Explicit time step
-         do n_o=2,norder_exp_old
-            if ( rank == 0 ) then
-               read( n_start_file ) work_old
-               call map_field(work_old, work, r_old, m2idx_old, scale_t, &
-                    &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                    &         lBc=.true.,l_phys_space=l_coll_old)
-            end if
-            if ( n_o <= tscheme%norder_exp ) then
-               call scatter_from_rank0_to_mloc(work, dTdt%expl(:,:,n_o))
-            end if
-         end do
-
-         !-- Implicit time step
-         do n_o=2,norder_imp_lin_old-1
-            if ( rank == 0 ) then
-               read( n_start_file ) work_old
-               call map_field(work_old, work, r_old, m2idx_old, scale_t, &
-                    &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                    &         lBc=.true.,l_phys_space=l_coll_old)
-            end if
-            if ( n_o <= tscheme%norder_imp_lin-1 ) then
-               call scatter_from_rank0_to_mloc(work, dTdt%impl(:,:,n_o))
-            end if
-         end do
-         if ( version > 3 ) then
-            do n_o=2,norder_imp_old-1
+         if ( tscheme_family_old == 'MULTISTEP' ) then
+            !-- Explicit time step
+            do n_o=2,norder_exp_old
                if ( rank == 0 ) then
                   read( n_start_file ) work_old
                   call map_field(work_old, work, r_old, m2idx_old, scale_t, &
                        &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                       &         lBc=.false.,l_phys_space=l_coll_old)
+                       &         lBc=.true.,l_phys_space=l_coll_old)
                end if
-               if ( n_o <= tscheme%norder_imp-1 ) then
-                  call scatter_from_rank0_to_mloc(work, dTdt%old(:,:,n_o))
+               if ( n_o <= tscheme%norder_exp ) then
+                  call scatter_from_rank0_to_mloc(work, dTdt%expl(:,:,n_o))
                end if
             end do
+
+            !-- Implicit time step
+            do n_o=2,norder_imp_lin_old-1
+               if ( rank == 0 ) then
+                  read( n_start_file ) work_old
+                  call map_field(work_old, work, r_old, m2idx_old, scale_t, &
+                       &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+                       &         lBc=.true.,l_phys_space=l_coll_old)
+               end if
+               if ( n_o <= tscheme%norder_imp_lin-1 ) then
+                  call scatter_from_rank0_to_mloc(work, dTdt%impl(:,:,n_o))
+               end if
+            end do
+            if ( version > 3 ) then
+               do n_o=2,norder_imp_old-1
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field(work_old, work, r_old, m2idx_old, scale_t, &
+                          &         n_m_max_old, n_r_max_old, n_r_max_max,     &
+                          &         lBc=.false.,l_phys_space=l_coll_old)
+                  end if
+                  if ( n_o <= tscheme%norder_imp-1 ) then
+                     call scatter_from_rank0_to_mloc(work, dTdt%old(:,:,n_o))
+                  end if
+               end do
+            end if
          end if
+
       end if
 
       if ( rank == 0 ) then

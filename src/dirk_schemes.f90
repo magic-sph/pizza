@@ -2,7 +2,6 @@ module dirk_schemes
 
    use precision_mod
    use parallel_mod
-   use fields, only: temp_Mloc ! to be removed
    use namelists, only: alpha, l_cheb_coll
    use constants, only: one, half, two, ci, zero
    use mem_alloc, only: bytes_allocated
@@ -47,6 +46,8 @@ contains
       this%dt(:)=0.0_cp
       allocate ( this%wimp_lin(1) )
       this%wimp_lin(1)=0.0_cp
+
+      this%family='DIRK'
 
       if ( index(time_scheme, 'ARS222') /= 0 ) then
          this%time_scheme = 'ARS222'
@@ -194,7 +195,6 @@ contains
 
       !-- Local variables
       integer :: n_stage, n_r, n_m
-      real(cp) :: gam, del ! to be removed
 
       do n_r=1,len_rhs
          do n_m=nMstart,nMstop
