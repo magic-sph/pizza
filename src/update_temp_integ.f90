@@ -4,7 +4,7 @@ module update_temp_integ
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, one, ci, half
    use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, &
-       &                TdiffFac, l_non_rot
+       &                TdiffFac, l_non_rot, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, rgrav, r
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, n_cheb_max
@@ -83,7 +83,7 @@ contains
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
    subroutine update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
-              &               buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
+              &               buo_Mloc, dTdt, tscheme, lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -95,7 +95,7 @@ contains
       complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       type(type_tarray), intent(inout) :: dTdt
-      complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
@@ -105,15 +105,28 @@ contains
       if ( lMat ) lTMat(:)=.false.
 
       !-- Assemble first buoyancy part from T^{n}
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*or1(n_r) &
-               &                      *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-            end if
+      if ( l_buo_imp ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m /= 0 ) then
+                  buo_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*or1(n_r) &
+                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               end if
+            end do
          end do
-      end do
+      else
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m /= 0 ) then
+                  buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
+                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               end if
+            end do
+         end do
+
+      end if
 
       !-- Finish calculation of advection
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
@@ -209,16 +222,18 @@ contains
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Finish assembling buoyancy 
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-               buo_imp_Mloc(n_m,n_r)=            buo_imp_Mloc(n_m,n_r)-&
-               &               tscheme%wimp_lin(1)*rgrav(n_r)*or1(n_r) &
-               &               *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-            end if
+      if ( l_buo_imp ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m /= 0 ) then
+                  buo_Mloc(n_m,n_r)=                    buo_Mloc(n_m,n_r)-&
+                  &               tscheme%wimp_lin(1)*rgrav(n_r)*or1(n_r) &
+                  &               *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               end if
+            end do
          end do
-      end do
+      end if
 
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dTdt, nMstart, nMstop, n_r_max)

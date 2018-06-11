@@ -23,7 +23,7 @@ module mloop_mod
 contains 
 
    subroutine mloop(temp_Mloc, dtemp_Mloc, psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc, &
-              &     dVsT_Mloc, dVsOm_Mloc, buo_imp_Mloc, dTdt, dpsidt, vp_bal, tscheme,    &
+              &     dVsT_Mloc, dVsOm_Mloc, buo_Mloc, dTdt, dpsidt, vp_bal, tscheme,        &
               &     lMat, l_log_next, l_vphi_bal_calc, run_time_solve, n_solve_calls,      &
               &     run_time_lu, n_lu_calls, run_time_dct, n_dct_calls)
 
@@ -32,7 +32,7 @@ contains
       logical,             intent(in) :: lMat
       logical,             intent(in) :: l_vphi_bal_calc
       logical,             intent(in) :: l_log_next
-      complex(cp),         intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop,n_r_max)
@@ -57,35 +57,35 @@ contains
 
      if ( l_cheb_coll ) then
          call update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,       &
-              &              buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
+              &              buo_Mloc, dTdt, tscheme, lMat, l_log_next)
          if ( l_direct_solve ) then
-            call update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,     &
-                 &                   up_Mloc, dVsOm_Mloc, buo_imp_Mloc, dpsidt,&
-                 &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,   &
-                 &                   run_time_solve, n_solve_calls,            &
-                 &                   run_time_lu, n_lu_calls, run_time_dct,    &
+            call update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,    &
+                 &                   up_Mloc, dVsOm_Mloc, buo_Mloc, dpsidt,   &
+                 &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,  &
+                 &                   run_time_solve, n_solve_calls,           &
+                 &                   run_time_lu, n_lu_calls, run_time_dct,   &
                  &                   n_dct_calls)
          else
-            call update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,     &
-                 &                   up_Mloc, dVsOm_Mloc, buo_imp_Mloc, dpsidt,&
-                 &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,   &
-                 &                   run_time_solve, n_solve_calls,            &
-                 &                   run_time_lu, n_lu_calls, run_time_dct,    &
+            call update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,    &
+                 &                   up_Mloc, dVsOm_Mloc, buo_Mloc, dpsidt,   &
+                 &                   vp_bal, tscheme, lMat, l_vphi_bal_calc,  &
+                 &                   run_time_solve, n_solve_calls,           &
+                 &                   run_time_lu, n_lu_calls, run_time_dct,   &
                  &                   n_dct_calls)
          end if
       else
          call update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,     &
-              &               buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
+              &               buo_Mloc, dTdt, tscheme, lMat, l_log_next)
          if ( l_direct_solve ) then
             call update_psi_int_smat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
-              &                      dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal,&
+              &                      dVsOm_Mloc, buo_Mloc, dpsidt, vp_bal,    &
               &                      tscheme, lMat, l_vphi_bal_calc,          &
               &                      run_time_solve, n_solve_calls,           &
               &                      run_time_lu, n_lu_calls, run_time_dct,   &
               &                      n_dct_calls)
          else
             call update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
-              &                      dVsOm_Mloc, buo_imp_Mloc, dpsidt, vp_bal,&
+              &                      dVsOm_Mloc, buo_Mloc, dpsidt, vp_bal,    &
               &                      tscheme, lMat, l_vphi_bal_calc,          &
               &                      run_time_solve, n_solve_calls,           &
               &                      run_time_lu, n_lu_calls, run_time_dct,   &

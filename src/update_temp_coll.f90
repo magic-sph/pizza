@@ -3,7 +3,7 @@ module update_temp_coll
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, four, ci
-   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac
+   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
        &                       rgrav
    use blocking, only: nMstart, nMstop
@@ -63,7 +63,7 @@ contains
    end subroutine finalize_temp_coll
 !------------------------------------------------------------------------------
    subroutine update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,      &
-              &              buo_imp_Mloc, dTdt, tscheme, lMat, l_log_next)
+              &              buo_Mloc, dTdt, tscheme, lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -75,13 +75,26 @@ contains
       complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       type(type_tarray), intent(inout) :: dTdt
-      complex(cp), intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, n_r_out, m
 
       if ( lMat ) lTMat(:)=.false.
+
+      !-- In case buoyancy is treated explicitly, assemble it here
+      if ( .not. l_buo_imp ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m /= 0 ) then
+                  buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
+                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               end if
+            end do
+         end do
+      end if
 
       !-- Finish calculation of advection
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
@@ -147,9 +160,12 @@ contains
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Assemble buoyancy
-      call tscheme%assemble_implicit_buo(buo_imp_Mloc, temp_Mloc, dTdt, BuoFac, &
-           &                             rgrav, nMstart, nMstop, n_r_max)
+      !-- Assemble buoyancy in case this is treated implicitly
+      if ( l_buo_imp ) then
+         call tscheme%assemble_implicit_buo(buo_Mloc, temp_Mloc, dTdt,      &
+              &                             BuoFac, rgrav, nMstart, nMstop, &
+              &                             n_r_max)
+      end if
 
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dTdt, nMstart, nMstop, n_r_max)

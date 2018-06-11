@@ -6,7 +6,7 @@ module update_psi_coll_smat
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
-       &                l_coriolis_imp
+       &                l_coriolis_imp, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -63,7 +63,7 @@ contains
    end subroutine finalize_om_coll_smat
 !------------------------------------------------------------------------------
    subroutine update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc, &
-              &                   dVsOm_Mloc,  buo_imp_Mloc, dpsidt, vp_bal,     &
+              &                   dVsOm_Mloc,  buo_Mloc, dpsidt, vp_bal,         &
               &                   tscheme, lMat, l_vphi_bal_calc, time_solve,    &
               &                   n_solve_calls, time_lu, n_lu_calls, time_dct,  &
               &                   n_dct_calls)
@@ -72,7 +72,7 @@ contains
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       logical,             intent(in) :: l_vphi_bal_calc
-      complex(cp),         intent(in) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -111,6 +111,13 @@ contains
                if ( .not. l_coriolis_imp ) then
                   dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage) &
                   &                                   +CorFac*beta(n_r)*us_Mloc(n_m,n_r)
+               end if
+
+               !-- If Buoyancy is treated explicitly, add it here:
+               if ( .not. l_buo_imp ) then
+                  dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage) &
+                  &                                   +buo_Mloc(n_m,n_r)
+
                end if
             end if
          end do
@@ -170,7 +177,11 @@ contains
             rhs(2*n_r_max)=zero
             do n_r=2,n_r_max-1
                !-- Add buoyancy
-               rhs(n_r)=work_Mloc(n_m,n_r)+buo_imp_Mloc(n_m,n_r)
+               if ( l_buo_imp ) then
+                  rhs(n_r)=work_Mloc(n_m,n_r)+buo_Mloc(n_m,n_r)
+               else
+                  rhs(n_r)=work_Mloc(n_m,n_r)
+               end if
                !-- Second part is zero (no time-advance in the psi-block)
                rhs(n_r+n_r_max)=zero
             end do

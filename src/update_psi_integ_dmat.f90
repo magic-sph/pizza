@@ -6,7 +6,7 @@ module update_psi_integ_dmat
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
-       &                l_ek_pump, ViscFac, ek 
+       &                l_ek_pump, ViscFac, ek, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx, n_cheb_max
@@ -159,7 +159,7 @@ contains
    end subroutine finalize_psi_integ_dmat
 !------------------------------------------------------------------------------
    subroutine update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,         &
-              &                   dVsOm_Mloc, buo_imp_Mloc, domdt, vp_bal,     &
+              &                   dVsOm_Mloc, buo_Mloc, domdt, vp_bal,         &
               &                   tscheme, lMat, l_vphi_bal_calc, time_solve,  &
               &                   n_solve_calls, time_lu, n_lu_calls, time_dct,&
               &                   n_dct_calls)
@@ -177,7 +177,7 @@ contains
       type(vp_bal_type), intent(inout) :: vp_bal
       type(type_tarray), intent(inout) :: domdt
       complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(inout) :: buo_imp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
       real(cp),          intent(inout) :: time_solve
       integer,           intent(inout) :: n_solve_calls
       real(cp),          intent(inout) :: time_lu
@@ -208,6 +208,13 @@ contains
                if ( .not. l_non_rot ) then
                   domdt%expl(n_m,n_r,tscheme%istage)=domdt%expl(n_m,n_r,tscheme%istage)-  &
                   &                                  CorFac*ci*real(m,cp)*psi_Mloc(n_m,n_r)
+               end if
+
+               !-- If Buoyancy is treated exiplicitly:
+               if ( .not. l_buo_imp ) then
+                  domdt%expl(n_m,n_r,tscheme%istage)=domdt%expl(n_m,n_r,tscheme%istage)  &
+                  &                                  +buo_Mloc(n_m,n_r)
+
                end if
             end if
          end do
@@ -280,47 +287,49 @@ contains
 
       !-- If Ekman pumping is requested, normalisation is different
       !-- Hence buoyancy has to be multiplied by h^2
-      if ( l_ek_pump ) then
-         do n_r=1,n_r_max
-            h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
-            do n_m=nMstart,nMstop
-               buo_imp_Mloc(n_m,n_r)=h2*buo_imp_Mloc(n_m,n_r)
-            end do
-         end do
-      end if
-
-      !-- Transform buoyancy to Chebyshev space
-      runStart = MPI_Wtime()
-      call rscheme%costf1(buo_imp_Mloc, nMstart, nMstop, n_r_max)
-      runStop = MPI_Wtime()
-      if ( runStop > runStart ) then
-         time_dct = time_dct + (runStop-runStart)
-         n_dct_calls = n_dct_calls + 1
-      end if
-
-      !-- Matrix-vector multiplication by the operator \int\int r^2:
-      do n_m=nMstart,nMstop
-         m = idx2m(n_m)
-
-         if ( m > 0 ) then
-            do n_cheb=1,n_cheb_max
-               rhs(n_cheb)=buo_imp_Mloc(n_m,n_cheb)
-            end do
-
-            call RHSE_mat%mat_vec_mul(rhs)
-
-            rhs(1)=zero
-            rhs(2)=zero
-            do n_cheb=1,n_cheb_max
-               buo_imp_Mloc(n_m,n_cheb)=rhs(n_cheb)
-            end do
-
-            !-- Dealiasing
-            do n_cheb=n_cheb_max+1,n_r_max
-               buo_imp_Mloc(n_m,n_cheb)=zero
+      if ( l_buo_imp ) then
+         if ( l_ek_pump ) then
+            do n_r=1,n_r_max
+               h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
+               do n_m=nMstart,nMstop
+                  buo_Mloc(n_m,n_r)=h2*buo_Mloc(n_m,n_r)
+               end do
             end do
          end if
-      end do
+
+         !-- Transform buoyancy to Chebyshev space
+         runStart = MPI_Wtime()
+         call rscheme%costf1(buo_Mloc, nMstart, nMstop, n_r_max)
+         runStop = MPI_Wtime()
+         if ( runStop > runStart ) then
+            time_dct = time_dct + (runStop-runStart)
+            n_dct_calls = n_dct_calls + 1
+         end if
+
+         !-- Matrix-vector multiplication by the operator \int\int r^2:
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+
+            if ( m > 0 ) then
+               do n_cheb=1,n_cheb_max
+                  rhs(n_cheb)=buo_Mloc(n_m,n_cheb)
+               end do
+
+               call RHSE_mat%mat_vec_mul(rhs)
+
+               rhs(1)=zero
+               rhs(2)=zero
+               do n_cheb=1,n_cheb_max
+                  buo_Mloc(n_m,n_cheb)=rhs(n_cheb)
+               end do
+
+               !-- Dealiasing
+               do n_cheb=n_cheb_max+1,n_r_max
+                  buo_Mloc(n_m,n_cheb)=zero
+               end do
+            end if
+         end do
+      end if
 
       !-- Calculation of the implicit part
       call get_psi_rhs_imp_int_dmat(om_Mloc, up_Mloc, domdt%old(:,:,tscheme%istage),  &
@@ -360,7 +369,9 @@ contains
          do n_cheb=1,n_cheb_max
             rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             !-- Add buoyancy
-            if ( m /=  0 ) rhs(n_cheb)=rhs(n_cheb)+buo_imp_Mloc(n_m,n_cheb)
+            if ( l_buo_imp ) then
+               if ( m /=  0 ) rhs(n_cheb)=rhs(n_cheb)+buo_Mloc(n_m,n_cheb)
+            end if
          end do
 
          !-- Multiply rhs by precond matrix

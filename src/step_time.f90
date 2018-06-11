@@ -7,7 +7,7 @@ module step_time
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
        &             dom_Mloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
-       &                 dVsOm_Rloc, dVsOm_Mloc, buo_imp_Mloc, dpsidt, dTdt
+       &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
@@ -262,7 +262,7 @@ contains
             !--------------------
             runStart = MPI_Wtime()
             call mloop(temp_Mloc, dtemp_Mloc, psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc,&
-                 &     dVsT_Mloc, dVsOm_Mloc, buo_imp_Mloc, dTdt, dpsidt, vp_bal, tscheme,   &
+                 &     dVsT_Mloc, dVsOm_Mloc, buo_Mloc, dTdt, dpsidt, vp_bal, tscheme,       &
                  &     lMat, l_log_next, l_vphi_bal_calc, run_time_solve, n_solve_calls,     &
                  &     run_time_lu, n_lu_calls, run_time_dct,  n_dct_calls)
             runStop = MPI_Wtime()

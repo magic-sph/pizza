@@ -39,6 +39,7 @@ module namelists
    character(len=72) :: cheb_method ! Chebyshev method: collocation, integration
    character(len=72) :: matrix_solve ! Either direct or influence matrix
    character(len=72) :: corio_term   ! Implicit or explicit treatment of Coriolis force
+   character(len=72) :: buo_term   ! Implicit or explicit treatment of Buoyancy
    logical, public :: l_newmap      ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
    logical, public :: l_rerror_fix  ! Switch to fix round-off error in derivative calculation
    real(cp), public :: rerror_fac
@@ -78,6 +79,7 @@ module namelists
    logical,  public :: l_cheb_coll     ! Collocation method for Chebs
    logical,  public :: l_direct_solve  ! Direct solve or influence matrix method
    logical,  public :: l_coriolis_imp  ! Implicit treatment of Coriolis force
+   logical,  public :: l_buo_imp       ! Implicit treatment of Buoyancy
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb           ! Outer core radius
    real(cp), public :: r_icb           ! Inner core radius
@@ -102,7 +104,7 @@ contains
       &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
-      &                matrix_solve,corio_term
+      &                matrix_solve,corio_term,buo_term
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz
@@ -267,8 +269,32 @@ contains
          l_coriolis_imp = .false.
       end if
 
+      !-- Implicit or Explicit treatment of Buoyancy
+      call capitalize(buo_term)
+      if ( index(buo_term, 'IMP') /= 0 ) then
+         l_buo_imp = .true.
+      else
+         l_buo_imp = .false.
+      end if
+
+      if ( .not. l_cheb_coll ) then
+         call capitalize(time_scheme)
+         if ( time_scheme == 'CNLF'.or. time_scheme=='MODCNAB' .or. &
+         &    time_scheme == 'ARS443' .or. time_scheme=='ARS222' ) then
+            l_buo_imp = .false.
+            buo_term = 'EXP'
+            if ( rank == 0 ) then
+               write(6, &
+               &    '(" ! Implicit Buoyancy term not compatible with chosen time scheme")')
+               write(6, &
+               &    '(" ! Buoyancy term will be treated explicitly")')
+            end if
+         end if
+      end if
+
       if ( .not. l_direct_solve .and. l_coriolis_imp ) then
          l_coriolis_imp = .false.
+         corio_term = 'EXP'
          if ( rank == 0 ) then
             write(6, &
             &    '(" ! Implicit Coriolis term not compatible with influence matrix method")')
@@ -334,6 +360,7 @@ contains
       l_rerror_fix     =.true.
       rerror_fac       =500.0_cp
       corio_term       ='IMPLICIT' ! Implicit treatment of Coriolis term
+      buo_term         ='IMPLICIT' ! Implicit treatment of Buoyancy
       time_scale       ='VISC' ! viscous units
 
       !-- Physcal parameters
@@ -408,6 +435,8 @@ contains
       write(n_out,*) " matrix_solve    = """,matrix_solve(1:length),""","
       length=length_to_blank(corio_term)
       write(n_out,*) " corio_term      = """,corio_term(1:length),""","
+      length=length_to_blank(buo_term)
+      write(n_out,*) " buo_term        = """,buo_term(1:length),""","
       write(n_out,'(''  alpha           ='',ES14.6,'','')')   alpha
       write(n_out,'(''  l_newmap        ='',l3,'','')') l_newmap
       length=length_to_blank(map_function)

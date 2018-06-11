@@ -82,12 +82,6 @@ contains
          this%l_calc_lin_rhs = .false.
       end if
 
-      if ( (this%time_scheme == 'CNLF'.or. this%time_scheme=='MODCNAB') .and. &
-      &    (.not. l_cheb_coll) ) then
-           call abortRun('! Integration method does not work with the chosen &
-           &              time scheme. It would require to store buoyancy as well')
-      end if
-
       allocate ( this%dt(this%norder_exp) )
       allocate ( this%wimp(this%norder_imp) )
       allocate ( this%wimp_lin(this%norder_imp_lin) )
