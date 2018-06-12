@@ -17,6 +17,31 @@ def costf(f):
     fhat = fac*dct(f, type=1, axis=-1)
     return fhat
 
+def intcheb(f, z1, z2):
+    """
+    This routine computes an integration of a function along radius
+
+    :param f: the input array
+    :type f: numpy.ndarray
+    :param z1: bottom boundary
+    :type z1: float
+    :param z2: top boundary
+    :type z2: float
+    :returns: the integral of f between z1 and z2
+    :rtype: float
+    """
+    nr = f.shape[-1]-1
+    w2 = costf(f)
+    w2[0] *= 0.5
+    w2[-1] *= 0.5
+
+    int = 0.
+    for i in range(0, nr+1, 2):
+        int = int-(z2-z1)/(i**2-1)*w2[i]
+    int *=  np.sqrt(2./(f.shape[-1]-1))
+
+    return int
+
 def spat_spec(arr_grid, n_m_max):
     """
     This routine computes a spectral transform from a spatial represenation
