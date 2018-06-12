@@ -373,6 +373,7 @@ contains
          allocate( r_old(1), work_old(1,1), work(1,1), m2idx_old(1) )
       end if
 
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
       call MPI_Bcast(time,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(version,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(norder_exp_old,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
@@ -381,7 +382,7 @@ contains
       call MPI_Bcast(tscheme_family_old,len(tscheme_family_old),MPI_CHARACTER,0, &
            &         MPI_COMM_WORLD,ierr)
       if ( tscheme_family_old == 'MULTISTEP' ) then
-         if ( rank /= 0 ) allocate( dt_array_old(max(norder_exp_old,size(tscheme%dt))) )
+         if ( rank /= 0 ) allocate( dt_array_old(max(norder_exp_old,tscheme%norder_exp)) )
       else if ( tscheme_family_old == 'DIRK' ) then
          if ( rank /= 0 ) allocate( dt_array_old(max(1,size(tscheme%dt))) )
       end if
