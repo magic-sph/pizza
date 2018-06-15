@@ -82,6 +82,8 @@ module matrix_types
       procedure :: write => write_bordmat_complex
    end type type_bordmat_complex
 
+   public :: band_band_product
+
 contains
 
    subroutine initialize_band_real(this, kl, ku, len)
@@ -556,5 +558,49 @@ contains
       close(file_handle)
 
    end subroutine write_bordmat_complex
+!------------------------------------------------------------------------------
+   subroutine band_band_product(A,B,C)
+      !
+      ! This subroutine computes a matrix multiplication between
+      ! two input banded matrices
+      !
+
+      !-- Input variables
+      type(type_bandmat_real), intent(in) :: A
+      type(type_bandmat_real), intent(in) :: B
+
+      !-- Output variables
+      type(type_bandmat_real), intent(inout) :: C
+
+      !-- Local variables
+      integer :: klC, kuC, nrmax, n_r
+      integer :: o_a,o_c,o_b,d_a,d_b,d_c
+      integer :: row_a,row_b,row_c
+
+      if ( .not. allocated(B%dat) ) then
+         klC=A%kl+B%kl
+         kuC=A%ku+B%ku
+         nrmax =A%nlines
+         call C%initialize(klC, kuC, nrmax)
+      end if
+
+      do o_c=-min(C%ku, A%ku+B%ku),min(C%kl,A%kl+B%kl)
+         do o_a=-min(C%ku,B%kl-o_c),min(A%kl,B%ku+o_c)
+            o_b=o_c-o_a
+            row_a=A%ku+o_a
+            row_b=B%ku+o_b
+            row_c=C%ku+o_c
+            d_a  =0
+            d_b  =-o_b
+            d_c  =-o_b
+            do n_r=max(0,-o_a,o_b),max(0,nrmax+min(0,-o_a,o_b))
+               C%dat(row_c,n_r+d_c) = C%dat(row_c,n_r+d_c)+ &
+               &                      A%dat(row_a,n_r+d_a)* &
+               &                      B%dat(row_b,n_r+d_b)
+            end do
+         end do
+      end do
+
+   end subroutine band_band_product
 !------------------------------------------------------------------------------
 end module matrix_types
