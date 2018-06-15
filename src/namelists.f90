@@ -292,7 +292,7 @@ contains
          end if
       end if
 
-      if ( .not. l_direct_solve .and. l_coriolis_imp ) then
+      if ( .not. l_direct_solve .and. l_coriolis_imp .and. (.not. l_non_rot) ) then
          l_coriolis_imp = .false.
          corio_term = 'EXP'
          if ( rank == 0 ) then
