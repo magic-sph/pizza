@@ -7,6 +7,11 @@ module algebra
 
    private
 
+   interface prepare_band_mat
+      module procedure prepare_band_mat_real
+      module procedure prepare_band_mat_complex
+   end interface prepare_band_mat
+
    interface prepare_bordered_mat
       module procedure prepare_bordered_mat_real
       module procedure prepare_bordered_mat_complex
@@ -16,6 +21,11 @@ module algebra
       module procedure prepare_full_mat_real
       module procedure prepare_full_mat_complex
    end interface prepare_full_mat
+
+   interface solve_band_mat
+      module procedure solve_band_mat_real
+      module procedure solve_band_mat_complex
+   end interface solve_band_mat
 
    interface solve_bordered_mat
       module procedure solve_bordered_mat_real
@@ -29,7 +39,7 @@ module algebra
    end interface solve_full_mat
 
    public :: prepare_full_mat, prepare_bordered_mat, solve_full_mat, &
-   &         solve_bordered_mat
+   &         solve_bordered_mat, prepare_band_mat, solve_band_mat
 
 contains
 
@@ -163,6 +173,46 @@ contains
 
    end subroutine prepare_full_mat_complex
 !-----------------------------------------------------------------------------
+   subroutine prepare_band_mat_real(A,lenA,kl,ku,pivotA)
+
+      !-- Input variables
+      integer, intent(in) :: lenA
+      integer, intent(in) :: kl
+      integer, intent(in) :: ku
+
+      !-- Output variables
+      real(cp), intent(inout) :: A(2*kl+ku+1,lenA)
+      integer,  intent(out)   :: pivotA(lenA)
+
+      !-- Local variables
+      integer :: n_bands, info
+
+      n_bands = 2*kl+ku+1
+
+      call dgbtrf(lenA, lenA, kl, ku, A, n_bands, pivotA, info)
+
+   end subroutine prepare_band_mat_real
+!-----------------------------------------------------------------------------
+   subroutine prepare_band_mat_complex(A,lenA,kl,ku,pivotA)
+
+      !-- Input variables
+      integer, intent(in) :: lenA
+      integer, intent(in) :: kl
+      integer, intent(in) :: ku
+
+      !-- Output variables
+      complex(cp), intent(inout) :: A(2*kl+ku+1,lenA)
+      integer,     intent(out)   :: pivotA(lenA)
+
+      !-- Local variables
+      integer :: n_bands, info
+
+      n_bands = 2*kl+ku+1
+
+      call zgbtrf(lenA, lenA, kl, ku, A, n_bands, pivotA, info)
+
+   end subroutine prepare_band_mat_complex
+!-----------------------------------------------------------------------------
    subroutine prepare_bordered_mat_real(A1,A2,A3,A4,n_boundaries,lenA4,kl,ku, &
               &                         pivotA1, pivotA4)
 
@@ -234,6 +284,50 @@ contains
       call zgetrf(n_boundaries, n_boundaries, A1, n_boundaries, pivotA1, info)
 
    end subroutine prepare_bordered_mat_complex
+!-----------------------------------------------------------------------------
+   subroutine solve_band_mat_real(A, lenA, kl, ku, pivotA, rhs, lenRhs)
+
+      !-- Input variables
+      integer,  intent(in) :: kl
+      integer,  intent(in) :: ku
+      integer,  intent(in) :: lenA
+      integer,  intent(in) :: lenRhs
+      integer,  intent(in) :: pivotA(lenA)
+      real(cp), intent(in) :: A(2*kl+ku+1,lenA)
+
+      !-- Output variable
+      real(cp), intent(inout) :: rhs(lenRhs)
+
+      !-- Local variables:
+      integer :: nStart, n_bands, info
+
+      n_bands = 2*kl+ku+1
+
+      call dgbtrs('N', lenA, kl, ku, 1, A, n_bands, pivotA, rhs(:), lenA, info)
+
+   end subroutine solve_band_mat_real
+!-----------------------------------------------------------------------------
+   subroutine solve_band_mat_complex(A, lenA, kl, ku, pivotA, rhs, lenRhs)
+
+      !-- Input variables
+      integer,     intent(in) :: kl
+      integer,     intent(in) :: ku
+      integer,     intent(in) :: lenA
+      integer,     intent(in) :: lenRhs
+      integer,     intent(in) :: pivotA(lenA)
+      complex(cp), intent(in) :: A(2*kl+ku+1,lenA)
+
+      !-- Output variable
+      complex(cp), intent(inout) :: rhs(lenRhs)
+
+      !-- Local variables:
+      integer :: nStart, n_bands, info
+
+      n_bands = 2*kl+ku+1
+
+      call zgbtrs('N', lenA, kl, ku, 1, A, n_bands, pivotA, rhs(:), lenA, info)
+
+   end subroutine solve_band_mat_complex
 !-----------------------------------------------------------------------------
    subroutine solve_bordered_mat_real(A1, A2, A3, A4, n_boundaries, lenA4, kl, &
               &                       ku, pivotA1, pivotA4, rhs, lenRhs)

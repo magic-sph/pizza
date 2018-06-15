@@ -4,6 +4,7 @@ module tests
    !
    use precision_mod
    use parallel_mod
+   use galerkin
    use constants, only: one, half, two, pi
    use namelists, only: l_newmap, radratio, l_rerror_fix, rerror_fac
    use chebyshev, only: type_cheb
@@ -11,7 +12,7 @@ module tests
    use radial_der, only: initialize_der_arrays, finalize_der_arrays, get_ddr
    use radial_scheme, only: type_rscheme
    use algebra, only: prepare_full_mat, solve_full_mat, prepare_bordered_mat, &
-       &              solve_bordered_mat
+       &              solve_bordered_mat, prepare_band_mat
    use useful, only: abortRun
    use chebsparselib, only: intcheb2rmult1, rmult1, intcheb1, intcheb4, &
        &                    intcheb2, eye, intcheb4rmult4,  &
@@ -94,8 +95,8 @@ contains
             errColloc = maxval(abs(sol(:)-sol_theo(:)))
 
             tStart = MPI_Wtime()
-            call solve_laplacian_integ(n_r_max_loc, r_loc, rscheme, sol, &
-                 &                     timeLuInt, timeSolveInt)
+            call solve_laplacian_integ_tau(n_r_max_loc, r_loc, rscheme, sol, &
+                 &                         timeLuInt, timeSolveInt)
             tStop = MPI_Wtime()
             tInteg = tStop-tStart
             errInteg = maxval(abs(sol(:)-sol_theo(:)))
@@ -309,7 +310,105 @@ contains
 
    end subroutine solve_biharmo
 !------------------------------------------------------------------------------
-   subroutine solve_laplacian_integ(n_r_max, r, rscheme, rhs, timeLu, timeSolve)
+   subroutine solve_laplacian_integ_galerkin(n_r_max, r, rscheme, rhs, timeLu, &
+              &                              timeSolve)
+
+      !-- Input variables
+      integer,             intent(in) :: n_r_max
+      real(cp),            intent(in) :: r(n_r_max)
+      class(type_rscheme), intent(in) :: rscheme
+
+      !-- Output variable
+      real(cp),            intent(out) :: rhs(n_r_max)
+      real(cp),            intent(out) :: timeLu
+      real(cp),            intent(out) :: timeSolve
+
+      !-- Local variables
+      type(type_bandmat_real) :: gal_sten
+      real(cp), allocatable :: tmp(:), stencilA(:), stencilB(:)
+      real(cp), allocatable :: Bmat(:,:), Amat(:,:)
+      integer, allocatable :: pivotA(:)
+      real(cp) :: a, b, tStart, tStop
+      integer :: i_r, klA, kuA, klB, kuB, nStart
+      integer :: n_band, n_r, n_bands_Bmat, n_bands_Amat, n_boundaries, lenA
+
+      klA = 1
+      kuA = 1
+      klB = 3
+      kuB = 3
+      n_bands_Bmat = klB+kuB+1
+      !-- Factor 2 in front of klA is needed for LU factorisation
+      n_bands_Amat = 2*klA+kuA+1
+      n_boundaries = 2
+      lenA = n_r_max-n_boundaries
+
+      allocate ( stencilA(klA+kuA+1), stencilB(klB+kuB+1) )
+      allocate ( Amat(n_bands_Amat, n_r_max) )
+      allocate ( Bmat(n_bands_Bmat, n_r_max) )
+      allocate ( tmp(n_r_max), pivotA(n_r_max) )
+
+      call get_galerkin_stencil(gal_sten, n_r_max, 1)
+
+      !-- Set the matrices to zero
+      Amat(:,:)=0.0_cp
+      Bmat(:,:)=0.0_cp
+      
+      a = half*(r(1)-r(n_r_max))
+      b = half*(r(1)+r(n_r_max))
+
+      !-- Fill right-hand side matrix
+      do n_r=1,lenA
+         i_r = n_r+n_boundaries
+
+         !-- Define the equations 
+         stencilA = rmult1(a,b,i_r-1,klA+kuA+1)-intcheb1(a,i_r-1,klA+kuA+1)
+         stencilB = intcheb2rmult1(a,b,i_r-1,klB+kuB+1)
+
+         !-- Roll the arrays for band storage
+         do n_band=1,klB+kuB+1
+            if ( i_r+kuB+1-n_band <= n_r_max .and. i_r+kuB+1-n_band >= 1 ) then
+               Bmat(n_band,i_r+kuB+1-n_band) = rscheme%rnorm*stencilB(n_band)
+            end if
+         end do
+         !-- Roll the arrays for band storage
+         do n_band=1,klA+kuA+1
+            if ( i_r+kuA+1-n_band <= n_r_max .and. i_r+kuA+1-n_band >= 1 ) then
+               Amat(klA+n_band,i_r+kuA+1-n_band) = rscheme%rnorm*stencilA(n_band)
+            end if
+         end do
+      end do
+
+      !-- Assemble right-hand side
+      tmp(:)= 3.0_cp
+      call rscheme%costf1(tmp, n_r_max)
+      nStart = n_boundaries+1
+      call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
+           &     tmp, 1, 0.0_cp, rhs, 1)
+
+      !-- LU factorisation
+      tStart = MPI_Wtime()
+      call prepare_band_mat(Amat,n_r_max,klA,kuA, pivotA)
+      tStop = MPI_Wtime()
+      timeLu= tStop-tStart
+
+      !-- Solve
+      ! tStart = MPI_Wtime()
+      ! call solve_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,n_r_max, &
+           ! &                  klA4, kuA4, pivotA1, pivotA4, rhs, n_r_max)
+      ! tStop = MPI_Wtime()
+      timeSolve= tStop-tStart
+
+      !-- Final DCT to bring the solution back to physical space
+      call rscheme%costf1(rhs, n_r_max)
+
+      call destroy_galerkin_stencil(gal_sten)
+      deallocate ( Amat, Bmat, tmp, pivotA )
+      deallocate ( stencilA, stencilB )
+
+   end subroutine solve_laplacian_integ_galerkin
+!------------------------------------------------------------------------------
+   subroutine solve_laplacian_integ_tau(n_r_max, r, rscheme, rhs, timeLu, &
+              &                         timeSolve)
 
       !-- Input variables
       integer,             intent(in) :: n_r_max
@@ -447,7 +546,7 @@ contains
       deallocate ( A4mat, A1mat, A2mat, A3mat, Bmat, tmp, pivotA4 )
       deallocate ( stencilA4, stencilB )
 
-   end subroutine solve_laplacian_integ
+   end subroutine solve_laplacian_integ_tau
 !------------------------------------------------------------------------------
    subroutine solve_laplacian_colloc(n_r_max, r, rscheme, rhs, timeLu, &
               &                      timeSolve)
