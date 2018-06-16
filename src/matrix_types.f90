@@ -21,6 +21,7 @@ module matrix_types
    contains
       procedure :: initialize => initialize_band_real
       procedure :: finalize => finalize_band_real
+      procedure :: reduce_mat_size
       procedure :: mat_real_vec_complex_mul
       procedure :: mat_real_vec_real_mul
       generic :: mat_vec_mul => mat_real_vec_complex_mul, mat_real_vec_real_mul
@@ -123,6 +124,40 @@ contains
       deallocate( this%dat )
 
    end subroutine finalize_band_real
+!------------------------------------------------------------------------------
+   subroutine reduce_mat_size(this, ncut)
+
+      class(type_bandmat_real) :: this
+
+      !-- Input variable
+      integer, intent(in) :: ncut
+
+      !-- Local variable
+      real(cp), allocatable :: tmp(:,:)
+      integer :: n_r, n_b
+
+      allocate( tmp(this%nbands,this%nlines) )
+
+      do n_r=1,this%nlines
+         do n_b=1,this%nbands
+            tmp(n_b,n_r)=this%dat(n_b,n_r)
+         end do
+      end do
+
+      deallocate( this%dat)
+
+      this%nlines = this%nlines-ncut
+      allocate( this%dat(this%nbands, this%nlines) )
+
+      do n_r=1,this%nlines
+         do n_b=1,this%nbands
+            this%dat(n_b,n_r)=tmp(n_b,n_r)
+         end do
+      end do
+
+      deallocate( tmp)
+
+   end subroutine reduce_mat_size
 !------------------------------------------------------------------------------
    subroutine mat_real_vec_complex_mul(this, vec)
       !
@@ -577,7 +612,7 @@ contains
       integer :: o_a,o_c,o_b,d_a,d_b,d_c
       integer :: row_a,row_b,row_c
 
-      if ( .not. allocated(B%dat) ) then
+      if ( .not. allocated(C%dat) ) then
          klC=A%kl+B%kl
          kuC=A%ku+B%ku
          nrmax =A%nlines
@@ -587,13 +622,13 @@ contains
       do o_c=-min(C%ku, A%ku+B%ku),min(C%kl,A%kl+B%kl)
          do o_a=-min(C%ku,B%kl-o_c),min(A%kl,B%ku+o_c)
             o_b=o_c-o_a
-            row_a=A%ku+o_a
-            row_b=B%ku+o_b
-            row_c=C%ku+o_c
-            d_a  =0
-            d_b  =-o_b
-            d_c  =-o_b
-            do n_r=max(0,-o_a,o_b),max(0,nrmax+min(0,-o_a,o_b))
+            row_a=A%ku+o_a+1
+            row_b=B%ku+o_b+1
+            row_c=C%ku+o_c+1
+            d_a  =1
+            d_b  =-o_b+1
+            d_c  =-o_b+1
+            do n_r=max(0,-o_a,o_b),max(0,nrmax+min(0,-o_a,o_b))-1
                C%dat(row_c,n_r+d_c) = C%dat(row_c,n_r+d_c)+ &
                &                      A%dat(row_a,n_r+d_a)* &
                &                      B%dat(row_b,n_r+d_b)
