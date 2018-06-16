@@ -12,13 +12,13 @@ module tests
    use radial_der, only: initialize_der_arrays, finalize_der_arrays, get_ddr
    use radial_scheme, only: type_rscheme
    use algebra, only: prepare_full_mat, solve_full_mat, prepare_bordered_mat, &
-       &              solve_bordered_mat, prepare_band_mat
+       &              solve_bordered_mat, prepare_band_mat, solve_band_mat
    use useful, only: abortRun
    use chebsparselib, only: intcheb2rmult1, rmult1, intcheb1, intcheb4, &
        &                    intcheb2, eye, intcheb4rmult4,  &
        &                    intcheb4rmult4laplrot2, intcheb4rmult4lapl2
    use integration, only: rInt_R
-   use matrix_types, only: type_bandmat_real, type_bordmat_real
+   use matrix_types, only: type_bandmat_real, type_bordmat_real, band_band_product
 
    implicit none
 
@@ -39,7 +39,7 @@ contains
       real(cp), allocatable :: r_loc(:), sol(:), sol_theo(:)
       integer :: file_handle, n_r_max_loc, n_in, n_r
       real(cp) :: r_cmb, r_icb, eps, alph1, alph2, c1, c2
-      real(cp) :: errColloc, errInteg
+      real(cp) :: errColloc, errInteg, bbot, btop, epsh
       real(cp) :: tStart, tStop, tColloc, tInteg
       real(cp) :: timeLuColl, timeLuInt, timeSolveColl, timeSolveInt
 
@@ -62,6 +62,11 @@ contains
          else
             open( newunit=file_handle, file='error_laplacian')
          end if
+         !btop = -0.25_cp
+         !bbot =  0.75_cp
+         btop = 0._cp
+         bbot = 0._cp
+         epsh =  3.0_cp
 
          do n_r=1,size(nrs)
             n_r_max_loc = nrs(n_r)
@@ -83,20 +88,24 @@ contains
                  &                     rerror_fac)
             call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
-            c1 = (-1.0_cp-0.75_cp*(r_cmb**2-r_icb**2))/log(r_cmb/r_icb)
-            c2 = -0.25_cp-0.75_cp*r_cmb**2-c1*log(r_cmb)
-            sol_theo(:)=0.75_cp*r_loc(:)**2+c1*log(r_loc)+c2
+            c1 = (btop-bbot-0.25_cp*epsh*(r_cmb**2-r_icb**2))/log(r_cmb/r_icb)
+            c2 = btop-0.25_cp*epsh*r_cmb**2-c1*log(r_cmb)
+            sol_theo(:)=0.25_cp*epsh*r_loc(:)**2+c1*log(r_loc)+c2
 
             tStart = MPI_Wtime()
             call solve_laplacian_colloc(n_r_max_loc, r_loc, rscheme, sol, &
-                 &                      timeLuColl, timeSolveColl)
+                 &                      timeLuColl, timeSolveColl, bbot,  &
+                 &                      btop, epsh)
             tStop = MPI_Wtime()
             tColloc = tStop-tStart
             errColloc = maxval(abs(sol(:)-sol_theo(:)))
 
             tStart = MPI_Wtime()
-            call solve_laplacian_integ_tau(n_r_max_loc, r_loc, rscheme, sol, &
-                 &                         timeLuInt, timeSolveInt)
+            call solve_laplacian_integ_tau(n_r_max_loc, r_loc, rscheme, sol,    & 
+                 &                         timeLuInt, timeSolveInt, bbot, btop, &
+                 &                         epsh)
+            !call solve_laplacian_integ_galerkin(n_r_max_loc, r_loc, rscheme, sol, &
+            !     &                              timeLuInt, timeSolveInt, epsh)
             tStop = MPI_Wtime()
             tInteg = tStop-tStart
             errInteg = maxval(abs(sol(:)-sol_theo(:)))
@@ -311,12 +320,13 @@ contains
    end subroutine solve_biharmo
 !------------------------------------------------------------------------------
    subroutine solve_laplacian_integ_galerkin(n_r_max, r, rscheme, rhs, timeLu, &
-              &                              timeSolve)
+              &                              timeSolve, epsh)
 
       !-- Input variables
       integer,             intent(in) :: n_r_max
       real(cp),            intent(in) :: r(n_r_max)
       class(type_rscheme), intent(in) :: rscheme
+      real(cp),            intent(in) :: epsh
 
       !-- Output variable
       real(cp),            intent(out) :: rhs(n_r_max)
@@ -324,13 +334,12 @@ contains
       real(cp),            intent(out) :: timeSolve
 
       !-- Local variables
-      type(type_bandmat_real) :: gal_sten
+      type(type_bandmat_real) :: gal_sten, Amat, Cmat
       real(cp), allocatable :: tmp(:), stencilA(:), stencilB(:)
-      real(cp), allocatable :: Bmat(:,:), Amat(:,:)
-      integer, allocatable :: pivotA(:)
+      real(cp), allocatable :: Bmat(:,:)
       real(cp) :: a, b, tStart, tStop
-      integer :: i_r, klA, kuA, klB, kuB, nStart
-      integer :: n_band, n_r, n_bands_Bmat, n_bands_Amat, n_boundaries, lenA
+      integer :: i_r, klA, kuA, klB, kuB
+      integer :: n_band, n_r, n_bands_Bmat, n_boundaries, lenA
 
       klA = 1
       kuA = 1
@@ -338,19 +347,18 @@ contains
       kuB = 3
       n_bands_Bmat = klB+kuB+1
       !-- Factor 2 in front of klA is needed for LU factorisation
-      n_bands_Amat = 2*klA+kuA+1
       n_boundaries = 2
       lenA = n_r_max-n_boundaries
 
+      call Amat%initialize(klA, kuA, n_r_max)
+
       allocate ( stencilA(klA+kuA+1), stencilB(klB+kuB+1) )
-      allocate ( Amat(n_bands_Amat, n_r_max) )
       allocate ( Bmat(n_bands_Bmat, n_r_max) )
-      allocate ( tmp(n_r_max), pivotA(n_r_max) )
+      allocate ( tmp(n_r_max) )
 
       call get_galerkin_stencil(gal_sten, n_r_max, 1)
 
       !-- Set the matrices to zero
-      Amat(:,:)=0.0_cp
       Bmat(:,:)=0.0_cp
       
       a = half*(r(1)-r(n_r_max))
@@ -373,47 +381,68 @@ contains
          !-- Roll the arrays for band storage
          do n_band=1,klA+kuA+1
             if ( i_r+kuA+1-n_band <= n_r_max .and. i_r+kuA+1-n_band >= 1 ) then
-               Amat(klA+n_band,i_r+kuA+1-n_band) = rscheme%rnorm*stencilA(n_band)
+               Amat%dat(n_band,i_r+kuA+1-n_band) = rscheme%rnorm*stencilA(n_band)
             end if
          end do
       end do
 
+      !-- Multiply by the Galerkin matrix
+      gal_sten%dat = gal_sten%dat
+      call band_band_product(Amat, gal_sten, Cmat, l_lhs=.true.)
+
       !-- Assemble right-hand side
-      tmp(:)= 3.0_cp
+      tmp(:)= epsh
       call rscheme%costf1(tmp, n_r_max)
-      nStart = n_boundaries+1
       call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
            &     tmp, 1, 0.0_cp, rhs, 1)
 
+      !-- Remove first blank rows (careful remapping of kl, ku and room for LU factorisation)
+      call Cmat%remove_leading_blank_rows(n_boundaries)
+
+      !-- Truncate the last N lines
+      call Cmat%remove_last_rows(n_boundaries)
+
       !-- LU factorisation
       tStart = MPI_Wtime()
-      call prepare_band_mat(Amat,n_r_max,klA,kuA, pivotA)
+      call prepare_band_mat(Cmat%dat,Cmat%nlines, Cmat%kl, Cmat%ku, Cmat%piv)
       tStop = MPI_Wtime()
       timeLu= tStop-tStart
 
       !-- Solve
-      ! tStart = MPI_Wtime()
-      ! call solve_bordered_mat(A1mat,A2mat,A3mat,A4mat,n_boundaries,n_r_max, &
-           ! &                  klA4, kuA4, pivotA1, pivotA4, rhs, n_r_max)
-      ! tStop = MPI_Wtime()
+      tStart = MPI_Wtime()
+      call solve_band_mat(Cmat%dat,Cmat%nlines, Cmat%kl, Cmat%ku, Cmat%piv, &
+           &              rhs(1+n_boundaries:n_r_max), n_r_max-n_boundaries)
+      tStop = MPI_Wtime()
       timeSolve= tStop-tStart
+
+      tmp(:) = 0.0_cp
+      tmp(1:n_r_max-n_boundaries)=rhs(1+n_boundaries:n_r_max) 
+      rhs(:)=tmp(:)
+
+      !-- Transform from Galerkin space to Chebyshev space
+      call galerkin2cheb(gal_sten, rhs)
 
       !-- Final DCT to bring the solution back to physical space
       call rscheme%costf1(rhs, n_r_max)
 
       call destroy_galerkin_stencil(gal_sten)
-      deallocate ( Amat, Bmat, tmp, pivotA )
+      call Amat%finalize()
+      call Cmat%finalize()
+      deallocate ( Bmat, tmp )
       deallocate ( stencilA, stencilB )
 
    end subroutine solve_laplacian_integ_galerkin
 !------------------------------------------------------------------------------
    subroutine solve_laplacian_integ_tau(n_r_max, r, rscheme, rhs, timeLu, &
-              &                         timeSolve)
+              &                         timeSolve, bbot, btop, epsh)
 
       !-- Input variables
       integer,             intent(in) :: n_r_max
       real(cp),            intent(in) :: r(n_r_max)
       class(type_rscheme), intent(in) :: rscheme
+      real(cp),            intent(in) :: bbot
+      real(cp),            intent(in) :: btop
+      real(cp),            intent(in) :: epsh
 
       !-- Output variable
       real(cp),            intent(out) :: rhs(n_r_max)
@@ -517,14 +546,14 @@ contains
       end do
 
       !-- Assemble right-hand side
-      tmp(:)       = 3.0_cp
+      tmp(:)=epsh
       call rscheme%costf1(tmp, n_r_max)
       nStart = n_boundaries+1
       call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
            &     tmp, 1, 0.0_cp, rhs, 1)
       !-- Boundary conditions
-      rhs(1) = -0.25_cp
-      rhs(2) = 0.75_cp
+      rhs(1) = btop
+      rhs(2) = bbot
 
       !-- LU factorisation
       tStart = MPI_Wtime()
@@ -549,12 +578,15 @@ contains
    end subroutine solve_laplacian_integ_tau
 !------------------------------------------------------------------------------
    subroutine solve_laplacian_colloc(n_r_max, r, rscheme, rhs, timeLu, &
-              &                      timeSolve)
+              &                      timeSolve, bbot, btop, epsh)
 
       !-- Input variables
       integer,             intent(in) :: n_r_max
       real(cp),            intent(in) :: r(n_r_max)
       class(type_rscheme), intent(in) :: rscheme
+      real(cp),            intent(in) :: bbot
+      real(cp),            intent(in) :: btop
+      real(cp),            intent(in) :: epsh
 
       !-- Output variable
       real(cp),            intent(out) :: rhs(n_r_max)
@@ -574,9 +606,9 @@ contains
          mat(1,nR_out)=rscheme%rnorm*rscheme%rMat(1,nR_out)
          mat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
       end do
-      rhs(:)       = 3.0_cp
-      rhs(1)       = -0.25_cp
-      rhs(n_r_max) = 0.75_cp
+      rhs(:)       = epsh
+      rhs(1)       = btop
+      rhs(n_r_max) = bbot
 
       !----- Other points:
       do nR_out=1,n_r_max

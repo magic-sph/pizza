@@ -303,7 +303,7 @@ contains
 
       n_bands = 2*kl+ku+1
 
-      call dgbtrs('N', lenA, kl, ku, 1, A, n_bands, pivotA, rhs(:), lenA, info)
+      call dgbtrs('N', lenA, kl, ku, 1, A, n_bands, pivotA, rhs(:), lenRhs, info)
 
    end subroutine solve_band_mat_real
 !-----------------------------------------------------------------------------

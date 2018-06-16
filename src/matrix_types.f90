@@ -17,11 +17,14 @@ module matrix_types
       integer :: ku ! Number of upper diagonals
       integer :: nbands ! Number of bands
       integer :: nlines    ! Number of lines
+      logical :: l_lhs_type ! L.H.S. matrix or not
+      integer, allocatable :: piv(:) ! pivot
       real(cp), allocatable :: dat(:,:) ! data
    contains
       procedure :: initialize => initialize_band_real
       procedure :: finalize => finalize_band_real
-      procedure :: reduce_mat_size
+      procedure :: remove_last_rows
+      procedure :: remove_leading_blank_rows
       procedure :: mat_real_vec_complex_mul
       procedure :: mat_real_vec_real_mul
       generic :: mat_vec_mul => mat_real_vec_complex_mul, mat_real_vec_real_mul
@@ -87,7 +90,7 @@ module matrix_types
 
 contains
 
-   subroutine initialize_band_real(this, kl, ku, len)
+   subroutine initialize_band_real(this, kl, ku, len, l_lhs)
 
       class(type_bandmat_real) :: this
 
@@ -95,25 +98,36 @@ contains
       integer, intent(in) :: kl
       integer, intent(in) :: ku
       integer, intent(in) :: len
+      logical, optional,  intent(in) :: l_lhs
 
       !-- Local variables
-      integer :: n_r, n_b
+      logical :: l_lhs_loc
+
+      if ( present(l_lhs) ) then
+         l_lhs_loc = l_lhs
+      else
+         l_lhs_loc = .false.
+      end if
 
       this%kl = kl
       this%ku = ku
       this%nlines = len
       this%nbands = kl+ku+1
+      this%l_lhs_type = l_lhs_loc
 
-      allocate( this%dat(this%nbands,this%nlines))
+      if ( this%l_lhs_type ) then
+         allocate( this%dat(this%nbands+this%kl,this%nlines) )
+         allocate( this%piv(this%nlines) )
+         bytes_allocated = bytes_allocated+(this%nbands+this%kl)*this%nlines*&
+         &                 SIZEOF_DEF_REAL+this%nlines*SIZEOF_INTEGER
+      else
+         allocate( this%dat(this%nbands,this%nlines) )
+         bytes_allocated = bytes_allocated+this%nbands*this%nlines*SIZEOF_DEF_REAL
+      end if
 
       !-- Fill it with zeros
-      do n_r=1,this%nlines
-         do n_b=1,this%nbands
-            this%dat(n_b,n_r)=0.0_cp
-         end do
-      end do
+      this%dat(:,:)=0.0_cp
 
-      bytes_allocated = bytes_allocated+this%nbands*this%nlines*SIZEOF_DEF_REAL
 
    end subroutine initialize_band_real
 !------------------------------------------------------------------------------
@@ -121,11 +135,12 @@ contains
 
       class(type_bandmat_real) :: this
 
+      if ( this%l_lhs_type ) deallocate( this%piv )
       deallocate( this%dat )
 
    end subroutine finalize_band_real
 !------------------------------------------------------------------------------
-   subroutine reduce_mat_size(this, ncut)
+   subroutine remove_last_rows(this, ncut)
 
       class(type_bandmat_real) :: this
 
@@ -138,26 +153,80 @@ contains
 
       allocate( tmp(this%nbands,this%nlines) )
 
-      do n_r=1,this%nlines
-         do n_b=1,this%nbands
-            tmp(n_b,n_r)=this%dat(n_b,n_r)
+      if ( this%l_lhs_type ) then
+         do n_r=1,this%nlines
+            do n_b=1,this%nbands
+               tmp(n_b,n_r)=this%dat(this%kl+n_b,n_r)
+            end do
          end do
-      end do
+      else
+         do n_r=1,this%nlines
+            do n_b=1,this%nbands
+               tmp(n_b,n_r)=this%dat(n_b,n_r)
+            end do
+         end do
+      end if
 
       deallocate( this%dat)
 
       this%nlines = this%nlines-ncut
-      allocate( this%dat(this%nbands, this%nlines) )
-
-      do n_r=1,this%nlines
-         do n_b=1,this%nbands
-            this%dat(n_b,n_r)=tmp(n_b,n_r)
+      if ( this%l_lhs_type ) then
+         deallocate( this%piv )
+         allocate( this%piv(this%nlines) )
+         allocate( this%dat(this%nbands+this%kl, this%nlines) )
+         do n_r=1,this%nlines
+            do n_b=1,this%nbands
+               this%dat(this%kl+n_b,n_r)=tmp(n_b,n_r)
+            end do
          end do
-      end do
+      else
+         allocate( this%dat(this%nbands, this%nlines) )
+         do n_r=1,this%nlines
+            do n_b=1,this%nbands
+               this%dat(n_b,n_r)=tmp(n_b,n_r)
+            end do
+         end do
+      end if
 
       deallocate( tmp)
 
-   end subroutine reduce_mat_size
+   end subroutine remove_last_rows
+!------------------------------------------------------------------------------
+   subroutine remove_leading_blank_rows(this,ncut)
+
+      class(type_bandmat_real) :: this
+
+      !-- Input variable
+      integer, intent(in) :: ncut
+
+      !-- Local variable
+      real(cp), allocatable :: tmp(:,:)
+      integer :: n_r, n_b
+
+      if ( this%l_lhs_type ) then
+         allocate( tmp(this%nbands,this%nlines) )
+         do n_r=1,this%nlines
+            do n_b=1,this%nbands
+               tmp(n_b,n_r)=this%dat(this%kl+n_b,n_r)
+            end do
+         end do
+         this%kl = this%kl-ncut
+         this%ku = this%ku+ncut
+         deallocate( this%dat )
+         allocate( this%dat(2*this%kl+this%ku+1,this%nlines) )
+         this%dat(1:this%kl,:)=0.0_cp
+         do n_r=1,this%nlines
+            do n_b=1,this%nbands
+               this%dat(this%kl+n_b,n_r)=tmp(n_b,n_r)
+            end do
+         end do
+         deallocate( tmp )
+      else
+         this%kl = this%kl-ncut
+         this%ku = this%ku+ncut
+      end if
+
+   end subroutine remove_leading_blank_rows
 !------------------------------------------------------------------------------
    subroutine mat_real_vec_complex_mul(this, vec)
       !
@@ -594,7 +663,7 @@ contains
 
    end subroutine write_bordmat_complex
 !------------------------------------------------------------------------------
-   subroutine band_band_product(A,B,C)
+   subroutine band_band_product(A,B,C,l_lhs)
       !
       ! This subroutine computes a matrix multiplication between
       ! two input banded matrices
@@ -603,6 +672,7 @@ contains
       !-- Input variables
       type(type_bandmat_real), intent(in) :: A
       type(type_bandmat_real), intent(in) :: B
+      logical,                 intent(in) :: l_lhs
 
       !-- Output variables
       type(type_bandmat_real), intent(inout) :: C
@@ -610,13 +680,19 @@ contains
       !-- Local variables
       integer :: klC, kuC, nrmax, n_r
       integer :: o_a,o_c,o_b,d_a,d_b,d_c
-      integer :: row_a,row_b,row_c
+      integer :: row_a,row_b,row_c,row_c_offset
 
       if ( .not. allocated(C%dat) ) then
          klC=A%kl+B%kl
          kuC=A%ku+B%ku
          nrmax =A%nlines
-         call C%initialize(klC, kuC, nrmax)
+         call C%initialize(klC, kuC, nrmax, l_lhs)
+      end if
+
+      if ( l_lhs ) then
+         row_c_offset = klC
+      else
+         row_c_offset = 0
       end if
 
       do o_c=-min(C%ku, A%ku+B%ku),min(C%kl,A%kl+B%kl)
@@ -629,9 +705,8 @@ contains
             d_b  =-o_b+1
             d_c  =-o_b+1
             do n_r=max(0,-o_a,o_b),max(0,nrmax+min(0,-o_a,o_b))-1
-               C%dat(row_c,n_r+d_c) = C%dat(row_c,n_r+d_c)+ &
-               &                      A%dat(row_a,n_r+d_a)* &
-               &                      B%dat(row_b,n_r+d_b)
+               C%dat(row_c+row_c_offset,n_r+d_c) = C%dat(row_c+row_c_offset,n_r+d_c)+ &
+               &                                   A%dat(row_a,n_r+d_a)*B%dat(row_b,n_r+d_b)
             end do
          end do
       end do
