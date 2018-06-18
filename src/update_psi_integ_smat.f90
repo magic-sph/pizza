@@ -797,7 +797,7 @@ contains
          !-- Roll the array for band storage
          do n_band=1,Amat%nbands
             if ( i_r+Amat%ku+1-n_band <= Amat%nlines .and. i_r+Amat%ku+1-n_band >= 1 ) then
-               Amat%dat(Amat%kl+n_band,i_r+Amat%ku+1-n_band) = rscheme%rnorm* &
+               Amat%dat(n_band,i_r+Amat%ku+1-n_band) = rscheme%rnorm* &
                &             cmplx(stencilA(n_band), CorSten(n_band), kind=cp)
             end if
          end do

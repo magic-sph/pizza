@@ -442,9 +442,6 @@ contains
       !-- To be improved --!
       tempMat_fac(:)=one
 
-      deallocate( stencilA )
-      call Amat%finalize()
-
 
       !do n_r=1,A_mat%nlines_band
       !   i_r = n_r+A_mat%ntau
@@ -452,16 +449,20 @@ contains
 !         do n_band=1,A_mat%nbands
 !            if ( n_r+A_mat%ku+1-n_band <= A_mat%nlines_band .and. &
 !            &                         n_r+A_mat%ku+1-n_band >= 1 ) then
-!               A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) =  &
-!               & A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band)* &
+!               A_mat%A4(n_band,n_r+A_mat%ku+1-n_band) =  &
+!               & A_mat%A4(n_band,n_r+A_mat%ku+1-n_band)* &
 !               &                      tempMat_fac(n_r+A_mat%ntau)
- !           end if
- !        end do
+!           end if
+!        end do
 
-      !end do
+!     end do
 
       !-- LU factorisation
       call Cmat%prepare_LU()
+
+      !-- Remove temporary arrays
+      deallocate( stencilA )
+      call Amat%finalize()
 
    end subroutine get_lhs_mat_gal
 !------------------------------------------------------------------------------
