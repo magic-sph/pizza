@@ -4,7 +4,7 @@ module update_temp_integ
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, one, ci, half
    use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, &
-       &                TdiffFac, l_non_rot, l_buo_imp
+       &                TdiffFac, l_non_rot, l_buo_imp, l_galerkin
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, rgrav, r
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, n_cheb_max
@@ -25,7 +25,6 @@ module update_temp_integ
    integer, parameter :: n_boundaries=2 ! Number of BCs for this equation
    integer, parameter :: klA=4
    integer, parameter :: kuA=4
-   logical, parameter :: l_galerkin = .true.
 
    logical,  allocatable :: lTmat(:)
    complex(cp), allocatable :: rhs(:)
@@ -193,6 +192,12 @@ contains
 
       !-- Transform the explicit part to chebyshev space
       call rscheme%costf1(dTdt%expl(:,:,tscheme%istage), nMstart, nMstop, n_r_max)
+      do n_m=nMstart,nMstop
+         do n_cheb=n_cheb_max+1,n_r_max
+            dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
+
+         end do
+      end do
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
@@ -204,13 +209,13 @@ contains
 
          rhs(1)=zero
          rhs(2)=zero
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             dTdt%expl(n_m,n_cheb,tscheme%istage)=rhs(n_cheb)
          end do
          !-- Pad with zeros
-         do n_cheb=n_cheb_max+1,n_r_max
-            dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
-         end do
+         !do n_cheb=n_cheb_max+1,n_r_max
+         !   dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
+         !end do
       end do
 
       !-- Calculation of the implicit part
@@ -255,18 +260,18 @@ contains
             call LHS_mat_tau(n_m)%solve(rhs, n_r_max)
          end if
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             temp_Mloc(n_m, n_cheb)=rhs(n_cheb)
          end do
 
       end do
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
-      do n_cheb=n_cheb_max+1,n_r_max
-         do n_m=nMstart,nMstop
-            temp_Mloc(n_m,n_cheb)=zero
-         end do
-      end do
+      !do n_cheb=n_cheb_max+1,n_r_max
+      !   do n_m=nMstart,nMstop
+      !      temp_Mloc(n_m,n_cheb)=zero
+      !   end do
+      !end do
 
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
@@ -331,14 +336,14 @@ contains
          rhs(1)=zero
          rhs(2)=zero
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             temp_old(n_m,n_cheb)=rhs(n_cheb)
          end do
 
          !-- Pad with zeros
-         do n_cheb=n_cheb_max+1,n_r_max
-            temp_old(n_m,n_cheb)=zero
-         end do
+         !do n_cheb=n_cheb_max+1,n_r_max
+         !   temp_old(n_m,n_cheb)=zero
+         !end do
 
       end do
 
@@ -362,28 +367,28 @@ contains
             call RHSI_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero
             rhs(2)=zero
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                work_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
             !-- Pad with zeros
-            do n_cheb=n_cheb_max+1,n_r_max
-               work_Mloc(n_m,n_cheb)=zero
-            end do
+            !do n_cheb=n_cheb_max+1,n_r_max
+            !   work_Mloc(n_m,n_cheb)=zero
+            !end do
          end do
 
          !-- Finally assemble the right hand side
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
                dtemp_imp_Mloc_last(n_m,n_cheb)=TdiffFac*work_Mloc(n_m,n_cheb) 
             end do
          end do
 
          !-- Pad with zeros
-         do n_cheb=n_cheb_max+1,n_r_max
-            do n_m=nMstart,nMstop
-               dtemp_imp_Mloc_last(n_m,n_cheb)=zero
-            end do
-         end do
+         !do n_cheb=n_cheb_max+1,n_r_max
+         !   do n_m=nMstart,nMstop
+         !      dtemp_imp_Mloc_last(n_m,n_cheb)=zero
+         !   end do
+         !end do
 
       end if
 

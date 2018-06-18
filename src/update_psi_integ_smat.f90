@@ -6,7 +6,8 @@ module update_psi_integ_smat
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
-       &                l_ek_pump, ViscFac, l_coriolis_imp, ek, l_buo_imp
+       &                l_ek_pump, ViscFac, l_coriolis_imp, ek, l_buo_imp,    &
+       &                l_galerkin
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx, n_cheb_max
@@ -31,7 +32,6 @@ module update_psi_integ_smat
    
    private
 
-   logical, parameter :: l_galerkin=.true.
    logical,  allocatable :: lPsimat(:) ! Do we need to rebuild the matrices?
    complex(cp), allocatable :: rhs(:)  ! Complex right-hand-side
    real(cp), allocatable :: psifac(:,:) ! Precondition matrix
@@ -311,6 +311,12 @@ contains
          n_dct_calls = n_dct_calls + 1
       end if
 
+      do n_m=nMstart,nMstop
+         do n_cheb=n_cheb_max+1,n_r_max
+            dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
+         end do
+      end do
+
       !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
@@ -329,14 +335,14 @@ contains
          rhs(1)=zero
          rhs(2)=zero
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             dpsidt%expl(n_m,n_cheb,tscheme%istage)=rhs(n_cheb)
          end do
 
          !-- Deliasing
-         do n_cheb=n_cheb_max+1,n_r_max
-            dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
-         end do
+         !do n_cheb=n_cheb_max+1,n_r_max
+         !   dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
+         !end do
       end do
 
       !-- If Ekman pumping is needed then regularisation is different
@@ -375,14 +381,14 @@ contains
                rhs(2)=zero
                rhs(3)=zero
                rhs(4)=zero
-               do n_cheb=1,n_cheb_max
+               do n_cheb=1,n_r_max
                   buo_Mloc(n_m,n_cheb)=rhs(n_cheb)
                end do
 
                !-- Deliasing
-               do n_cheb=n_cheb_max+1,n_r_max
-                  buo_Mloc(n_m,n_cheb)=zero
-               end do
+               !do n_cheb=n_cheb_max+1,n_r_max
+               !   buo_Mloc(n_m,n_cheb)=zero
+               !end do
             end if
          end do
       end if
@@ -452,11 +458,11 @@ contains
          end if
 
          if ( m == 0 ) then
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                uphi0(n_cheb)=real(rhs(n_cheb))
             end do
          else
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
          end if
@@ -464,18 +470,18 @@ contains
       end do
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
-      if ( n_cheb_max < n_r_max ) then ! fill with zeros !
-         do n_cheb=n_cheb_max+1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m == 0 ) then
-                  uphi0(n_cheb)=0.0_cp
-               else
-                  psi_Mloc(n_m,n_cheb)=zero
-               end if
-            end do
-         end do
-      end if
+      ! if ( n_cheb_max < n_r_max ) then ! fill with zeros !
+         ! do n_cheb=n_cheb_max+1,n_r_max
+            ! do n_m=nMstart,nMstop
+               ! m = idx2m(n_m)
+               ! if ( m == 0 ) then
+                  ! uphi0(n_cheb)=0.0_cp
+               ! else
+                  ! psi_Mloc(n_m,n_cheb)=zero
+               ! end if
+            ! end do
+         ! end do
+      ! end if
 
       !-- Bring uphi0 to the physical space
       if ( l_rank_has_m0 ) then
@@ -590,14 +596,14 @@ contains
             rhs(4)=zero
          end if
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             psi_old(n_m,n_cheb)=rhs(n_cheb)
          end do
 
          !-- Pad with zeros
-         do n_cheb=n_cheb_max+1,n_r_max
-            psi_old(n_m,n_cheb)=zero
-         end do
+         !do n_cheb=n_cheb_max+1,n_r_max
+         !   psi_old(n_m,n_cheb)=zero
+         !end do
 
       end do
 
@@ -645,28 +651,28 @@ contains
                rhs(3)=zero
                rhs(4)=zero
             end if
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                work_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
             !-- Pad with zeros
-            do n_cheb=n_cheb_max+1,n_r_max
-               work_Mloc(n_m,n_cheb)=zero
-            end do
+            ! do n_cheb=n_cheb_max+1,n_r_max
+               ! work_Mloc(n_m,n_cheb)=zero
+            ! end do
          end do
 
          !-- Finally assemble the right hand side
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
                dpsi_imp_Mloc_last(n_m,n_cheb)=work_Mloc(n_m,n_cheb)
             end do
          end do
 
          !-- Pad with zeros
-         do n_cheb=n_cheb_max+1,n_r_max
-            do n_m=nMstart,nMstop
-               dpsi_imp_Mloc_last(n_m,n_cheb)=zero
-            end do
-         end do
+         ! do n_cheb=n_cheb_max+1,n_r_max
+            ! do n_m=nMstart,nMstop
+               ! dpsi_imp_Mloc_last(n_m,n_cheb)=zero
+            ! end do
+         ! end do
 
       end if 
 

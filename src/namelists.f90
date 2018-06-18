@@ -36,10 +36,11 @@ module namelists
    character(len=72), public :: map_function ! Mapping family: either tangent or arcsin
    character(len=72), public :: time_scale  ! Time unit
    character(len=72), public :: time_scheme ! Time scheme
-   character(len=72) :: cheb_method ! Chebyshev method: collocation, integration
+   character(len=72) :: bc_method    ! Galerkin or Tau-Lanczos method for BCs
+   character(len=72) :: cheb_method  ! Chebyshev method: collocation, integration
    character(len=72) :: matrix_solve ! Either direct or influence matrix
    character(len=72) :: corio_term   ! Implicit or explicit treatment of Coriolis force
-   character(len=72) :: buo_term   ! Implicit or explicit treatment of Buoyancy
+   character(len=72) :: buo_term    ! Implicit or explicit treatment of Buoyancy
    logical, public :: l_newmap      ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
    logical, public :: l_rerror_fix  ! Switch to fix round-off error in derivative calculation
    real(cp), public :: rerror_fac
@@ -71,6 +72,7 @@ module namelists
    integer,  public :: n_checkpoint_step
    integer,  public :: n_specs
    integer,  public :: n_spec_step
+   logical,  public :: l_galerkin
    logical,  public :: l_vphi_balance    ! Calculate the vphi force balance
    logical,  public :: l_heat
    logical,  public :: l_chem
@@ -104,7 +106,7 @@ contains
       &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
-      &                matrix_solve,corio_term,buo_term
+      &                matrix_solve,corio_term,buo_term,bc_method
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz
@@ -253,6 +255,14 @@ contains
          l_cheb_coll = .false.
       end if
 
+      !-- Determine BC method: Galerkin or Tau-Lanczos
+      call capitalize(bc_method)
+      if ( index(bc_method, 'GAL') /= 0 ) then
+         l_galerkin = .true.
+      else
+         l_galerkin = .false.
+      end if
+
       !-- Determine solver method
       call capitalize(matrix_solve)
       if ( index(matrix_solve, 'DIRECT') /= 0 ) then
@@ -356,6 +366,7 @@ contains
                           ! 3: FFTW_EXHAUSTIVE
       time_scheme      ='CNAB2'
       cheb_method      ='colloc'
+      bc_method        ='tau-lanczos'
       matrix_solve     ='DIRECT'
       l_rerror_fix     =.true.
       rerror_fac       =500.0_cp
@@ -431,6 +442,8 @@ contains
       write(n_out,*) " time_scheme     = """,time_scheme(1:length),""","
       length=length_to_blank(cheb_method)
       write(n_out,*) " cheb_method     = """,cheb_method(1:length),""","
+      length=length_to_blank(bc_method)
+      write(n_out,*) " bc_method       = """,bc_method(1:length),""","
       length=length_to_blank(matrix_solve)
       write(n_out,*) " matrix_solve    = """,matrix_solve(1:length),""","
       length=length_to_blank(corio_term)
