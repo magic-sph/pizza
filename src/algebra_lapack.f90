@@ -299,7 +299,7 @@ contains
       real(cp), intent(inout) :: rhs(lenRhs)
 
       !-- Local variables:
-      integer :: nStart, n_bands, info
+      integer :: n_bands, info
 
       n_bands = 2*kl+ku+1
 
@@ -321,7 +321,7 @@ contains
       complex(cp), intent(inout) :: rhs(lenRhs)
 
       !-- Local variables:
-      integer :: nStart, n_bands, info
+      integer :: n_bands, info
 
       n_bands = 2*kl+ku+1
 

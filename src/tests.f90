@@ -693,9 +693,7 @@ contains
       end do
 
       !-- Multiply by the Galerkin matrix
-      gal_sten%dat = gal_sten%dat
       call band_band_product(Amat, gal_sten, Cmat, l_lhs=.true.)
-
 
       !-- Assemble right-hand side
       rhs(:) = cos(r)
