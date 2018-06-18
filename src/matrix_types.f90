@@ -6,7 +6,8 @@ module matrix_types
    use precision_mod
    use constants, only: one, zero
    use mem_alloc, only: bytes_allocated
-   use algebra, only: prepare_bordered_mat, solve_bordered_mat
+   use algebra, only: prepare_bordered_mat, solve_bordered_mat, prepare_band_mat, &
+       &              solve_band_mat
 
    implicit none
 
@@ -25,9 +26,13 @@ module matrix_types
       procedure :: finalize => finalize_band_real
       procedure :: remove_last_rows
       procedure :: remove_leading_blank_rows
+      procedure :: prepare_LU => prepare_LU_band_real
+      procedure :: solve_band_real_rhs_real
+      procedure :: solve_band_real_rhs_complex
       procedure :: mat_real_vec_complex_mul
       procedure :: mat_real_vec_real_mul
       generic :: mat_vec_mul => mat_real_vec_complex_mul, mat_real_vec_real_mul
+      generic :: solve => solve_band_real_rhs_real, solve_band_real_rhs_complex
    end type type_bandmat_real
 
    type, public :: type_bandmat_complex
@@ -210,7 +215,7 @@ contains
                tmp(n_b,n_r)=this%dat(this%kl+n_b,n_r)
             end do
          end do
-         this%kl = this%kl-ncut
+         this%kl = max(this%kl-ncut,0)
          this%ku = this%ku+ncut
          deallocate( this%dat )
          allocate( this%dat(2*this%kl+this%ku+1,this%nlines) )
@@ -222,11 +227,72 @@ contains
          end do
          deallocate( tmp )
       else
-         this%kl = this%kl-ncut
+         this%kl = max(this%kl-ncut,0)
          this%ku = this%ku+ncut
       end if
 
    end subroutine remove_leading_blank_rows
+!------------------------------------------------------------------------------
+   subroutine prepare_LU_band_real(this)
+
+      class(type_bandmat_real) :: this
+
+      if ( this%l_lhs_type ) then
+         call prepare_band_mat(this%dat,this%nlines,this%kl,this%ku,this%piv)
+      end if
+
+   end subroutine prepare_LU_band_real
+!------------------------------------------------------------------------------
+   subroutine solve_band_real_rhs_real(this, rhs, lenRhs)
+
+      class(type_bandmat_real) :: this
+
+      !-- Input variable
+      integer, intent(in) :: lenRhs
+
+      !-- Output variables
+      real(cp), intent(inout) :: rhs(lenRhs)
+
+      if ( this%l_lhs_type ) then
+         call solve_band_mat(this%dat, this%nlines, this%kl, this%ku, this%piv, &
+              &              rhs, lenRhs)
+      end if
+
+   end subroutine solve_band_real_rhs_real
+!------------------------------------------------------------------------------
+   subroutine solve_band_real_rhs_complex(this, rhs, lenRhs)
+
+      class(type_bandmat_real) :: this
+
+      !-- Input variable
+      integer, intent(in) :: lenRhs
+
+      !-- Output variables
+      complex(cp), intent(inout) :: rhs(lenRhs)
+
+      !-- Local variables
+      integer :: n_r
+      real(cp) :: rhsr(lenRhs), rhsi(lenRhs)
+
+      if ( this%l_lhs_type ) then
+
+         do n_r=1,lenRhs
+            rhsr(n_r)= real(rhs(n_r))
+            rhsi(n_r)=aimag(rhs(n_r))
+         end do
+
+         call solve_band_mat(this%dat, this%nlines, this%kl, this%ku, this%piv, &
+              &              rhsr, lenRhs)
+         call solve_band_mat(this%dat, this%nlines, this%kl, this%ku, this%piv, &
+              &              rhsi, lenRhs)
+
+         do n_r=1,lenRhs
+            rhs(n_r)=cmplx(rhsr(n_r),rhsi(n_r),kind=cp)
+         end do
+
+      end if
+
+   end subroutine solve_band_real_rhs_complex
 !------------------------------------------------------------------------------
    subroutine mat_real_vec_complex_mul(this, vec)
       !

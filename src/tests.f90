@@ -101,11 +101,11 @@ contains
             errColloc = maxval(abs(sol(:)-sol_theo(:)))
 
             tStart = MPI_Wtime()
-            call solve_laplacian_integ_tau(n_r_max_loc, r_loc, rscheme, sol,    & 
-                 &                         timeLuInt, timeSolveInt, bbot, btop, &
-                 &                         epsh)
-            !call solve_laplacian_integ_galerkin(n_r_max_loc, r_loc, rscheme, sol, &
-            !     &                              timeLuInt, timeSolveInt, epsh)
+            ! call solve_laplacian_integ_tau(n_r_max_loc, r_loc, rscheme, sol,    & 
+                 ! &                         timeLuInt, timeSolveInt, bbot, btop, &
+                 ! &                         epsh)
+            call solve_laplacian_integ_galerkin(n_r_max_loc, r_loc, rscheme, sol, &
+                &                              timeLuInt, timeSolveInt, epsh)
             tStop = MPI_Wtime()
             tInteg = tStop-tStart
             errInteg = maxval(abs(sol(:)-sol_theo(:)))
@@ -334,9 +334,8 @@ contains
       real(cp),            intent(out) :: timeSolve
 
       !-- Local variables
-      type(type_bandmat_real) :: gal_sten, Amat, Cmat
+      type(type_bandmat_real) :: gal_sten, Amat, Cmat, Bmat
       real(cp), allocatable :: tmp(:), stencilA(:), stencilB(:)
-      real(cp), allocatable :: Bmat(:,:)
       real(cp) :: a, b, tStart, tStop
       integer :: i_r, klA, kuA, klB, kuB
       integer :: n_band, n_r, n_bands_Bmat, n_boundaries, lenA
@@ -351,16 +350,13 @@ contains
       lenA = n_r_max-n_boundaries
 
       call Amat%initialize(klA, kuA, n_r_max)
+      call Bmat%initialize(klB, kuB, n_r_max)
 
       allocate ( stencilA(klA+kuA+1), stencilB(klB+kuB+1) )
-      allocate ( Bmat(n_bands_Bmat, n_r_max) )
       allocate ( tmp(n_r_max) )
 
       call get_galerkin_stencil(gal_sten, n_r_max, 1)
 
-      !-- Set the matrices to zero
-      Bmat(:,:)=0.0_cp
-      
       a = half*(r(1)-r(n_r_max))
       b = half*(r(1)+r(n_r_max))
 
@@ -375,7 +371,7 @@ contains
          !-- Roll the arrays for band storage
          do n_band=1,klB+kuB+1
             if ( i_r+kuB+1-n_band <= n_r_max .and. i_r+kuB+1-n_band >= 1 ) then
-               Bmat(n_band,i_r+kuB+1-n_band) = rscheme%rnorm*stencilB(n_band)
+               Bmat%dat(n_band,i_r+kuB+1-n_band) = rscheme%rnorm*stencilB(n_band)
             end if
          end do
          !-- Roll the arrays for band storage
@@ -391,10 +387,9 @@ contains
       call band_band_product(Amat, gal_sten, Cmat, l_lhs=.true.)
 
       !-- Assemble right-hand side
-      tmp(:)= epsh
-      call rscheme%costf1(tmp, n_r_max)
-      call dgbmv('N', n_r_max, n_r_max, klB, kuB, one, Bmat, n_bands_Bmat, &
-           &     tmp, 1, 0.0_cp, rhs, 1)
+      rhs(:)= epsh
+      call rscheme%costf1(rhs, n_r_max)
+      call Bmat%mat_vec_mul(rhs)
 
       !-- Remove first blank rows (careful remapping of kl, ku and room for LU factorisation)
       call Cmat%remove_leading_blank_rows(n_boundaries)
@@ -404,20 +399,18 @@ contains
 
       !-- LU factorisation
       tStart = MPI_Wtime()
-      call prepare_band_mat(Cmat%dat,Cmat%nlines, Cmat%kl, Cmat%ku, Cmat%piv)
+      call Cmat%prepare_LU()
       tStop = MPI_Wtime()
       timeLu= tStop-tStart
 
       !-- Solve
       tStart = MPI_Wtime()
-      call solve_band_mat(Cmat%dat,Cmat%nlines, Cmat%kl, Cmat%ku, Cmat%piv, &
-           &              rhs(1+n_boundaries:n_r_max), n_r_max-n_boundaries)
+      call Cmat%solve(rhs(1+n_boundaries:n_r_max),n_r_max-n_boundaries)
       tStop = MPI_Wtime()
       timeSolve= tStop-tStart
 
-      tmp(:) = 0.0_cp
-      tmp(1:n_r_max-n_boundaries)=rhs(1+n_boundaries:n_r_max) 
-      rhs(:)=tmp(:)
+      !-- Put the two first zeroes at the end
+      rhs = cshift(rhs, n_boundaries)
 
       !-- Transform from Galerkin space to Chebyshev space
       call galerkin2cheb(gal_sten, rhs)
@@ -428,7 +421,8 @@ contains
       call destroy_galerkin_stencil(gal_sten)
       call Amat%finalize()
       call Cmat%finalize()
-      deallocate ( Bmat, tmp )
+      call Bmat%finalize()
+      deallocate ( tmp )
       deallocate ( stencilA, stencilB )
 
    end subroutine solve_laplacian_integ_galerkin
