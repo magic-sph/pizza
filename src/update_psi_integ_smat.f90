@@ -15,8 +15,9 @@ module update_psi_integ_smat
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
    use useful, only: abortRun
+   use galerkin
    use matrix_types, only: type_bandmat_complex, type_bordmat_complex,  &
-       &                   type_bandmat_real
+       &                   type_bandmat_real, band_band_product
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,    &
        &                    intcheb4rmult4, rmult2, intcheb1rmult1,     &
        &                    intcheb2rmult2, intcheb4rmult4laplrot2,     &
@@ -30,14 +31,16 @@ module update_psi_integ_smat
    
    private
 
+   logical, parameter :: l_galerkin=.true.
    logical,  allocatable :: lPsimat(:) ! Do we need to rebuild the matrices?
    complex(cp), allocatable :: rhs(:)  ! Complex right-hand-side
    real(cp), allocatable :: psifac(:,:) ! Precondition matrix
 
-   type(type_bordmat_complex), allocatable :: LHS_mat(:)
+   type(type_bordmat_complex), allocatable :: LHS_mat_tau(:)
+   type(type_bandmat_complex), allocatable :: LHS_mat_gal(:)
    type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
-   type(type_bandmat_real) :: RHSE_mat(2)
+   type(type_bandmat_real) :: RHSE_mat(2), gal_sten(2)
 
    public :: update_psi_int_smat, initialize_psi_integ_smat,  &
    &         finalize_psi_integ_smat, get_psi_rhs_imp_int_smat
@@ -53,26 +56,44 @@ contains
       !-- Local variables
       integer :: n_m, m
 
+      if ( l_galerkin ) then
+         !-- Define Galerkin basis and stencils
+         if ( ktopv == 1 .and. kbotv == 1 ) then
+            call abortRun('This bc is not implemented yet')
+         else
+            call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
+            call get_galerkin_stencil(gal_sten(2), n_r_max, 2)
+         end if
+      end if
+
       !-- Allocate array of matrices (this is handy since it can store various bandwidths)
       allocate( RHSI_mat(nMstart:nMstop) )
       allocate( RHSIL_mat(nMstart:nMstop) )
-      allocate( LHS_mat(nMstart:nMstop) )
+      if ( l_galerkin ) then
+         allocate( LHS_mat_gal(nMstart:nMstop) )
+      else
+         allocate( LHS_mat_tau(nMstart:nMstop) )
+      end if
 
       !-- Initialize matrices
       if ( l_non_rot ) then
 
-         call RHSE_mat(1)%initialize(4, 4, n_cheb_max) ! This is m  = 0
-         call RHSE_mat(2)%initialize(8, 8, n_cheb_max) ! This is m /= 0
+         call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+         call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
-               call RHSI_mat(n_m)%initialize(4, 4, n_cheb_max)
-               call RHSIL_mat(n_m)%initialize(2, 2, n_cheb_max)
-               call LHS_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
+               call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
+               call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
+               if ( .not. l_galerkin ) then
+                  call LHS_mat_tau(n_m)%initialize(4, 4, 2, n_r_max)
+               end if
             else
-               call RHSI_mat(n_m)%initialize(6, 6, n_cheb_max)
-               call RHSIL_mat(n_m)%initialize(4, 4, n_cheb_max)
-               call LHS_mat(n_m)%initialize(6, 6, 4, n_cheb_max)
+               call RHSI_mat(n_m)%initialize(6, 6, n_r_max)
+               call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
+               if ( .not. l_galerkin ) then
+                  call LHS_mat_tau(n_m)%initialize(6, 6, 4, n_r_max)
+               end if
             end if
          end do
 
@@ -80,21 +101,25 @@ contains
 
          if ( l_ek_pump ) then
 
-            call RHSE_mat(1)%initialize(4, 4, n_cheb_max) ! This is m  = 0
-            call RHSE_mat(2)%initialize(8, 8, n_cheb_max) ! This is m /= 0
+            call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+            call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  call RHSI_mat(n_m)%initialize(6, 6, n_cheb_max)
-                  call RHSIL_mat(n_m)%initialize(4, 4, n_cheb_max)
-                  call LHS_mat(n_m)%initialize(6, 6, 2, n_cheb_max)
+                  call RHSI_mat(n_m)%initialize(6, 6, n_r_max)
+                  call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
+                  if ( .not. l_galerkin ) then
+                     call LHS_mat_tau(n_m)%initialize(6, 6, 2, n_r_max)
+                  end if
                else
-                  call RHSI_mat(n_m)%initialize(10, 10, n_cheb_max)
-                  call LHS_mat(n_m)%initialize(10, 10, 4, n_cheb_max)
+                  call RHSI_mat(n_m)%initialize(10, 10, n_r_max)
+                  if ( .not. l_galerkin ) then
+                     call LHS_mat_tau(n_m)%initialize(10, 10, 4, n_r_max)
+                  end if
                   if ( l_coriolis_imp ) then
-                     call RHSIL_mat(n_m)%initialize(10, 10, n_cheb_max)
+                     call RHSIL_mat(n_m)%initialize(10, 10, n_r_max)
                   else
-                     call RHSIL_mat(n_m)%initialize(8, 8, n_cheb_max)
+                     call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
                   end if
                end if
             end do
@@ -102,21 +127,25 @@ contains
 
          else ! if there's no Ekman pumping
 
-            call RHSE_mat(1)%initialize(4, 4, n_cheb_max) ! This is m  = 0
-            call RHSE_mat(2)%initialize(8, 8, n_cheb_max) ! This is m /= 0
+            call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+            call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  call RHSI_mat(n_m)%initialize(4, 4, n_cheb_max)
-                  call RHSIL_mat(n_m)%initialize(2, 2, n_cheb_max)
-                  call LHS_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
+                  call RHSI_mat(n_m)%initialize(4, 4, n_r_max)
+                  call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
+                  if ( .not. l_galerkin ) then
+                     call LHS_mat_tau(n_m)%initialize(4, 4, 2, n_r_max)
+                  end if
                else
-                  call RHSI_mat(n_m)%initialize(8, 8, n_cheb_max)
-                  call LHS_mat(n_m)%initialize(8, 8, 4, n_cheb_max)
+                  call RHSI_mat(n_m)%initialize(8, 8, n_r_max)
+                  if ( .not. l_galerkin ) then
+                     call LHS_mat_tau(n_m)%initialize(8, 8, 4, n_r_max)
+                  end if
                   if ( l_coriolis_imp ) then
-                     call RHSIL_mat(n_m)%initialize(8, 8, n_cheb_max)
+                     call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
                   else
-                     call RHSIL_mat(n_m)%initialize(6, 6, n_cheb_max)
+                     call RHSIL_mat(n_m)%initialize(6, 6, n_r_max)
                   end if
                end if
             end do
@@ -137,12 +166,12 @@ contains
       lPsimat(:)=.false.
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
-      allocate( rhs(n_cheb_max) )
+      allocate( rhs(n_r_max) )
       rhs(:)=zero
-      bytes_allocated = bytes_allocated+n_cheb_max*SIZEOF_DEF_COMPLEX
+      bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
-      allocate( psifac(n_cheb_max, nMstart:nMstop) )
-      bytes_allocated = bytes_allocated + n_cheb_max*(nMstop-nMstart+1)* &
+      allocate( psifac(n_r_max, nMstart:nMstop) )
+      bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
       &                 SIZEOF_DEF_REAL
 
    end subroutine initialize_psi_integ_smat
@@ -160,9 +189,20 @@ contains
       do n_m=nMstart,nMstop
          call RHSIL_mat(n_m)%finalize()
          call RHSI_mat(n_m)%finalize()
-         call LHS_mat(n_m)%finalize()
+         if ( l_galerkin ) then
+            call LHS_mat_gal(n_m)%finalize()
+         else
+            call LHS_mat_tau(n_m)%finalize()
+         end if
       end do
-      deallocate( LHS_mat, RHSIL_mat, RHSI_mat )
+      if ( l_galerkin ) then
+         call destroy_galerkin_stencil(gal_sten(1))
+         call destroy_galerkin_stencil(gal_sten(2))
+         deallocate( LHS_mat_gal )
+      else
+         deallocate( LHS_mat_tau )
+      end if
+      deallocate( RHSIL_mat, RHSI_mat )
       deallocate( psifac, rhs, lPsimat )
 
    end subroutine finalize_psi_integ_smat
@@ -275,7 +315,7 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)=dpsidt%expl(n_m,n_cheb,tscheme%istage)
          end do
 
@@ -325,7 +365,7 @@ contains
             m = idx2m(n_m)
 
             if ( m > 0 ) then
-               do n_cheb=1,n_cheb_max
+               do n_cheb=1,n_r_max
                   rhs(n_cheb)=buo_Mloc(n_m,n_cheb)
                end do
 
@@ -361,13 +401,18 @@ contains
          m = idx2m(n_m)
 
          if ( .not. lPsimat(n_m) ) then
-            call get_lhs_mat(tscheme, LHS_mat(n_m), psifac(:, n_m), m, time_lu, &
-                 &           n_lu_calls)
+            if ( l_galerkin ) then
+               call get_lhs_mat_gal(tscheme, LHS_mat_gal(n_m), psifac(:, n_m), m, &
+                    &               time_lu, n_lu_calls)
+            else
+               call get_lhs_mat_tau(tscheme, LHS_mat_tau(n_m), psifac(:, n_m), m, &
+                    &               time_lu, n_lu_calls)
+            end if
             lPsimat(n_m)=.true.
          end if
 
          !-- Assemble RHS
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             !-- Add buoyancy
             if ( l_buo_imp ) then
@@ -376,12 +421,30 @@ contains
          end do
 
          !-- Multiply rhs by precond matrix
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)=rhs(n_cheb)*psifac(n_cheb,n_m)
          end do
 
          runStart = MPI_Wtime()
-         call LHS_mat(n_m)%solve(rhs,n_cheb_max)
+         if ( l_galerkin ) then
+            if ( m == 0 ) then
+               call LHS_mat_gal(n_m)%solve(rhs(3:n_r_max), &
+                    &                      n_r_max-2)
+               !-- Put the two first zero lines at the end
+               rhs = cshift(rhs, 2)
+               !-- Transform from Galerkin space to Chebyshev space
+               call galerkin2cheb(gal_sten(1), rhs)
+            else
+               call LHS_mat_gal(n_m)%solve(rhs(5:n_r_max), &
+                    &                      n_r_max-4)
+               !-- Put the four first zero lines at the end
+               rhs = cshift(rhs, 4)
+               !-- Transform from Galerkin space to Chebyshev space
+               call galerkin2cheb(gal_sten(2), rhs)
+            end if
+         else
+            call LHS_mat_tau(n_m)%solve(rhs,n_r_max)
+         end if
          runStop = MPI_Wtime()
          if ( runStop > runStart ) then
             time_solve = time_solve + (runStop-runStart)
@@ -514,7 +577,7 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)= psi_old(n_m,n_cheb)
          end do
 
@@ -572,7 +635,7 @@ contains
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             end do
             call RHSIL_mat(n_m)%mat_vec_mul(rhs)
@@ -609,7 +672,191 @@ contains
 
    end subroutine get_psi_rhs_imp_int_smat
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat(tscheme, A_mat, psiMat_fac, m, time_lu, n_lu_calls)
+   subroutine get_lhs_mat_gal(tscheme, Cmat, psiMat_fac, m, time_lu, n_lu_calls)
+
+      !-- Input variables
+      class(type_tscheme), intent(in) :: tscheme    ! time step
+      integer,             intent(in) :: m          ! Azimuthal wavenumber
+
+      !-- Output variables
+      type(type_bandmat_complex), intent(out) :: Cmat
+      real(cp),                   intent(inout) :: psiMat_fac(:)
+      real(cp),                   intent(inout) :: time_lu
+      integer,                    intent(inout) :: n_lu_calls
+
+      !-- Local variables
+      type(type_bandmat_complex) :: Amat
+      real(cp), allocatable :: stencilA(:), CorSten(:)
+      integer :: n_r, i_r, n_band, klA, kuA, n_boundaries
+      real(cp) :: a, b, runStart, runStop
+
+      a = half*(r_cmb-r_icb)
+      b = half*(r_cmb+r_icb)
+
+      if ( m == 0 ) then
+         n_boundaries = 2
+      else
+         n_boundaries = 4
+      end if
+
+      if ( l_non_rot ) then
+         if ( m == 0 ) then
+            klA = 4
+            kuA = 4
+         else
+            klA = 6
+            kuA = 6
+         end if
+      else
+         if ( l_ek_pump ) then
+            if ( m == 0 ) then
+               klA = 6
+               kuA = 6
+            else
+               klA = 10
+               kuA = 10
+            end if
+         else
+            if ( m == 0 ) then
+               klA = 4
+               kuA = 4
+            else
+               klA = 8
+               kuA = 8
+            end if
+         end if
+      end if
+
+      call Amat%initialize(klA, kuA, n_r_max)
+      allocate( stencilA(Amat%nbands), CorSten(Amat%nbands) )
+
+
+      !-- Fill A matrix
+      do n_r=1,Amat%nlines
+         i_r = n_r+n_boundaries
+
+         !-- Define the equations
+         if ( l_non_rot ) then
+
+            if ( m == 0 ) then
+               stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-               &
+               &  tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,Amat%nbands)- &
+               &                 3.0_cp*intcheb1rmult1(a,b,i_r-1,Amat%nbands) )
+               CorSten   = 0.0_cp
+            else
+               stencilA = -intcheb4rmult4lapl(a,b,m,i_r-1,Amat%nbands)+  &
+               &          tscheme%wimp_lin(1)*ViscFac*                    &
+               &          intcheb4rmult4lapl2(a,b,m,i_r-1,Amat%nbands)  
+               CorSten   = 0.0_cp
+            end if
+
+         else ! this is rotating
+
+            if ( l_ek_pump ) then
+
+               if ( m == 0 ) then
+                  stencilA = intcheb2rmult2hmult2(a,b,i_r-1,Amat%nbands)-      &
+                  &          tscheme%wimp_lin(1)*ViscFac*                       &
+                  &          intcheb2rmult2hmult2laplm1(a,b,i_r-1,Amat%nbands)
+                  CorSten  = 0.0_cp
+               else
+                  stencilA = intcheb4rmult4hmult2laplrot(a,b,m,i_r-1,Amat%nbands)&
+                  &          -tscheme%wimp_lin(1)*ViscFac*                        &
+                  &          intcheb4rmult4hmult2laplrot2(a,b,m,i_r-1,Amat%nbands)  
+                  if ( l_coriolis_imp ) then
+                     CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
+                     &           intcheb4rmult4hmult2(a,b,i_r-1,Amat%nbands)
+                  else
+                     CorSten   = 0.0_cp
+                  end if
+               end if
+
+            else ! there's no Ekman pumping
+
+               if ( m == 0 ) then
+                  stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-              &
+                  &  tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,Amat%nbands)-&
+                  &                 3.0_cp*intcheb1rmult1(a,b,i_r-1,Amat%nbands) )
+                  CorSten   = 0.0_cp
+               else
+                  stencilA = intcheb4rmult4laplrot(a,b,m,i_r-1,Amat%nbands)   &
+                  &          -tscheme%wimp_lin(1)*ViscFac*                     &
+                  &          intcheb4rmult4laplrot2(a,b,m,i_r-1,Amat%nbands)  
+                  if ( l_coriolis_imp ) then
+                     CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*     &
+                     &           intcheb4rmult4(a,b,i_r-1,Amat%nbands)
+                  else
+                     CorSten   = 0.0_cp
+                  end if
+               end if
+
+            end if
+
+         end if
+
+         !-- Roll the array for band storage
+         do n_band=1,Amat%nbands
+            if ( i_r+Amat%ku+1-n_band <= Amat%nlines .and. i_r+Amat%ku+1-n_band >= 1 ) then
+               Amat%dat(Amat%kl+n_band,i_r+Amat%ku+1-n_band) = rscheme%rnorm* &
+               &             cmplx(stencilA(n_band), CorSten(n_band), kind=cp)
+            end if
+         end do
+
+      end do
+
+      if ( m == 0 ) then
+         call band_band_product(Amat, gal_sten(1), Cmat, l_lhs=.true.)
+
+         !-- Remove first blank rows (careful remapping of kl, ku and room for LU factorisation)
+         call Cmat%remove_leading_blank_rows(2)
+
+         !-- Truncate the last N lines
+         call Cmat%remove_last_rows(2)
+      else
+         call band_band_product(Amat, gal_sten(2), Cmat, l_lhs=.true.)
+
+         !-- Remove first blank rows (careful remapping of kl, ku and room for LU factorisation)
+         call Cmat%remove_leading_blank_rows(4)
+
+         !-- Truncate the last N lines
+         call Cmat%remove_last_rows(4)
+      end if
+
+      deallocate( stencilA, CorSten )
+      call Amat%finalize()
+
+      !-- To be improved
+      psiMat_fac(:)=one
+
+
+      !do n_r=1,A_mat%nlines
+      !   i_r = n_r+A_mat%ntau
+!
+!         do n_band=1,A_mat%nbands
+!            if ( n_r+A_mat%ku+1-n_band <= A_mat%nlines .and. &
+!            &                         n_r+A_mat%ku+1-n_band >= 1 ) then
+!               A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) =  &
+!               & A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band)* &
+!               &                      psiMat_fac(n_r+A_mat%ntau)
+!            end if
+!         end do
+
+ !     end do
+
+      ! if ( m == 10 ) call A_mat%write()
+
+      !-- LU factorisation
+      runStart = MPI_Wtime()
+      call Cmat%prepare_LU()
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         time_lu = time_lu + (runStop-runStart)
+         n_lu_calls = n_lu_calls + 1
+      end if
+
+   end subroutine get_lhs_mat_gal
+!------------------------------------------------------------------------------
+   subroutine get_lhs_mat_tau(tscheme, A_mat, psiMat_fac, m, time_lu, n_lu_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme    ! time step
@@ -920,7 +1167,7 @@ contains
          n_lu_calls = n_lu_calls + 1
       end if
 
-   end subroutine get_lhs_mat
+   end subroutine get_lhs_mat_tau
 !------------------------------------------------------------------------------
    subroutine get_rhs_exp_mat(D_mat, m0)
       !

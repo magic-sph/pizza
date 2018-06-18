@@ -13,20 +13,26 @@ module update_temp_integ
    use useful, only: abortRun
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
-   use matrix_types, only: type_bandmat_real, type_bordmat_real
+   use matrix_types, only: type_bandmat_real, type_bordmat_real, &
+       &                   band_band_product
+   use galerkin
    use chebsparselib, only: intcheb2rmult2, intcheb2rmult2lapl
 
    implicit none
    
    private
 
-   integer, parameter :: n_boundaries=2
+   integer, parameter :: n_boundaries=2 ! Number of BCs for this equation
+   integer, parameter :: klA=4
+   integer, parameter :: kuA=4
+   logical, parameter :: l_galerkin = .true.
 
    logical,  allocatable :: lTmat(:)
    complex(cp), allocatable :: rhs(:)
 
-   type(type_bordmat_real), allocatable :: LHS_mat(:)
-   type(type_bandmat_real) :: RHSE_mat
+   type(type_bordmat_real), allocatable :: LHS_mat_tau(:)
+   type(type_bandmat_real), allocatable :: LHS_mat_gal(:)
+   type(type_bandmat_real) :: RHSE_mat, gal_sten
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
    real(cp), allocatable :: tempfac(:,:) ! Preconditon matrix
 
@@ -39,15 +45,33 @@ contains
 
       integer :: n_m, m
 
-      call RHSE_mat%initialize(4, 4, n_cheb_max)
+      if ( l_galerkin ) then
+         !-- Define Galerkin basis and stencils
+         if ( ktopt == 1 .and. kbott == 1 ) then
+            call get_galerkin_stencil(gal_sten, n_r_max, 1)
+         else
+            call abortRun('This bc is not implemented yet')
+         end if
+      end if
+
+      call RHSE_mat%initialize(4, 4, n_r_max)
 
       allocate( RHSI_mat(nMstart:nMstop) )
-      allocate( LHS_mat(nMstart:nMstop) )
-
       do n_m=nMstart,nMstop
-         call RHSI_mat(n_m)%initialize(2, 2, n_cheb_max)
-         call LHS_mat(n_m)%initialize(4, 4, n_boundaries, n_cheb_max)
+         call RHSI_mat(n_m)%initialize(2, 2, n_r_max)
       end do
+
+      if ( l_galerkin ) then
+         allocate( LHS_mat_gal(nMstart:nMstop) )
+         !do n_m=nMstart,nMstop
+         !   call LHS_mat_gal(n_m)%initialize(klA, kuA, n_r_max, l_lhs=.true.)
+         !end do
+      else
+         allocate( LHS_mat_tau(nMstart:nMstop) )
+         do n_m=nMstart,nMstop
+            call LHS_mat_tau(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
+         end do
+      end if
 
       call get_rhs_exp_mat(RHSE_mat)
       do n_m=nMstart,nMstop
@@ -59,11 +83,11 @@ contains
       lTmat(:)=.false.
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
-      allocate( rhs(n_cheb_max) )
-      bytes_allocated = bytes_allocated+n_cheb_max*SIZEOF_DEF_COMPLEX
+      allocate( rhs(n_r_max) )
+      bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
-      allocate( tempfac(n_cheb_max, nMstart:nMstop) )
-      bytes_allocated = bytes_allocated + n_cheb_max*(nMstop-nMstart+1)* &
+      allocate( tempfac(n_r_max, nMstart:nMstop) )
+      bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
       &                 SIZEOF_DEF_REAL
 
    end subroutine initialize_temp_integ
@@ -76,9 +100,21 @@ contains
       call RHSE_mat%finalize()
       do n_m=nMstart,nMstop
          call RHSI_mat(n_m)%finalize()
-         call LHS_mat(n_m)%finalize()
       end do
-      deallocate( tempfac, LHS_mat, RHSI_mat, rhs, lTmat )
+      deallocate( tempfac, RHSI_mat, rhs, lTmat )
+
+      if ( l_galerkin ) then
+         do n_m=nMstart,nMstop
+            call LHS_mat_gal(n_m)%finalize()
+         end do
+         deallocate( LHS_mat_gal )
+         call destroy_galerkin_stencil(gal_sten)
+      else
+         do n_m=nMstart,nMstop
+            call LHS_mat_tau(n_m)%finalize()
+         end do
+         deallocate( LHS_mat_tau )
+      end if
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
@@ -160,7 +196,7 @@ contains
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)=dTdt%expl(n_m,n_cheb,tscheme%istage)
          end do
 
@@ -190,20 +226,34 @@ contains
          m = idx2m(n_m)
          
          if ( .not. lTmat(n_m) ) then
-            call get_lhs_mat( tscheme, LHS_mat(n_m), tempfac(:,n_m), m )
+            if ( l_galerkin ) then
+               call get_lhs_mat_gal( tscheme, LHS_mat_gal(n_m), tempfac(:,n_m), m )
+            else
+               call get_lhs_mat_tau( tscheme, LHS_mat_tau(n_m), tempfac(:,n_m), m )
+            end if
             lTmat(n_m)=.true.
          end if
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)=work_Mloc(n_m,n_cheb)
          end do
 
          !-- Multiply rhs by precond matrix
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)=rhs(n_cheb)*tempfac(n_cheb,n_m)
          end do
 
-         call LHS_mat(n_m)%solve(rhs, n_cheb_max)
+         if ( l_galerkin ) then
+            call LHS_mat_gal(n_m)%solve(rhs(1+n_boundaries:n_r_max), &
+                 &                      n_r_max-n_boundaries)
+            !-- Put the two first zero lines at the end
+            rhs = cshift(rhs, n_boundaries)
+
+            !-- Transform from Galerkin space to Chebyshev space
+            call galerkin2cheb(gal_sten, rhs)
+         else
+            call LHS_mat_tau(n_m)%solve(rhs, n_r_max)
+         end if
 
          do n_cheb=1,n_cheb_max
             temp_Mloc(n_m, n_cheb)=rhs(n_cheb)
@@ -272,7 +322,7 @@ contains
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)= temp_old(n_m,n_cheb)
          end do
 
@@ -306,7 +356,7 @@ contains
 
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             end do
             call RHSI_mat(n_m)%mat_vec_mul(rhs)
@@ -339,7 +389,83 @@ contains
 
    end subroutine get_temp_rhs_imp_int
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat(tscheme, A_mat, tempMat_fac, m)
+   subroutine get_lhs_mat_gal(tscheme, Cmat, tempMat_fac, m)
+
+      !-- Input variables
+      class(type_tscheme),     intent(in) :: tscheme    ! time step
+      integer,                 intent(in) :: m          ! Azimuthal wavenumber
+
+      !-- Output variables
+      type(type_bandmat_real), intent(out) :: Cmat
+      real(cp),                intent(inout) :: tempMat_fac(:)
+
+      !-- Local variables
+      type(type_bandmat_real) :: Amat
+      real(cp), allocatable :: stencilA(:)
+      integer :: n_r, i_r, n_band
+      real(cp) :: a, b
+
+
+      a = half*(r_cmb-r_icb)
+      b = half*(r_cmb+r_icb)
+
+      call Amat%initialize(klA, kuA, n_r_max)
+      allocate( stencilA(Amat%nbands) )
+
+      !-- Fill A matrix
+      do n_r=1,Amat%nlines
+         i_r = n_r+n_boundaries
+
+         !-- Define the equations
+         stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-      &
+         &                       tscheme%wimp_lin(1)*TdiffFac*   &
+         &          intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)  
+
+         !-- Roll the array for band storage
+         do n_band=1,Amat%nbands
+            if ( i_r+Amat%ku+1-n_band <= Amat%nlines .and. i_r+Amat%ku+1-n_band >= 1 ) then
+               Amat%dat(n_band,i_r+Amat%ku+1-n_band) = rscheme%rnorm*stencilA(n_band)
+            end if
+         end do
+
+      end do
+
+      !-- Multiply by the Galerkin matrix and allocate Cmat
+      call band_band_product(Amat, gal_sten, Cmat, l_lhs=.true.)
+
+      !-- Remove first blank rows (careful remapping of kl, ku and room for LU factorisation)
+      call Cmat%remove_leading_blank_rows(n_boundaries)
+
+      !-- Truncate the last N lines
+      call Cmat%remove_last_rows(n_boundaries)
+
+      !-- To be improved --!
+      tempMat_fac(:)=one
+
+      deallocate( stencilA )
+      call Amat%finalize()
+
+
+      !do n_r=1,A_mat%nlines_band
+      !   i_r = n_r+A_mat%ntau
+!
+!         do n_band=1,A_mat%nbands
+!            if ( n_r+A_mat%ku+1-n_band <= A_mat%nlines_band .and. &
+!            &                         n_r+A_mat%ku+1-n_band >= 1 ) then
+!               A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band) =  &
+!               & A_mat%A4(A_mat%kl+n_band,n_r+A_mat%ku+1-n_band)* &
+!               &                      tempMat_fac(n_r+A_mat%ntau)
+ !           end if
+ !        end do
+
+      !end do
+
+      !-- LU factorisation
+      call Cmat%prepare_LU()
+
+   end subroutine get_lhs_mat_gal
+!------------------------------------------------------------------------------
+   subroutine get_lhs_mat_tau(tscheme, A_mat, tempMat_fac, m)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme    ! time step
@@ -466,7 +592,7 @@ contains
       !-- LU factorisation
       call A_mat%prepare_LU()
 
-   end subroutine get_lhs_mat
+   end subroutine get_lhs_mat_tau
 !------------------------------------------------------------------------------
    subroutine get_rhs_exp_mat(B_mat)
 
