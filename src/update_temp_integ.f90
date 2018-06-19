@@ -13,8 +13,8 @@ module update_temp_integ
    use useful, only: abortRun
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
-   use matrix_types, only: type_bandmat_real, type_bordmat_real, &
-       &                   band_band_product
+   use band_matrix, only: type_bandmat_real, band_band_product
+   use bordered_matrix, only: type_bordmat_real
    use galerkin
    use chebsparselib, only: intcheb2rmult2, intcheb2rmult2lapl
 
@@ -447,20 +447,16 @@ contains
       !-- To be improved --!
       tempMat_fac(:)=one
 
-
-      !do n_r=1,A_mat%nlines_band
-      !   i_r = n_r+A_mat%ntau
-!
-!         do n_band=1,A_mat%nbands
-!            if ( n_r+A_mat%ku+1-n_band <= A_mat%nlines_band .and. &
-!            &                         n_r+A_mat%ku+1-n_band >= 1 ) then
-!               A_mat%A4(n_band,n_r+A_mat%ku+1-n_band) =  &
-!               & A_mat%A4(n_band,n_r+A_mat%ku+1-n_band)* &
-!               &                      tempMat_fac(n_r+A_mat%ntau)
-!           end if
-!        end do
-
-!     end do
+      !do n_r=1,Cmat%nlines
+      !  do n_band=1,Cmat%nbands
+      !     if ( n_r+Cmat%ku+1-n_band <= Cmat%nlines_band .and. &
+      !     &                         n_r+Cmat%ku+1-n_band >= 1 ) then
+      !        Cmat%dat(Cmat%kl+n_band,n_r+Cmat%ku+1-n_band) =  &
+      !        & Cmat%dat(Cmat%kl+Cmat%n_band,n_r+Cmat%ku+1-n_band)* &
+      !        &                      tempMat_fac(n_r+n_boundaries)
+      !    end if
+      ! end do
+      !end do
 
       !-- LU factorisation
       call Cmat%prepare_LU()

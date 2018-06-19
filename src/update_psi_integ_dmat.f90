@@ -15,7 +15,8 @@ module update_psi_integ_dmat
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
    use useful, only: abortRun
-   use matrix_types, only: type_bordmat_real, type_bandmat_real
+   use band_matrix, only: type_bandmat_real
+   use bordered_matrix, only: type_bordmat_real
    use chebsparselib, only: rmult2, intcheb1rmult1, intcheb2rmult2,           &
        &                    intcheb2rmult2laplrot, intcheb2rmult2hmult2lapl,  &
        &                    intcheb2rmult2hmult2, intcheb2rmult2hmult2laplm1, &

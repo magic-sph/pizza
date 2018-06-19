@@ -17,8 +17,8 @@ module update_psi_integ_smat
    use time_array, only: type_tarray
    use useful, only: abortRun
    use galerkin
-   use matrix_types, only: type_bandmat_complex, type_bordmat_complex,  &
-       &                   type_bandmat_real, band_band_product
+   use band_matrix, only: type_bandmat_complex, type_bandmat_real, band_band_product
+   use bordered_matrix, only: type_bordmat_complex
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,    &
        &                    intcheb4rmult4, rmult2, intcheb1rmult1,     &
        &                    intcheb2rmult2, intcheb4rmult4laplrot2,     &

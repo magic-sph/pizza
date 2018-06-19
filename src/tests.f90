@@ -17,7 +17,8 @@ module tests
        &                    intcheb2, eye, intcheb4rmult4,  &
        &                    intcheb4rmult4laplrot2, intcheb4rmult4lapl2
    use integration, only: rInt_R
-   use matrix_types, only: type_bandmat_real, type_bordmat_real, band_band_product
+   use band_matrix, only: type_bandmat_real, band_band_product
+   use bordered_matrix, only: type_bordmat_real
 
    implicit none
 

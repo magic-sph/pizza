@@ -2,7 +2,7 @@ module galerkin
 
    use precision_mod
    use constants, only: one, two
-   use matrix_types, only: type_bandmat_real
+   use band_matrix, only: type_bandmat_real
 
    implicit none
 
