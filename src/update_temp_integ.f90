@@ -164,8 +164,14 @@ contains
       end if
 
       !-- Finish calculation of advection
+      call rscheme%costf1(dVsT_Mloc, nMstart, nMstop, n_r_max)
+      !do n_cheb=n_cheb_max+1,n_r_max
+      !   do n_m=nMstart,nMstop
+      !      dVsT_Mloc(n_m,n_cheb)=zero
+      !   end do
+      !end do
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true. )
+           &       rscheme, nocopy=.true., l_dct=.false. )
 
       !-- Finish calculation of the explicit part for current time step
       if ( l_non_rot ) then
@@ -192,12 +198,11 @@ contains
 
       !-- Transform the explicit part to chebyshev space
       call rscheme%costf1(dTdt%expl(:,:,tscheme%istage), nMstart, nMstop, n_r_max)
-      do n_m=nMstart,nMstop
-         do n_cheb=n_cheb_max+1,n_r_max
-            dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
-
-         end do
-      end do
+      !do n_cheb=n_cheb_max+1,n_r_max
+      !   do n_m=nMstart,nMstop
+      !      dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
+      !   end do
+      !end do
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
@@ -212,10 +217,6 @@ contains
          do n_cheb=1,n_r_max
             dTdt%expl(n_m,n_cheb,tscheme%istage)=rhs(n_cheb)
          end do
-         !-- Pad with zeros
-         !do n_cheb=n_cheb_max+1,n_r_max
-         !   dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
-         !end do
       end do
 
       !-- Calculation of the implicit part
@@ -267,11 +268,11 @@ contains
       end do
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
-      !do n_cheb=n_cheb_max+1,n_r_max
-      !   do n_m=nMstart,nMstop
-      !      temp_Mloc(n_m,n_cheb)=zero
-      !   end do
-      !end do
+      do n_cheb=n_cheb_max+1,n_r_max
+         do n_m=nMstart,nMstop
+            temp_Mloc(n_m,n_cheb)=zero
+         end do
+      end do
 
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
@@ -340,11 +341,6 @@ contains
             temp_old(n_m,n_cheb)=rhs(n_cheb)
          end do
 
-         !-- Pad with zeros
-         !do n_cheb=n_cheb_max+1,n_r_max
-         !   temp_old(n_m,n_cheb)=zero
-         !end do
-
       end do
 
       if ( l_calc_rhs_lin ) then
@@ -370,10 +366,6 @@ contains
             do n_cheb=1,n_r_max
                work_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
-            !-- Pad with zeros
-            !do n_cheb=n_cheb_max+1,n_r_max
-            !   work_Mloc(n_m,n_cheb)=zero
-            !end do
          end do
 
          !-- Finally assemble the right hand side
@@ -382,13 +374,6 @@ contains
                dtemp_imp_Mloc_last(n_m,n_cheb)=TdiffFac*work_Mloc(n_m,n_cheb) 
             end do
          end do
-
-         !-- Pad with zeros
-         !do n_cheb=n_cheb_max+1,n_r_max
-         !   do n_m=nMstart,nMstop
-         !      dtemp_imp_Mloc_last(n_m,n_cheb)=zero
-         !   end do
-         !end do
 
       end if
 

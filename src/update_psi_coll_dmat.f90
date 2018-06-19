@@ -288,8 +288,8 @@ contains
 
       !-- Bring uphi0 to the physical space
       if ( l_rank_has_m0 ) then
+         call get_dr(uphi0, om0, n_r_max, rscheme, l_dct=.false.)
          call rscheme%costf1(uphi0, n_r_max)
-         call get_dr(uphi0, om0, n_r_max, rscheme)
       end if
 
       !-- Copy omega into work (it allows to keep omega in Cheb space)
@@ -392,6 +392,9 @@ contains
       call solve_influence_matrix(psi_Mloc, psi2_Mloc, psi3_Mloc, om_Mloc, &
            &                      om2_Mloc, om3_Mloc, influence_matrix_Mloc)
 
+      !-- Get the radial derivative of psi to calculate uphi
+      call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme, &
+           &      l_dct=.false.)
 
       !-- Finally bring psi and omega to the physical space
       runStart = MPI_Wtime()
@@ -403,8 +406,6 @@ contains
          n_dct_calls = n_dct_calls + 2
       end if
 
-      !-- Get the radial derivative of psi to calculate uphi
-      call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop

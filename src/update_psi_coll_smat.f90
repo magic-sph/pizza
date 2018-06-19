@@ -227,9 +227,13 @@ contains
 
       !-- Bring uphi0 to the physical space
       if ( l_rank_has_m0 ) then
+         call get_dr(uphi0, om0, n_r_max, rscheme, l_dct=.false.)
          call rscheme%costf1(uphi0, n_r_max)
-         call get_dr(uphi0, om0, n_r_max, rscheme)
       end if
+
+      !-- Get the radial derivative of psi to calculate uphi
+      call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
+           &      rscheme, l_dct=.false.)
 
       !-- Bring psi and omega to the physical space
       runStart = MPI_Wtime()
@@ -240,9 +244,6 @@ contains
          time_dct = time_dct + (runStop-runStart)
          n_dct_calls = n_dct_calls + 2
       end if
-
-      !-- Get the radial derivative of psi to calculate uphi
-      call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop

@@ -241,9 +241,15 @@ contains
 
       if ( lMat ) lPsimat(:)=.false.
 
+      call rscheme%costf1( dVsOm_Mloc, nMstart, nMstop, n_r_max )
+      !do n_cheb=n_cheb_max+1,n_r_max
+      !   do n_m=nMstart,nMstop
+      !      dVsOm_Mloc(n_m,n_cheb)=zero
+      !   end do
+      !end do
       !-- Finish calculation of advection
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true.)
+           &       rscheme, nocopy=.true., l_dct=.false.)
 
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
@@ -311,11 +317,11 @@ contains
          n_dct_calls = n_dct_calls + 1
       end if
 
-      do n_m=nMstart,nMstop
-         do n_cheb=n_cheb_max+1,n_r_max
-            dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
-         end do
-      end do
+      !do n_cheb=n_cheb_max+1,n_r_max
+       !  do n_m=nMstart,nMstop
+      !      dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
+      !   end do
+      !end do
 
       !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
       do n_m=nMstart,nMstop
@@ -339,10 +345,6 @@ contains
             dpsidt%expl(n_m,n_cheb,tscheme%istage)=rhs(n_cheb)
          end do
 
-         !-- Deliasing
-         !do n_cheb=n_cheb_max+1,n_r_max
-         !   dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
-         !end do
       end do
 
       !-- If Ekman pumping is needed then regularisation is different
@@ -385,17 +387,14 @@ contains
                   buo_Mloc(n_m,n_cheb)=rhs(n_cheb)
                end do
 
-               !-- Deliasing
-               !do n_cheb=n_cheb_max+1,n_r_max
-               !   buo_Mloc(n_m,n_cheb)=zero
-               !end do
             end if
          end do
       end if
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc, dpsidt%old(:,:,tscheme%istage),  &
-           &                        dpsidt%impl(:,:,tscheme%istage), vp_bal,            &
+      call get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc,                       &
+           &                        dpsidt%old(:,:,tscheme%istage),          &
+           &                        dpsidt%impl(:,:,tscheme%istage), vp_bal, &
            &                        l_vphi_bal_calc, tscheme%l_calc_lin_rhs)
 
 
@@ -434,15 +433,13 @@ contains
          runStart = MPI_Wtime()
          if ( l_galerkin ) then
             if ( m == 0 ) then
-               call LHS_mat_gal(n_m)%solve(rhs(3:n_r_max), &
-                    &                      n_r_max-2)
+               call LHS_mat_gal(n_m)%solve(rhs(3:n_r_max), n_r_max-2)
                !-- Put the two first zero lines at the end
                rhs = cshift(rhs, 2)
                !-- Transform from Galerkin space to Chebyshev space
                call galerkin2cheb(gal_sten(1), rhs)
             else
-               call LHS_mat_gal(n_m)%solve(rhs(5:n_r_max), &
-                    &                      n_r_max-4)
+               call LHS_mat_gal(n_m)%solve(rhs(5:n_r_max), n_r_max-4)
                !-- Put the four first zero lines at the end
                rhs = cshift(rhs, 4)
                !-- Transform from Galerkin space to Chebyshev space
@@ -470,24 +467,28 @@ contains
       end do
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
-      ! if ( n_cheb_max < n_r_max ) then ! fill with zeros !
-         ! do n_cheb=n_cheb_max+1,n_r_max
-            ! do n_m=nMstart,nMstop
-               ! m = idx2m(n_m)
-               ! if ( m == 0 ) then
-                  ! uphi0(n_cheb)=0.0_cp
-               ! else
-                  ! psi_Mloc(n_m,n_cheb)=zero
-               ! end if
-            ! end do
-         ! end do
-      ! end if
+      if ( n_cheb_max < n_r_max ) then ! fill with zeros !
+         do n_cheb=n_cheb_max+1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m == 0 ) then
+                  uphi0(n_cheb)=0.0_cp
+               else
+                  psi_Mloc(n_m,n_cheb)=zero
+               end if
+            end do
+         end do
+      end if
 
       !-- Bring uphi0 to the physical space
       if ( l_rank_has_m0 ) then
+         call get_dr(uphi0, om0, n_r_max, rscheme, l_dct=.false.)
          call rscheme%costf1(uphi0, n_r_max)
-         call get_dr(uphi0, om0, n_r_max, rscheme)
       end if
+
+      !-- Get the radial derivative of psi to calculate uphi, us and omega
+      call get_ddr(psi_Mloc, work_Mloc, om_Mloc, nMstart, nMstop, n_r_max, &
+           &       rscheme,l_dct=.false.)
 
       !-- Bring psi back the physical space
       runStart = MPI_Wtime()
@@ -497,9 +498,6 @@ contains
          time_dct = time_dct + (runStop-runStart)
          n_dct_calls = n_dct_calls + 1
       end if
-
-      !-- Get the radial derivative of psi to calculate uphi, us and omega
-      call get_ddr(psi_Mloc, work_Mloc, om_Mloc, nMstart, nMstop, n_r_max, rscheme)
 
       if ( l_non_rot ) then
          do n_r=1,n_r_max
@@ -600,11 +598,6 @@ contains
             psi_old(n_m,n_cheb)=rhs(n_cheb)
          end do
 
-         !-- Pad with zeros
-         !do n_cheb=n_cheb_max+1,n_r_max
-         !   psi_old(n_m,n_cheb)=zero
-         !end do
-
       end do
 
       !-- Calculate and store vphi force balance if needed
@@ -654,10 +647,6 @@ contains
             do n_cheb=1,n_r_max
                work_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
-            !-- Pad with zeros
-            ! do n_cheb=n_cheb_max+1,n_r_max
-               ! work_Mloc(n_m,n_cheb)=zero
-            ! end do
          end do
 
          !-- Finally assemble the right hand side
@@ -666,13 +655,6 @@ contains
                dpsi_imp_Mloc_last(n_m,n_cheb)=work_Mloc(n_m,n_cheb)
             end do
          end do
-
-         !-- Pad with zeros
-         ! do n_cheb=n_cheb_max+1,n_r_max
-            ! do n_m=nMstart,nMstop
-               ! dpsi_imp_Mloc_last(n_m,n_cheb)=zero
-            ! end do
-         ! end do
 
       end if 
 
