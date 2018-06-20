@@ -102,7 +102,73 @@ contains
                end if
             end do
 
-         case(5) ! u(ri)=u'(ri)=u(ro)=u'(ro)=0
+         case(5) ! u'(ro)-1/ro*u(ro)=u'(ri)-1/ri*u(ri)=0
+
+            kl = 2
+            ku = 0
+            call sten%initialize(kl, ku, n_r_max)
+            do i=1,n_r_max
+               dm = real(i-1,cp)
+               sten%dat(1,i)=one
+               if ( i == 1 .or. i==n_r_max ) sten%dat(1,i)=two*sten%dat(1,i)
+               if ( i < n_r_max ) then
+                  sten%dat(2,i) = -2.0_cp*(eta-1.0_cp)*(eta+1.0_cp &
+                  &               )/((dm+2.0_cp)*(eta**2+2.0_cp*eta*dm**2+6.0_cp &
+                  &               *eta*dm+2.0_cp*eta+1.0_cp))
+                  if ( i == n_r_max-1 ) sten%dat(2,i)=two*sten%dat(2,i)
+               end if
+               if ( i < n_r_max-1 ) then
+                  sten%dat(3,i) = -dm*(eta**2+2.0_cp*eta*dm**2 &
+                  &               +2.0_cp*eta*dm-2.0_cp*eta+1.0_cp)/((dm+2.0_cp &
+                  &               )*(eta**2+2.0_cp*eta*dm**2+6.0_cp*eta*dm+2.0_cp &
+                  &               *eta+1.0_cp))
+                  if ( i == n_r_max-2 ) sten%dat(3,i)=two*sten%dat(3,i)
+               end if
+            end do
+
+         case(6) ! u'(ro)-1/ro*u(ro)=u(ri)=0
+
+            kl = 2
+            ku = 0
+            call sten%initialize(kl, ku, n_r_max)
+            do i=1,n_r_max
+               dm = real(i-1,cp)
+               sten%dat(1,i)=one
+               if ( i == 1 .or. i==n_r_max ) sten%dat(1,i)=two*sten%dat(1,i)
+               if ( i < n_r_max ) then
+                  sten%dat(2,i) = 4.0_cp*(dm+1.0_cp)/&
+                  &               (eta+2.0_cp*dm**2+6.0_cp*dm+4.0_cp)
+                  if ( i == n_r_max-1 ) sten%dat(2,i)=two*sten%dat(2,i)
+               end if
+               if ( i < n_r_max-1 ) then
+                  sten%dat(3,i) = -(eta+2.0_cp*dm**2+2.0_cp*dm)/ &
+                  &                (eta+2.0_cp*dm**2+6.0_cp*dm+4.0_cp)
+                  if ( i == n_r_max-2 ) sten%dat(3,i)=two*sten%dat(3,i)
+               end if
+            end do
+
+         case(7) ! u(ro)=u'(ri)-1/ri*u(ri)=0
+
+            kl = 2
+            ku = 0
+            call sten%initialize(kl, ku, n_r_max)
+            do i=1,n_r_max
+               dm = real(i-1,cp)
+               sten%dat(1,i)=one
+               if ( i == 1 .or. i==n_r_max ) sten%dat(1,i)=two*sten%dat(1,i)
+               if ( i < n_r_max ) then
+                  sten%dat(2,i) = -4.0_cp*eta*(dm+1.0_cp)/(2.0_cp &
+                  &               *eta*dm**2+6.0_cp*eta*dm+4.0_cp*eta+1.0_cp)
+                  if ( i == n_r_max-1 ) sten%dat(2,i)=two*sten%dat(2,i)
+               end if
+               if ( i < n_r_max-1 ) then
+                  sten%dat(3,i) = -(2.0_cp*eta*dm**2+2.0_cp*eta*dm+1.0_cp)/ &
+                  &             (2.0_cp*eta*dm**2+6.0_cp*eta*dm+4.0_cp*eta+1.0_cp)
+                  if ( i == n_r_max-2 ) sten%dat(3,i)=two*sten%dat(3,i)
+               end if
+            end do
+
+         case(8) ! u(ri)=u'(ri)=u(ro)=u'(ro)=0
             
             kl = 4
             ku = 0
@@ -121,7 +187,7 @@ contains
                end if
             end do
 
-         case(6) ! u(ri)=u''(ri)+u'(ri)=u(ro)=u''(ro)-u(ro)=0
+         case(9) ! u(ri)=u''(ri)+1/ri*u'(ri)=u(ro)=u''(ro)-1/ro*u'(ro)=0
             
             kl = 4
             ku = 0
@@ -173,7 +239,75 @@ contains
                end if
             end do
 
-         case(7) ! u(ri)==u(ro)=u'(ri)=u''''(ro)=0
+         case(10) ! u(ri)=u'(ri)=u(ro)=u''(ro)-1/ro*u'(ro)=0
+            
+            kl = 4
+            ku = 0
+            call sten%initialize(kl, ku, n_r_max)
+
+            do i=1,n_r_max
+               dm = real(i-1,cp)
+               sten%dat(1,i)=one
+               if ( i == 1 .or. i==n_r_max ) sten%dat(1,i)=two*sten%dat(1,i)
+               if ( i < n_r_max ) then
+                  sten%dat(2,i) = 8.0_cp*(dm+1.0_cp)/(3.0_cp*eta &
+                  &               +4.0_cp*dm**2+20.0_cp*dm+25.0_cp)
+                  if ( i == n_r_max-1 ) sten%dat(2,i)=two*sten%dat(2,i)
+               end if
+               if ( i < n_r_max-1 ) then
+                  sten%dat(3,i) = -2.0_cp*(dm+2.0_cp)*(3.0_cp*eta+4.0_cp*dm**2+ &
+                  &               16.0_cp*dm+21.0_cp)/((dm+3.0_cp)*(3.0_cp*eta+ &
+                  &               4.0_cp*dm**2+20.0_cp*dm+25.0_cp))
+                  if ( i == n_r_max-2 ) sten%dat(3,i)=two*sten%dat(3,i)
+               end if
+               if ( i < n_r_max-2 ) then
+                  sten%dat(4,i) = -8.0_cp*(dm+1.0_cp)/(3.0_cp*eta &
+                  &               +4.0_cp*dm**2+20.0_cp*dm+25.0_cp)
+                  if ( i == n_r_max-3 ) sten%dat(4,i)=two*sten%dat(4,i)
+               end if
+               if ( i < n_r_max-3 ) then
+                  sten%dat(5,i) = (dm+1.0_cp)*(3.0_cp*eta+4.0_cp*dm**2+12.0_cp*&
+                  &               dm+9.0_cp)/((dm+3.0_cp)*(3.0_cp*eta+4.0_cp*  &
+                  &               dm**2+20.0_cp*dm+25.0_cp))
+                  if ( i == n_r_max-4 ) sten%dat(5,i)=two*sten%dat(5,i)
+               end if
+            end do
+
+         case(11) ! u(ri)=u''(ri)-1/ri*u'(ri)=u(ro)=u'(ro)=0
+            
+            kl = 4
+            ku = 0
+            call sten%initialize(kl, ku, n_r_max)
+            do i=1,n_r_max
+               dm = real(i-1,cp)
+               sten%dat(1,i)=one
+               if ( i == 1 .or. i==n_r_max ) sten%dat(1,i)=two*sten%dat(1,i)
+               if ( i < n_r_max ) then
+                  sten%dat(2,i) = -8.0_cp*eta*(dm+1.0_cp)/(4.0_cp*eta*dm**2+ &
+                  &                20.0_cp*eta*dm+25.0_cp*eta+3.0_cp)
+                  if ( i == n_r_max-1 ) sten%dat(2,i)=two*sten%dat(2,i)
+               end if
+               if ( i < n_r_max-1 ) then
+                  sten%dat(3,i) = -2.0_cp*(dm+2.0_cp)*(4.0_cp*eta*dm**2+16.0_cp*&
+                  &               eta*dm+21.0_cp*eta+3.0_cp)/((dm+3.0_cp)*      &
+                  &               (4.0_cp*eta*dm**2+20.0_cp*eta*dm+25.0_cp*eta+ &
+                  &               3.0_cp))
+                  if ( i == n_r_max-2 ) sten%dat(3,i)=two*sten%dat(3,i)
+               end if
+               if ( i < n_r_max-2 ) then
+                  sten%dat(4,i) = 8.0_cp*eta*(dm+1.0_cp)/(4.0_cp*eta*dm**2+ &
+                  &               20.0_cp*eta*dm+25.0_cp*eta+3.0_cp)
+                  if ( i == n_r_max-3 ) sten%dat(4,i)=two*sten%dat(4,i)
+               end if
+               if ( i < n_r_max-3 ) then
+                  sten%dat(5,i) = (dm+1.0_cp)*(4.0_cp*eta*dm**2+12.0_cp*eta*dm+ &
+                  &               9.0_cp*eta+3.0_cp)/((dm+3.0_cp)*(4.0_cp*eta*  &
+                  &               dm**2+20.0_cp*eta*dm+25.0_cp*eta+3.0_cp))
+                  if ( i == n_r_max-4 ) sten%dat(5,i)=two*sten%dat(5,i)
+               end if
+            end do
+
+         case(12) ! u(ri)==u(ro)=u'(ri)=u''''(ro)=0
 
             kl = 4
             ku = 0

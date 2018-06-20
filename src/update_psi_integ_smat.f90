@@ -58,16 +58,21 @@ contains
 
       if ( l_galerkin ) then
          !-- Define Galerkin basis and stencils
-         if ( ktopv == 1 .and. kbotv == 1 ) then
+         if ( ktopv == 1 .and. kbotv == 1 ) then ! Stress-free stress-free
+            call get_galerkin_stencil(gal_sten(1), n_r_max, 5)
+            call get_galerkin_stencil(gal_sten(2), n_r_max, 9)
+         else if ( ktopv /=1 .and. kbotv == 1 ) then
+            call get_galerkin_stencil(gal_sten(1), n_r_max, 7)
+            call get_galerkin_stencil(gal_sten(2), n_r_max, 11)
+         else if ( ktopv ==1 .and. kbotv /= 1 ) then
+            call get_galerkin_stencil(gal_sten(1), n_r_max, 6)
+            call get_galerkin_stencil(gal_sten(2), n_r_max, 10)
+         else if ( ktopv /=1 .and. kbotv /= 1 ) then ! Rigid/Rigid
             call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
-            call get_galerkin_stencil(gal_sten(2), n_r_max, 6)
-         else if ( ktopv /=1 .and. kbotv /= 1 ) then
             if ( l_non_rot ) then
-               call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
-               call get_galerkin_stencil(gal_sten(2), n_r_max, 5)
+               call get_galerkin_stencil(gal_sten(2), n_r_max, 8)
             else
-               call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
-               call get_galerkin_stencil(gal_sten(2), n_r_max, 7)
+               call get_galerkin_stencil(gal_sten(2), n_r_max, 12)
             end if
          else
             call abortRun('This bc is not implemented yet')
