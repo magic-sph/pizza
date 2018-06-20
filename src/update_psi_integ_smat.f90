@@ -62,7 +62,7 @@ contains
             call abortRun('This bc is not implemented yet')
          else
             call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
-            call get_galerkin_stencil(gal_sten(2), n_r_max, 2)
+            call get_galerkin_stencil(gal_sten(2), n_r_max, 5)
          end if
       end if
 

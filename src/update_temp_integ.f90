@@ -48,8 +48,12 @@ contains
          !-- Define Galerkin basis and stencils
          if ( ktopt == 1 .and. kbott == 1 ) then
             call get_galerkin_stencil(gal_sten, n_r_max, 1)
-         else
-            call abortRun('This bc is not implemented yet')
+         else if ( ktopt /= 1 .and. kbott /= 1 ) then
+            call get_galerkin_stencil(gal_sten, n_r_max, 2)
+         else if ( ktopt == 1 .and. kbott /= 1 ) then
+            call get_galerkin_stencil(gal_sten, n_r_max, 3)
+         else if ( ktopt /= 1 .and. kbott == 1 ) then
+            call get_galerkin_stencil(gal_sten, n_r_max, 4)
          end if
       end if
 
