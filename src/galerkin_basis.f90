@@ -126,70 +126,49 @@ contains
             kl = 4
             ku = 0
             call sten%initialize(kl, ku, n_r_max)
-            ! do i=1,n_r_max
-               ! m = i-1
-               ! sten%dat(1,i) = one
-               ! if ( i == 1 .or. i==n_r_max ) sten%dat(1,i)=two*sten%dat(1,i)
-               ! if ( i < n_r_max-1 ) then
-                  ! !sten%dat(3,i) = -two*real(m*m+4*m+6,cp)/real(m+3,cp)/real(m+4,cp)
-                  ! sten%dat(3,i) = -two*real(m+2)*real(m*m+4*m+9,cp)/ &
-                  ! &                    real(m+3,cp)/real(m*m+6*m+11,cp)
-                  ! if ( i == n_r_max-2 ) sten%dat(3,i)=two*sten%dat(3,i)
-               ! end if
-               ! if ( i < n_r_max-3 ) then
-                  ! !sten%dat(5,i) = real(m,cp)*real(m+1,cp)/real(m+3,cp)/real(m+4,cp)
-                  ! sten%dat(5,i) = real(m*m+2*m+3,cp)*real(m+1,cp)/ &
-                  ! &               real(m+3,cp)/real(m*m+6*m+11,cp)
-                  ! if ( i == n_r_max-4 ) sten%dat(5,i)=two*sten%dat(5,i)
-               ! end if
-            ! end do
 
             do i=1,n_r_max
-               m = i-1
-               sten%dat(1,i) = one
+               dm = real(i-1,cp)
+               sten%dat(1,i)=one
                if ( i == 1 .or. i==n_r_max ) sten%dat(1,i)=two*sten%dat(1,i)
                if ( i < n_r_max ) then
-                  sten%dat(2,i) = -12.0_cp*(eta-1.0_cp)*(eta+1.0_cp)*real(m+1,cp)/&
-                  &               (6.0_cp*eta*eta*real(m*m,cp)+30.0_cp*eta*eta*   &
-                  &                real(m,cp)+33.0_cp*eta*eta+4.0_cp*eta*         &
-                  &                real(m**4,cp)+40.0_cp*eta*real(m**3,cp)+       &
-                  &                140.0_cp*eta*real(m*m,cp)+200.0_cp*eta*m+      &
-                  &                105.0_cp*eta+6.0_cp*real(m*m,cp)+real(30*m+33,cp))
+                  sten%dat(2,i) = -24.0_cp*(eta-1.0_cp)*(eta+1.0_cp)*(dm+1.0_cp)/ &
+                  &               (12.0_cp*eta**2*dm**2+60.0_cp*eta**2*dm+        &
+                  &                75.0_cp*eta**2+16.0_cp*eta*dm**4+160.0_cp      &
+                  &               *eta*dm**3+584.0_cp*eta*dm**2+920.0_cp*eta*dm   &
+                  &               +534.0_cp*eta+12.0_cp*dm**2+60.0_cp*dm+75.0_cp)
                   if ( i == n_r_max-1 ) sten%dat(2,i)=two*sten%dat(2,i)
                end if
                if ( i < n_r_max-1 ) then
-                  sten%dat(3,i) =-two*real((m+2)*(2*m**2+8*m+9),cp)*              &
-                  &               (3.0_cp*eta**2+2.0_cp*eta*real(m**2,cp)+        &
-                  &               8.0_cp*eta*real(m,cp)+9.0_cp*eta+3.0_cp) /      &
-                  &               (real(m+3,cp)*(6.0_cp*eta**2*real(m**2,cp)+     &
-                  &               30.0_cp*eta**2*real(m,cp)+33.0_cp*eta**2+       &
-                  &               4.0_cp*eta*real(m**4,cp)+40.0_cp*eta*           &
-                  &               real(m**3,cp)+140.0_cp*eta*real(m**2,cp)+       &
-                  &               200.0_cp*eta*real(m,cp)+105.0_cp*eta+           &
-                  &               real(6*m**2+30*m+33,cp)))
+                  sten%dat(3,i) = -2.0_cp*(dm+2.0_cp)*(12.0_cp*eta**2*dm**2+      &
+                  &               48.0_cp*eta**2*dm+63.0_cp*eta**2+16.0_cp*eta*   &
+                  &               dm**4+128.0_cp*eta*dm**3+424.0_cp*eta*dm**2+    &
+                  &               672.0_cp*eta*dm+414.0_cp*eta+12.0_cp*dm**2+     &
+                  &               48.0_cp*dm+63.0_cp)/((dm+3.0_cp)*(12.0_cp*      &
+                  &               eta**2*dm**2+60.0_cp*eta**2*dm+75.0_cp*eta**2+  &
+                  &               16.0_cp*eta*dm**4+160.0_cp*eta*dm**3+584.0_cp   &
+                  &               *eta*dm**2+920.0_cp*eta*dm+534.0_cp*eta+12.0_cp &
+                  &               *dm**2+60.0_cp*dm+75.0_cp))
                   if ( i == n_r_max-2 ) sten%dat(3,i)=two*sten%dat(3,i)
                end if
                if ( i < n_r_max-2 ) then
-                  sten%dat(4,i) = 12.0_cp*(eta-1.0_cp)*(eta+1.0_cp)*real(m+1,cp)/ &
-                  &               (6.0_cp*eta**2*real(m**2,cp)+30.0_cp*eta**2*    &
-                  &                real(m,cp)+33.0_cp*eta**2+4.0_cp*eta*          &
-                  &                real(m**4,cp)+40.0_cp*eta*real(m**3,cp)+       &
-                  &                140.0_cp*eta*real(m**2,cp)+200.0_cp*eta*       &
-                  &                real(m,cp)+105.0_cp*eta+real(6*m**2+30*m+33,cp))
+                  sten%dat(4,i) = 24.0_cp*(eta-1.0_cp)*(eta+1.0_cp)*(dm+1.0_cp)/  &
+                  &               (12.0_cp*eta**2*dm**2+60.0_cp*eta**2*dm+75.0_cp*&
+                  &               eta**2+16.0_cp*eta*dm**4+160.0_cp*eta*dm**3+    &
+                  &               584.0_cp*eta*dm**2+920.0_cp*eta*dm+534.0_cp*eta+&
+                  &               12.0_cp*dm**2+60.0_cp*dm+75.0_cp)
                   if ( i == n_r_max-3 ) sten%dat(4,i)=two*sten%dat(4,i)
                end if
                if ( i < n_r_max-3 ) then
-                  sten%dat(5,i) = real(m+1,cp)*(6.0_cp*eta**2*real(m**2,cp)+      &
-                  &               18.0_cp*eta**2*real(m,cp)+9.0_cp*eta**2+4.0_cp* &
-                  &               eta*real(m**4,cp)+24.0_cp*eta*real(m**3,cp)+    &
-                  &               44.0_cp*eta*real(m**2,cp)+24.0_cp*eta*real(m,cp)&
-                  &               +9.0_cp*eta+real(6*m**2+18*m+9,cp))/            &
-                  &               (real(m+3,cp)*(6.0_cp*eta**2*real(m**2,cp)+     &
-                  &               30.0_cp*eta**2*real(m,cp)+33.0_cp*eta**2+       &
-                  &               4.0_cp*eta*real(m**4,cp)+40.0_cp*eta*           &
-                  &               real(m**3,cp) + 140.0_cp*eta*real(m**2,cp)+     &
-                  &               200.0_cp*eta*real(m,cp)+105.0_cp*eta+           &
-                  &               real(6*m**2 + 30*m + 33,cp)))
+                  sten%dat(5,i) = (dm+1.0_cp)*(12.0_cp*eta**2*dm**2+36.0_cp*      &
+                  &               eta**2*dm+27.0_cp*eta**2+16.0_cp*eta*dm**4+     &
+                  &               96.0_cp*eta*dm**3+200.0_cp*eta*dm**2+168.0_cp   &
+                  &               *eta*dm+54.0_cp*eta+12.0_cp*dm**2+36.0_cp*dm    &
+                  &               +27.0_cp)/((dm+3.0_cp)*(12.0_cp*eta**2*dm**2    &
+                  &               +60.0_cp*eta**2*dm+75.0_cp*eta**2+16.0_cp*eta   &
+                  &               *dm**4+160.0_cp*eta*dm**3+584.0_cp*eta*dm**2    &
+                  &               +920.0_cp*eta*dm+534.0_cp*eta+12.0_cp*dm**2+    &
+                  &               60.0_cp*dm+75.0_cp))
                   if ( i == n_r_max-4 ) sten%dat(5,i)=two*sten%dat(5,i)
                end if
             end do
