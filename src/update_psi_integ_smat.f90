@@ -59,10 +59,19 @@ contains
       if ( l_galerkin ) then
          !-- Define Galerkin basis and stencils
          if ( ktopv == 1 .and. kbotv == 1 ) then
-            call abortRun('This bc is not implemented yet')
-         else
             call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
-            call get_galerkin_stencil(gal_sten(2), n_r_max, 5)
+            call get_galerkin_stencil(gal_sten(2), n_r_max, 6)
+            call abortRun('This bc is not fully functional yet')
+         else if ( ktopv /=1 .and. kbotv /= 1 ) then
+            if ( l_non_rot ) then
+               call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
+               call get_galerkin_stencil(gal_sten(2), n_r_max, 5)
+            else
+               call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
+               call get_galerkin_stencil(gal_sten(2), n_r_max, 7)
+            end if
+         else
+            call abortRun('This bc is not implemented yet')
          end if
       end if
 
