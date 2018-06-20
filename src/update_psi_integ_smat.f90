@@ -567,22 +567,22 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
-               psi_old(n_m,n_r)=up_Mloc(n_m,n_r)
+               work_Mloc(n_m,n_r)=up_Mloc(n_m,n_r)
             else
-               psi_old(n_m,n_r)=psi_Mloc(n_m,n_r)
+               work_Mloc(n_m,n_r)=psi_Mloc(n_m,n_r)
             end if
          end do
       end do
 
       !-- Transform the implicit part to chebyshev space
-      call rscheme%costf1(psi_old, nMstart, nMstop, n_r_max)
+      call rscheme%costf1(work_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Matrix-vector multiplication by the operator -\int^4 r^4 \Delta .
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
          do n_cheb=1,n_r_max
-            rhs(n_cheb)= psi_old(n_m,n_cheb)
+            rhs(n_cheb)= work_Mloc(n_m,n_cheb)
          end do
 
          call RHSI_mat(n_m)%mat_vec_mul(rhs)
@@ -615,21 +615,6 @@ contains
       end if
 
       if ( l_calc_lin_rhs ) then
-
-         !-- Copy psi_Mloc into work_Mloc
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m == 0 ) then
-                  work_Mloc(n_m,n_r)=up_Mloc(n_m,n_r)
-               else
-                  work_Mloc(n_m,n_r)=psi_Mloc(n_m,n_r)
-               end if
-            end do
-         end do
-
-         !-- Transform work_Mloc to Cheb space
-         call rscheme%costf1(work_Mloc, nMstart, nMstop, n_r_max)
 
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop

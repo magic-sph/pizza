@@ -318,18 +318,18 @@ contains
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
-            temp_old(n_m,n_r)=temp_Mloc(n_m,n_r)
+            work_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)
          end do
       end do
 
       !-- Transform the implicit part to chebyshev space
-      call rscheme%costf1(temp_old, nMstart, nMstop, n_r_max)
+      call rscheme%costf1(work_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
 
          do n_cheb=1,n_r_max
-            rhs(n_cheb)= temp_old(n_m,n_cheb)
+            rhs(n_cheb)= work_Mloc(n_m,n_cheb)
          end do
 
          call RHSE_mat%mat_vec_mul(rhs)
@@ -344,16 +344,6 @@ contains
       end do
 
       if ( l_calc_rhs_lin ) then
-
-         !-- Copy temp_Mloc into work_Mloc
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               work_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)
-            end do
-         end do
-
-         !-- Transform work_Mloc to Cheb space
-         call rscheme%costf1(work_Mloc, nMstart, nMstop, n_r_max)
 
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
