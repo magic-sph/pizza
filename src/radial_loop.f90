@@ -113,7 +113,7 @@ contains
          end if
 
          !-- Courant condition
-         if ( tscheme%istage == tscheme%nstages ) then
+         if ( tscheme%istage == 1 ) then
             call courant(n_r, dtr_Rloc(n_r), dth_Rloc(n_r), us_grid, up_grid)
          end if
 
