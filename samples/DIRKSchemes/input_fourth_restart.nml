@@ -1,13 +1,13 @@
 &grid
-   n_r_max    =48,
-   n_cheb_max =48,
-   m_max      =48,
+   n_r_max    =32,
+   n_cheb_max =32,
+   m_max      =32,
    minc       =1,
 /
 &control
-   tag        ="final",
+   tag        ="fourth_continue",
    l_newmap   =.false.,
-   time_scheme="ARS222",
+   time_scheme="PC2",
    courfac    =1.0_cp,
  n_time_steps =200,
    dtMax      =1d-4,
@@ -29,7 +29,7 @@
  /
  &start_field
   l_start_file=.true.,
-  start_file  ="checkpoint_end.fourth_continue",
+  start_file  ="checkpoint_end.third_continue",
   init_t      =0,
   amp_t       =2.5e-4,
   init_u      =0,
