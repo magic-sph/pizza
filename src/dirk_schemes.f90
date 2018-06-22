@@ -57,7 +57,7 @@ contains
          this%l_calc_lin_rhs = .true.
          this%nstages = 2
          this%istage = 1
-         allocate( this%butcher_imp(2,2), this%butcher_exp(2,2) )
+         allocate( this%butcher_imp(3,3), this%butcher_exp(3,3) )
       else if ( index(time_scheme, 'ARS443') /= 0 ) then
          this%time_scheme = 'ARS443'
          this%norder_imp = 5
@@ -65,6 +65,24 @@ contains
          this%norder_exp = 4
          this%l_calc_lin_rhs = .true.
          this%nstages = 4
+         this%istage = 1
+         allocate( this%butcher_imp(5,5), this%butcher_exp(5,5) )
+      else if ( index(time_scheme, 'BPR353') /= 0 ) then
+         this%time_scheme = 'BPR353'
+         this%norder_imp = 5
+         this%norder_imp_lin = 5
+         this%norder_exp = 4
+         this%l_calc_lin_rhs = .true.
+         this%nstages = 4
+         this%istage = 1
+         allocate( this%butcher_imp(5,5), this%butcher_exp(5,5) )
+      else if ( index(time_scheme, 'PC2') /= 0 ) then
+         this%time_scheme = 'PC2'
+         this%norder_imp = 4
+         this%norder_imp_lin = 4
+         this%norder_exp = 3
+         this%l_calc_lin_rhs = .true.
+         this%nstages = 3
          this%istage = 1
          allocate( this%butcher_imp(4,4), this%butcher_exp(4,4) )
       end if
@@ -97,22 +115,59 @@ contains
             gam = half * (two-sqrt(two))
             del = one-half/gam
             this%wimp_lin(1) = gam
-            this%butcher_imp(:,:) = reshape((/ gam,0.0_cp,   &
-                                    &          one-gam,gam /),(/2,2/),order=(/2,1/))
-            this%butcher_exp(:,:) = reshape((/ gam,0.0_cp,   &
-                                    &          del,one-del /),(/2,2/),order=(/2,1/))
+            this%butcher_imp(:,:) = reshape([  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,  gam   , 0.0_cp,  &
+                                    &          0.0_cp, one-gam, gam    ],&
+                                    &          [3,3],order=[2,1])
+            this%butcher_exp(:,:) = reshape([  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &             gam,  0.0_cp, 0.0_cp,  &
+                                    &             del, one-del, 0.0_cp], &
+                                    &          [3,3],order=[2,1])
          case ('ARS443')
             this%wimp_lin(1) = half
-            this%butcher_imp(:,:) = reshape((/ half,0.0_cp,0.0_cp,0.0_cp,          &
-                                    &          1.0_cp/6.0_cp,half,0.0_cp,0.0_cp,   &
-                                    &          -half,half,half,0.0_cp,             &
-                                    &          1.5_cp,-1.5_cp,half,half /),(/4,4/),&
-                                    &          order=(/2,1/))
-            this%butcher_exp(:,:) = reshape((/ half,0.0_cp,0.0_cp,0.0_cp,                &
-                                    &          11.0_cp/18.0,1.0_cp/18.0_cp,0.0_cp,0.0_cp,&
-                                    &          5.0_cp/6.0_cp,-5.0_cp/6.0_cp,half,0.0_cp, &
-                                    &          0.25_cp,1.75_cp,0.75_cp,-1.75_cp /),      &
-                                    &          (/4,4/),order=(/2,1/))
+            this%butcher_imp(:,:) = reshape(                               &
+            &            [ 0.0_cp,       0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp,   &
+            &              0.0_cp,         half, 0.0_cp, 0.0_cp, 0.0_cp,   &
+            &              0.0_cp,1.0_cp/6.0_cp,   half, 0.0_cp, 0.0_cp,   &
+            &              0.0_cp,        -half,   half,   half, 0.0_cp,   &
+            &              0.0_cp,       1.5_cp,-1.5_cp,   half,   half],  &
+            &              [5,5],order=[2,1])
+            this%butcher_exp(:,:) = reshape(                                     &
+            &       [           0.0_cp,       0.0_cp,  0.0_cp,   0.0_cp, 0.0_cp, &
+            &                    half,        0.0_cp,  0.0_cp,   0.0_cp, 0.0_cp, &
+            &         11.0_cp/18.0_cp,1.0_cp/18.0_cp,  0.0_cp,   0.0_cp, 0.0_cp, &
+            &           5.0_cp/6.0_cp,-5.0_cp/6.0_cp,    half,   0.0_cp, 0.0_cp, &
+            &                 0.25_cp,       1.75_cp, 0.75_cp, -1.75_cp, 0.0_cp],&
+            &         [5,5],order=[2,1])
+
+         case ('BPR353')
+            this%wimp_lin(1) = half
+            this%butcher_imp(:,:) = reshape(                                   &
+            &       [         0.0_cp,        0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp,   &
+            &                   half,          half, 0.0_cp, 0.0_cp, 0.0_cp,   &
+            &         5.0_cp/18.0_cp,-1.0_cp/9.0_cp,   half, 0.0_cp, 0.0_cp,   &
+            &                   half,        0.0_cp, 0.0_cp,   half, 0.0_cp,   &
+            &                0.25_cp,        0.0_cp,0.75_cp,  -half,   half],  &
+            &              [5,5],order=[2,1])
+            this%butcher_exp(:,:) = reshape(                                   &
+            &       [        0.0_cp,       0.0_cp,  0.0_cp,   0.0_cp, 0.0_cp,  &
+            &                   one,       0.0_cp,  0.0_cp,   0.0_cp, 0.0_cp,  &
+            &         4.0_cp/9.0_cp,2.0_cp/9.0_cp,  0.0_cp,   0.0_cp, 0.0_cp,  &
+            &               0.25_cp,       0.0_cp, 0.75_cp,   0.0_cp, 0.0_cp,  &
+            &               0.25_cp,       0.0_cp, 0.75_cp,   0.0_cp, 0.0_cp], &
+            &         [5,5],order=[2,1])
+         case ('PC2')
+            this%wimp_lin(1) = half
+            this%butcher_imp(:,:) = reshape([ 0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp, &
+            &                                   half,   half, 0.0_cp, 0.0_cp, &
+            &                                   half, 0.0_cp,   half, 0.0_cp, &
+            &                                   half, 0.0_cp, 0.0_cp,   half],&
+            &                               [4,4],order=[2,1])
+            this%butcher_exp(:,:) = reshape([ 0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp, &
+            &                                    one, 0.0_cp, 0.0_cp, 0.0_cp, &
+            &                                   half,   half, 0.0_cp, 0.0_cp, &
+            &                                   half, 0.0_cp,   half, 0.0_cp],&
+            &                               [4,4],order=[2,1])
       end select
 
       this%wimp_lin(1)      = this%dt(1)*this%wimp_lin(1)
@@ -205,17 +260,17 @@ contains
       do n_stage=1,this%istage
          do n_r=1,len_rhs
             do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_exp(this%istage,n_stage)* &
-               &                         dfdt%expl(n_m,n_r,n_stage)
+               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_exp(this%istage+1,n_stage)* &
+               &            dfdt%expl(n_m,n_r,n_stage)
             end do
          end do
       end do
 
-      do n_stage=1,this%istage-1
+      do n_stage=1,this%istage
          do n_r=1,len_rhs
             do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_imp(this%istage,n_stage)* &
-               &                         dfdt%impl(n_m,n_r,n_stage+1)
+               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_imp(this%istage+1,n_stage)* &
+               &                         dfdt%impl(n_m,n_r,n_stage)
             end do
          end do
       end do
@@ -272,16 +327,22 @@ contains
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m /= 0 ) then
-                  if (n_stage == this%istage) then
-                     buo(n_m,n_r)=buo(n_m,n_r)-this%wimp_lin(1)*rgrav(n_r)*or1(n_r)*  &
-                     &            BuoFac*ci*real(m,cp)*temp(n_m,n_r)
-                  else
-                     buo(n_m,n_r)=buo(n_m,n_r)-this%butcher_imp(this%istage,n_stage)* &
-                     &            rgrav(n_r)*or1(n_r)*BuoFac*ci*real(m,cp)*           &
-                     &            dTdt%old(n_m,n_r,n_stage+1)
-                  end if
+                  buo(n_m,n_r)=buo(n_m,n_r)-                              &
+                  &            this%butcher_imp(this%istage+1,n_stage)*   &
+                  &            rgrav(n_r)*or1(n_r)*BuoFac*ci*real(m,cp)*  &
+                  &            dTdt%old(n_m,n_r,n_stage)
                end if
             end do
+         end do
+      end do
+
+      do n_r=1,n_r_max
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m /= 0 ) then
+               buo(n_m,n_r)=buo(n_m,n_r)-this%wimp_lin(1)*rgrav(n_r)*  &
+               &            or1(n_r)*BuoFac*ci*real(m,cp)*temp(n_m,n_r)
+            end if
          end do
       end do
 
