@@ -255,11 +255,11 @@ contains
       if ( lMat ) lPsimat(:)=.false.
 
       call rscheme%costf1( dVsOm_Mloc, nMstart, nMstop, n_r_max )
-      !do n_cheb=n_cheb_max+1,n_r_max
-      !   do n_m=nMstart,nMstop
-      !      dVsOm_Mloc(n_m,n_cheb)=zero
-      !   end do
-      !end do
+      do n_cheb=n_cheb_max+1,n_r_max
+         do n_m=nMstart,nMstop
+            dVsOm_Mloc(n_m,n_cheb)=zero
+         end do
+      end do
       !-- Finish calculation of advection
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
            &       rscheme, nocopy=.true., l_dct=.false.)
@@ -330,11 +330,11 @@ contains
          n_dct_calls = n_dct_calls + 1
       end if
 
-      !do n_cheb=n_cheb_max+1,n_r_max
-       !  do n_m=nMstart,nMstop
-      !      dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
-      !   end do
-      !end do
+      do n_cheb=n_cheb_max+1,n_r_max
+         do n_m=nMstart,nMstop
+            dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
+         end do
+      end do
 
       !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
       do n_m=nMstart,nMstop
@@ -480,18 +480,18 @@ contains
       end do
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
-      if ( n_cheb_max < n_r_max ) then ! fill with zeros !
-         do n_cheb=n_cheb_max+1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m == 0 ) then
-                  uphi0(n_cheb)=0.0_cp
-               else
-                  psi_Mloc(n_m,n_cheb)=zero
-               end if
-            end do
-         end do
-      end if
+      !if ( n_cheb_max < n_r_max ) then ! fill with zeros !
+      !   do n_cheb=n_cheb_max+1,n_r_max
+      !      do n_m=nMstart,nMstop
+      !         m = idx2m(n_m)
+      !         if ( m == 0 ) then
+      !            uphi0(n_cheb)=0.0_cp
+      !         else
+      !            psi_Mloc(n_m,n_cheb)=zero
+      !         end if
+      !      end do
+      !   end do
+      !end if
 
       !-- Bring uphi0 to the physical space
       if ( l_rank_has_m0 ) then

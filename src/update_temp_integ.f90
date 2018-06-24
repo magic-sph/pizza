@@ -169,11 +169,11 @@ contains
 
       !-- Finish calculation of advection
       call rscheme%costf1(dVsT_Mloc, nMstart, nMstop, n_r_max)
-      !do n_cheb=n_cheb_max+1,n_r_max
-      !   do n_m=nMstart,nMstop
-      !      dVsT_Mloc(n_m,n_cheb)=zero
-      !   end do
-      !end do
+      do n_cheb=n_cheb_max+1,n_r_max
+        do n_m=nMstart,nMstop
+           dVsT_Mloc(n_m,n_cheb)=zero
+        end do
+      end do
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
            &       rscheme, nocopy=.true., l_dct=.false. )
 
@@ -202,11 +202,11 @@ contains
 
       !-- Transform the explicit part to chebyshev space
       call rscheme%costf1(dTdt%expl(:,:,tscheme%istage), nMstart, nMstop, n_r_max)
-      !do n_cheb=n_cheb_max+1,n_r_max
-      !   do n_m=nMstart,nMstop
-      !      dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
-      !   end do
-      !end do
+      do n_cheb=n_cheb_max+1,n_r_max
+         do n_m=nMstart,nMstop
+            dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
+         end do
+      end do
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
@@ -272,11 +272,11 @@ contains
       end do
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
-      do n_cheb=n_cheb_max+1,n_r_max
-         do n_m=nMstart,nMstop
-            temp_Mloc(n_m,n_cheb)=zero
-         end do
-      end do
+      !do n_cheb=n_cheb_max+1,n_r_max
+      !  do n_m=nMstart,nMstop
+      !     temp_Mloc(n_m,n_cheb)=zero
+      !  end do
+      !end do
 
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)

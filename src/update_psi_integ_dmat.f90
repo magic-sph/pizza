@@ -80,37 +80,37 @@ contains
       allocate( LHS_om_mat(nMstart:nMstop) )
       allocate( LHS_psi_mat(nMstart:nMstop) )
 
-      call RHSE_mat%initialize(4, 4, n_r_max)
+      call RHSE_mat%initialize(4, 4, n_cheb_max)
 
       !-- Initialize matrices
       if ( .not. l_ek_pump ) then
 
-         call RHSI_mat%initialize(4, 4, n_r_max)
+         call RHSI_mat%initialize(4, 4, n_cheb_max)
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
-            call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
-            call LHS_om_mat(n_m)%initialize(4, 4, 2, n_r_max)
-            if ( m /= 0 ) call LHS_psi_mat(n_m)%initialize(4, 4, 2, n_r_max)
+            call RHSIL_mat(n_m)%initialize(2, 2, n_cheb_max)
+            call LHS_om_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
+            if ( m /= 0 ) call LHS_psi_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
          end do
 
       else ! There is Ekman pumping
 
-         call RHSI_mat%initialize(6, 6, n_r_max)
+         call RHSI_mat%initialize(6, 6, n_cheb_max)
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
-            call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
-            call LHS_om_mat(n_m)%initialize(6, 6, 2, n_r_max)
-            if ( m /= 0 ) call LHS_psi_mat(n_m)%initialize(4, 4, 2, n_r_max)
+            call RHSIL_mat(n_m)%initialize(4, 4, n_cheb_max)
+            call LHS_om_mat(n_m)%initialize(6, 6, 2, n_cheb_max)
+            if ( m /= 0 ) call LHS_psi_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
          end do
 
       end if
 
       !-- Allocate prefactors
-      allocate( omfac(n_r_max, nMstart:nMstop) )
-      allocate( psifac(n_r_max, nMstart:nMstop) )
+      allocate( omfac(n_cheb_max, nMstart:nMstop) )
+      allocate( psifac(n_cheb_max, nMstart:nMstop) )
       omfac(:,:) =one
       psifac(:,:)=one
-      bytes_allocated = bytes_allocated + 2*n_r_max*(nMstop-nMstart+1)* &
+      bytes_allocated = bytes_allocated + 2*n_cheb_max*(nMstop-nMstart+1)* &
       &                 SIZEOF_DEF_REAL
 
       !-- Fill matrices
@@ -128,9 +128,9 @@ contains
       lPsimat(:)=.false.
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
-      allocate( rhs(n_r_max) )
+      allocate( rhs(n_cheb_max) )
       rhs(:)=zero
-      bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
+      bytes_allocated = bytes_allocated+n_cheb_max*SIZEOF_DEF_COMPLEX
 
 
    end subroutine initialize_psi_integ_dmat
@@ -268,7 +268,7 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
-         do n_cheb=1,n_r_max
+         do n_cheb=1,n_cheb_max
             rhs(n_cheb)=domdt%expl(n_m,n_cheb,tscheme%istage)
          end do
 
@@ -276,7 +276,7 @@ contains
          rhs(1)=zero
          rhs(2)=zero
 
-         do n_cheb=1,n_r_max
+         do n_cheb=1,n_cheb_max
             domdt%expl(n_m,n_cheb,tscheme%istage)=rhs(n_cheb)
          end do
 
@@ -308,7 +308,7 @@ contains
             m = idx2m(n_m)
 
             if ( m > 0 ) then
-               do n_cheb=1,n_r_max
+               do n_cheb=1,n_cheb_max
                   rhs(n_cheb)=buo_Mloc(n_m,n_cheb)
                end do
 
@@ -316,7 +316,7 @@ contains
 
                rhs(1)=zero
                rhs(2)=zero
-               do n_cheb=1,n_r_max
+               do n_cheb=1,n_cheb_max
                   buo_Mloc(n_m,n_cheb)=rhs(n_cheb)
                end do
 
@@ -359,7 +359,7 @@ contains
          end if
 
          !-- Assemble RHS
-         do n_cheb=1,n_r_max
+         do n_cheb=1,n_cheb_max
             rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             !-- Add buoyancy
             if ( l_buo_imp ) then
@@ -368,7 +368,7 @@ contains
          end do
 
          !-- Multiply rhs by precond matrix
-         do n_cheb=1,n_r_max
+         do n_cheb=1,n_cheb_max
             rhs(n_cheb)=rhs(n_cheb)*omfac(n_cheb,n_m)
          end do
 
@@ -381,11 +381,11 @@ contains
          end if
 
          if ( m == 0 ) then
-            do n_cheb=1,n_r_max
+            do n_cheb=1,n_cheb_max
                uphi0(n_cheb)=real(rhs(n_cheb))
             end do
          else
-            do n_cheb=1,n_r_max
+            do n_cheb=1,n_cheb_max
                om_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
 
@@ -395,14 +395,14 @@ contains
             !-- Boundary conditions for psi
             rhs(1)=0.0_cp
             rhs(2)=0.0_cp
-            do n_cheb=1,n_r_max
+            do n_cheb=1,n_cheb_max
                !-- Minus signs comes from \Del\psi = - \omega
                rhs(n_cheb)= -rhs(n_cheb)*psifac(n_cheb,n_m)
             end do
 
             call LHS_psi_mat(n_m)%solve(rhs,n_r_max)
 
-            do n_cheb=1,n_r_max
+            do n_cheb=1,n_cheb_max
                psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
          end if  ! m /= 0
@@ -542,7 +542,7 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
-         do n_cheb=1,n_r_max
+         do n_cheb=1,n_cheb_max
             rhs(n_cheb)= om_old(n_m,n_cheb)
          end do
          call RHSI_mat%mat_vec_mul(rhs)
@@ -550,7 +550,7 @@ contains
          rhs(1)=zero 
          rhs(2)=zero
 
-         do n_cheb=1,n_r_max
+         do n_cheb=1,n_cheb_max
             om_old(n_m,n_cheb)=rhs(n_cheb)
          end do
 
@@ -590,19 +590,19 @@ contains
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
-            do n_cheb=1,n_r_max
+            do n_cheb=1,n_cheb_max
                rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             end do
             call RHSIL_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero ! vphi equation has only 2 BCs
             rhs(2)=zero
-            do n_cheb=1,n_r_max
+            do n_cheb=1,n_cheb_max
                work_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
          end do
 
          !-- Finally assemble the right hand side
-         do n_cheb=1,n_r_max
+         do n_cheb=1,n_cheb_max
             do n_m=nMstart,nMstop
                dom_imp_Mloc_last(n_m,n_cheb)=work_Mloc(n_m,n_cheb)
             end do
