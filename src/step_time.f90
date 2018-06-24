@@ -396,9 +396,9 @@ contains
       end if
 
    end subroutine time_loop
-!---------------------------------------------------------------------------------------
-   subroutine start_from_another_scheme(l_vphi_bal_calc, l_bridge_step, n_time_step, &
-              &                         tscheme)
+!--------------------------------------------------------------------------------
+   subroutine start_from_another_scheme(l_vphi_bal_calc, l_bridge_step, &
+              &                         n_time_step, tscheme)
 
       logical,             intent(in) :: l_vphi_bal_calc
       logical,             intent(in) :: l_bridge_step
@@ -447,5 +447,5 @@ contains
       end if
 
    end subroutine start_from_another_scheme
-!---------------------------------------------------------------------------------------
+!---------------------------------------------------------------------------------
 end module step_time
