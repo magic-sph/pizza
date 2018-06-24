@@ -18,7 +18,6 @@ module dirk_schemes
    type, public, extends(type_tscheme) :: type_dirk
       real(cp), allocatable :: butcher_imp(:,:)
       real(cp), allocatable :: butcher_exp(:,:)
-!      logical :: l_calc_lin_rhs ! Do we need to calculate the linear op in the past
    contains
       procedure :: initialize
       procedure :: finalize
@@ -54,7 +53,6 @@ contains
          this%norder_imp_lin = 3
          this%norder_imp = 3
          this%norder_exp = 2
-         this%l_calc_lin_rhs = .true.
          this%nstages = 2
          this%istage = 1
          allocate( this%butcher_imp(3,3), this%butcher_exp(3,3) )
@@ -63,7 +61,6 @@ contains
          this%norder_imp = 5
          this%norder_imp_lin = 5
          this%norder_exp = 4
-         this%l_calc_lin_rhs = .true.
          this%nstages = 4
          this%istage = 1
          allocate( this%butcher_imp(5,5), this%butcher_exp(5,5) )
@@ -72,7 +69,6 @@ contains
          this%norder_imp = 5
          this%norder_imp_lin = 5
          this%norder_exp = 4
-         this%l_calc_lin_rhs = .true.
          this%nstages = 4
          this%istage = 1
          allocate( this%butcher_imp(5,5), this%butcher_exp(5,5) )
@@ -81,11 +77,15 @@ contains
          this%norder_imp = 4
          this%norder_imp_lin = 4
          this%norder_exp = 3
-         this%l_calc_lin_rhs = .true.
          this%nstages = 3
          this%istage = 1
          allocate( this%butcher_imp(4,4), this%butcher_exp(4,4) )
       end if
+
+      allocate( this%l_exp_calc(this%nstages) )
+      allocate( this%l_imp_calc_rhs(this%nstages) )
+      this%l_exp_calc(:) = .true.
+      this%l_imp_calc_rhs(:) = .true.
 
       this%butcher_imp(:,:)=0.0_cp
       this%butcher_exp(:,:)=0.0_cp
@@ -97,6 +97,7 @@ contains
       class(type_dirk) :: this
 
       deallocate( this%dt, this%wimp_lin, this%butcher_exp, this%butcher_imp )
+      deallocate( this%l_exp_calc, this%l_imp_calc_rhs )
 
    end subroutine finalize
 !------------------------------------------------------------------------------
@@ -123,6 +124,7 @@ contains
                                     &             gam,  0.0_cp, 0.0_cp,  &
                                     &             del, one-del, 0.0_cp], &
                                     &          [3,3],order=[2,1])
+            this%l_imp_calc_rhs(1)=.false.
          case ('ARS443')
             this%wimp_lin(1) = half
             this%butcher_imp(:,:) = reshape(                               &
@@ -139,7 +141,7 @@ contains
             &           5.0_cp/6.0_cp,-5.0_cp/6.0_cp,    half,   0.0_cp, 0.0_cp, &
             &                 0.25_cp,       1.75_cp, 0.75_cp, -1.75_cp, 0.0_cp],&
             &         [5,5],order=[2,1])
-
+            this%l_imp_calc_rhs(1)=.false.
          case ('BPR353')
             this%wimp_lin(1) = half
             this%butcher_imp(:,:) = reshape(                                   &
@@ -156,6 +158,7 @@ contains
             &               0.25_cp,       0.0_cp, 0.75_cp,   0.0_cp, 0.0_cp,  &
             &               0.25_cp,       0.0_cp, 0.75_cp,   0.0_cp, 0.0_cp], &
             &         [5,5],order=[2,1])
+            this%l_exp_calc(4)=.false. ! No need to calculte the explicit solve
          case ('PC2')
             this%wimp_lin(1) = half
             this%butcher_imp(:,:) = reshape([ 0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp, &

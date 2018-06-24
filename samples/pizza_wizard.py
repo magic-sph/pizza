@@ -15,6 +15,7 @@ import TestChebMap.unitTest
 import TimeStepChange.unitTest
 import MultistepSchemes.unitTest
 import DIRKSchemes.unitTest
+import GalerkinBases.unitTest
 
 __version__ = '1.0'
 
@@ -205,6 +206,11 @@ def getSuite(startdir, cmd, precision, args):
         # Test a timestep change
         suite.addTest(TimeStepChange.unitTest.TimeStepChange('outputFileDiff',
                                                   '%s/TimeStepChange' % startdir, 
+                                                  execCmd=cmd,
+                                                  precision=precision))
+        # Test several Galerkin Bases
+        suite.addTest(GalerkinBases.unitTest.TestGalerkinBases('outputFileDiff',
+                                                  '%s/GalerkinBases' % startdir, 
                                                   execCmd=cmd,
                                                   precision=precision))
 
