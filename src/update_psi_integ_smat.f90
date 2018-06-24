@@ -42,8 +42,9 @@ module update_psi_integ_smat
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
    type(type_bandmat_real) :: RHSE_mat(2), gal_sten(2)
 
-   public :: update_psi_int_smat, initialize_psi_integ_smat,  &
-   &         finalize_psi_integ_smat, get_psi_rhs_imp_int_smat
+   public :: update_psi_int_smat, initialize_psi_integ_smat,    &
+   &         finalize_psi_integ_smat, get_psi_rhs_imp_int_smat, &
+   &         finish_exp_psi_int_smat
 
 contains
 
@@ -221,10 +222,9 @@ contains
    end subroutine finalize_psi_integ_smat
 !------------------------------------------------------------------------------
    subroutine update_psi_int_smat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,         &
-              &                   dVsOm_Mloc, buo_Mloc, dpsidt, vp_bal,        &
-              &                   tscheme, lMat, l_vphi_bal_calc, time_solve,  &
-              &                   n_solve_calls, time_lu, n_lu_calls, time_dct,&
-              &                   n_dct_calls)
+              &                   buo_Mloc, dpsidt, vp_bal, tscheme, lMat,     &
+              &                   l_vphi_bal_calc, time_solve, n_solve_calls,  &
+              &                   time_lu, n_lu_calls, time_dct, n_dct_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -238,7 +238,6 @@ contains
       complex(cp),       intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
       type(vp_bal_type), intent(inout) :: vp_bal
       type(type_tarray), intent(inout) :: dpsidt
-      complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
       real(cp),          intent(inout) :: time_solve
       integer,           intent(inout) :: n_solve_calls
@@ -249,116 +248,10 @@ contains
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
-      real(cp) :: h2, ekp_fac, runStart, runStop
+      real(cp) :: h2, runStart, runStop
       integer :: n_r, n_m, n_cheb, m
 
       if ( lMat ) lPsimat(:)=.false.
-
-      call rscheme%costf1( dVsOm_Mloc, nMstart, nMstop, n_r_max )
-      do n_cheb=n_cheb_max+1,n_r_max
-         do n_m=nMstart,nMstop
-            dVsOm_Mloc(n_m,n_cheb)=zero
-         end do
-      end do
-      !-- Finish calculation of advection
-      call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct=.false.)
-
-      !-- Finish calculation of the explicit part for current time step
-      do n_r=1,n_r_max
-         do n_m=nMstart, nMstop
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-               dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage)-&
-               &                                   or1(n_r)*work_Mloc(n_m,n_r)
-
-               !-- If Coriolis force is treated explicitly it is added here:
-               if ( .not. l_coriolis_imp ) then
-                  dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage)-&
-                  &                                   CorFac*ci*real(m,cp)*psi_Mloc(n_m,n_r)
-               end if
-
-               !-- If Buoyancy is treated explicitly
-               if ( .not. l_buo_imp ) then 
-                  dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage)&
-                  &                                   +buo_Mloc(n_m,n_r)
-               end if
-            end if
-         end do
-      end do
-
-      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
-         do n_r=1,n_r_max
-            vp_bal%rey_stress(n_r)=real(dpsidt%expl(m2idx(0),n_r,tscheme%istage))
-         end do
-      end if
-
-
-      !-- Add Ekman pumping as an explicit term if this is requested
-      if ( l_ek_pump ) then
-         do n_r=1,n_r_max
-            !-- The following statement is required to make sure
-            !-- that h2 remains 0+ even when -O3 is used at the compilation
-            if ( n_r == 1 ) then
-               h2 = 0.0_cp
-            else
-               h2 = (r_cmb*r_cmb-r(n_r)*r(n_r))
-            end if
-            ekp_fac = CorFac*half*sqrt(ek*r_cmb)*h2**(0.25_cp)
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m == 0 ) then
-                  dpsidt%expl(n_m,n_r,tscheme%istage)=h2*dpsidt%expl(n_m,n_r,tscheme%istage)- &
-                  &                                   ekp_fac*up_Mloc(n_m,n_r)
-               else 
-                  dpsidt%expl(n_m,n_r,tscheme%istage)=h2*dpsidt%expl(n_m,n_r,tscheme%istage)+ &
-                  &                                         ekp_fac*( -om_Mloc(n_m,n_r) +     &
-                  &                                  half*beta(n_r)*   up_Mloc(n_m,n_r) +     &
-                  &                    beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
-                  &                                                    us_Mloc(n_m,n_r) )
-               end if
-            end do
-         end do
-      end if
-
-      !-- Transform the explicit part to chebyshev space
-      runStart = MPI_Wtime()
-      call rscheme%costf1(dpsidt%expl(:,:,tscheme%istage), nMstart, nMstop, n_r_max)
-      runStop = MPI_Wtime()
-      if ( runStop > runStart ) then
-         time_dct = time_dct + (runStop-runStart)
-         n_dct_calls = n_dct_calls + 1
-      end if
-
-      do n_cheb=n_cheb_max+1,n_r_max
-         do n_m=nMstart,nMstop
-            dpsidt%expl(n_m,n_cheb,tscheme%istage)=zero
-         end do
-      end do
-
-      !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
-      do n_m=nMstart,nMstop
-         m = idx2m(n_m)
-
-         do n_cheb=1,n_r_max
-            rhs(n_cheb)=dpsidt%expl(n_m,n_cheb,tscheme%istage)
-         end do
-
-         if ( m == 0 ) then
-            call RHSE_mat(1)%mat_vec_mul(rhs)
-         else
-            call RHSE_mat(2)%mat_vec_mul(rhs)
-            rhs(3)=zero
-            rhs(4)=zero
-         end if
-         rhs(1)=zero
-         rhs(2)=zero
-
-         do n_cheb=1,n_r_max
-            dpsidt%expl(n_m,n_cheb,tscheme%istage)=rhs(n_cheb)
-         end do
-
-      end do
 
       !-- If Ekman pumping is needed then regularisation is different
       !-- Hence buoyancy has to be multiplied by h^2
@@ -408,7 +301,8 @@ contains
       call get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc,                       &
            &                        dpsidt%old(:,:,tscheme%istage),          &
            &                        dpsidt%impl(:,:,tscheme%istage), vp_bal, &
-           &                        l_vphi_bal_calc, tscheme%l_calc_lin_rhs)
+           &                        l_vphi_bal_calc,                         &
+           &                        tscheme%l_imp_calc_rhs(tscheme%istage))
 
 
       !-- Now assemble the right hand side and store it in work_Mloc
@@ -556,6 +450,127 @@ contains
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
 
    end subroutine update_psi_int_smat
+!------------------------------------------------------------------------------
+   subroutine finish_exp_psi_int_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
+              &                       dVsOm_Mloc, buo_Mloc, dpsi_exp_last, &
+              &                       vp_bal, l_vphi_bal_calc)
+
+      !-- Input variables
+      complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      logical,     intent(in) :: l_vphi_bal_calc
+
+      !-- Output variables
+      type(vp_bal_type), intent(inout) :: vp_bal
+      complex(cp),       intent(inout) :: dpsi_exp_last(nMstart:nMstop,n_r_max)
+
+      !-- Local variables
+      integer :: n_r, n_m, m, n_cheb
+      real(cp) :: h2, ekp_fac
+
+      call rscheme%costf1( dVsOm_Mloc, nMstart, nMstop, n_r_max )
+      do n_cheb=n_cheb_max+1,n_r_max
+         do n_m=nMstart,nMstop
+            dVsOm_Mloc(n_m,n_cheb)=zero
+         end do
+      end do
+      !-- Finish calculation of advection
+      call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
+           &       rscheme, nocopy=.true., l_dct=.false.)
+
+      !-- Finish calculation of the explicit part for current time step
+      do n_r=1,n_r_max
+         do n_m=nMstart, nMstop
+            m = idx2m(n_m)
+            if ( m /= 0 ) then
+               dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-    &
+               &                      or1(n_r)*work_Mloc(n_m,n_r)
+
+               !-- If Coriolis force is treated explicitly it is added here:
+               if ( .not. l_coriolis_imp ) then
+                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-   &
+                  &                      CorFac*ci*real(m,cp)*psi_Mloc(n_m,n_r)
+               end if
+
+               !-- If Buoyancy is treated explicitly
+               if ( .not. l_buo_imp ) then 
+                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)+buo_Mloc(n_m,n_r)
+               end if
+            end if
+         end do
+      end do
+
+      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
+         do n_r=1,n_r_max
+            vp_bal%rey_stress(n_r)=real(dpsi_exp_last(m2idx(0),n_r))
+         end do
+      end if
+
+      !-- Add Ekman pumping as an explicit term if this is requested
+      if ( l_ek_pump ) then
+         do n_r=1,n_r_max
+            !-- The following statement is required to make sure
+            !-- that h2 remains 0+ even when -O3 is used at the compilation
+            if ( n_r == 1 ) then
+               h2 = 0.0_cp
+            else
+               h2 = (r_cmb*r_cmb-r(n_r)*r(n_r))
+            end if
+            ekp_fac = CorFac*half*sqrt(ek*r_cmb)*h2**(0.25_cp)
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m == 0 ) then
+                  dpsi_exp_last(n_m,n_r)=h2*dpsi_exp_last(n_m,n_r)- &
+                  &                       ekp_fac*up_Mloc(n_m,n_r)
+               else 
+                  dpsi_exp_last(n_m,n_r)=  h2*dpsi_exp_last(n_m,n_r) +       &
+                  &                      ekp_fac*( -om_Mloc(n_m,n_r) +       &
+                  &               half*beta(n_r)*   up_Mloc(n_m,n_r) +       &
+                  &   beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
+                  &                                 us_Mloc(n_m,n_r) )
+               end if
+            end do
+         end do
+      end if
+
+      !-- Transform the explicit part to chebyshev space
+      call rscheme%costf1(dpsi_exp_last, nMstart, nMstop, n_r_max)
+
+      do n_cheb=n_cheb_max+1,n_r_max
+         do n_m=nMstart,nMstop
+            dpsi_exp_last(n_m,n_cheb)=zero
+         end do
+      end do
+
+      !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
+      do n_m=nMstart,nMstop
+         m = idx2m(n_m)
+
+         do n_cheb=1,n_r_max
+            rhs(n_cheb)=dpsi_exp_last(n_m,n_cheb)
+         end do
+
+         if ( m == 0 ) then
+            call RHSE_mat(1)%mat_vec_mul(rhs)
+         else
+            call RHSE_mat(2)%mat_vec_mul(rhs)
+            rhs(3)=zero
+            rhs(4)=zero
+         end if
+         rhs(1)=zero
+         rhs(2)=zero
+
+         do n_cheb=1,n_r_max
+            dpsi_exp_last(n_m,n_cheb)=rhs(n_cheb)
+         end do
+
+      end do
+
+   end subroutine finish_exp_psi_int_smat
 !------------------------------------------------------------------------------
    subroutine get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc, psi_old,   &
               &                        dpsi_imp_Mloc_last, vp_bal,   &

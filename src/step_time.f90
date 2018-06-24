@@ -11,13 +11,13 @@ module step_time
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
-   use update_temp_coll, only: update_temp_co, get_temp_rhs_imp_coll
-   use update_temp_integ, only: update_temp_int, get_temp_rhs_imp_int
+   use update_temp_coll, only: get_temp_rhs_imp_coll
+   use update_temp_integ, only: get_temp_rhs_imp_int
    use update_psi_integ_smat, only: get_psi_rhs_imp_int_smat
    use update_psi_integ_dmat, only: get_psi_rhs_imp_int_dmat
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
    use update_psi_coll_smat, only: get_psi_rhs_imp_coll_smat
-   use mloop_mod, only: mloop
+   use mloop_mod, only: mloop, finish_explicit_assembly
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
@@ -182,44 +182,58 @@ contains
          tscheme%istage = 1
          runStartT = MPI_Wtime()
          do n_stage=1,tscheme%nstages
-            !-------------------
-            !-- MPI transpositions from m-distributed to r-distributed
-            !-------------------
-            runStart = MPI_Wtime()
-            call transp_m2r(m2r_fields, us_Mloc, us_Rloc)
-            call transp_m2r(m2r_fields, up_Mloc, up_Rloc)
-            call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
-            call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
-            runStop = MPI_Wtime()
-            if (runStop>runStart) then
-               n_mpi_comms  =n_mpi_comms+1
-               run_time_mpi_comms=run_time_mpi_comms+(runStop-runStart)
-            end if
 
-            !-------------------
-            !-- Radial loop
-            !-------------------
-            runStart = MPI_Wtime()
-            call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc, &
-                 &            dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,       &
-                 &            dth_Rloc, run_time_fft, n_fft_calls, tscheme )
-            runStop = MPI_Wtime()
-            if (runStop>runStart) then
-               n_r_loops  =n_r_loops+1
-               run_time_r_loop=run_time_r_loop+(runStop-runStart)
-            end if
+            if ( tscheme%l_exp_calc(n_stage) ) then
+               !-------------------
+               !-- MPI transpositions from m-distributed to r-distributed
+               !-------------------
+               runStart = MPI_Wtime()
+               call transp_m2r(m2r_fields, us_Mloc, us_Rloc)
+               call transp_m2r(m2r_fields, up_Mloc, up_Rloc)
+               call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
+               call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
+               runStop = MPI_Wtime()
+               if (runStop>runStart) then
+                  n_mpi_comms  =n_mpi_comms+1
+                  run_time_mpi_comms=run_time_mpi_comms+(runStop-runStart)
+               end if
 
-            !------------------
-            !-- MPI transpositions from r-distributed to m-distributed
-            !------------------
-            runStart = MPI_Wtime()
-            call transp_r2m(r2m_fields, dtempdt_Rloc, dTdt%expl(:,:,tscheme%istage))
-            call transp_r2m(r2m_fields, dpsidt_Rloc, dpsidt%expl(:,:,tscheme%istage))
-            call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
-            call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
-            runStop = MPI_Wtime()
-            if (runStop>runStart) then
-               run_time_mpi_comms=run_time_mpi_comms+(runStop-runStart)
+               !-------------------
+               !-- Radial loop
+               !-------------------
+               runStart = MPI_Wtime()
+               call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, &
+                    &            dtempdt_Rloc, dVsT_Rloc, dpsidt_Rloc, &
+                    &            dVsOm_Rloc, dtr_Rloc, dth_Rloc,       &
+                    &            run_time_fft, n_fft_calls, tscheme )
+               runStop = MPI_Wtime()
+               if (runStop>runStart) then
+                  n_r_loops  =n_r_loops+1
+                  run_time_r_loop=run_time_r_loop+(runStop-runStart)
+               end if
+
+               !------------------
+               !-- MPI transpositions from r-distributed to m-distributed
+               !------------------
+               runStart = MPI_Wtime()
+               call transp_r2m(r2m_fields, dtempdt_Rloc, &
+                    &          dTdt%expl(:,:,tscheme%istage))
+               call transp_r2m(r2m_fields, dpsidt_Rloc, &
+                    &          dpsidt%expl(:,:,tscheme%istage))
+               call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
+               call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
+               runStop = MPI_Wtime()
+               if (runStop>runStart) then
+                  run_time_mpi_comms=run_time_mpi_comms+(runStop-runStart)
+               end if
+
+               !--------------------
+               !-- Finish assembling the explicit terms
+               !--------------------
+               call finish_explicit_assembly(temp_Mloc, psi_Mloc, us_Mloc,       &
+                    &                        up_Mloc, om_Mloc, dVsT_Mloc,        &
+                    &                        dVsOm_Mloc, buo_Mloc, dTdt, dpsidt, &
+                    &                        tscheme, vp_bal, l_vphi_bal_calc )
             end if
 
             if ( tscheme%istage == 1 ) then
@@ -230,7 +244,8 @@ contains
                call dt_courant(dtr,dth,l_new_dt,tscheme%dt(1),dt_new,dtMax, &
                     &          dtr_Rloc,dth_Rloc,time)
 
-               call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step, l_new_dt)
+               call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step,&
+                    &                    l_new_dt)
                !-- Store the old weight factor of matrices
                !-- it it changes because of dt factors moving
                !-- matrix also needs to be rebuilt
@@ -261,10 +276,11 @@ contains
             !-- M-loop (update routines)
             !--------------------
             runStart = MPI_Wtime()
-            call mloop(temp_Mloc, dtemp_Mloc, psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc,&
-                 &     dVsT_Mloc, dVsOm_Mloc, buo_Mloc, dTdt, dpsidt, vp_bal, tscheme,       &
-                 &     lMat, l_log_next, l_vphi_bal_calc, run_time_solve, n_solve_calls,     &
-                 &     run_time_lu, n_lu_calls, run_time_dct,  n_dct_calls)
+            call mloop(temp_Mloc, dtemp_Mloc, psi_Mloc, om_Mloc,  dom_Mloc,       &
+                 &     us_Mloc, up_Mloc, buo_Mloc, dTdt, dpsidt, vp_bal, tscheme, &
+                 &     lMat, l_log_next, l_vphi_bal_calc, run_time_solve,         &
+                 &     n_solve_calls, run_time_lu, n_lu_calls, run_time_dct,      &
+                 &     n_dct_calls)
             runStop = MPI_Wtime()
             if ( .not. lMat ) then
                if (runStop>runStart) then
@@ -396,7 +412,7 @@ contains
       end if
 
    end subroutine time_loop
-!--------------------------------------------------------------------------------
+!-------------------------------------------------------------------------------
    subroutine start_from_another_scheme(l_vphi_bal_calc, l_bridge_step, &
               &                         n_time_step, tscheme)
 
@@ -447,5 +463,5 @@ contains
       end if
 
    end subroutine start_from_another_scheme
-!---------------------------------------------------------------------------------
+!--------------------------------------------------------------------------------
 end module step_time

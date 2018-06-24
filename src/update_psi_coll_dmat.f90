@@ -38,7 +38,7 @@ module update_psi_coll_dmat
    end interface get_bc_influence_matrix
 
    public :: update_om_coll_dmat, initialize_om_coll_dmat, finalize_om_coll_dmat, &
-   &         get_psi_rhs_imp_coll_dmat
+   &         get_psi_rhs_imp_coll_dmat, finish_exp_psi_coll_dmat
 
 contains
 
@@ -102,10 +102,9 @@ contains
    end subroutine finalize_om_coll_dmat
 !------------------------------------------------------------------------------
    subroutine update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc, &
-              &                   dVsOm_Mloc,  buo_Mloc, dpsidt, vp_bal,         &
-              &                   tscheme, lMat, l_vphi_bal_calc, time_solve,    &
-              &                   n_solve_calls, time_lu, n_lu_calls, time_dct,  &
-              &                   n_dct_calls)
+              &                   buo_Mloc, dpsidt, vp_bal, tscheme, lMat,       &
+              &                   l_vphi_bal_calc, time_solve, n_solve_calls,    &
+              &                   time_lu, n_lu_calls, time_dct, n_dct_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -121,7 +120,6 @@ contains
       complex(cp),       intent(inout) :: up_Mloc(nMstart:nMstop,n_r_max)
       type(vp_bal_type), intent(inout) :: vp_bal
       type(type_tarray), intent(inout) :: dpsidt
-      complex(cp),       intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       real(cp),          intent(inout) :: time_solve
       integer,           intent(inout) :: n_solve_calls
       real(cp),          intent(inout) :: time_lu
@@ -135,53 +133,12 @@ contains
 
       if ( lMat ) lPsimat(:)=.false.
 
-      !-- Finish calculation of advection
-      call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true.)
-
-      !-- Finish calculation of the explicit part for current time step
-      do n_r=1,n_r_max
-         do n_m=nMstart, nMstop
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-               dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage)-&
-               &                                   or1(n_r)*work_Mloc(n_m,n_r)
-               !-- If Coriolis is treated explicitly, add it here:
-               if ( .not. l_non_rot ) then
-                  dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage) &
-                  &                                   +CorFac*beta(n_r)*us_Mloc(n_m,n_r)
-               end if
-
-               !-- If Buoyancy is treated explicitly, add it here:
-               if ( .not. l_buo_imp ) then
-                  dpsidt%expl(n_m,n_r,tscheme%istage)=dpsidt%expl(n_m,n_r,tscheme%istage) &
-                  &                                   +buo_Mloc(n_m,n_r)
-               end if
-            end if
-         end do
-      end do
-
-      if ( l_ek_pump ) then
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m /= 0 ) then
-                  dpsidt%expl(n_m,n_r,tscheme%istage)=  dpsidt%expl(n_m,n_r,tscheme%istage)- &
-                  &                                   CorFac*ekpump(n_r)*om_Mloc(n_m,n_r)  + &
-                  &                  half*CorFac*ekpump(n_r)*beta(n_r)*  up_Mloc(n_m,n_r)  + &
-                  &                         CorFac*( ekpump(n_r)*beta(n_r)*(-ci*real(m,cp) + &
-                  &                        5.0_cp*r_cmb*oheight(n_r)) ) * us_Mloc(n_m,n_r)
-               end if
-            end do
-         end do
-      end if
-
       !-- Calculation of the implicit part
       call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc,           &
            &                         dpsidt%old(:,:,tscheme%istage),       &
            &                         dpsidt%impl(:,:,tscheme%istage),      &
            &                         vp_bal, l_vphi_bal_calc,              &
-           &                         tscheme%l_calc_lin_rhs)
+           &                         tscheme%l_imp_calc_rhs(tscheme%istage))
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
@@ -426,6 +383,64 @@ contains
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
 
    end subroutine update_om_coll_dmat
+!------------------------------------------------------------------------------
+   subroutine finish_exp_psi_coll_dmat(us_Mloc, up_Mloc, om_Mloc, dVsOm_Mloc, &
+              &                        buo_Mloc, dpsi_exp_last)
+
+      !-- Input variables
+      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Output variable
+      complex(cp),  intent(inout) :: dpsi_exp_last(nMstart:nMstop,n_r_max)
+
+      !-- Local variables:
+      integer :: n_r, n_m, m
+   
+      !-- Finish calculation of advection
+      call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
+           &       rscheme, nocopy=.true.)
+
+      !-- Finish calculation of the explicit part for current time step
+      do n_r=1,n_r_max
+         do n_m=nMstart, nMstop
+            m = idx2m(n_m)
+            if ( m /= 0 ) then
+               dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-&
+               &                        or1(n_r)*work_Mloc(n_m,n_r)
+               !-- If Coriolis is treated explicitly, add it here:
+               if ( .not. l_non_rot ) then
+                  dpsi_exp_last(n_m,n_r)=            dpsi_exp_last(n_m,n_r) &
+                  &                      +CorFac*beta(n_r)*us_Mloc(n_m,n_r)
+               end if
+
+               !-- If Buoyancy is treated explicitly, add it here:
+               if ( .not. l_buo_imp ) then
+                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)+buo_Mloc(n_m,n_r)
+               end if
+            end if
+         end do
+      end do
+
+      if ( l_ek_pump ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m /= 0 ) then
+                  dpsi_exp_last(n_m,n_r)=       dpsi_exp_last(n_m,n_r)  - &
+                  &                CorFac*ekpump(n_r)*om_Mloc(n_m,n_r)  + &
+                  & half*CorFac*ekpump(n_r)*beta(n_r)*up_Mloc(n_m,n_r)  + &
+                  &      CorFac*( ekpump(n_r)*beta(n_r)*(-ci*real(m,cp) + &
+                  &    5.0_cp*r_cmb*oheight(n_r)) ) * us_Mloc(n_m,n_r)
+               end if
+            end do
+         end do
+      end if
+
+   end subroutine finish_exp_psi_coll_dmat
 !------------------------------------------------------------------------------
    subroutine get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc, psi_last, &
               &                         dpsi_imp_Mloc_last, vp_bal,           &

@@ -44,42 +44,45 @@ contains
       this%istage = 1
       this%family = 'MULTISTEP'
 
+      allocate( this%l_exp_calc(1) )
+      allocate( this%l_imp_calc_rhs(1) )
+      this%l_exp_calc(1) = .true.
+      this%l_imp_calc_rhs(1) = .true.
+      bytes_allocated = bytes_allocated+2*SIZEOF_LOGICAL
+
       if ( index(time_scheme, 'CNAB2') /= 0 ) then
          this%time_scheme = 'CNAB2'
          this%norder_imp_lin = 2
          this%norder_imp = 2
          this%norder_exp = 2
-         this%l_calc_lin_rhs = .true.
       else if ( index(time_scheme, 'MODCNAB') /= 0 ) then
          this%time_scheme = 'MODCNAB'
          this%norder_imp = 3
          this%norder_imp_lin = 3
          this%norder_exp = 2
-         this%l_calc_lin_rhs = .true.
       else if ( index(time_scheme, 'CNLF') /= 0 ) then
          this%time_scheme = 'CNLF'
          this%norder_imp = 3
          this%norder_imp_lin = 3
          this%norder_exp = 2
-         this%l_calc_lin_rhs = .true.
       else if ( index(time_scheme, 'BDF2AB2') /= 0 ) then
          this%time_scheme = 'BDF2AB2'
          this%norder_imp = 3
          this%norder_imp_lin = 2 ! it should be one but we need to restart
          this%norder_exp = 2
-         this%l_calc_lin_rhs = .false.
+         this%l_imp_calc_rhs(1) = .false.
       else if ( index(time_scheme, 'BDF3AB3') /= 0 ) then
          this%time_scheme = 'BDF3AB3'
          this%norder_imp = 4
          this%norder_imp_lin = 2 ! it should be one but we need to restart
          this%norder_exp = 3
-         this%l_calc_lin_rhs = .false.
+         this%l_imp_calc_rhs(1) = .false.
       else if ( index(time_scheme, 'BDF4AB4') /= 0 ) then
          this%time_scheme = 'BDF4AB4'
          this%norder_imp = 5
          this%norder_imp_lin = 2 ! it should be one but we need to restart
          this%norder_exp = 4
-         this%l_calc_lin_rhs = .false.
+         this%l_imp_calc_rhs(1) = .false.
       end if
 
       allocate ( this%dt(this%norder_exp) )
@@ -101,7 +104,8 @@ contains
 
       class(type_multistep) :: this
 
-      deallocate( this%dt, this%wimp, this%wimp_lin, this%wexp )
+      deallocate( this%l_exp_calc, this%dt, this%wimp, this%wimp_lin, this%wexp )
+      deallocate( this%l_imp_calc_rhs )
 
    end subroutine finalize
 !------------------------------------------------------------------------------

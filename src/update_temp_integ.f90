@@ -36,7 +36,7 @@ module update_temp_integ
    real(cp), allocatable :: tempfac(:,:) ! Preconditon matrix
 
    public :: update_temp_int, initialize_temp_integ, finalize_temp_integ, &
-   &         get_temp_rhs_imp_int
+   &         get_temp_rhs_imp_int, finish_exp_temp_int
 
 contains
 
@@ -121,24 +121,21 @@ contains
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
-   subroutine update_temp_int(psi_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,    &
-              &               buo_Mloc, dTdt, tscheme, lMat, l_log_next)
+   subroutine update_temp_int(temp_Mloc, dtemp_Mloc, buo_Mloc, &
+              &               dTdt, tscheme, lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       logical,             intent(in) :: l_log_next
-      complex(cp),         intent(in) :: psi_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Output variables
       complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       type(type_tarray), intent(inout) :: dTdt
       complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Local variables
-      real(cp) :: h2
       integer :: n_r, n_m, m, n_cheb
 
       if ( lMat ) lTMat(:)=.false.
@@ -154,79 +151,12 @@ contains
                end if
             end do
          end do
-      else
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m /= 0 ) then
-                  buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
-                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-               end if
-            end do
-         end do
-
       end if
-
-      !-- Finish calculation of advection
-      call rscheme%costf1(dVsT_Mloc, nMstart, nMstop, n_r_max)
-      do n_cheb=n_cheb_max+1,n_r_max
-        do n_m=nMstart,nMstop
-           dVsT_Mloc(n_m,n_cheb)=zero
-        end do
-      end do
-      call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct=.false. )
-
-      !-- Finish calculation of the explicit part for current time step
-      if ( l_non_rot ) then
-         do n_r=1,n_r_max
-            do n_m=nMstart, nMstop
-               m = idx2m(n_m)
-               dTdt%expl(n_m,n_r,tscheme%istage)=dTdt%expl(n_m,n_r,tscheme%istage)   &
-               &                                      -or1(n_r)*work_Mloc(n_m,n_r)   &
-               &             -ci*real(m,cp)*or1(n_r)*dtcond(n_r)*psi_Mloc(n_m,n_r)
-            end do
-         end do
-      else ! this is rotating
-         do n_r=1,n_r_max
-            h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
-            do n_m=nMstart, nMstop
-               m = idx2m(n_m)
-               dTdt%expl(n_m,n_r,tscheme%istage)=dTdt%expl(n_m,n_r,tscheme%istage)   &
-               &                                      -or1(n_r)*work_Mloc(n_m,n_r)   &
-               &                          -ci*real(m,cp)*(h2*or1(n_r)*dtcond(n_r)+   &
-               &                          tadvz_fac* tcond(n_r))* psi_Mloc(n_m,n_r)
-            end do
-         end do
-      end if
-
-      !-- Transform the explicit part to chebyshev space
-      call rscheme%costf1(dTdt%expl(:,:,tscheme%istage), nMstart, nMstop, n_r_max)
-      do n_cheb=n_cheb_max+1,n_r_max
-         do n_m=nMstart,nMstop
-            dTdt%expl(n_m,n_cheb,tscheme%istage)=zero
-         end do
-      end do
-
-      !-- Matrix-vector multiplication by the operator \int\int r^2 .
-      do n_m=nMstart,nMstop
-         do n_cheb=1,n_r_max
-            rhs(n_cheb)=dTdt%expl(n_m,n_cheb,tscheme%istage)
-         end do
-
-         call RHSE_mat%mat_vec_mul(rhs)
-
-         rhs(1)=zero
-         rhs(2)=zero
-         do n_cheb=1,n_r_max
-            dTdt%expl(n_m,n_cheb,tscheme%istage)=rhs(n_cheb)
-         end do
-      end do
 
       !-- Calculation of the implicit part
       call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,tscheme%istage),  &
            &                    dTdt%impl(:,:,tscheme%istage),            &
-           &                    tscheme%l_calc_lin_rhs)
+           &                    tscheme%l_imp_calc_rhs(tscheme%istage))
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
@@ -273,9 +203,9 @@ contains
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
       !do n_cheb=n_cheb_max+1,n_r_max
-      !  do n_m=nMstart,nMstop
-      !     temp_Mloc(n_m,n_cheb)=zero
-      !  end do
+      !   do n_m=nMstart,nMstop
+      !      temp_Mloc(n_m,n_cheb)=zero
+      !   end do
       !end do
 
       !-- Bring temperature back to physical space
@@ -305,6 +235,93 @@ contains
       end if
 
    end subroutine update_temp_int
+!------------------------------------------------------------------------------
+   subroutine finish_exp_temp_int(temp_Mloc, psi_Mloc, dVsT_Mloc, buo_Mloc, &
+              &                   dtemp_exp_last)
+
+      !-- Input variables
+      complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Output variables
+      complex(cp), intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: dtemp_exp_last(nMstart:nMstop,n_r_max)
+
+      !-- Local variables
+      integer :: n_r, n_m, m, n_cheb
+      real(cp) :: h2
+
+      !-- If buoyancy is treated explicitly
+      if ( .not. l_buo_imp ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m /= 0 ) then
+                  buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
+                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               end if
+            end do
+         end do
+      end if
+
+      !-- Finish calculation of advection
+      call rscheme%costf1(dVsT_Mloc, nMstart, nMstop, n_r_max)
+      do n_cheb=n_cheb_max+1,n_r_max
+         do n_m=nMstart,nMstop
+            dVsT_Mloc(n_m,n_cheb)=zero
+         end do
+      end do
+      call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
+           &       rscheme, nocopy=.true., l_dct=.false. )
+
+      !-- Finish calculation of the explicit part for current time step
+      if ( l_non_rot ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart, nMstop
+               m = idx2m(n_m)
+               dtemp_exp_last(n_m,n_r)=         dtemp_exp_last(n_m,n_r)   &
+               &                           -or1(n_r)*work_Mloc(n_m,n_r)   &
+               &  -ci*real(m,cp)*or1(n_r)*dtcond(n_r)*psi_Mloc(n_m,n_r)
+            end do
+         end do
+      else ! this is rotating
+         do n_r=1,n_r_max
+            h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
+            do n_m=nMstart, nMstop
+               m = idx2m(n_m)
+               dtemp_exp_last(n_m,n_r)=             dtemp_exp_last(n_m,n_r)   &
+               &                               -or1(n_r)*work_Mloc(n_m,n_r)   &
+               &                -ci*real(m,cp)*(h2*or1(n_r)*dtcond(n_r)+      &
+               &                  tadvz_fac* tcond(n_r))* psi_Mloc(n_m,n_r)
+            end do
+         end do
+      end if
+
+      !-- Transform the explicit part to chebyshev space
+      call rscheme%costf1(dtemp_exp_last, nMstart, nMstop, n_r_max)
+      do n_cheb=n_cheb_max+1,n_r_max
+         do n_m=nMstart,nMstop
+            dtemp_exp_last(n_m,n_cheb)=zero
+         end do
+      end do
+
+      !-- Matrix-vector multiplication by the operator \int\int r^2 .
+      do n_m=nMstart,nMstop
+         do n_cheb=1,n_r_max
+            rhs(n_cheb)=dtemp_exp_last(n_m,n_cheb)
+         end do
+
+         call RHSE_mat%mat_vec_mul(rhs)
+
+         rhs(1)=zero
+         rhs(2)=zero
+         do n_cheb=1,n_r_max
+            dtemp_exp_last(n_m,n_cheb)=rhs(n_cheb)
+         end do
+      end do
+
+   end subroutine finish_exp_temp_int
 !------------------------------------------------------------------------------
    subroutine get_temp_rhs_imp_int(temp_Mloc, temp_old, dtemp_imp_Mloc_last,  &
               &                    l_calc_rhs_lin)

@@ -9,7 +9,6 @@ module time_schemes
 
    type, abstract, public :: type_tscheme
 
-      logical :: l_calc_lin_rhs
       character(len=10) :: family
       integer :: nstages
       integer :: istage
@@ -19,6 +18,8 @@ module time_schemes
       character(len=8) :: time_scheme
       real(cp), allocatable :: dt(:)
       real(cp), allocatable :: wimp_lin(:)
+      logical,  allocatable :: l_exp_calc(:)
+      logical, allocatable :: l_imp_calc_rhs(:)
 
    contains 
 
@@ -35,7 +36,6 @@ module time_schemes
    end type type_tscheme
 
    interface
-
 
       subroutine initialize_if(this, time_scheme)
          import

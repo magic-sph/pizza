@@ -28,7 +28,7 @@ module update_temp_coll
    complex(cp), allocatable :: rhs(:)
 
    public :: update_temp_co, initialize_temp_coll, finalize_temp_coll, &
-   &         get_temp_rhs_imp_coll
+   &         get_temp_rhs_imp_coll, finish_exp_temp_coll
 
 contains
 
@@ -62,57 +62,30 @@ contains
 
    end subroutine finalize_temp_coll
 !------------------------------------------------------------------------------
-   subroutine update_temp_co(us_Mloc, temp_Mloc, dtemp_Mloc, dVsT_Mloc,      &
-              &              buo_Mloc, dTdt, tscheme, lMat, l_log_next)
+   subroutine update_temp_co(temp_Mloc, dtemp_Mloc, buo_Mloc, dTdt, &
+              &              tscheme, lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       logical,             intent(in) :: l_log_next
-      complex(cp),         intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
 
       !-- Output variables
-      complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       type(type_tarray), intent(inout) :: dTdt
-      complex(cp), intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, n_r_out, m
 
       if ( lMat ) lTMat(:)=.false.
 
-      !-- In case buoyancy is treated explicitly, assemble it here
-      if ( .not. l_buo_imp ) then
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m /= 0 ) then
-                  buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
-                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-               end if
-            end do
-         end do
-      end if
-
-      !-- Finish calculation of advection
-      call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true. )
-
-      !-- Finish calculation of the explicit part for current time step
-      do n_r=1,n_r_max
-         do n_m=nMstart, nMstop
-            dTdt%expl(n_m,n_r,tscheme%istage)=dTdt%expl(n_m,n_r,tscheme%istage)    &
-            &                                      -or1(n_r)*work_Mloc(n_m,n_r)    &
-            &                                      -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
-            &                                   tadvz_fac*beta(n_r)*tcond(n_r))
-         end do
-      end do
-
       !-- Calculation of the implicit part
-      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt%old(:,:,tscheme%istage), &
-           &                     dTdt%impl(:,:,tscheme%istage), tscheme%l_calc_lin_rhs)
+      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc,          &
+           &                     dTdt%old(:,:,tscheme%istage),   &
+           &                     dTdt%impl(:,:,tscheme%istage),  &
+           &                     tscheme%l_imp_calc_rhs(tscheme%istage))
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
@@ -123,7 +96,8 @@ contains
          
          if ( .not. lTmat(n_m) ) then
 #ifdef WITH_PRECOND_S
-            call get_tempMat(tscheme, m, tMat(:,:,n_m), tPivot(:,n_m), tMat_fac(:,n_m))
+            call get_tempMat(tscheme, m, tMat(:,:,n_m), tPivot(:,n_m), &
+                 &           tMat_fac(:,n_m))
 #else
             call get_tempMat(tscheme, m, tMat(:,:,n_m), tPivot(:,n_m))
 #endif
@@ -142,7 +116,8 @@ contains
          end do
 #endif
 
-         call solve_full_mat(tMat(:,:,n_m), n_r_max, n_r_max, tPivot(:, n_m), rhs(:))
+         call solve_full_mat(tMat(:,:,n_m), n_r_max, n_r_max, tPivot(:, n_m), &
+              &              rhs(:))
 
          do n_r_out=1,rscheme%n_max
             temp_Mloc(n_m, n_r_out)=rhs(n_r_out)
@@ -176,6 +151,49 @@ contains
       end if
 
    end subroutine update_temp_co
+!------------------------------------------------------------------------------
+   subroutine finish_exp_temp_coll(temp_Mloc, us_Mloc, dVsT_Mloc, buo_Mloc, &
+              &                    dtemp_exp_last)
+
+      !-- Input variables
+      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Output variables
+      complex(cp), intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: dtemp_exp_last(nMstart:nMstop,n_r_max)
+
+      !-- Local variables
+      integer :: n_r, n_m, m
+
+      if ( .not. l_buo_imp ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m /= 0 ) then
+                  buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
+                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+               end if
+            end do
+         end do
+      end if
+
+      !-- Finish calculation of advection
+      call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
+           &       rscheme, nocopy=.true. )
+
+      !-- Finish calculation of the explicit part for current time step
+      do n_r=1,n_r_max
+         do n_m=nMstart, nMstop
+            dtemp_exp_last(n_m,n_r)=dtemp_exp_last(n_m,n_r)         & 
+            &                       -or1(n_r)*work_Mloc(n_m,n_r)    &
+            &                       -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
+            &                       tadvz_fac*beta(n_r)*tcond(n_r))
+         end do
+      end do
+
+   end subroutine finish_exp_temp_coll
 !------------------------------------------------------------------------------
    subroutine get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, temp_last, &
               &                     dtemp_imp_Mloc_last, l_calc_lin_rhs)

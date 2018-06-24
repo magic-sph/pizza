@@ -354,6 +354,7 @@ contains
             if ( l_dct_loc ) call r_scheme%costf1(work,nMstart,nMstop,n_r_max)
           
             !-- Get derivatives:
+            !call get_dcheb(work,df,nMstart,nMstop,n_r_max,r_scheme%n_max)
             call get_dcheb(work,df,nMstart,nMstop,n_r_max,n_r_max)
           
             !-- Transform back:
@@ -365,6 +366,7 @@ contains
             if ( l_dct_loc ) call r_scheme%costf1(f,nMstart,nMstop,n_r_max)
           
             !-- Get derivatives:
+            !call get_dcheb(f,df,nMstart,nMstop,n_r_max,r_scheme%n_max)
             call get_dcheb(f,df,nMstart,nMstop,n_r_max,n_r_max)
           
             !-- Transform back:
@@ -448,6 +450,7 @@ contains
          if ( l_dct_loc ) call r_scheme%costf1(work_1d_real,n_r_max)
           
          !-- Get derivatives:
+         !call get_dcheb(work_1d_real,df,n_r_max,r_scheme%n_max)
          call get_dcheb(work_1d_real,df,n_r_max,n_r_max)
           
          !-- Transform back:
@@ -532,6 +535,7 @@ contains
          if ( l_dct_loc ) call r_scheme%costf1(work,nMstart,nMstop,n_r_max)
     
          !-- Get derivatives:
+         !call get_ddcheb(work,df,ddf,nMstart,nMstop,n_r_max,r_scheme%n_max)
          call get_ddcheb(work,df,ddf,nMstart,nMstop,n_r_max,n_r_max)
     
          !-- Transform back:
@@ -626,6 +630,7 @@ contains
          call r_scheme%costf1(work_1d_real,n_r_max)
     
          !-- Get derivatives:
+         !call get_ddcheb(work_1d_real,df,ddf,n_r_max,r_scheme%n_max)
          call get_ddcheb(work_1d_real,df,ddf,n_r_max,n_r_max)
     
          !-- Transform back:
