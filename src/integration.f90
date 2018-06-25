@@ -54,7 +54,7 @@ contains
          end do
 
          !-- Remaining renormalisation:
-         rInt=sqrt(two/real(n_r_max-1,cp))*rInt
+         rInt=two*sqrt(two/real(n_r_max-1,cp))*rInt
 
          deallocate( f2 )
 

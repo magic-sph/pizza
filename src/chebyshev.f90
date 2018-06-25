@@ -137,10 +137,10 @@ contains
          &    index(map_function, 'BAY') /= 0 ) then
 
             do n_r=1,n_r_max
-               this%drx(n_r)  =                         (this%alpha1) /        &
+               this%drx(n_r)  =                         (two*this%alpha1) /        &
                &    ((one+this%alpha1**2*(two*r(n_r)-ricb-rcmb-this%alpha2)**2)*   &
                &    lambd)
-               this%ddrx(n_r) =-(four*this%alpha1**3*(two*r(n_r)-ricb-rcmb-      &
+               this%ddrx(n_r) =-(8.0_cp*this%alpha1**3*(two*r(n_r)-ricb-rcmb-      &
                &               this%alpha2)) / ((one+this%alpha1**2*(-two*r(n_r)+  &
                &               ricb+rcmb+this%alpha2)**2)**2*lambd)
             end do
@@ -150,9 +150,9 @@ contains
          &         index(map_function, 'KTL') /= 0 ) then
 
             do n_r=1,n_r_max
-               this%drx(n_r)  =asin(this%alpha1)/this%alpha1*sqrt(one-     &
+               this%drx(n_r)  =two*asin(this%alpha1)/this%alpha1*sqrt(one-     &
                &               this%alpha1**2*this%r_cheb(n_r)**2)
-               this%ddrx(n_r) =-two*asin(this%alpha1)**2*this%r_cheb(n_r)
+               this%ddrx(n_r) =-four*asin(this%alpha1)**2*this%r_cheb(n_r)
             end do
 
          end if
@@ -160,7 +160,7 @@ contains
       else !-- No mapping is used: this is the regular Gauss-Lobatto grid
 
          do n_r=1,n_r_max
-            this%drx(n_r)  =one/(rcmb-ricb)
+            this%drx(n_r)  =two/(rcmb-ricb)
             this%ddrx(n_r) =0.0_cp
          end do
 
@@ -221,20 +221,20 @@ contains
             this%rMat(1,k)  =one
             this%rMat(2,k)  =this%r_cheb(k)
             this%drMat(1,k) =0.0_cp
-            this%drMat(2,k) =two*this%drx(k)
+            this%drMat(2,k) =this%drx(k)
             this%d2rMat(1,k)=0.0_cp
-            this%d2rMat(2,k)=two*this%ddrx(k)
+            this%d2rMat(2,k)=this%ddrx(k)
 
             !----- now construct the rest with a recursion:
             do n=3,n_r_max ! do loop over the (n-1) order of the chebs
 
                this%rMat(n,k)  =    two*this%r_cheb(k)*this%rMat(n-1,k) - &
                &                                       this%rMat(n-2,k)
-               this%drMat(n,k) =      four*this%drx(k)*this%rMat(n-1,k) + &
+               this%drMat(n,k) =       two*this%drx(k)*this%rMat(n-1,k) + &
                &                   two*this%r_cheb(k)*this%drMat(n-1,k) - &
                &                                      this%drMat(n-2,k)
-               this%d2rMat(n,k)=     four*this%ddrx(k)*this%rMat(n-1,k) + &
-               &                   8.0_cp*this%drx(k)*this%drMat(n-1,k) + &
+               this%d2rMat(n,k)=      two*this%ddrx(k)*this%rMat(n-1,k) + &
+               &                     four*this%drx(k)*this%drMat(n-1,k) + &
                &                  two*this%r_cheb(k)*this%d2rMat(n-1,k) - &
                &                                     this%d2rMat(n-2,k)
             end do
