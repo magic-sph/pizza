@@ -291,7 +291,8 @@ contains
          call capitalize(time_scheme)
          if ( time_scheme == 'CNLF'.or. time_scheme=='MODCNAB' .or.   &
          &    time_scheme == 'ARS443' .or. time_scheme=='ARS222' .or. &
-         &    time_scheme == 'BPR353' .or. time_scheme=='PC2') then
+         &    time_scheme == 'BPR353' .or. time_scheme=='PC2' .or.    &
+         &    time_scheme == 'LZ453' ) then
             l_buo_imp = .false.
             buo_term = 'EXP'
             if ( rank == 0 ) then

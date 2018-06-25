@@ -64,6 +64,14 @@ contains
          this%nstages = 4
          this%istage = 1
          allocate( this%butcher_imp(5,5), this%butcher_exp(5,5) )
+      else if ( index(time_scheme, 'LZ453') /= 0 ) then
+         this%time_scheme = 'LZ453'
+         this%norder_imp = 5
+         this%norder_imp_lin = 5
+         this%norder_exp = 4
+         this%nstages = 4
+         this%istage = 1
+         allocate( this%butcher_imp(5,5), this%butcher_exp(5,5) )
       else if ( index(time_scheme, 'BPR353') /= 0 ) then
          this%time_scheme = 'BPR353'
          this%norder_imp = 5
@@ -159,6 +167,22 @@ contains
             &               0.25_cp,       0.0_cp, 0.75_cp,   0.0_cp, 0.0_cp], &
             &         [5,5],order=[2,1])
             this%l_exp_calc(4)=.false. ! No need to calculte the explicit solve
+         case ('LZ453')
+            this%wimp_lin(1) = 1.2_cp
+            this%butcher_imp(:,:) = reshape(                                                        &
+            &[            0.0_cp,           0.0_cp,            0.0_cp,            0.0_cp, 0.0_cp,   &
+            &   -44.0_cp/45.0_cp,           1.2_cp,            0.0_cp,            0.0_cp, 0.0_cp,   &
+            &  -47.0_cp/300.0_cp,         -0.71_cp,            1.2_cp,            0.0_cp, 0.0_cp,   &
+            &           3.375_cp,         -3.25_cp, -59.0_cp/120.0_cp,            1.2_cp, 0.0_cp,   &
+            &    89.0_cp/50.0_cp,-486.0_cp/55.0_cp,            8.9_cp,-562.0_cp/275.0_cp, 1.2_cp],  &
+            &[5,5],order=[2,1])
+            this%butcher_exp(:,:) = reshape(                                   &
+            & [            0.0_cp,            0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp,  &
+            &       2.0_cp/9.0_cp,            0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp,  &
+            &    71.0_cp/420.0_cp,  23.0_cp/140.0_cp, 0.0_cp, 0.0_cp, 0.0_cp,  &
+            &  -281.0_cp/336.0_cp, 187.0_cp/112.0_cp, 0.0_cp, 0.0_cp, 0.0_cp,  &
+            &             0.1_cp,             0.0_cp, 0.5_cp, 0.4_cp, 0.0_cp], &
+            &  [5,5],order=[2,1])
          case ('PC2')
             this%wimp_lin(1) = half
             this%butcher_imp(:,:) = reshape([ 0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp, &
