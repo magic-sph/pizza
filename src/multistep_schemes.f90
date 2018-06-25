@@ -77,6 +77,11 @@ contains
          this%norder_imp_lin = 2 ! it should be one but we need to restart
          this%norder_exp = 3
          this%l_imp_calc_rhs(1) = .false.
+      else if ( index(time_scheme, 'TVB33') /= 0 ) then
+         this%time_scheme = 'TVB33'
+         this%norder_imp = 4
+         this%norder_imp_lin = 4 ! it should be one but we need to restart
+         this%norder_exp = 3
       else if ( index(time_scheme, 'BDF4AB4') /= 0 ) then
          this%time_scheme = 'BDF4AB4'
          this%norder_imp = 5
@@ -116,7 +121,8 @@ contains
 
       !-- Local variables
       real(cp) :: delta, delta_n, delta_n_1, delta_n_2
-      real(cp) :: a0, a1, a2, a3, a4, b0, b1, b2, b3, c1, c2, c3
+      real(cp) :: a0, a1, a2, a3, a4, b0, b1, b2, b3, c0, c1, c2, c3
+      real(cp) :: gam, theta, c 
       real(cp) :: wimp_old
 
       wimp_old = this%wimp_lin(1)
@@ -188,6 +194,59 @@ contains
             this%wexp(1)=b0/a0 * this%dt(1)
             this%wexp(2)=b1/a0 * this%dt(1)
             this%wexp(3)=b2/a0 * this%dt(1)
+
+         case ('TVB33')
+            gam = (2619.0_cp-sqrt(5995281.0_cp))/345.0_cp
+            theta = (3525.0_cp*gam*gam-3118.0_cp*gam-5084.0_cp)/5468.0_cp
+            c = (2178.0_cp*theta-959.0_cp*gam*gam+130.0_cp*gam+726.0_cp)/4096.0_cp
+
+            delta_n = this%dt(1)/this%dt(2)
+            delta_n_1 = this%dt(2)/this%dt(3)
+
+            a3 = - delta_n_1**3 * delta_n**2 * (3.0_cp*gam**2*delta_n+two*gam* &
+            &      (one-delta_n)-one)/(one+delta_n_1)/(one+delta_n_1*(one+delta_n))
+            a2 = - delta_n**2*(gam*delta_n*delta_n_1*(two-3.0_cp*gam)+(one-two*gam)*&
+            &      (one+delta_n_1))/(one+delta_n)
+            a1 = - (delta_n_1*(one+gam*delta_n)*(1+delta_n*(3.0_cp*gam-two))+ &
+            &       delta_n*(two*gam-one)+one)/(one+delta_n_1)-theta
+            a0 = theta+(one+two*gam*delta_n+delta_n_1*(one+gam*delta_n)*&
+            &    (one+3.0_cp*gam*delta_n))/(one+delta_n)/               &
+            &    (one+delta_n_1*(one+delta_n))
+
+            b2 = delta_n_1**2*delta_n*(6.0_cp*gam*(one+gam*delta_n)+theta* &
+            &    (3.0_cp+two*delta_n))/(6.0_cp*(one+delta_n_1))
+            b1 = -gam*delta_n*(one+delta_n_1*(one+gam*delta_n))-theta/6.0_cp* &
+            &    delta_n*(3.0_cp+delta_n_1*(3.0_cp+two*delta_n))
+            b0 = (one+gam*delta_n)*(one+delta_n_1*(one+gam*delta_n))/(one+delta_n_1)&
+            &    +theta*(one+0.5_cp*delta_n+delta_n_1*delta_n*(3.0_cp+two*delta_n)/ &
+            &    (6.0_cp*(one+delta_n_1)))
+
+            c3 = theta*delta_n_1**2*delta_n*(3.0_cp+two*delta_n)/(6.0_cp* &
+            &    (one+delta_n_1))-c
+            c2 = (c*(one+delta_n_1)*(one+delta_n_1*(one+delta_n))-delta_n_1**2* &
+            &    delta_n**2*gam*(one-gam))/(delta_n_1**2*(one+delta_n))-theta*  &
+            &    delta_n*(3.0_cp+delta_n_1*(3.0_cp+2.0_cp*delta_n))/6.0_cp
+            c1 = (delta_n_1**2*delta_n*(one-gam)*(one+gam*delta_n)-c*(one+delta_n_1*&
+            &    (one+delta_n)))/delta_n_1**2/delta_n+theta*(one+0.5_cp*delta_n+    &
+            &    delta_n_1*delta_n*(3.0_cp+two*delta_n)/(6.0_cp*(one+delta_n_1)))
+            c0 = (delta_n_1**2*delta_n*gam*(one+gam*delta_n)+c*(one+delta_n_1)) / &
+            &    (delta_n_1**2*delta_n*(one+delta_n))
+
+            this%wimp_lin(1)=c0/a0 * this%dt(1)
+            this%wimp_lin(2)=c1/a0 * this%dt(1)
+            this%wimp_lin(3)=c2/a0 * this%dt(1)
+            this%wimp_lin(4)=c3/a0 * this%dt(1)
+            !this%wimp_lin(5)=0.0_cp
+
+            this%wimp(1)=one
+            this%wimp(2)=-a1/a0
+            this%wimp(3)=-a2/a0
+            this%wimp(4)=-a3/a0
+
+            this%wexp(1)=b0/a0 * this%dt(1)
+            this%wexp(2)=b1/a0 * this%dt(1)
+            this%wexp(3)=b2/a0 * this%dt(1)
+
          case ('BDF4AB4')
             delta_n = this%dt(1)/this%dt(2)
             delta_n_1 = this%dt(2)/this%dt(3)
