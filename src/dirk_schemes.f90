@@ -56,6 +56,14 @@ contains
          this%nstages = 2
          this%istage = 1
          allocate( this%butcher_imp(3,3), this%butcher_exp(3,3) )
+      else if ( index(time_scheme, 'LZ232') /= 0 ) then
+         this%time_scheme = 'LZ232'
+         this%norder_imp_lin = 3
+         this%norder_imp = 3
+         this%norder_exp = 2
+         this%nstages = 2
+         this%istage = 1
+         allocate( this%butcher_imp(3,3), this%butcher_exp(3,3) )
       else if ( index(time_scheme, 'ARS443') /= 0 ) then
          this%time_scheme = 'ARS443'
          this%norder_imp = 5
@@ -133,6 +141,16 @@ contains
                                     &             del, one-del, 0.0_cp], &
                                     &          [3,3],order=[2,1])
             this%l_imp_calc_rhs(1)=.false.
+         case ('LZ232')
+            this%wimp_lin(1) = half
+            this%butcher_imp(:,:) = reshape([  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &        -0.25_cp,    half, 0.0_cp,  &
+                                    &            half,  0.0_cp, half ],  &
+                                    &          [3,3],order=[2,1])
+            this%butcher_exp(:,:) = reshape([  0.0_cp, 0.0_cp, 0.0_cp,  &
+                                    &         0.25_cp, 0.0_cp, 0.0_cp,  &
+                                    &            -one,    two, 0.0_cp], &
+                                    &          [3,3],order=[2,1])
          case ('ARS443')
             this%wimp_lin(1) = half
             this%butcher_imp(:,:) = reshape(                               &
