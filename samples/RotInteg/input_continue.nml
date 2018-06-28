@@ -1,6 +1,6 @@
 &grid
  n_r_max    =96,
- n_cheb_max =96,
+ n_cheb_max =64,
  m_max      =64,
  minc       =1,
 /
@@ -8,7 +8,7 @@
  tag        ="continue",
 time_scheme ="BDF3AB3",
  l_newmap   =.false.,
-n_time_steps=1000,
+n_time_steps=300,
  dtMax      =1d-1,
  cheb_method="integ",
  corio_term ="explicit",
@@ -16,7 +16,7 @@ matrix_solve="influence",
 l_rerror_fix=.true.,
  rerror_fac =5d2,
  runMinutes =20,
- courfac    =10d0,
+ courfac    =4.0d0,
  time_scale ="rot",
 /
  &phys_param
