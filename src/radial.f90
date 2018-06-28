@@ -9,7 +9,7 @@ module radial_functions
    use constants, only: one, two, three, pi, half
    use namelists, only: tag, alph1, alph2, l_newmap, radratio, g0, g1, g2, &
        &                l_non_rot, ek, l_ek_pump, l_temp_3D, tcond_fac,    &
-       &                r_cmb, r_icb, l_cheb_coll
+       &                r_cmb, r_icb, l_cheb_coll, beta_shift
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -157,19 +157,31 @@ contains
          oheight(:)=1.0_cp
          height(:) =1.0_cp
       else ! Calculate beta only when this is rotating !
-         height(1) = 0.0_cp
-         beta(1)   = 0.0_cp
-         dbeta(1)  = 0.0_cp
-         ekpump(1) = ek_pump_fac*0.0e0_cp
-         oheight(1)= 0.0e0_cp
-         do n_r=2,n_r_max
-            height(n_r) = two * sqrt(r_cmb**2-r(n_r)**2)
-            oheight(n_r)= half/sqrt(r_cmb**2-r(n_r)**2)
-            beta(n_r)   = -r(n_r)/(r_cmb**2-r(n_r)**2)
-            dbeta(n_r)  = -(r_cmb**2+r(n_r)**2)/(r_cmb**2-r(n_r)**2)**2
-            ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
-            &             (r_cmb**2-r(n_r)**2)**(3.0_cp/4.0_cp)
-         end do
+         if ( abs(beta_shift) <= 10.0_cp*epsilon(beta_shift) ) then
+            height(1) = 0.0_cp
+            beta(1)   = 0.0_cp
+            dbeta(1)  = 0.0_cp
+            ekpump(1) = ek_pump_fac*0.0e0_cp
+            oheight(1)= 0.0e0_cp
+            do n_r=2,n_r_max
+               height(n_r) = two * sqrt(r_cmb**2-r(n_r)**2)
+               oheight(n_r)= half/sqrt(r_cmb**2-r(n_r)**2)
+               beta(n_r)   = -r(n_r)/(r_cmb**2-r(n_r)**2)
+               dbeta(n_r)  = -(r_cmb**2+r(n_r)**2)/(r_cmb**2-r(n_r)**2)**2
+               ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
+               &             (r_cmb**2-r(n_r)**2)**(3.0_cp/4.0_cp)
+            end do
+         else
+            do n_r=1,n_r_max
+               height(n_r) = two * sqrt((r_cmb+beta_shift)**2-r(n_r)**2)
+               oheight(n_r)= half/sqrt((r_cmb+beta_shift)**2-r(n_r)**2)
+               beta(n_r)   = -r(n_r)/((r_cmb+beta_shift)**2-r(n_r)**2)
+               dbeta(n_r)  = -((r_cmb+beta_shift)**2+r(n_r)**2)/   &
+               &              ((r_cmb+beta_shift)**2-r(n_r)**2)**2
+               ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/      &
+               &             ((r_cmb+beta_shift)**2-r(n_r)**2)**(3.0_cp/4.0_cp)
+            end do
+         end if
 
       end if
 

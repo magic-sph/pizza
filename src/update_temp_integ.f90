@@ -440,19 +440,31 @@ contains
       !-- Truncate the last N lines
       call Cmat%remove_last_rows(n_boundaries)
 
-      !-- To be improved --!
-      tempMat_fac(:)=one
+      !-- Quick preconditionner
+      deallocate( stencilA )
+      allocate( stencilA(Cmat%nbands) )
+      stencilA(:)=0.0_cp
+      do n_r=1,Cmat%nlines
+        do n_band=1,Cmat%nbands
+           if ( n_r+Cmat%ku+1-n_band <= Cmat%nlines .and. &
+           &                         n_r+Cmat%ku+1-n_band >= 1 ) then
 
-      !do n_r=1,Cmat%nlines
-      !  do n_band=1,Cmat%nbands
-      !     if ( n_r+Cmat%ku+1-n_band <= Cmat%nlines_band .and. &
-      !     &                         n_r+Cmat%ku+1-n_band >= 1 ) then
-      !        Cmat%dat(Cmat%kl+n_band,n_r+Cmat%ku+1-n_band) =  &
-      !        & Cmat%dat(Cmat%kl+Cmat%n_band,n_r+Cmat%ku+1-n_band)* &
-      !        &                      tempMat_fac(n_r+n_boundaries)
-      !    end if
-      ! end do
-      !end do
+               stencilA(n_band)=Cmat%dat(Cmat%kl+n_band,n_r+Cmat%ku+1-n_band)
+           end if
+         end do
+        tempMat_fac(n_r+n_boundaries)=one/maxval(abs(stencilA))
+      end do
+      do n_r=1,Cmat%nlines
+        do n_band=1,Cmat%nbands
+           if ( n_r+Cmat%ku+1-n_band <= Cmat%nlines .and. &
+           &                         n_r+Cmat%ku+1-n_band >= 1 ) then
+              Cmat%dat(Cmat%kl+n_band,n_r+Cmat%ku+1-n_band) =  &
+              & Cmat%dat(Cmat%kl+n_band,n_r+Cmat%ku+1-n_band)* &
+              &                      tempMat_fac(n_r+n_boundaries)
+          end if
+       end do
+      end do
+      tempMat_fac(1:n_boundaries)=one
 
       !-- LU factorisation
       call Cmat%prepare_LU()

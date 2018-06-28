@@ -22,6 +22,7 @@ module namelists
    real(cp), public :: raxi          ! Compisitional Rayleigh number
    real(cp), public :: sc            ! Schmidt number
    real(cp), public :: tcond_fac     ! Rescaling of the conducting temperature
+   real(cp), public :: beta_shift    ! Shift the upper bound of \beta
    logical,  public :: l_non_rot     ! Switch to do a non-rotatig annulus
    logical,  public :: l_temp_3D     ! 2D or 3D temperature background
    logical,  public :: l_ek_pump     ! With or without Ekman pumping
@@ -109,7 +110,7 @@ contains
       &                matrix_solve,corio_term,buo_term,bc_method
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
-      &                   l_temp_3D,tcond_fac,l_temp_advz
+      &                   l_temp_3D,tcond_fac,l_temp_advz, beta_shift
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
@@ -389,6 +390,7 @@ contains
       sc               =0.0_cp
       radratio         =0.35_cp
       tcond_fac        =one
+      beta_shift       =0.0_cp
       !----- Gravity parameters: defaut value g propto r (i.e. g1=1)
       g0               =0.0_cp
       g1               =one
@@ -482,6 +484,7 @@ contains
       write(n_out,'(''  sc              ='',ES14.6,'','')') sc
       write(n_out,'(''  radratio        ='',ES14.6,'','')') radratio
       write(n_out,'(''  tcond_fac       ='',ES14.6,'','')') tcond_fac
+      write(n_out,'(''  beta_shift      ='',ES14.6,'','')') beta_shift
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1
       write(n_out,'(''  g2              ='',ES14.6,'','')') g2

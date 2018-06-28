@@ -18,9 +18,7 @@ module update_psi_integ_dmat
    use band_matrix, only: type_bandmat_real
    use bordered_matrix, only: type_bordmat_real
    use chebsparselib, only: rmult2, intcheb1rmult1, intcheb2rmult2,           &
-       &                    intcheb2rmult2laplrot, intcheb2rmult2hmult2lapl,  &
-       &                    intcheb2rmult2hmult2, intcheb2rmult2hmult2laplm1, &
-       &                    intcheb2rmult2lapl
+       &                    intcheb2rmult2laplrot, intcheb2rmult2lapl
 
 
    implicit none
@@ -81,37 +79,22 @@ contains
       allocate( LHS_om_mat(nMstart:nMstop) )
       allocate( LHS_psi_mat(nMstart:nMstop) )
 
-      call RHSE_mat%initialize(4, 4, n_cheb_max)
+      call RHSE_mat%initialize(4, 4, n_r_max)
 
-      !-- Initialize matrices
-      if ( .not. l_ek_pump ) then
-
-         call RHSI_mat%initialize(4, 4, n_cheb_max)
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            call RHSIL_mat(n_m)%initialize(2, 2, n_cheb_max)
-            call LHS_om_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
-            if ( m /= 0 ) call LHS_psi_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
-         end do
-
-      else ! There is Ekman pumping
-
-         call RHSI_mat%initialize(6, 6, n_cheb_max)
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            call RHSIL_mat(n_m)%initialize(4, 4, n_cheb_max)
-            call LHS_om_mat(n_m)%initialize(6, 6, 2, n_cheb_max)
-            if ( m /= 0 ) call LHS_psi_mat(n_m)%initialize(4, 4, 2, n_cheb_max)
-         end do
-
-      end if
+      call RHSI_mat%initialize(6, 6, n_r_max)
+      do n_m=nMstart,nMstop
+         m = idx2m(n_m)
+         call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
+         call LHS_om_mat(n_m)%initialize(6, 6, 2, n_r_max)
+         if ( m /= 0 ) call LHS_psi_mat(n_m)%initialize(4, 4, 2, n_r_max)
+      end do
 
       !-- Allocate prefactors
-      allocate( omfac(n_cheb_max, nMstart:nMstop) )
-      allocate( psifac(n_cheb_max, nMstart:nMstop) )
+      allocate( omfac(n_r_max, nMstart:nMstop) )
+      allocate( psifac(n_r_max, nMstart:nMstop) )
       omfac(:,:) =one
       psifac(:,:)=one
-      bytes_allocated = bytes_allocated + 2*n_cheb_max*(nMstop-nMstart+1)* &
+      bytes_allocated = bytes_allocated + 2*n_r_max*(nMstop-nMstart+1)* &
       &                 SIZEOF_DEF_REAL
 
       !-- Fill matrices
@@ -129,9 +112,9 @@ contains
       lPsimat(:)=.false.
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
-      allocate( rhs(n_cheb_max) )
+      allocate( rhs(n_r_max) )
       rhs(:)=zero
-      bytes_allocated = bytes_allocated+n_cheb_max*SIZEOF_DEF_COMPLEX
+      bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
 
    end subroutine initialize_psi_integ_dmat
@@ -195,14 +178,6 @@ contains
       !-- If Ekman pumping is requested, normalisation is different
       !-- Hence buoyancy has to be multiplied by h^2
       if ( l_buo_imp ) then
-         if ( l_ek_pump ) then
-            do n_r=1,n_r_max
-               h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
-               do n_m=nMstart,nMstop
-                  buo_Mloc(n_m,n_r)=h2*buo_Mloc(n_m,n_r)
-               end do
-            end do
-         end if
 
          !-- Transform buoyancy to Chebyshev space
          runStart = MPI_Wtime()
@@ -218,7 +193,7 @@ contains
             m = idx2m(n_m)
 
             if ( m > 0 ) then
-               do n_cheb=1,n_cheb_max
+               do n_cheb=1,n_r_max
                   rhs(n_cheb)=buo_Mloc(n_m,n_cheb)
                end do
 
@@ -226,7 +201,7 @@ contains
 
                rhs(1)=zero
                rhs(2)=zero
-               do n_cheb=1,n_cheb_max
+               do n_cheb=1,n_r_max
                   buo_Mloc(n_m,n_cheb)=rhs(n_cheb)
                end do
 
@@ -271,7 +246,7 @@ contains
          end if
 
          !-- Assemble RHS
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             !-- Add buoyancy
             if ( l_buo_imp ) then
@@ -280,7 +255,7 @@ contains
          end do
 
          !-- Multiply rhs by precond matrix
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)=rhs(n_cheb)*omfac(n_cheb,n_m)
          end do
 
@@ -293,11 +268,11 @@ contains
          end if
 
          if ( m == 0 ) then
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                uphi0(n_cheb)=real(rhs(n_cheb))
             end do
          else
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                om_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
 
@@ -307,14 +282,14 @@ contains
             !-- Boundary conditions for psi
             rhs(1)=0.0_cp
             rhs(2)=0.0_cp
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                !-- Minus signs comes from \Del\psi = - \omega
                rhs(n_cheb)= -rhs(n_cheb)*psifac(n_cheb,n_m)
             end do
 
             call LHS_psi_mat(n_m)%solve(rhs,n_r_max)
 
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
          end if  ! m /= 0
@@ -436,7 +411,7 @@ contains
 
       !-- Local variables
       integer :: n_r, n_m, m, n_cheb
-      real(cp) :: h2, ekp_fac
+      real(cp) :: ekp_fac
 
       !-- Finish calculation of advection
       call rscheme%costf1( dVsOm_Mloc, nMstart, nMstop, n_r_max )
@@ -480,21 +455,14 @@ contains
       !-- Add Ekman pumping as an explicit term if this is requested
       if ( l_ek_pump ) then
          do n_r=1,n_r_max
-            !-- The following statement is required to make sure
-            !-- that h2 remains 0+ even when -O3 is used at the compilation
-            if ( n_r == 1 ) then
-               h2 = 0.0_cp
-            else
-               h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
-            end if
-            ekp_fac = CorFac*half*sqrt(ek*r_cmb)*h2**(0.25_cp)
+            ekp_fac = CorFac*ekpump(n_r)
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  dom_exp_last(n_m,n_r)=  h2*dom_exp_last(n_m,n_r) -  &
-                  &                       ekp_fac*up_Mloc(n_m,n_r)
+                  dom_exp_last(n_m,n_r)= dom_exp_last(n_m,n_r) -  &
+                  &                   ekp_fac*up_Mloc(n_m,n_r)
                else 
-                  dom_exp_last(n_m,n_r)=h2*dom_exp_last(n_m,n_r) +           &
+                  dom_exp_last(n_m,n_r)=   dom_exp_last(n_m,n_r) +           &
                   &                  ekp_fac*( -om_Mloc(n_m,n_r) +           &
                   &           half*beta(n_r)*   up_Mloc(n_m,n_r) +           &
                   &   beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
@@ -571,7 +539,7 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             rhs(n_cheb)= om_old(n_m,n_cheb)
          end do
          call RHSI_mat%mat_vec_mul(rhs)
@@ -579,7 +547,7 @@ contains
          rhs(1)=zero 
          rhs(2)=zero
 
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             om_old(n_m,n_cheb)=rhs(n_cheb)
          end do
 
@@ -619,19 +587,19 @@ contains
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             end do
             call RHSIL_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero ! vphi equation has only 2 BCs
             rhs(2)=zero
-            do n_cheb=1,n_cheb_max
+            do n_cheb=1,n_r_max
                work_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
          end do
 
          !-- Finally assemble the right hand side
-         do n_cheb=1,n_cheb_max
+         do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
                dom_imp_Mloc_last(n_m,n_cheb)=work_Mloc(n_m,n_cheb)
             end do
@@ -674,30 +642,14 @@ contains
          i_r = n_r+A_mat%ntau
 
          !-- Define the equations
-         if ( .not. l_ek_pump ) then
-
-            if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
-            else
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-         &
-               &           tscheme%wimp_lin(1)*ViscFac*                    &
-               &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
-            end if
-
-         else ! there is Ekman pumping
-
-            if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2hmult2(a,b,i_r-1,A_mat%nbands)-      &
-               &           tscheme%wimp_lin(1)*ViscFac*                       &
-               &           intcheb2rmult2hmult2laplm1(a,b,i_r-1,A_mat%nbands)
-            else
-               stencilA4 = intcheb2rmult2hmult2(a,b,i_r-1,A_mat%nbands)   &
-               &           -tscheme%wimp_lin(1)*ViscFac*                  &
-               &           intcheb2rmult2hmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
-            end if
-
+         if ( m == 0 ) then
+            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
+            &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+            &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+         else
+            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-         &
+            &           tscheme%wimp_lin(1)*ViscFac*                    &
+            &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
          end if
 
          !-- Roll the array for band storage
@@ -715,30 +667,14 @@ contains
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
 
-         if ( .not. l_ek_pump ) then
-
-            if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
-               &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
-            else
-               stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-  &
-               &           tscheme%wimp_lin(1)*ViscFac*             &
-               &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
-            end if
-
-         else ! If there is Ekman pumping
-
-            if ( m == 0 ) then
-               stencilA4 = intcheb2rmult2hmult2(a,b,i_r-1,A_mat%nbands)-    &
-               &           tscheme%wimp_lin(1)*ViscFac*                     &
-               &           intcheb2rmult2hmult2laplm1(a,b,i_r-1,A_mat%nbands)
-            else
-               stencilA4 = intcheb2rmult2hmult2(a,b,i_r-1,A_mat%nbands)    &
-               &           -tscheme%wimp_lin(1)*ViscFac*                   &
-               &           intcheb2rmult2hmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
-            end if
-
+         if ( m == 0 ) then
+            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
+            &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+            &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
+         else
+            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-  &
+            &           tscheme%wimp_lin(1)*ViscFac*             &
+            &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
          end if
 
          !-- Only the lower bands can contribute to the matrix A3
@@ -1036,15 +972,7 @@ contains
          i_r = n_r+n_bounds
 
          !-- Define right-hand side equations
-         if ( .not. l_ek_pump ) then
-
-            stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
-
-         else ! if there is Ekman pumping
-
-            stencilB = intcheb2rmult2hmult2(a,b,i_r-1,B_mat%nbands)
-
-         end if
+         stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
 
          !-- Roll array for band storage
          do n_band=1,B_mat%nbands
@@ -1082,25 +1010,11 @@ contains
          i_r = n_r+n_bounds
 
          !-- Define right-hand side equations
-         if ( .not. l_ek_pump ) then
-
-            if ( m == 0 ) then
-               stencilC =  ViscFac * (  rmult2(a,b,i_r-1,Cmat%nbands)- &
-               &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands) )
-            else
-               stencilC = ViscFac*intcheb2rmult2lapl(a,b,m,i_r-1,Cmat%nbands)
-            end if
-
-         else  ! If there is Ekman pumping
-
-            if ( m == 0 ) then
-               stencilC = ViscFac*intcheb2rmult2hmult2laplm1(a,b,i_r-1, &
-               &                                             Cmat%nbands)
-            else
-               stencilC = ViscFac*intcheb2rmult2hmult2lapl(a,b,m,i_r-1, &
-               &                                           Cmat%nbands)
-            end if
-
+         if ( m == 0 ) then
+            stencilC =  ViscFac * (  rmult2(a,b,i_r-1,Cmat%nbands)- &
+            &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands) )
+         else
+            stencilC = ViscFac*intcheb2rmult2lapl(a,b,m,i_r-1,Cmat%nbands)
          end if
 
          !-- Roll array for band storage
