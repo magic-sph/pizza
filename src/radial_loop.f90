@@ -114,7 +114,8 @@ contains
 
          !-- Courant condition
          if ( tscheme%istage == 1 ) then
-            call courant(n_r, dtr_Rloc(n_r), dth_Rloc(n_r), us_grid, up_grid)
+            call courant(n_r, dtr_Rloc(n_r), dth_Rloc(n_r), us_grid, up_grid, &
+                 &       tscheme%courfac)
          end if
 
          !-- Get nonlinear products

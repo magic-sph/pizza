@@ -12,8 +12,9 @@ program pizza
    use communications, only: initialize_communications, finalize_communications
    use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains, &
        &               nRstart, nRstop
-   use namelists, only: read_namelists, write_namelists, tag, time_scheme, &
-       &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve
+   use namelists, only: read_namelists, write_namelists, tag, time_scheme,    &  
+       &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve,&
+       &                courfac
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use radial_functions, only: initialize_radial_functions, &
@@ -87,7 +88,7 @@ program pizza
    call initialize_outputs()
 
    !-- Initialize time scheme
-   call tscheme%initialize(time_scheme)
+   call tscheme%initialize(time_scheme, courfac)
 
    !-- Initialize MPI communicators
    call initialize_communications()
@@ -114,6 +115,7 @@ program pizza
    if ( rank == 0 ) then
       call write_namelists(6)
       call write_namelists(n_log_file)
+      call tscheme%print_info(n_log_file)
    end if
 
    !-- Pre calculations has to be done before matrix initialisation

@@ -32,14 +32,16 @@ module dirk_schemes
 
 contains
 
-   subroutine initialize(this, time_scheme)
+   subroutine initialize(this, time_scheme, courfac_nml)
 
       class(type_dirk) :: this
 
       !-- Input/output variables
+      real(cp),          intent(in) :: courfac_nml
       character(len=72), intent(inout) :: time_scheme
 
-      !-- Number of stages per iteration is always one in this case
+      !-- Local variables
+      real(cp) :: courfac_loc
 
       allocate ( this%dt(1) )
       this%dt(:)=0.0_cp
@@ -55,7 +57,7 @@ contains
          this%norder_exp = 2
          this%nstages = 2
          this%istage = 1
-         allocate( this%butcher_imp(3,3), this%butcher_exp(3,3) )
+         courfac_loc = 1.35_cp
       else if ( index(time_scheme, 'LZ232') /= 0 ) then
          this%time_scheme = 'LZ232'
          this%norder_imp_lin = 3
@@ -63,7 +65,7 @@ contains
          this%norder_exp = 2
          this%nstages = 2
          this%istage = 1
-         allocate( this%butcher_imp(3,3), this%butcher_exp(3,3) )
+         courfac_loc = 1.25_cp
       else if ( index(time_scheme, 'ARS443') /= 0 ) then
          this%time_scheme = 'ARS443'
          this%norder_imp = 5
@@ -71,7 +73,7 @@ contains
          this%norder_exp = 4
          this%nstages = 4
          this%istage = 1
-         allocate( this%butcher_imp(5,5), this%butcher_exp(5,5) )
+         courfac_loc = 0.9_cp
       else if ( index(time_scheme, 'LZ453') /= 0 ) then
          this%time_scheme = 'LZ453'
          this%norder_imp = 5
@@ -79,7 +81,7 @@ contains
          this%norder_exp = 4
          this%nstages = 4
          this%istage = 1
-         allocate( this%butcher_imp(5,5), this%butcher_exp(5,5) )
+         courfac_loc = 1.15_cp
       else if ( index(time_scheme, 'BPR353') /= 0 ) then
          this%time_scheme = 'BPR353'
          this%norder_imp = 5
@@ -87,7 +89,7 @@ contains
          this%norder_exp = 4
          this%nstages = 4
          this%istage = 1
-         allocate( this%butcher_imp(5,5), this%butcher_exp(5,5) )
+         courfac_loc = 1.0_cp
       else if ( index(time_scheme, 'PC2') /= 0 ) then
          this%time_scheme = 'PC2'
          this%norder_imp = 4
@@ -95,16 +97,27 @@ contains
          this%norder_exp = 3
          this%nstages = 3
          this%istage = 1
-         allocate( this%butcher_imp(4,4), this%butcher_exp(4,4) )
+         courfac_loc = 0.8_cp
       end if
+
+      if ( abs(courfac_nml) >= 1.0e3_cp ) then
+         this%courfac=courfac_loc
+      else
+         this%courfac=courfac_nml
+      end if
+
+      allocate( this%butcher_imp(this%nstages+1,this%nstages+1), &
+      &         this%butcher_exp(this%nstages+1,this%nstages+1) )
+      this%butcher_imp(:,:)=0.0_cp
+      this%butcher_exp(:,:)=0.0_cp
+      bytes_allocated=bytes_allocated+2*(this%nstages+1)*(this%nstages+1)*&
+      &               SIZEOF_DEF_REAL
 
       allocate( this%l_exp_calc(this%nstages) )
       allocate( this%l_imp_calc_rhs(this%nstages) )
       this%l_exp_calc(:) = .true.
       this%l_imp_calc_rhs(:) = .true.
-
-      this%butcher_imp(:,:)=0.0_cp
-      this%butcher_exp(:,:)=0.0_cp
+      bytes_allocated=bytes_allocated+2*this%nstages*SIZEOF_LOGICAL
 
    end subroutine initialize
 !------------------------------------------------------------------------------

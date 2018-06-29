@@ -3,7 +3,7 @@ module courant_mod
    use parallel_mod
    use precision_mod
    use outputs, only: n_log_file
-   use namelists, only: courfac, dt_fac, tag
+   use namelists, only:  dt_fac, tag
    use truncation, only: n_phi_max, n_r_max
    use blocking, only: nRstart, nRstop
    use radial_functions, only: delxr2, delxh2, beta
@@ -39,7 +39,7 @@ contains
 
    end subroutine finalize_courant
 !------------------------------------------------------------------------------
-   subroutine courant(n_r,dtrkc,dthkc,ur,up)
+   subroutine courant(n_r,dtrkc,dthkc,ur,up,courfac)
       !
       !  courant condition check: calculates Courant                      
       !  advection lengths in radial direction dtrkc                      
@@ -51,6 +51,8 @@ contains
       integer,  intent(in) :: n_r             ! radial level
       real(cp), intent(in) :: ur(n_phi_max)   ! radial velocity
       real(cp), intent(in) :: up(n_phi_max)   ! azimuthal velocity
+      real(cp), intent(in) :: courfac         ! Courant factor
+
     
       !-- Output:
       real(cp), intent(out) :: dtrkc    ! Courant step (based on radial advection)

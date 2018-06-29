@@ -359,7 +359,7 @@ contains
       alph2            =0.0_cp
       map_function     ='arcsin' ! By default Kosloff and Tal-Ezer mapping when l_newmap=.true.
       dtMax            =1.0e-5_cp
-      courfac          =2.5_cp
+      courfac          =1.0e3_cp
       dt_fac           =2.0_cp
       tEND             =0.0_cp    ! numerical time where run should end
       runHours         =0
@@ -462,7 +462,6 @@ contains
       write(n_out,'(''  alph1           ='',ES14.6,'','')') alph1
       write(n_out,'(''  alph2           ='',ES14.6,'','')') alph2
       write(n_out,'(''  dtMax           ='',ES14.6,'','')') dtMax
-      write(n_out,'(''  courfac         ='',ES14.6,'','')') courfac
       write(n_out,'(''  dt_fac          ='',ES14.6,'','')') dt_fac
       write(n_out,'(''  runHours        ='',i4,'','')') runHours
       write(n_out,'(''  runMinutes      ='',i4,'','')') runMinutes
