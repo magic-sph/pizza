@@ -7,6 +7,7 @@ module update_psi_integ_dmat
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, ek, l_buo_imp
+   use hdif, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx, n_cheb_max
@@ -561,8 +562,8 @@ contains
          end do
          call get_ddr(uphi0, duphi0, d2uphi0, n_r_max, rscheme)
          do n_r=1,n_r_max
-            vp_bal%visc(n_r)=ViscFac*(d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
-            &                or2(n_r)*uphi0(n_r))
+            vp_bal%visc(n_r)=ViscFac*hdif_V(m0)*(d2uphi0(n_r)+       &
+            &                or1(n_r)*duphi0(n_r)-or2(n_r)*uphi0(n_r))
             vp_bal%pump(n_r)=-CorFac*ekpump(n_r)*uphi0(n_r)
          end do
       end if
@@ -623,8 +624,10 @@ contains
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands)
-      integer :: n_r, i_r, n_band, n_b
+      integer :: n_r, i_r, n_band, n_b, n_m
       real(cp) :: a, b, runStart, runStop
+
+      n_m = m2idx(m)
 
       !-- We have to fill A3 with zeros again otherwise on the next iteration
       !-- with a different dt there might be some issues with spurious values
@@ -644,11 +647,12 @@ contains
          !-- Define the equations
          if ( m == 0 ) then
             stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-            &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+            &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)* (            &
+            &                                 rmult2(a,b,i_r-1,A_mat%nbands)- &
             &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
          else
             stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-         &
-            &           tscheme%wimp_lin(1)*ViscFac*                    &
+            &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        &
             &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
          end if
 
@@ -669,11 +673,12 @@ contains
 
          if ( m == 0 ) then
             stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-            &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+            &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)* (            &
+            &                                 rmult2(a,b,i_r-1,A_mat%nbands)- &
             &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
          else
-            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-  &
-            &           tscheme%wimp_lin(1)*ViscFac*             &
+            stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-         &
+            &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        & 
             &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
          end if
 
@@ -998,7 +1003,9 @@ contains
       !-- Local variables
       real(cp) :: stencilC(Cmat%nbands)
       real(cp) :: a, b
-      integer :: n_band, n_r, i_r, n_bounds
+      integer :: n_band, n_r, i_r, n_bounds, n_m
+
+      n_m = m2idx(m)
 
       a = half*(r_cmb-r_icb)
       b = half*(r_cmb+r_icb)
@@ -1011,10 +1018,12 @@ contains
 
          !-- Define right-hand side equations
          if ( m == 0 ) then
-            stencilC =  ViscFac * (  rmult2(a,b,i_r-1,Cmat%nbands)- &
+            stencilC =  ViscFac *hdif_V(n_m)* (                     &
+            &                        rmult2(a,b,i_r-1,Cmat%nbands)- &
             &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands) )
          else
-            stencilC = ViscFac*intcheb2rmult2lapl(a,b,m,i_r-1,Cmat%nbands)
+            stencilC = ViscFac*hdif_V(n_m)* &
+            &          intcheb2rmult2lapl(a,b,m,i_r-1,Cmat%nbands)
          end if
 
          !-- Roll array for band storage

@@ -8,6 +8,7 @@ module update_psi_integ_smat
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, l_coriolis_imp, ek, l_buo_imp,    &
        &                l_galerkin
+   use hdif, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx, n_cheb_max
@@ -589,8 +590,8 @@ contains
          end do
          call get_ddr(uphi0, duphi0, d2uphi0, n_r_max, rscheme)
          do n_r=1,n_r_max
-            vp_bal%visc(n_r)=ViscFac*(d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
-            &                or2(n_r)*uphi0(n_r))
+            vp_bal%visc(n_r)=ViscFac*hdif_V(m0)* (d2uphi0(n_r)+ &
+            &                or1(n_r)*duphi0(n_r)-or2(n_r)*uphi0(n_r))
             vp_bal%pump(n_r)=-CorFac*ekpump(n_r)*uphi0(n_r)
          end do
       end if
@@ -642,9 +643,10 @@ contains
       type(type_bandmat_complex) :: Amat
       real(cp), allocatable :: stencilA(:), CorSten(:)
       complex(cp), allocatable :: stencilB(:)
-      integer :: n_r, i_r, n_band, klA, kuA, n_boundaries
+      integer :: n_r, i_r, n_band, klA, kuA, n_boundaries, n_m
       real(cp) :: a, b, runStart, runStop
 
+      n_m = m2idx(m)
       a = half*(r_cmb-r_icb)
       b = half*(r_cmb+r_icb)
 
@@ -685,12 +687,13 @@ contains
 
             if ( m == 0 ) then
                stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-               &
-               &  tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,Amat%nbands)- &
+               &  tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)* (                   &
+               &                                rmult2(a,b,i_r-1,Amat%nbands)- &
                &                 3.0_cp*intcheb1rmult1(a,b,i_r-1,Amat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA = -intcheb4rmult4lapl(a,b,m,i_r-1,Amat%nbands)+  &
-               &          tscheme%wimp_lin(1)*ViscFac*                    &
+               &          tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*       &
                &          intcheb4rmult4lapl2(a,b,m,i_r-1,Amat%nbands)  
                CorSten   = 0.0_cp
             end if
@@ -699,12 +702,13 @@ contains
 
             if ( m == 0 ) then
                stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-              &
-               &  tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,Amat%nbands)-&
+               &  tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                   &
+               &                                rmult2(a,b,i_r-1,Amat%nbands)-&
                &                 3.0_cp*intcheb1rmult1(a,b,i_r-1,Amat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA = intcheb4rmult4laplrot(a,b,m,i_r-1,Amat%nbands)   &
-               &          -tscheme%wimp_lin(1)*ViscFac*                     &
+               &          -tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        &
                &          intcheb4rmult4laplrot2(a,b,m,i_r-1,Amat%nbands)  
                if ( l_coriolis_imp ) then
                   CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*     &
@@ -801,9 +805,11 @@ contains
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands), CorSten(A_mat%nbands)
-      integer :: n_r, i_r, n_band, n_b
+      integer :: n_r, i_r, n_band, n_b, n_m
       real(cp) :: a, b, dn2, runStart, runStop
       real(cp) :: d4top(A_mat%nlines)
+
+      n_m = m2idx(m)
 
       do n_r=1,A_mat%nlines
          dn2 = real(n_r-1,cp)*real(n_r-1,cp)
@@ -831,12 +837,13 @@ contains
 
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+               &   tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                     &
+               &                                 rmult2(a,b,i_r-1,A_mat%nbands)- &
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
-               &           tscheme%wimp_lin(1)*ViscFac*                    &
+               &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        &
                &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = 0.0_cp
             end if
@@ -845,12 +852,13 @@ contains
 
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-              &
-               &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)-&
+               &   tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                    &
+               &                                 rmult2(a,b,i_r-1,A_mat%nbands)-&
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)   &
-               &           -tscheme%wimp_lin(1)*ViscFac*                     &
+               &           -tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*         &
                &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
                if ( l_coriolis_imp ) then
                   CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*     &
@@ -882,12 +890,13 @@ contains
 
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)- &
+               &   tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                     &
+               &                                 rmult2(a,b,i_r-1,A_mat%nbands)- &
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
-               &           tscheme%wimp_lin(1)*ViscFac*                    &
+               &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        &
                &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = 0.0_cp
             end if
@@ -896,12 +905,13 @@ contains
 
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-              &
-               &   tscheme%wimp_lin(1)*ViscFac*( rmult2(a,b,i_r-1,A_mat%nbands)-&
+               &   tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                    &
+               &                                 rmult2(a,b,i_r-1,A_mat%nbands)-&
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)   &
-               &           -tscheme%wimp_lin(1)*ViscFac*                     &
+               &           -tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*         &
                &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
                if ( l_coriolis_imp ) then
                   CorSten = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
@@ -1174,7 +1184,9 @@ contains
       !-- Local variables
       real(cp) :: stencilC(Cmat%nbands), CorSten(Cmat%nbands)
       real(cp) :: a, b
-      integer :: n_band, n_r, i_r, n_bounds
+      integer :: n_band, n_r, i_r, n_bounds, n_m
+
+      n_m = m2idx(m)
 
       a = half*(r_cmb-r_icb)
       b = half*(r_cmb+r_icb)
@@ -1193,22 +1205,26 @@ contains
          if ( l_non_rot ) then
 
             if ( m == 0 ) then
-               stencilC =  ViscFac * (  rmult2(a,b,i_r-1,Cmat%nbands)- &
+               stencilC =  ViscFac * hdif_V(n_m) *(                    &
+               &                        rmult2(a,b,i_r-1,Cmat%nbands)- &
                &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands) )
                CorSten  = 0.0_cp
             else
-               stencilC = -ViscFac*intcheb4rmult4lapl2(a,b,m,i_r-1,Cmat%nbands)
+               stencilC = -ViscFac*hdif_V(n_m)*                        &
+               &           intcheb4rmult4lapl2(a,b,m,i_r-1,Cmat%nbands)
                CorSten  = 0.0_cp
             end if
 
          else ! if this is rotating
 
             if ( m == 0 ) then
-               stencilC =    ViscFac* ( rmult2(a,b,i_r-1,Cmat%nbands)- &
-               &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands))
+               stencilC =    ViscFac*hdif_V(n_m)* (                    &
+               &                        rmult2(a,b,i_r-1,Cmat%nbands)- &
+               &         3.0_cp*intcheb1rmult1(a,b,i_r-1,Cmat%nbands) )
                CorSten  = 0.0_cp
             else
-               stencilC = ViscFac*intcheb4rmult4laplrot2(a,b,m,i_r-1,Cmat%nbands)
+               stencilC = ViscFac*hdif_V(n_m)*                         &
+               &          intcheb4rmult4laplrot2(a,b,m,i_r-1,Cmat%nbands)
                if ( l_coriolis_imp ) then
                   CorSten = -CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,&
                   &                                           Cmat%nbands)

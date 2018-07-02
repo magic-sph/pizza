@@ -87,6 +87,10 @@ module namelists
    real(cp), public :: r_cmb           ! Outer core radius
    real(cp), public :: r_icb           ! Inner core radius
    real(cp), public :: CorFac, BuoFac, TdiffFac, ViscFac
+   real(cp), public :: hdif_temp       ! Hyperdiffusion amplitude on temperature
+   real(cp), public :: hdif_vel        ! Hyperdiffusion amplitude on velocity
+   integer,  public :: hdif_exp        ! Exponent of the hyperdiffusion profile
+   integer,  public :: hdif_m          ! Azimuthal wavenumber for hdif
 
    public :: read_namelists, write_namelists
 
@@ -108,6 +112,7 @@ contains
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
       &                matrix_solve,corio_term,buo_term,bc_method
+      namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz, beta_shift
@@ -140,7 +145,7 @@ contains
          if ( rank == 0 ) write(*,*) '!  Reading grid parameters!'
          read(input_handle,nml=grid,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '! No grid namelist found!'
+            write(*,*) '!  No grid namelist found!'
          end if
          close(input_handle)
 
@@ -149,7 +154,16 @@ contains
          if ( rank == 0 ) write(*,*) '!  Reading control parameters!'
          read(input_handle,nml=control,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '! No control namelist found!'
+            write(*,*) '!  No control namelist found!'
+         end if
+         close(input_handle)
+
+         open(newunit=input_handle,file=trim(input_filename))
+         !-- Reading control parameters from namelists in STDIN:
+         if ( rank == 0 ) write(*,*) '!  Reading hdif parameters!'
+         read(input_handle,nml=hdif,iostat=res)
+         if ( res /= 0 .and. rank == 0 ) then
+            write(*,*) '!  No hdif namelist found!'
          end if
          close(input_handle)
 
@@ -158,7 +172,7 @@ contains
          if ( rank == 0 ) write(*,*) '!  Reading physical parameters!'
          read(input_handle,nml=phys_param,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '! No phys_param namelist found!'
+            write(*,*) '!  No phys_param namelist found!'
          end if
          close(input_handle)
 
@@ -378,6 +392,12 @@ contains
       buo_term         ='IMPLICIT' ! Implicit treatment of Buoyancy
       time_scale       ='VISC' ! viscous units
 
+      !-- Hyperdiffusion
+      hdif_vel         =0.0_cp
+      hdif_temp        =0.0_cp
+      hdif_m           =0
+      hdif_exp         =0
+
       !-- Physcal parameters
       l_non_rot        =.false.
       l_ek_pump        =.false.
@@ -473,6 +493,14 @@ contains
       write(n_out,'(''  n_fft_optim_lev ='',i4,'','')') n_fft_optim_lev
       length=length_to_blank(time_scale)
       write(n_out,*) " time_scale      = """,time_scale(1:length),""","
+      write(n_out,*) "/"
+
+      write(n_out,*) "&hdif"
+      length=length_to_blank(tag)
+      write(n_out,'(''  hdif_vel        ='',ES14.6,'','')') hdif_vel
+      write(n_out,'(''  hdif_temp       ='',ES14.6,'','')') hdif_temp
+      write(n_out,'(''  hdif_exp        ='',i4,'','')') hdif_exp
+      write(n_out,'(''  hdif_m          ='',i4,'','')') hdif_m
       write(n_out,*) "/"
 
       write(n_out,*) "&phys_param"

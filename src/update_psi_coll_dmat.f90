@@ -5,6 +5,7 @@ module update_psi_coll_dmat
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
+   use hdif, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
        &                l_non_rot, l_ek_pump, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
@@ -492,20 +493,23 @@ contains
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac*   d2uphi0(n_r)+     &
-                  &                ViscFac*or1(n_r)*      duphi0(n_r)-     &
-                  & (ViscFac*or2(n_r)+CorFac*ekpump(n_r))* uphi0(n_r)
+                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac*hdif_V(n_m)*(      &
+                  &                                      d2uphi0(n_r)+   &
+                  &                        or1(n_r)*      duphi0(n_r)-   &
+                  &                        or2(n_r)*       uphi0(n_r) )- &
+                  &              CorFac*ekpump(n_r)*       uphi0(n_r)
 
                   if ( l_vphi_bal_calc ) then
-                     vp_bal%visc(n_r)=ViscFac*(d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
-                     &                or2(n_r)*uphi0(n_r))
+                     vp_bal%visc(n_r)=ViscFac*hdif_V(n_m)*(d2uphi0(n_r)+ &
+                     &                or1(n_r)*duphi0(n_r)-or2(n_r)*uphi0(n_r))
                      vp_bal%pump(n_r)=-CorFac*ekpump(n_r)*uphi0(n_r)
                   end if
                else
                   dm2 = real(m,cp)*real(m,cp)
-                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac* work_Mloc(n_m,n_r) &
-                  &           +ViscFac*or1(n_r)*        dom_Mloc(n_m,n_r) &
-                  & -ViscFac*dm2*or2(n_r)*               om_Mloc(n_m,n_r)
+                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac*hdif_V(n_m)*(       &
+                  &                                    work_Mloc(n_m,n_r) &
+                  &                   +or1(n_r)*        dom_Mloc(n_m,n_r) &
+                  &         -dm2*or2(n_r)*               om_Mloc(n_m,n_r) )
                end if
             end do
          end do
@@ -529,10 +533,11 @@ contains
       integer,  intent(inout) :: n_lu_calls
 
       !-- Local variables
-      integer :: n_r, n_cheb, info
+      integer :: n_r, n_cheb, info, n_m
       real(cp) :: dm2, runStart, runStop
 
       dm2 = real(m,cp)*real(m,cp)
+      n_m = m2idx(m)
 
       !----- Boundary conditions:
       do n_cheb=1,rscheme%n_max
@@ -553,9 +558,10 @@ contains
 
             omMat(n_r,n_cheb)= rscheme%rnorm * (                          &
             &                                  rscheme%rMat(n_r,n_cheb) - &
-            &   tscheme%wimp_lin(1)*(ViscFac*rscheme%d2rMat(n_r,n_cheb) + &
-            &    ViscFac*or1(n_r)*            rscheme%drMat(n_r,n_cheb) - &
-            &    ViscFac*dm2*or2(n_r)*         rscheme%rMat(n_r,n_cheb) ) )
+            &              tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(      &
+            &                                rscheme%d2rMat(n_r,n_cheb) + &
+            &            or1(n_r)*            rscheme%drMat(n_r,n_cheb) - &
+            &            dm2*or2(n_r)*         rscheme%rMat(n_r,n_cheb) ) )
 
          end do
       end do
@@ -682,7 +688,9 @@ contains
       integer,  intent(out) :: uphiPivot(n_r_max)
 
       !-- Local variables
-      integer :: nR_out, nR, info
+      integer :: nR_out, nR, info, n_m
+
+      n_m = m2idx(0)
 
       !----- Boundary conditions:
       do nR_out=1,rscheme%n_max
@@ -715,10 +723,11 @@ contains
          do nR=2,n_r_max-1
             uphiMat(nR,nR_out)= rscheme%rnorm * (                     &
             &                               rscheme%rMat(nR,nR_out) - &
-            &tscheme%wimp_lin(1)*(ViscFac*rscheme%d2rMat(nR,nR_out) + &
-            &    ViscFac*or1(nR)*          rscheme%drMat(nR,nR_out) - &
-            &  (CorFac*ekpump(nR)+ViscFac*or2(nR))*                   &
-            &                               rscheme%rMat(nR,nR_out) ) )
+            &        tscheme%wimp_lin(1)*(ViscFac*hdif_V(n_m)*(       &
+            &                           rscheme%d2rMat(nR,nR_out) +   &
+            &            or1(nR)*        rscheme%drMat(nR,nR_out) -   &
+            &            or2(nR)*         rscheme%rMat(nR,nR_out) ) - &
+            &          CorFac*ekpump(nR)* rscheme%rMat(nR,nR_out) ) )
          end do
       end do
 

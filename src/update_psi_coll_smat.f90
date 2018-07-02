@@ -5,6 +5,7 @@ module update_psi_coll_smat
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
+   use hdif, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
        &                l_coriolis_imp, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
@@ -330,24 +331,27 @@ contains
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac*   d2uphi0(n_r)+     &
-                  &                ViscFac*or1(n_r)*      duphi0(n_r)-     &
-                  & (ViscFac*or2(n_r)+CorFac*ekpump(n_r))* uphi0(n_r)
+                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac*hdif_V(n_m)*(        &
+                  &                                      d2uphi0(n_r)+     &
+                  &                        or1(n_r)*      duphi0(n_r)-     &
+                  &                        or2(n_r)*       uphi0(n_r) ) -  &
+                  &              CorFac*ekpump(n_r)*       uphi0(n_r)
 
                   if ( l_vphi_bal_calc ) then
-                     vp_bal%visc(n_r)=ViscFac*(d2uphi0(n_r)+or1(n_r)*duphi0(n_r)-&
-                     &                or2(n_r)*uphi0(n_r))
+                     vp_bal%visc(n_r)=ViscFac*hdif_V(n_m)*(d2uphi0(n_r)+   &
+                     &                or1(n_r)*duphi0(n_r)-or2(n_r)*uphi0(n_r))
                      vp_bal%pump(n_r)=-CorFac*ekpump(n_r)*uphi0(n_r)
                   end if
                else
                   dm2 = real(m,cp)*real(m,cp)
-                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac* work_Mloc(n_m,n_r) &
-                  &           +ViscFac*or1(n_r)*        dom_Mloc(n_m,n_r) &
-                  & -(CorFac*ekpump(n_r)+ViscFac*dm2*or2(n_r))*           &
-                  &                                      om_Mloc(n_m,n_r) &
-                  & +half*CorFac*ekpump(n_r)*beta(n_r)*  up_Mloc(n_m,n_r) &
-                  & +CorFac*( ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+      &
-                  &              5.0_cp*r_cmb*oheight(n_r)) )*            &
+                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac*hdif_V(n_m)*(         &
+                  &                                    work_Mloc(n_m,n_r)   &
+                  &                   +or1(n_r)*        dom_Mloc(n_m,n_r)   &
+                  &                   -dm2*or2(n_r)*     om_Mloc(n_m,n_r) ) &
+                  &             -CorFac*ekpump(n_r)*     om_Mloc(n_m,n_r)   &
+                  & +half*CorFac*ekpump(n_r)*beta(n_r)*  up_Mloc(n_m,n_r)   &
+                  & +CorFac*( ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+        &
+                  &              5.0_cp*r_cmb*oheight(n_r)) )*              &
                   &                                      us_Mloc(n_m,n_r)
 
                   if ( l_coriolis_imp ) then
@@ -377,9 +381,10 @@ contains
       integer,     intent(inout) :: n_lu_calls
 
       !-- Local variables
-      integer :: nR_out, nR, nR_psi, nR_out_psi, info
+      integer :: nR_out, nR, nR_psi, nR_out_psi, info, n_m
       real(cp) :: dm2, runStart, runStop
 
+      n_m = m2idx(m)
       dm2 = real(m,cp)*real(m,cp)
 
       !----- Boundary conditions:
@@ -437,10 +442,11 @@ contains
 
             psiMat(nR,nR_out)= rscheme%rnorm * (                         &
             &                                  rscheme%rMat(nR,nR_out) - &
-            &   tscheme%wimp_lin(1)*(ViscFac*rscheme%d2rMat(nR,nR_out) + &
-            &    ViscFac*or1(nR)*             rscheme%drMat(nR,nR_out) - &
-            &  (CorFac*ekpump(nR)+ViscFac*dm2*or2(nR))*                  &
-            &                                  rscheme%rMat(nR,nR_out) ) )
+            &         tscheme%wimp_lin(1)*(ViscFac*hdif_V(n_m)*(         &
+            &                              rscheme%d2rMat(nR,nR_out) +   &
+            &            or1(nR)*           rscheme%drMat(nR,nR_out) -   &
+            &            dm2*or2(nR)*        rscheme%rMat(nR,nR_out) ) - &
+            &  CorFac*ekpump(nR)*            rscheme%rMat(nR,nR_out) ) )
 
             psiMat(nR,nR_out_psi)=-rscheme%rnorm*tscheme%wimp_lin(1)*(   &
             &-half*CorFac*ekpump(nR)*beta(nR)*rscheme%drMat(nR,nR_out)+  &
@@ -523,7 +529,9 @@ contains
       integer,  intent(out) :: uphiPivot(n_r_max)
 
       !-- Local variables
-      integer :: nR_out, nR, info
+      integer :: nR_out, nR, info, n_m
+
+      n_m = m2idx(0)
 
       !----- Boundary conditions:
       do nR_out=1,rscheme%n_max
@@ -556,10 +564,11 @@ contains
          do nR=2,n_r_max-1
             uphiMat(nR,nR_out)= rscheme%rnorm * (                     &
             &                               rscheme%rMat(nR,nR_out) - &
-            &tscheme%wimp_lin(1)*(ViscFac*rscheme%d2rMat(nR,nR_out) + &
-            &    ViscFac*or1(nR)*          rscheme%drMat(nR,nR_out) - &
-            &  (CorFac*ekpump(nR)+ViscFac*or2(nR))*                   &
-            &                               rscheme%rMat(nR,nR_out) ) )
+            &tscheme%wimp_lin(1)*(ViscFac*hdif_V(n_m)*(               &
+            &                           rscheme%d2rMat(nR,nR_out) +   &
+            &            or1(nR)*        rscheme%drMat(nR,nR_out) -   &
+            &            or2(nR)*         rscheme%rMat(nR,nR_out) ) - &
+            &  CorFac*ekpump(nR)*         rscheme%rMat(nR,nR_out) ) )
          end do
       end do
 

@@ -5,9 +5,10 @@ module update_temp_integ
    use constants, only: zero, one, ci, half
    use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, &
        &                TdiffFac, l_non_rot, l_buo_imp, l_galerkin
+   use hdif, only: hdif_T
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, rgrav, r
    use blocking, only: nMstart, nMstop
-   use truncation, only: n_r_max, idx2m, n_cheb_max
+   use truncation, only: n_r_max, idx2m, n_cheb_max, m2idx
    use radial_der, only: get_dr
    use fields, only: work_Mloc
    use useful, only: abortRun
@@ -382,7 +383,8 @@ contains
          !-- Finally assemble the right hand side
          do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
-               dtemp_imp_Mloc_last(n_m,n_cheb)=TdiffFac*work_Mloc(n_m,n_cheb) 
+               dtemp_imp_Mloc_last(n_m,n_cheb)=TdiffFac*hdif_T(n_m)*&
+               &                               work_Mloc(n_m,n_cheb) 
             end do
          end do
 
@@ -403,10 +405,10 @@ contains
       !-- Local variables
       type(type_bandmat_real) :: Amat
       real(cp), allocatable :: stencilA(:)
-      integer :: n_r, i_r, n_band
+      integer :: n_r, i_r, n_band, n_m
       real(cp) :: a, b
 
-
+      n_m = m2idx(m)
       a = half*(r_cmb-r_icb)
       b = half*(r_cmb+r_icb)
 
@@ -419,7 +421,7 @@ contains
 
          !-- Define the equations
          stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-      &
-         &                       tscheme%wimp_lin(1)*TdiffFac*   &
+         &          tscheme%wimp_lin(1)*TdiffFac*hdif_T(n_m)*   &
          &          intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)  
 
          !-- Roll the array for band storage
@@ -487,8 +489,10 @@ contains
 
       !-- Local variables
       real(cp) :: stencilA4(A_mat%nbands)
-      integer :: n_r, i_r, n_band, n_b
+      integer :: n_r, i_r, n_band, n_b, n_m
       real(cp) :: a, b
+
+      n_m = m2idx(m)
 
       !-- We have to fill A3 with zeros again otherwise on the next iteration
       !-- with a different dt there might be some issues with spurious values
@@ -507,8 +511,8 @@ contains
 
          !-- Define the equations
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-     &
-         &                       tscheme%wimp_lin(1)*TdiffFac*   &
-         &     intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         &           tscheme%wimp_lin(1)*TdiffFac*hdif_T(n_m)*   &
+         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
 
          !-- Roll the array for band storage
          do n_band=1,A_mat%nbands
@@ -524,8 +528,8 @@ contains
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-    &
-         &                       tscheme%wimp_lin(1)*TdiffFac*  &
-         &       intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         &           tscheme%wimp_lin(1)*TdiffFac*hdif_T(n_m)*  &
+         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,A_mat%kl

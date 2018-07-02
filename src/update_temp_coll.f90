@@ -6,8 +6,9 @@ module update_temp_coll
    use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
        &                       rgrav
+   use hdif, only: hdif_T
    use blocking, only: nMstart, nMstop
-   use truncation, only: n_r_max, idx2m
+   use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
    use fields, only: work_Mloc
    use algebra, only: prepare_full_mat, solve_full_mat
@@ -225,7 +226,8 @@ contains
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                dm2 = real(m,cp)*real(m,cp)
-               dtemp_imp_Mloc_last(n_m,n_r)=TdiffFac*( work_Mloc(n_m,n_r)  &
+               dtemp_imp_Mloc_last(n_m,n_r)=TdiffFac*hdif_T(n_m)* (        &
+               &                                       work_Mloc(n_m,n_r)  &
                &                         +or1(n_r)*   dtemp_Mloc(n_m,n_r)  &
                &                     -dm2*or2(n_r)*    temp_Mloc(n_m,n_r) )
             end do
@@ -253,10 +255,11 @@ contains
 #endif
 
       !-- Local variables
-      integer :: nR_out, nR, info
+      integer :: nR_out, nR, info, n_m
       real(cp) :: dm2
 
       dm2 = real(m,cp)*real(m,cp)
+      n_m = m2idx(m)
 
       !----- Boundary coditions:
       do nR_out=1,rscheme%n_max
@@ -284,7 +287,8 @@ contains
          do nR=2,n_r_max-1
             tMat(nR,nR_out)= rscheme%rnorm * (                          &
             &                                 rscheme%rMat(nR,nR_out) - &
-            &tscheme%wimp_lin(1)*TdiffFac*( rscheme%d2rMat(nR,nR_out) + &
+            &              tscheme%wimp_lin(1)*TdiffFac*hdif_T(n_m)*(   &
+            &                               rscheme%d2rMat(nR,nR_out) + &
             &          or1(nR)*              rscheme%drMat(nR,nR_out) - &
             &      dm2*or2(nR)*               rscheme%rMat(nR,nR_out) ) )
          end do
