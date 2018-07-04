@@ -12,9 +12,10 @@ class PizzaTs(PizzaSetup):
     This python class is used to read and plot the different time series 
     written by the code: 
 
-       * Kinetic energy: :ref:`e_kin.TAG <secEkinFile>`
-       * Heat transfer: :ref:`heat.TAG <secHeatFile>`
-       * Power budget: :ref:`power.TAG <secpowerFile>`
+       * Kinetic energy: e_kin.TAG
+       * Heat transfer: heat.TAG
+       * Power budget: power.TAG
+       * Length scales: length_scales.TAG
 
     Here are a couple of examples of how to use this function.
 
@@ -132,10 +133,17 @@ class PizzaTs(PizzaSetup):
             self.rey = data[:, 1]
             self.rey_zon = data[:, 2]
             self.rey_fluct = data[:, 3]
-        elif self.field in ('power'):
+        elif self.field == 'power':
             self.time = data[:, 0]
             self.buoPower = data[:, 1]
             self.viscDiss = data[:, 2]
+        elif self.field == 'length_scales':
+            self.time = data[:, 0]
+            self.lus_peak = data[:, 1]
+            self.lekin_peak = data[:, 2]
+            self.lvort_peak = data[:, 3]
+            self.lint = data[:, 4]
+            self.ldiss = data[:, 5]
         if iplot:
             self.plot()
 
@@ -173,7 +181,7 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='lower right', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Nusselt number')
-        elif self.field in ('power'):
+        elif self.field == 'power':
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.semilogy(self.time, self.buoPower, label='Thermal buoyancy')
@@ -181,3 +189,15 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Power')
+        elif self.field == 'length_scales':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.semilogy(self.time, self.lus_peak, label='Peak us**2')
+            ax.semilogy(self.time, self.lekin_peak, label='Peak Ekin')
+            ax.semilogy(self.time, self.lvort_peak, label='Peak w**2')
+            ax.semilogy(self.time, self.lint, label='Integral')
+            ax.semilogy(self.time, self.ldiss, label='Dissipation')
+
+            ax.legend(loc='best', frameon=False)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Length scales')
