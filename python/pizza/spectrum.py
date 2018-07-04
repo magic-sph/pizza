@@ -33,7 +33,7 @@ class PizzaSpectrum(PizzaSetup):
         """
 
         if ispec is not None:
-            self.ave = False
+            ave = False
 
         self.ave = ave
 
