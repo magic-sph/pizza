@@ -11,7 +11,7 @@ class PizzaMovie:
 
     def __init__(self, field='up', nvar='all', datadir='.', tag=None, step=1,
                  endian='l', levels=64, cmap='seismic', deminc=True, png=False,
-                 cut=1., bgcolor=None, dpi=100):
+                 cut=1., bgcolor=None, dpi=100, normed=False):
 
         if png:
             plt.ioff()
@@ -90,13 +90,13 @@ class PizzaMovie:
                     print(k)
 
                 plt.cla()
-                vmin = -max( abs(dat.max()), abs(dat.min()))
-                vmin = cut * vmin
-                vmax = -vmin
-                cs = np.linspace(vmin, vmax, levels)
+                if normed:
+                    vmin = -max( abs(dat.max()), abs(dat.min()))
+                    vmin = cut * vmin
+                    vmax = -vmin
+                    cs = np.linspace(vmin, vmax, levels)
 
                 ax = fig.axes[0]
-
                 im = ax.contourf(xx, yy, dat, cs, cmap=plt.get_cmap(cmap),
                                  extend='both')
 

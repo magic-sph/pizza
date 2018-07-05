@@ -1,8 +1,10 @@
-import os
+# -*- coding: utf-8 -*-
+import os, re
 from .npfile import *
 import numpy as np
+from .log import PizzaSetup
 from .plotlib import equatContour
-from .libpizza import spec_spat, symmetrize
+from .libpizza import spec_spat, symmetrize, scanDir
 import scipy.interpolate as inp
 
 def my_interp2d(f, rad, radnew):
@@ -18,8 +20,17 @@ def my_interp2d(f, rad, radnew):
 
 
 class Frame:
+    """
+    This module is used to read the 2-D snapshots
+    """
 
     def __init__(self, filename, endian='l'):
+        """
+        :param filename: name of the file
+        :type filename: str
+        :param endian: endianness of the file ('B' or 'l')
+        :type endian: str
+        """
 
         file = npfile(filename, endian=endian)
 
@@ -40,12 +51,26 @@ class Frame:
 
         file.close()
 
-class PizzaFields:
+
+class PizzaFields(PizzaSetup):
+    """
+    This module is used to read the frames, transform them back on the
+    physical grid and display them.
+    """
 
     def __init__(self, ivar=1, datadir='.', tag=None, endian='l'):
+        """
+        :param ivar: the number of the snapshot file
+        :type ivar: int
+        :param datadir: working directory
+        :type datadir: str
+        :param tag: extension TAG of the snapshot files
+        :type tag: str
+        :param endian: endianness of the file ('B' or 'l')
+        :type endian: str
+        """
 
-        filename = 'frame_temp_%i.%s' % (ivar, tag)
-        filename = os.path.join(datadir, filename)
+        filename = self.get_filename('frame_temp', ivar, datadir, tag)
         f = Frame(filename, endian=endian)
         self.ra = f.ra
         self.ek = f.ek
@@ -67,27 +92,107 @@ class PizzaFields:
         self.temp_m[0, :] += self.tcond
         self.temp = spec_spat(self.temp_m, self.n_phi_max)
 
-        filename = 'frame_us_%i.%s' % (ivar, tag)
-        filename = os.path.join(datadir, filename)
+        filename = self.get_filename('frame_us', ivar, datadir, tag)
         f = Frame(filename, endian=endian)
         self.us_m = f.field_m
         self.us = spec_spat(self.us_m, self.n_phi_max)
 
-        filename = 'frame_up_%i.%s' % (ivar, tag)
-        filename = os.path.join(datadir, filename)
+        filename = self.get_filename('frame_up', ivar, datadir, tag)
         f = Frame(filename, endian=endian)
         self.uphi_m = f.field_m
         self.uphi = spec_spat(self.uphi_m, self.n_phi_max)
 
-        filename = 'frame_om_%i.%s' % (ivar, tag)
-        filename = os.path.join(datadir, filename)
+        filename = self.get_filename('frame_om', ivar, datadir, tag)
         f = Frame(filename, endian=endian)
         self.vortz_m = f.field_m
         self.vortz = spec_spat(self.vortz_m, self.n_phi_max)
 
+    def get_filename(self, prefix, ivar, datadir, tag):
+        """
+        This routine determines the filename based on what is available
+        in the current directory
+
+        :param prefix: the file prefix ('frame_temp', 'frame_us', 'frame_om', ...)
+        :type prefix: str
+        :param ivar: the number of the snapshot file
+        :type ivar: int
+        :param datadir: working directory
+        :type datadir: str
+        :param tag: extension TAG of the snapshot files
+        :type tag: str
+        """
+
+        if tag is not None:
+            if ivar is not None:
+                file = '%s_%i.%s' % (prefix, ivar, tag)
+                filename = os.path.join(datadir, file)
+            else:
+                files = scanDir('%s_*%s' % (prefix, tag))
+                if len(files) != 0:
+                    filename = os.path.join(datadir, files[-1])
+                else:
+                    print('No such tag... try again')
+                    return
+
+            if os.path.exists('log.%s' % tag):
+                PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                    nml='log.%s' % tag)
+        else:
+            if ivar is not None:
+                files = scanDir('%s_%i*' % (prefix, ivar))
+                filename = os.path.join(datadir, files[-1])
+            else:
+                files = scanDir('%s_*' % prefix)
+                filename = os.path.join(datadir, files[-1])
+            # Determine the setup
+            mask = re.compile(r'.*\.(.*)')
+            ending = mask.search(files[-1]).groups(0)[0]
+            if os.path.exists('log.%s' % ending):
+                PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                    nml='log.%s' % ending)
+
+        if not os.path.exists(filename):
+            print('No such file')
+            return
+
+        return filename
+
     def equat(self, field='vort', cm='seismic', levels=65, deminc=True,
               normed=True, vmax=None, vmin=None, normRad=False, stream=False,
               streamNorm='vel', streamDensity=1.5, cbar=True, label=None):
+        """
+        Display an equatorial planform of a scalar quantity
+
+        :param field: the name of the input physical quantity you want to
+                      display
+        :type field: str
+        :param normRad: when set to True, the contour levels are normalised
+                        radius by radius (default is False)
+        :type normRad: bool
+        :param levels: the number of levels in the contour
+        :type levels: int
+        :param cm: name of the colormap ('jet', 'seismic', 'RdYlBu_r', etc.)
+        :type cm: str
+        :param tit: display the title of the figure when set to True
+        :type tit: bool
+        :param cbar: display the colorbar when set to True
+        :type cbar: bool
+        :param vmax: maximum value of the contour levels
+        :type vmax: float
+        :param vmin: minimum value of the contour levels
+        :type vmin: float
+        :param normed: when set to True, the colormap is centered around zero.
+                       Default is True, except for entropy/temperature plots.
+        :type normed: bool
+        :param stream: a boolean to control the plotting of streamlines (False
+                       by default)
+        :type stream: bool
+        :param streamNorm: scalar that is used to normalise the thickness of
+                           the streamlines (by default 'vel')
+        :type streamNorm: str
+        :param streamDensity: control the number of streamlines
+        :type streamDensity: float
+        """
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
             data = self.vortz

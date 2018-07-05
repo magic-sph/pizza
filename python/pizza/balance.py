@@ -1,41 +1,172 @@
 from .npfile import *
 import numpy as np
 import matplotlib.pyplot as plt
+import copy
 from .log import PizzaSetup
+from .libpizza import scanDir
+import os, re
 
 
-class PizzaBalance:
+class PizzaBalance(PizzaSetup):
+    """
+    This module is used to load and display the output files that
+    contain the azimuthal force balance vphi_bal.TAG
+    """
 
-    def __init__(self, tag='None', endian='B', iplot=False):
-        filename = 'vphi_bal.%s' % tag
+    def __init__(self, datadir='.', tag=None, endian='l', iplot=False, all=False):
+        """
+        :param datadir: working directory
+        :type datadir: str
+        :param tag: a specific trailing tag, default is None
+        :type tag: str
+        :param endian: endianness of the file ('B' or 'l')
+        :type endian: str
+        :param iplot: boolean to toggle the display (False by default)
+        :type iplot: bool
+        :param all: when set to True, the complete time series is reconstructed by
+                    stacking all the corresponding files from the working directory
+                    (False by default)
+        :type all: bool
+        """
+        pattern = os.path.join(datadir, 'log.*')
+        logFiles = scanDir(pattern)
+
+        if tag is not None:
+            pattern = os.path.join(datadir, 'vphi_bal.%s' % tag)
+            files = scanDir(pattern)
+
+            # Either the log.tag directly exists and the setup is easy to obtain
+            if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                    nml='log.%s' % tag)
+            # Or the tag is a bit more complicated and we need to find 
+            # the corresponding log file
+            else:
+                mask = re.compile(r'vphi_bal\.(.*)')
+                if mask.match(files[-1]):
+                    ending = mask.search(files[-1]).groups(0)[0]
+                    if logFiles.__contains__('log.%s' % ending):
+                        PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                            nml='log.%s' % ending)
+
+            for k, file in enumerate(files):
+                if k == 0:
+                    self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
+                               self.ek_pump, self.visc = self.read(file, endian)
+                else:
+                    radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
+                                              self.read(file, endian)
+                    self.add(time, vp, dvpdt, rey_stress, ek_pump, visc)
+
+        # If no tag is specified, the most recent is plotted
+        elif not all:
+            if len(logFiles) != 0:
+                PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
+                name = 'vphi_bal.%s' % self.tag
+                filename = os.path.join(datadir, name)
+                self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
+                            self.ek_pump, self.visc = self.read(filename, endian)
+            else:
+                mot = 'vphi_bal.*'
+                dat = [(os.stat(i).st_mtime, i) for i in glob.glob(mot)]
+                dat.sort()
+                filename = dat[-1][1]
+                self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
+                            self.ek_pump, self.visc = self.read(filename, endian)
+
+        # If no tag is specified but all=True, all the directory is plotted
+        else:
+            if len(logFiles) != 0:
+                PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
+            pattern = os.path.join(datadir, 'vphi_bal.*')
+            files = scanDir(pattern)
+            for k, file in enumerate(files):
+                if k == 0:
+                    self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
+                                self.ek_pump, self.visc = self.read(file, endian)
+                else:
+                    radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
+                                              self.read(file, endian)
+                    self.add(time, vp, dvpdt, rey_stress, ek_pump, visc)
+
+        if iplot:
+            self.plot()
+
+    def __add__(self, new):
+        """
+        Built-in functions to sum two vphi force balances
+
+        .. note:: so far this only works when the number of radial grid points is
+                  the same
+        """
+        out = copy.deepcopy(new)
+        if new.time[0] == self.time[-1]:
+            out.time = np.concatenate((self.time, new.time[1:]), axis=0)
+            out.vp = np.concatenate((self.vp, new.vp[1:, :]), axis=0)
+            out.dvpdt = np.concatenate((self.dvpdt, new.dvpdt[1:, :]), axis=0)
+            out.rey_stress = np.concatenate((self.rey_stress, new.rey_stress[1:, :]), axis=0)
+            out.ek_pump = np.concatenate((self.ek_pump, new.ek_pump[1:, :]), axis=0)
+            out.visc = np.concatenate((self.visc, new.visc[1:, :]), axis=0)
+        else:
+            out.time = np.concatenate((self.time, new.time), axis=0)
+            out.vp = np.concatenate((self.vp, new.vp), axis=0)
+            out.dvpdt = np.concatenate((self.dvpdt, new.dvpdt), axis=0)
+            out.rey_stress = np.concatenate((self.rey_stress, new.rey_stress), axis=0)
+            out.ek_pump = np.concatenate((self.ek_pump, new.ek_pump), axis=0)
+            out.visc = np.concatenate((self.visc, new.visc), axis=0)
+        return out
+
+    def add(self, time, vp, dvpdt, rey_stress, ek_pump, visc):
+        if time[0] == self.time[-1]:
+            self.time = np.concatenate((self.time, time[1:]), axis=0)
+            self.vp = np.concatenate((self.vp, vp[1:, :]), axis=0)
+            self.dvpdt = np.concatenate((self.dvpdt, dvpdt[1:, :]), axis=0)
+            self.rey_stress = np.concatenate((self.rey_stress, rey_stress[1:, :]), axis=0)
+            self.ek_pump = np.concatenate((self.ek_pump, ek_pump[1:, :]), axis=0)
+            self.visc = np.concatenate((self.visc, visc[1:, :]), axis=0)
+        else:
+            self.time = np.concatenate((self.time, time), axis=0)
+            self.vp = np.concatenate((self.vp, vp), axis=0)
+            self.dvpdt = np.concatenate((self.dvpdt, dvpdt), axis=0)
+            self.rey_stress = np.concatenate((self.rey_stress, rey_stress), axis=0)
+            self.ek_pump = np.concatenate((self.ek_pump, ek_pump), axis=0)
+            self.visc = np.concatenate((self.visc, visc), axis=0)
+
+    def read(self, filename, endian):
+        """
+        Read one vphi_bal.TAG file
+        """
+
         file = npfile(filename, endian=endian)
 
         self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc \
                  = file.fort_read('Float64')
-        self.radius = file.fort_read('Float64')
-        self.time = file.fort_read('Float64')
-        self.vp = file.fort_read('Float64')
-        self.dvpdt = file.fort_read('Float64')
-        self.rey_stress = file.fort_read('Float64')
-        self.ek_pump = file.fort_read('Float64')
-        self.visc = file.fort_read('Float64')
+        radius = file.fort_read('Float64')
+        time = file.fort_read('Float64')
+        vp = file.fort_read('Float64')
+        dvpdt = file.fort_read('Float64')
+        rey_stress = file.fort_read('Float64')
+        ek_pump = file.fort_read('Float64')
+        visc = file.fort_read('Float64')
         while 1:
             try:
-                self.time = np.append(self.time, file.fort_read('Float64'))
-                self.vp = np.vstack((self.vp, file.fort_read('Float64')))
-                self.dvpdt = np.vstack((self.dvpdt, file.fort_read('Float64')))
-                self.rey_stress = np.vstack((self.rey_stress, file.fort_read('Float64')))
-                self.ek_pump = np.vstack((self.ek_pump, file.fort_read('Float64')))
-                self.visc = np.vstack((self.visc, file.fort_read('Float64')))
+                time = np.append(time, file.fort_read('Float64'))
+                vp = np.vstack((vp, file.fort_read('Float64')))
+                dvpdt = np.vstack((dvpdt, file.fort_read('Float64')))
+                rey_stress = np.vstack((rey_stress, file.fort_read('Float64')))
+                ek_pump = np.vstack((ek_pump, file.fort_read('Float64')))
+                visc = np.vstack((visc, file.fort_read('Float64')))
             except TypeError:
                 break
 
         file.close()
 
-        if iplot:
-            self.plot()
+        return radius, time, vp, dvpdt, rey_stress, ek_pump, visc
 
     def plot(self):
+        """
+        Display when ``iplot = True``
+        """
         fig = plt.figure()
         ax = fig.add_subplot(111)
         dvpdtm = self.dvpdt.mean(axis=0)
