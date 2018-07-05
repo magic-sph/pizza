@@ -58,7 +58,7 @@ class PizzaFields(PizzaSetup):
     physical grid and display them.
     """
 
-    def __init__(self, ivar=1, datadir='.', tag=None, endian='l'):
+    def __init__(self, ivar=None, datadir='.', tag=None, endian='l'):
         """
         :param ivar: the number of the snapshot file
         :type ivar: int
@@ -155,6 +155,7 @@ class PizzaFields(PizzaSetup):
             print('No such file')
             return
 
+        print('read %s' % filename)
         return filename
 
     def equat(self, field='vort', cm='seismic', levels=65, deminc=True,
