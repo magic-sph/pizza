@@ -1,4 +1,7 @@
 module output_frames
+   !
+   ! This module handles the writing of the snapshot. It uses MPI-IO
+   !
 
    use parallel_mod
    use precision_mod

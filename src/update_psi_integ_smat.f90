@@ -807,13 +807,14 @@ contains
       real(cp) :: stencilA4(A_mat%nbands), CorSten(A_mat%nbands)
       integer :: n_r, i_r, n_band, n_b, n_m
       real(cp) :: a, b, dn2, runStart, runStop
-      real(cp) :: d4top(A_mat%nlines)
+      real(cp) :: d3top(A_mat%nlines)
 
       n_m = m2idx(m)
 
       do n_r=1,A_mat%nlines
          dn2 = real(n_r-1,cp)*real(n_r-1,cp)
-         d4top(n_r)=16.0_cp/105.0_cp*dn2*(dn2-one)*(dn2-4.0_cp)*(dn2-9.0_cp)
+         !d4top(n_r)=16.0_cp/105.0_cp*dn2*(dn2-one)*(dn2-4.0_cp)*(dn2-9.0_cp)
+         d3top(n_r)=8.0_cp/15.0_cp*dn2*(dn2-one)*(dn2-4.0_cp)
       end do
 
 
@@ -982,7 +983,7 @@ contains
                   if ( l_non_rot ) then
                      A_mat%A1(3,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
                   else
-                     A_mat%A1(3,n_r)=rscheme%rnorm*d4top(n_r)
+                     A_mat%A1(3,n_r)=rscheme%rnorm*d3top(n_r)
                   end if
                end if
                if ( kbotv == 1 ) then
@@ -1001,7 +1002,7 @@ contains
                   if ( l_non_rot ) then
                      A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
                   else
-                     A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*d4top(n_r)
+                     A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*d3top(n_r)
                   end if
                end if
                if ( kbotv == 1 ) then

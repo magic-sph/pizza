@@ -1,15 +1,24 @@
 module outputs
+   !
+   ! This module handles the non-binary I/O of pizza:
+   !        - Time series (e_kin.TAG, length_scales.TAG, heat.TAG, power.TAG)
+   !        - Time-averaged radial profiles (radial_profiles.TAG)
+   !        - Time-averaged spectra (spec_avg.TAG)
+   !        - Spectra (spec_#.TAG)
+   ! and one Fortran unformatted binary file that contains the vphi force balance:
+   !        - vphi_bal.TAG
+   !
 
    use parallel_mod
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use namelists, only: tag, BuoFac, ra, pr, l_non_rot, l_vphi_balance, ek, &
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
-       &                ViscFac, CorFac, time_scale
+       &                ViscFac, CorFac, time_scale, r_cmb
    use communications, only: reduce_radial_on_rank
-   use truncation, only: n_r_max, m2idx, n_m_max, idx2m
+   use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
-       &                       beta, ekpump, or1
+       &                       beta, ekpump, or1, oheight, or2
    use blocking, only: nMstart, nMstop, nRstart, nRstop, l_rank_has_m0, &
        &               nm_per_rank, m_balance
    use integration, only: rInt_R
@@ -25,15 +34,19 @@ module outputs
    private
 
    integer :: frame_counter, n_calls, spec_counter
-   real(cp) :: timeLast, timeAvg
+   real(cp) :: timeLast_rad, timeAvg_rad
+   real(cp) :: timeLast_spec, timeAvg_spec
    integer, public :: n_log_file
-   integer :: n_rey_file, n_heat_file, n_kin_file, n_power_file
+   integer :: n_rey_file, n_heat_file, n_kin_file, n_power_file, n_lscale_file
    integer :: n_vphi_bal_file
    character(len=144), public :: log_file
-   character(len=144) :: kin_file, heat_file, power_file, rey_file
 
    real(cp), allocatable :: uphiR_mean(:), uphiR_SD(:)
+   real(cp), allocatable :: us2R_mean(:), us2R_SD(:), up2R_mean(:), up2R_SD(:)
+   real(cp), allocatable :: enstrophyR_mean(:), enstrophyR_SD(:)
    real(cp), allocatable :: tempR_mean(:), tempR_SD(:)
+   real(cp), allocatable :: us2M_mean(:), up2M_mean(:), enstrophyM_mean(:)
+   real(cp), allocatable :: us2M_SD(:), up2M_SD(:), enstrophyM_SD(:)
 
    type, public :: vp_bal_type
       real(cp), allocatable :: rey_stress(:)
@@ -53,6 +66,7 @@ contains
    subroutine initialize_outputs
 
       logical :: log_exists
+      character(len=144) :: kin_file, heat_file, power_file, rey_file, lscale_file
 
       if ( rank == 0 ) then
          log_file = 'log.'//tag
@@ -71,9 +85,12 @@ contains
             rey_file = 'reynolds.'//tag
          end if
          open(newunit=n_rey_file,file=rey_file, status='new')
+         lscale_file = 'length_scales.'//tag
+         open(newunit=n_lscale_file, file=lscale_file, status='new')
       end if 
 
-      timeAvg = 0.0_cp
+      timeAvg_rad  = 0.0_cp
+      timeAvg_spec = 0.0_cp
 
       if ( l_rank_has_m0 ) then
          heat_file = 'heat.'//tag
@@ -81,14 +98,35 @@ contains
 
          allocate( uphiR_mean(n_r_max), uphiR_SD(n_r_max) )
          allocate( tempR_mean(n_r_max), tempR_SD(n_r_max) )
-         bytes_allocated=bytes_allocated+4*n_r_max*SIZEOF_DEF_REAL
+         allocate( us2R_mean(n_r_max), us2R_SD(n_r_max) )
+         allocate( up2R_mean(n_r_max), up2R_SD(n_r_max) )
+         allocate( enstrophyR_mean(n_r_max), enstrophyR_SD(n_r_max) )
+         bytes_allocated=bytes_allocated+10*n_r_max*SIZEOF_DEF_REAL
 
-         uphiR_mean(:) = 0.0_cp
-         uphiR_SD(:)   = 0.0_cp
-         tempR_mean(:) = 0.0_cp
-         tempR_SD(:)   = 0.0_cp
-         n_calls       = 0
-         timeLast      = 0.0_cp
+         uphiR_mean(:)      = 0.0_cp
+         uphiR_SD(:)        = 0.0_cp
+         tempR_mean(:)      = 0.0_cp
+         tempR_SD(:)        = 0.0_cp
+         us2R_mean(:)       = 0.0_cp
+         us2R_SD(:)         = 0.0_cp
+         up2R_mean(:)       = 0.0_cp
+         up2R_SD(:)         = 0.0_cp
+         enstrophyR_mean(:) = 0.0_cp
+         enstrophyR_SD(:)   = 0.0_cp
+         n_calls            = 0
+         timeLast_rad       = 0.0_cp
+
+         allocate( us2M_mean(n_m_max), up2M_mean(n_m_max), enstrophyM_mean(n_m_max) )
+         allocate( us2M_SD(n_m_max), up2M_SD(n_m_max), enstrophyM_SD(n_m_max) )
+         bytes_allocated=bytes_allocated+6*n_m_max*SIZEOF_DEF_REAL
+
+         us2M_mean(:)       = 0.0_cp
+         up2M_mean(:)       = 0.0_cp
+         enstrophyM_mean(:) = 0.0_cp
+         us2M_SD(:)         = 0.0_cp
+         up2M_SD(:)         = 0.0_cp
+         enstrophyM_SD(:)   = 0.0_cp
+         timeLast_spec      = 0.0_cp
 
          if ( l_vphi_balance ) then
             open(newunit=n_vphi_bal_file, file='vphi_bal.'//tag, &
@@ -116,11 +154,16 @@ contains
             deallocate( vp_bal%pump, vp_bal%visc )
             deallocate( vp_bal%dvpdt, vp_bal%rey_stress )
          end if
+         deallocate( us2M_mean, up2M_mean, enstrophyM_mean )
+         deallocate( us2M_SD, up2M_SD, enstrophyM_SD )
          deallocate( uphiR_mean, uphiR_SD, tempR_mean, tempR_SD )
+         deallocate( us2R_mean, up2R_mean, enstrophyR_mean )
+         deallocate( us2R_SD, up2R_SD, enstrophyR_SD )
          close(n_heat_file)
       end if
 
       if ( rank == 0 ) then
+         close(n_lscale_file)
          close(n_rey_file)
          close(n_power_file)
          close(n_kin_file)
@@ -156,9 +199,11 @@ contains
       !-- Local variable
       integer :: m0, n_r
       character(len=144) :: frame_name
-      character(len=144) :: spec_name
+      real(cp) :: us2_m(n_m_max), up2_m(n_m_max), enstrophy_m(n_m_max)
+      real(cp) :: us2_r(n_r_max), up2_r(n_r_max), enstrophy_r(n_r_max)
 
-      timeAvg = timeAvg + tscheme%dt(1)
+      timeAvg_rad  = timeAvg_rad  + tscheme%dt(1)
+      timeAvg_spec = timeAvg_spec + tscheme%dt(1)
 
       if ( l_rst ) then
          call write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
@@ -166,10 +211,13 @@ contains
               &                     dTdt, dpsidt)
       end if
 
+      if ( l_spec .or. l_log ) then
+         call calculate_spectra(us_Mloc, up_Mloc, om_Mloc, us2_m, up2_m, &
+              &                 enstrophy_m)
+      end if
+
       if ( l_spec ) then
-         write(spec_name, '(A,I0,A,A)') 'spec_',spec_counter,'.',tag
-         call write_spectra(spec_name, us_Mloc, up_Mloc, om_Mloc, temp_Mloc)
-         spec_counter = spec_counter+1
+         call write_spectra(us2_m, up2_m, enstrophy_m)
       end if
 
       if ( l_vphi_bal_write ) then
@@ -191,9 +239,14 @@ contains
 
       if ( l_log ) then
          call get_time_series(time, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
-              &               dtemp_Mloc)
+              &               dtemp_Mloc, us2_m, up2_m, enstrophy_m,      &
+              &               us2_r, up2_r, enstrophy_r)
 
-         call get_radial_averages(timeAvg, l_stop_time, up_Mloc, temp_Mloc)
+         call get_radial_averages(timeAvg_rad, l_stop_time, up_Mloc, temp_Mloc, &
+              &                   us2_r, up2_r, enstrophy_r)
+
+         call get_spec_averages(timeAvg_spec, l_stop_time, us2_m, up2_m, &
+              &                 enstrophy_m)
       end if
 
       if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
@@ -205,13 +258,17 @@ contains
 
    end subroutine write_outputs
 !------------------------------------------------------------------------------
-   subroutine get_radial_averages(timeAvg, l_stop_time, up_Mloc, temp_Mloc)
+   subroutine get_radial_averages(timeAvg_rad, l_stop_time, up_Mloc, temp_Mloc, &
+              &                   us2_r, up2_r, enstrophy_r)
 
       !-- Input variables
-      real(cp),    intent(in) :: timeAvg
+      real(cp),    intent(in) :: timeAvg_rad
       logical,     intent(in) :: l_stop_time
       complex(cp), intent(in) :: up_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop, n_r_max)
+      real(cp),    intent(in) :: us2_r(n_r_max)
+      real(cp),    intent(in) :: up2_r(n_r_max)
+      real(cp),    intent(in) :: enstrophy_r(n_r_max)
 
       !-- Local variables
       real(cp) :: dtAvg
@@ -221,23 +278,36 @@ contains
       if ( l_rank_has_m0 ) then
 
          n_calls = n_calls+1
-         dtAvg = timeAvg-timeLast
+         dtAvg = timeAvg_rad-timeLast_rad
 
          idx = m2idx(0)
          do n_r=1,n_r_max
             call getMSD2(uphiR_mean(n_r), uphiR_SD(n_r), real(up_Mloc(idx,n_r)),&
-                 &       n_calls, dtAvg, timeAvg)
+                 &       n_calls, dtAvg, timeAvg_rad)
             call getMSD2(tempR_mean(n_r), tempR_SD(n_r), real(temp_Mloc(idx,n_r)),&
-                 &       n_calls, dtAvg, timeAvg)
+                 &       n_calls, dtAvg, timeAvg_rad)
+            call getMSD2(us2R_mean(n_r), us2R_SD(n_r), two*pi*us2_r(n_r), &
+                 &       n_calls, dtAvg, timeAvg_rad)
+            call getMSD2(up2R_mean(n_r), up2R_SD(n_r), two*pi*up2_r(n_r), &
+                 &       n_calls, dtAvg, timeAvg_rad)
+            call getMSD2(enstrophyR_mean(n_r), enstrophyR_SD(n_r),    &
+                 &       enstrophy_r(n_r), n_calls, dtAvg, timeAvg_rad)
          end do
-         timeLast = timeAvg
+         timeLast_rad = timeAvg_rad
 
          if ( l_stop_time ) then
             open(newunit=file_handle, file='radial_profiles.'//tag)
             do n_r=1,n_r_max
-               uphiR_SD(n_r)=sqrt(uphiR_SD(n_r)/timeAvg)
-               tempR_SD(n_r)=sqrt(tempR_SD(n_r)/timeAvg)
-               write(file_handle, '(es20.12, 4es16.8)') r(n_r),            &
+               uphiR_SD(n_r)     =sqrt(uphiR_SD(n_r)/timeAvg_rad)
+               tempR_SD(n_r)     =sqrt(tempR_SD(n_r)/timeAvg_rad)
+               us2R_SD(n_r)      =sqrt(us2R_SD(n_r)/timeAvg_rad)
+               up2R_SD(n_r)      =sqrt(up2R_SD(n_r)/timeAvg_rad)
+               enstrophyR_SD(n_r)=sqrt(enstrophyR_SD(n_r)/timeAvg_rad)
+               write(file_handle, '(es20.12, 10es16.8)') r(n_r),           &
+               &     round_off(us2R_mean(n_r)), round_off(us2R_SD(n_r)),   &
+               &     round_off(up2R_mean(n_r)), round_off(up2R_SD(n_r)),   &
+               &     round_off(enstrophyR_mean(n_r)),                      &
+               &     round_off(enstrophyR_SD(n_r)),                        &
                &     round_off(uphiR_mean(n_r)), round_off(uphiR_SD(n_r)), &
                &     round_off(tempR_mean(n_r)+tcond(n_r)),                &
                &     round_off(tempR_SD(n_r))
@@ -250,7 +320,8 @@ contains
    end subroutine get_radial_averages
 !------------------------------------------------------------------------------
    subroutine get_time_series(time, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
-              &               dtemp_Mloc)
+              &               dtemp_Mloc, us2_m, up2_m, enstrophy_m,      &
+              &               us2_r, up2_r, enstrophy)
 
       !-- Input variables
       real(cp),    intent(in) :: time
@@ -259,15 +330,25 @@ contains
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      real(cp),    intent(in) :: us2_m(n_m_max)
+      real(cp),    intent(in) :: up2_m(n_m_max)
+      real(cp),    intent(in) :: enstrophy_m(n_m_max)
+
+      !-- Output variables
+      real(cp), intent(out) :: us2_r(n_r_max)
+      real(cp), intent(out) :: up2_r(n_r_max)
+      real(cp), intent(out) :: enstrophy(n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, m, n_m0
-      real(cp) :: tTop, tBot, visc, pow, pum
+      integer :: lus_peak, lekin_peak, lvort_peak
+      real(cp) :: dlus_peak, dlekin_peak, dlvort_peak
+      real(cp) :: dl_diss, dlekin_int
+      real(cp) :: tTop, tBot, visc, pow, pum, E, Em
       real(cp) :: us2, up2, up2_axi
-      real(cp) :: us2_r(n_r_max), up2_r(n_r_max)
-      real(cp) :: up2_axi_r(n_r_max)
-      real(cp) :: visc_diss(n_r_max), buo_power(n_r_max), pump(n_r_max)
-      real(cp) :: NuTop, NuBot, beta_t, vol_fac
+      real(cp) :: up2_axi_r(n_r_max), nu_vol_r(n_r_max), nu_cond_r(n_r_max)
+      real(cp) :: buo_power(n_r_max), pump(n_r_max)
+      real(cp) :: NuTop, NuBot, beta_t, vol_fac, nu_vol
       real(cp) :: rey, rey_fluct, rey_zon
 
       !-- This is to determine the volume used to compute the Reynolds numbers
@@ -281,35 +362,42 @@ contains
          us2_r(n_r)    =0.0_cp
          up2_r(n_r)    =0.0_cp
          up2_axi_r(n_r)=0.0_cp
-         visc_diss(n_r)=0.0_cp
+         enstrophy(n_r)=0.0_cp
          buo_power(n_r)=0.0_cp
          pump(n_r)     =0.0_cp
+         nu_vol_r(n_r) =0.0_cp
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             us2_r(n_r)    =us2_r(n_r)+cc2real(us_Mloc(n_m,n_r),m)
             up2_r(n_r)    =up2_r(n_r)+cc2real(up_Mloc(n_m,n_r),m)
-            visc_diss(n_r)=visc_diss(n_r)+cc2real(om_Mloc(n_m,n_r),m)
+            enstrophy(n_r)=enstrophy(n_r)+cc2real(om_Mloc(n_m,n_r),m)
             buo_power(n_r)=buo_power(n_r)+cc22real(us_Mloc(n_m,n_r), &
             &              temp_Mloc(n_m,n_r), m)
+
+            nu_vol_r(n_r) =nu_vol_r(n_r)+cc2real(dtemp_Mloc(n_m,n_r),m)&
+            &              +real(m,cp)*real(m,cp)*or2(n_r)*            &
+            &                             cc2real(temp_Mloc(n_m,n_r),m)
 
             if ( m == 0 ) then
                up2_axi_r(n_r)=up2_axi_r(n_r)+cc2real(up_Mloc(n_m,n_r),m)
                pump(n_r)     =pump(n_r)+cc2real(up_Mloc(n_m,n_r),m)
             end if
          end do
+         nu_vol_r(n_r) =nu_vol_r(n_r)*r(n_r)*height(n_r)
          us2_r(n_r)    =us2_r(n_r)*r(n_r)*height(n_r)
          up2_r(n_r)    =up2_r(n_r)*r(n_r)*height(n_r)
          up2_axi_r(n_r)=up2_axi_r(n_r)*r(n_r)*height(n_r)
-         visc_diss(n_r)=ViscFac*visc_diss(n_r)*r(n_r)*height(n_r)
+         enstrophy(n_r)=ViscFac*enstrophy(n_r)*r(n_r)*height(n_r)
          buo_power(n_r)=BuoFac*buo_power(n_r)*rgrav(n_r)*r(n_r)*height(n_r)
          pump(n_r)     =pump(n_r)*CorFac*ekpump(n_r)*height(n_r)*r(n_r)
       end do
 
       !-- MPI reductions to get the s-profiles on rank==0
+      call reduce_radial_on_rank(nu_vol_r, 0)
       call reduce_radial_on_rank(us2_r, 0)
       call reduce_radial_on_rank(up2_r, 0)
       call reduce_radial_on_rank(up2_axi_r, 0)
-      call reduce_radial_on_rank(visc_diss, 0)
+      call reduce_radial_on_rank(enstrophy, 0)
       call reduce_radial_on_rank(buo_power, 0)
       call reduce_radial_on_rank(pump, 0)
 
@@ -317,6 +405,7 @@ contains
          !-- Kinetic energy
          us2 = rInt_R(us2_r, r, rscheme)
          up2 = rInt_R(up2_r, r, rscheme)
+
          up2_axi = rInt_R(up2_axi_r, r, rscheme)
          us2 = round_off(pi*us2)
          up2 = round_off(pi*up2)
@@ -328,7 +417,7 @@ contains
          rey_fluct = sqrt(two*(us2+up2-up2_axi)/vol_fac)
 
          !-- Total viscous dissipation
-         visc = rInt_R(visc_diss, r, rscheme)
+         visc = rInt_R(enstrophy, r, rscheme)
          visc = round_off(two*pi*visc)
 
          !-- In case of stress-free we need to include the surface contributions
@@ -352,6 +441,50 @@ contains
 
          write(n_rey_file, '(1P, es20.12, 3es16.8)') time, rey, rey_zon, &
          &                                           rey_fluct
+
+         !-- Lengthscales
+         !-- Peak of the spectra
+         lus_peak   = maxloc(us2_m(2:n_m_max), dim=1)*minc ! Excluding m=0
+         if ( lus_peak > 0 ) then
+            dlus_peak = pi/lus_peak
+         else
+            dlus_peak = 0.0_cp
+         end if
+         lekin_peak = maxloc(us2_m(2:n_m_max)+up2_m(2:n_m_max),dim=1)*minc
+         if ( lekin_peak > 0 ) then
+            dlekin_peak = pi/lekin_peak
+         else
+            dlekin_peak = 0.0_cp
+         end if
+         lvort_peak = maxloc(enstrophy_m(2:n_m_max),dim=1)*minc
+         if ( lvort_peak > 0 ) then
+            dlvort_peak = pi/lvort_peak
+         else
+            dlvort_peak = 0.0_cp
+         end if
+         !-- Integral lengthscale = pi*\sum E(m)/\sum m E(m)
+         E  = 0.0_cp
+         Em = 0.0_cp
+         do n_m=1,n_m_max
+            m =idx2m(n_m)
+            E  = E  + (us2_m(n_m)+up2_m(n_m))
+            Em = Em + real(m,cp)*(us2_m(n_m)+up2_m(n_m))
+         end do
+         if ( abs(E) > 10.0_cp*epsilon(one) ) then
+            dlekin_int = pi*E/Em
+         else
+            dlekin_int = 0.0_cp
+         end if
+         !-- Dissipation lengthscale = \sqrt(2*Ekin/\omega^2)
+         if ( abs(visc) > 10.0_cp*epsilon(one) ) then
+            dl_diss = sqrt(two*(us2+up2)*viscfac/visc)
+         else
+            dl_diss = 0.0_cp
+         end if
+         write(n_lscale_file, '(1P, es20.12, 5es16.8)') time, dlus_peak,          &
+         &                                              dlekin_peak, dlvort_peak, &
+         &                                              dlekin_int, dl_diss
+         
       end if
 
       if ( l_rank_has_m0 ) then
@@ -368,11 +501,15 @@ contains
          NuTop = round_off(NuTop)
          NuBot = round_off(NuBot)
 
+         nu_vol = rInt_R(nu_vol_r, r, rscheme)
+         nu_cond_r(:)=dtcond(:)*dtcond(:)*height(:)*r(:)
+         nu_vol = one+nu_vol/rInt_R(nu_cond_r, r, rscheme)
+
          beta_t = dtcond(int(n_r_max/2))+real(dtemp_Mloc(n_m0,int(n_r_max/2)))
          beta_t = round_off(beta_t)
 
-         write(n_heat_file, '(1P, ES20.12, 5ES16.8)') time, NuTop, NuBot, &
-         &                                             tTop, tBot, beta_t
+         write(n_heat_file, '(1P, ES20.12, 6ES16.8)') time, NuTop, NuBot, &
+         &                                            nu_vol, tTop, tBot, beta_t
       end if
 
    end subroutine get_time_series
@@ -402,22 +539,25 @@ contains
 
    end subroutine write_vphi_balance
 !------------------------------------------------------------------------------
-   subroutine write_spectra(spec_name, us_Mloc, up_Mloc, om_Mloc, temp_Mloc)
+   subroutine calculate_spectra(us_Mloc, up_Mloc, om_Mloc, us2_m_global, &
+              &                 up2_m_global, enstrophy_m_global)
 
       !-- Input variables
-      character(len=*), intent(in) :: spec_name
-      complex(cp),      intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp),      intent(in) :: up_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp),      intent(in) :: om_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp),      intent(in) :: temp_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp), intent(in) :: om_Mloc(nMstart:nMstop, n_r_max)
+
+      !-- Output variables
+      real(cp), intent(out) :: us2_m_global(n_m_max)
+      real(cp), intent(out) :: up2_m_global(n_m_max)
+      real(cp), intent(out) :: enstrophy_m_global(n_m_max)
 
       !-- Local variables
-      real(cp) :: ekin(n_r_max), enst(n_r_max), buo_power(n_r_max)
-      real(cp) :: ekin_m(nMstart:nMstop), enstrophy_m(nMstart:nMstop)
-      real(cp) :: ekin_m_global(n_m_max), enstrophy_m_global(n_m_max)
-      real(cp) :: power_m(nMstart:nMstop), power_m_global(n_m_max)
+      real(cp) :: us2(n_r_max), up2(n_r_max), enst(n_r_max)
+      real(cp) :: us2_m(nMstart:nMstop), enstrophy_m(nMstart:nMstop)
+      real(cp) :: up2_m(nMstart:nMstop)
       integer :: displs(0:n_procs-1), recvcounts(0:n_procs-1)
-      integer :: n_m, m, n_r, n_p, file_handle
+      integer :: n_m, m, n_r, n_p
 
 
       !-- This is not cache-friendly but hopefully it's happening only
@@ -425,17 +565,16 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
          do n_r=1,n_r_max
-            ekin(n_r)     =cc2real(us_Mloc(n_m,n_r),m) +  &
-            &              cc2real(up_Mloc(n_m,n_r),m)
-            enst(n_r)     =cc2real(om_Mloc(n_m,n_r),m)
-            ekin(n_r)     =ekin(n_r)*r(n_r)*height(n_r)
-            enst(n_r)     =enst(n_r)*r(n_r)*height(n_r)
-            buo_power(n_r)=cc22real(us_Mloc(n_m,n_r),temp_Mloc(n_m,n_r), m)
-            buo_power(n_r)=BuoFac*buo_power(n_r)*rgrav(n_r)*r(n_r)*height(n_r)
+            us2(n_r) =cc2real(us_Mloc(n_m,n_r),m) 
+            up2(n_r) =cc2real(up_Mloc(n_m,n_r),m)
+            enst(n_r)=cc2real(om_Mloc(n_m,n_r),m)
+            us2(n_r) =us2(n_r)*r(n_r)*height(n_r)
+            up2(n_r) =up2(n_r)*r(n_r)*height(n_r)
+            enst(n_r)=enst(n_r)*r(n_r)*height(n_r)
          end do
-         ekin_m(n_m)     =pi*rInt_R(ekin, r, rscheme)
+         us2_m(n_m)      =pi*rInt_R(us2, r, rscheme)
+         up2_m(n_m)      =pi*rInt_R(up2, r, rscheme)
          enstrophy_m(n_m)=pi*rInt_R(enst, r, rscheme)
-         power_m(n_m)    =two*pi*rInt_R(buo_power, r, rscheme)
       end do
 
       do n_p=0,n_procs-1
@@ -445,29 +584,93 @@ contains
       do n_p=1,n_procs-1
          displs(n_p)=displs(n_p-1)+recvcounts(n_p-1)
       end do
-      call MPI_GatherV(ekin_m, nm_per_rank, MPI_DEF_REAL,  &
-           &           ekin_m_global, recvcounts, displs,  &
+      call MPI_GatherV(us2_m, nm_per_rank, MPI_DEF_REAL,        &
+           &           us2_m_global, recvcounts, displs,        &
+           &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+      call MPI_GatherV(up2_m, nm_per_rank, MPI_DEF_REAL,        &
+           &           up2_m_global, recvcounts, displs,        &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
       call MPI_GatherV(enstrophy_m, nm_per_rank, MPI_DEF_REAL,  &
            &           enstrophy_m_global, recvcounts, displs,  &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(power_m, nm_per_rank, MPI_DEF_REAL,  &
-           &           power_m_global, recvcounts, displs,  &
-           &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+
+   end subroutine calculate_spectra
+!------------------------------------------------------------------------------
+   subroutine write_spectra(us2_m, up2_m, enstrophy_m)
+
+      !-- Input variables
+      real(cp), intent(in) :: us2_m(n_m_max)
+      real(cp), intent(in) :: up2_m(n_m_max)
+      real(cp), intent(in) :: enstrophy_m(n_m_max)
+
+      !-- Local variables
+      character(len=144) :: spec_name
+      integer :: file_handle, n_m, m
 
       if ( rank == 0 ) then
+         write(spec_name, '(A,I0,A,A)') 'spec_',spec_counter,'.',tag
+
          open(newunit=file_handle, file=spec_name, position='append')
          do n_m=1,n_m_max
             m = idx2m(n_m)
-            write(file_handle, '(I4, 3es16.8)') m,              &
-            &              round_off(ekin_m_global(n_m)),       &
-            &              round_off(enstrophy_m_global(n_m)),  &
-            &              round_off(power_m_global(n_m))
+            write(file_handle, '(I4, 3es16.8)') m,                       &
+            &              round_off(us2_m(n_m)), round_off(up2_m(n_m)), &
+            &              round_off(enstrophy_m(n_m))
          end do
          close(file_handle)
+
+         spec_counter = spec_counter+1
       end if
 
    end subroutine write_spectra
+!------------------------------------------------------------------------------
+   subroutine get_spec_averages(timeAvg_spec, l_stop_time, us2_m, up2_m, enstrophy_m)
+
+      !-- Input variables
+      real(cp), intent(in) :: timeAvg_spec
+      logical,  intent(in) :: l_stop_time
+      real(cp), intent(in) :: us2_m(n_m_max)
+      real(cp), intent(in) :: up2_m(n_m_max)
+      real(cp), intent(in) :: enstrophy_m(n_m_max)
+
+      !-- Local variables
+      real(cp) :: dtAvg
+      integer :: n_m, file_handle, m
+
+
+      if ( l_rank_has_m0 ) then
+
+         dtAvg = timeAvg_spec-timeLast_spec
+
+         do n_m=1,n_m_max
+            call getMSD2(us2M_mean(n_m), us2M_SD(n_m), us2_m(n_m), &
+                 &       n_calls, dtAvg, timeAvg_spec)
+            call getMSD2(up2M_mean(n_m), up2M_SD(n_m), up2_m(n_m), &
+                 &       n_calls, dtAvg, timeAvg_spec)
+            call getMSD2(enstrophyM_mean(n_m), enstrophyM_SD(n_m), &
+                 &       enstrophy_m(n_m), n_calls, dtAvg, timeAvg_spec)
+         end do
+         timeLast_spec = timeAvg_spec
+
+         if ( l_stop_time ) then
+            open(newunit=file_handle, file='spec_avg.'//tag)
+            do n_m=1,n_m_max
+               m = idx2m(n_m)
+               us2M_SD(n_m)      =sqrt(us2M_SD(n_m)/timeAvg_spec)
+               up2M_SD(n_m)      =sqrt(up2M_SD(n_m)/timeAvg_spec)
+               enstrophyM_SD(n_m)=sqrt(enstrophyM_SD(n_m)/timeAvg_spec)
+               write(file_handle, '(I4, 6es16.8)') m,                    &
+               &     round_off(us2M_mean(n_m)), round_off(us2M_SD(n_m)), &
+               &     round_off(up2M_mean(n_m)), round_off(up2M_SD(n_m)), &
+               &     round_off(enstrophyM_mean(n_m)),                    &
+               &     round_off(enstrophyM_SD(n_m))
+            end do
+            close(file_handle)
+         end if
+
+      end if
+
+   end subroutine get_spec_averages
 !------------------------------------------------------------------------------
    subroutine terminate_vp_bal(up_Mloc, vphi_bal, tscheme)
 
