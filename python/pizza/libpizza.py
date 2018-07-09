@@ -17,6 +17,40 @@ def costf(f):
     fhat = fac*dct(f, type=1, axis=-1)
     return fhat
 
+def avgField(time, field, tstart=None, std=False):
+    """
+    This subroutine computes the time-average (and the std) of a time series
+
+    >>> ts = PizzaTs(field='e_kin', iplot=False, all=True)
+    >>> us2vg = avgField(ts.time, ts.us2, 0.35)
+    >>> print(us2avg)
+
+    :param time: time
+    :type time: numpy.ndarray
+    :param field: the time series of a given field
+    :type field: numpy.ndarray
+    :param tstart: the starting time of the averaging
+    :type tstart: float
+    :param std: when set to True, the standard deviation is also calculated
+    :type std: bool
+    :returns: the time-averaged quantity
+    :rtype: float
+    """
+    if tstart is not None:
+        mask = np.where(abs(time-tstart) == min(abs(time-tstart)), 1, 0)
+        ind = np.nonzero(mask)[0][0]
+    else: # the whole input array is taken!
+        ind = 0
+    fac = 1./(time[-1]-time[ind])
+    avgField = fac*np.trapz(field[ind:], time[ind:])
+
+    if std:
+        stdField = np.sqrt(fac*np.trapz((field[ind:]-avgField)**2, time[ind:]))
+        return avgField, stdField
+    else:
+        return avgField
+
+
 def intcheb(f, z1, z2):
     """
     This routine computes an integration of a function along radius
