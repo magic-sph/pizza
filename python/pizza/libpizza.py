@@ -50,6 +50,33 @@ def avgField(time, field, tstart=None, std=False):
     else:
         return avgField
 
+def get_dr(f):
+    """
+    This routine calculates the radial derivative on a input array.
+
+    :param f: the input array
+    :type f: numpy.ndarray
+    :returns: the radial derivative of f
+    :rtype: numpy.ndarray
+    """
+    Nr =f.shape[-1]
+    fhat = costf(f)
+
+    #eps = np.finfo(1.0e0).eps
+    #valmin = 500. * eps*abs(fhat).max()
+
+    df = np.zeros_like(f)
+    df[..., -1] = 0
+    df[..., -2] = (Nr-1)*fhat[...,-1]
+
+    for i in range(Nr-3, -1, -1):
+        df[..., i] = df[..., i+2]+2.*(i+1)*fhat[...,i+1]
+
+    df[..., :] = 2.*df[..., :]
+
+    df = costf(df)
+
+    return df
 
 def intcheb(f, z1, z2):
     """
