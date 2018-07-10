@@ -37,8 +37,9 @@ module outputs
    real(cp) :: timeLast_rad, timeAvg_rad
    real(cp) :: timeLast_spec, timeAvg_spec
    integer, public :: n_log_file
-   integer :: n_rey_file, n_heat_file, n_kin_file, n_power_file, n_lscale_file
-   integer :: n_vphi_bal_file
+   integer :: n_rey_file_2D, n_heat_file, n_kin_file_2D, n_power_file_2D
+   integer :: n_lscale_file
+   integer :: n_vphi_bal_file, n_rey_file_3D, n_power_file_3D, n_kin_file_3D
    character(len=144), public :: log_file
 
    real(cp), allocatable :: uphiR_mean(:), uphiR_SD(:)
@@ -66,7 +67,7 @@ contains
    subroutine initialize_outputs
 
       logical :: log_exists
-      character(len=144) :: kin_file, heat_file, power_file, rey_file, lscale_file
+      character(len=144) :: file_name
 
       if ( rank == 0 ) then
          log_file = 'log.'//tag
@@ -75,26 +76,40 @@ contains
             call abortRun('! log file already exists, please change tag')
          end if
          open(newunit=n_log_file, file=log_file, status='new')
-         kin_file = 'e_kin.'//tag
-         open(newunit=n_kin_file, file=kin_file, status='new')
-         power_file = 'power.'//tag
-         open(newunit=n_power_file, file=power_file, status='new')
+         file_name = 'e_kin.'//tag
+         open(newunit=n_kin_file_2D, file=file_name, status='new')
+         file_name = 'power.'//tag
+         open(newunit=n_power_file_2D, file=file_name, status='new')
          if ( index(time_scale, 'ROT') /= 0 ) then
-            rey_file = 'rossby.'//tag
+            file_name = 'rossby.'//tag
          else
-            rey_file = 'reynolds.'//tag
+            file_name = 'reynolds.'//tag
          end if
-         open(newunit=n_rey_file,file=rey_file, status='new')
-         lscale_file = 'length_scales.'//tag
-         open(newunit=n_lscale_file, file=lscale_file, status='new')
+         open(newunit=n_rey_file_2D,file=file_name, status='new')
+         file_name = 'length_scales.'//tag
+         open(newunit=n_lscale_file, file=file_name, status='new')
+         file_name = 'heat.'//tag
+         open(newunit=n_heat_file, file=file_name, status='new')
+
+         if ( .not. l_non_rot ) then
+            file_name = 'e_kin_3D.' // tag
+            open(newunit=n_kin_file_3D, file=file_name, status='new')
+            file_name = 'power_3D.' // tag
+            open(newunit=n_power_file_3D, file=file_name, status='new')
+            if ( index(time_scale, 'ROT') /= 0 ) then
+               file_name = 'rossby_3D.'//tag
+            else
+               file_name = 'reynolds_3D.'//tag
+            end if
+            open(newunit=n_rey_file_3D,file=file_name, status='new')
+         end if
+
       end if 
 
       timeAvg_rad  = 0.0_cp
       timeAvg_spec = 0.0_cp
 
       if ( l_rank_has_m0 ) then
-         heat_file = 'heat.'//tag
-         open(newunit=n_heat_file, file=heat_file, status='new')
 
          allocate( uphiR_mean(n_r_max), uphiR_SD(n_r_max) )
          allocate( tempR_mean(n_r_max), tempR_SD(n_r_max) )
@@ -159,14 +174,19 @@ contains
          deallocate( uphiR_mean, uphiR_SD, tempR_mean, tempR_SD )
          deallocate( us2R_mean, up2R_mean, enstrophyR_mean )
          deallocate( us2R_SD, up2R_SD, enstrophyR_SD )
-         close(n_heat_file)
       end if
 
       if ( rank == 0 ) then
+         if ( .not. l_non_rot ) then
+            close(n_rey_file_3D)
+            close(n_power_file_3D)
+            close(n_kin_file_3D)
+         end if
+         close(n_heat_file)
          close(n_lscale_file)
-         close(n_rey_file)
-         close(n_power_file)
-         close(n_kin_file)
+         close(n_rey_file_2D)
+         close(n_power_file_2D)
+         close(n_kin_file_2D)
          close(n_log_file)
       end if
 
@@ -343,20 +363,14 @@ contains
       integer :: n_r, n_m, m, n_m0
       integer :: lus_peak, lekin_peak, lvort_peak
       real(cp) :: dlus_peak, dlekin_peak, dlvort_peak
-      real(cp) :: dl_diss, dlekin_int
-      real(cp) :: tTop, tBot, visc, pow, pum, E, Em
-      real(cp) :: us2, up2, up2_axi
+      real(cp) :: dl_diss, dlekin_int, pow_3D
+      real(cp) :: tTop, tBot, visc_2D, pow_2D, pum, E, Em, visc_3D
+      real(cp) :: us2_2D, up2_2D, up2_axi_2D, us2_3D, up2_3D, up2_axi_3D, uz2_3D
       real(cp) :: up2_axi_r(n_r_max), nu_vol_r(n_r_max), nu_cond_r(n_r_max)
-      real(cp) :: buo_power(n_r_max), pump(n_r_max)
-      real(cp) :: NuTop, NuBot, beta_t, vol_fac, nu_vol
-      real(cp) :: rey, rey_fluct, rey_zon
-
-      !-- This is to determine the volume used to compute the Reynolds numbers
-      if ( l_non_rot ) then
-         vol_fac = surf
-      else ! Rotating
-         vol_fac = vol_otc
-      end if
+      real(cp) :: buo_power(n_r_max), pump(n_r_max), tmp(n_r_max)
+      real(cp) :: NuTop, NuBot, beta_t, Nu_vol
+      real(cp) :: rey_2D, rey_fluct_2D, rey_zon_2D
+      real(cp) :: rey_3D, rey_fluct_3D, rey_zon_3D
 
       do n_r=1,n_r_max
          us2_r(n_r)    =0.0_cp
@@ -384,12 +398,6 @@ contains
             end if
          end do
          nu_vol_r(n_r) =nu_vol_r(n_r)*r(n_r)*height(n_r)
-         us2_r(n_r)    =us2_r(n_r)*r(n_r)*height(n_r)
-         up2_r(n_r)    =up2_r(n_r)*r(n_r)*height(n_r)
-         up2_axi_r(n_r)=up2_axi_r(n_r)*r(n_r)*height(n_r)
-         enstrophy(n_r)=ViscFac*enstrophy(n_r)*r(n_r)*height(n_r)
-         buo_power(n_r)=BuoFac*buo_power(n_r)*rgrav(n_r)*r(n_r)*height(n_r)
-         pump(n_r)     =pump(n_r)*CorFac*ekpump(n_r)*height(n_r)*r(n_r)
       end do
 
       !-- MPI reductions to get the s-profiles on rank==0
@@ -402,47 +410,124 @@ contains
       call reduce_radial_on_rank(pump, 0)
 
       if ( rank == 0 ) then
-         !-- Kinetic energy
-         us2 = rInt_R(us2_r, r, rscheme)
-         up2 = rInt_R(up2_r, r, rscheme)
 
-         up2_axi = rInt_R(up2_axi_r, r, rscheme)
-         us2 = round_off(pi*us2)
-         up2 = round_off(pi*up2)
-         up2_axi = round_off(pi*up2_axi)
+         !-----
+         !-- Kinetic energy (2D and 3D)
+         !-----
+         tmp(:) = us2_r(:)*r(:)
+         us2_2D = rInt_R(tmp, r, rscheme)
+         us2_2D = round_off(pi*us2_2D)
 
+         tmp(:) = up2_r(:)*r(:)
+         up2_2D = rInt_R(tmp, r, rscheme)
+         up2_2D = round_off(pi*up2_2D)
+
+         tmp(:) = up2_axi_r(:)*r(:)
+         up2_axi_2D = rInt_R(tmp, r, rscheme)
+         up2_axi_2D = round_off(pi*up2_axi_2D)
+
+         if ( .not. l_non_rot ) then
+            tmp(:) = us2_r(:)*r(:)*height(:)
+            us2_3D = rInt_R(tmp, r, rscheme)
+            us2_3D = round_off(pi*us2_3D)
+
+            tmp(:) = up2_r(:)*r(:)*height(:)
+            up2_3D = rInt_R(tmp, r, rscheme)
+            up2_3D = round_off(pi*up2_3D)
+
+            tmp(:) = 4.0_cp/3.0_cp*us2_r(:)*r(:)*r(:)*r(:)*oheight(:)
+            uz2_3D = rInt_R(tmp, r, rscheme)
+            uz2_3D = round_off(pi*uz2_3D)
+
+            tmp(:) = up2_axi_r(:)*r(:)*height(:)
+            up2_axi_3D = rInt_R(tmp, r, rscheme)
+            up2_axi_3D = round_off(pi*up2_axi_3D)
+         end if
+
+         !-----
          !-- Reynolds numbers
-         rey       = sqrt(two*(us2+up2)/vol_fac)
-         rey_zon   = sqrt(two*(up2_axi)/vol_fac)
-         rey_fluct = sqrt(two*(us2+up2-up2_axi)/vol_fac)
+         !-----
+         rey_2D       = sqrt(two*(us2_2D+up2_2D)/surf)
+         rey_zon_2D   = sqrt(two*up2_axi_2D/surf)
+         rey_fluct_2D = sqrt(two*(us2_2D+up2_2D-up2_axi_2D)/surf)
+         
+         if ( .not. l_non_rot ) then
+            rey_3D       = sqrt(two*(us2_3D+up2_3D+uz2_3D)/vol_otc)
+            rey_zon_3D   = sqrt(two*up2_axi_3D/vol_otc)
+            rey_fluct_3D = sqrt(two*(us2_3D+up2_3D+uz2_3D-up2_axi_3D)/vol_otc)
+         end if
 
-         !-- Total viscous dissipation
-         visc = rInt_R(enstrophy, r, rscheme)
-         visc = round_off(two*pi*visc)
-
+         !-----
+         !-- Power budget
+         !-----
+         tmp(:) = enstrophy(:)*r(:)
+         visc_2D = rInt_R(tmp, r, rscheme)
+         visc_2D = round_off(two*pi*visc_2D)
          !-- In case of stress-free we need to include the surface contributions
          if ( kbotv == 1 ) then
-            visc = visc-four*or1(n_r_max)*up2_r(n_r_max)
+            visc_2D = visc_2D-four*or1(n_r_max)*up2_r(n_r_max)
          end if
          if ( ktopv == 1 ) then
-            visc = visc-four*or1(1)*up2_r(1)
+            visc_2D = visc_2D-four*or1(1)*up2_r(1)
          end if
 
-         !-- Total buoyancy power
-         pow  = rInt_R(buo_power, r, rscheme)
-         pow  = round_off(two*pi*pow)
+         tmp(:)=BuoFac*buo_power(:)*rgrav(:)*r(:)
+         pow_2D = rInt_R(tmp, r, rscheme)
+         pow_2D = round_off(two*pi*pow_2D)
 
-         pum  = rInt_R(pump, r, rscheme)
-         pum  = round_off(two*pi*pum)
+         if ( .not. l_non_rot ) then
+            tmp(:) = enstrophy(:)*r(:)*height(:)
+            visc_3D = rInt_R(tmp, r, rscheme)
+            visc_3D = round_off(two*pi*visc_3D)
+            !-- In case of stress-free we need to include the surface contributions
+            if ( kbotv == 1 ) then
+               visc_3D = visc_3D-four*or1(n_r_max)*up2_r(n_r_max)
+            end if
+            if ( ktopv == 1 ) then
+               visc_3D = visc_3D-four*or1(1)*up2_r(1)
+            end if
 
-         write(n_kin_file, '(1P, es20.12, 3es16.8)') time, us2, up2, &
-         &                                           up2_axi
-         write(n_power_file, '(1P, es20.12, 3es16.8)') time, pow, visc, pum
+            tmp(:)=BuoFac*buo_power(:)*rgrav(:)*r(:)*height(:)
+            pow_3D = rInt_R(tmp, r, rscheme)
+            pow_3D = round_off(two*pi*pow_3D)
 
-         write(n_rey_file, '(1P, es20.12, 3es16.8)') time, rey, rey_zon, &
-         &                                           rey_fluct
+            !-- \int\int (  g*T*(us*s/r+uz*z/r)*s dz ds )
+            !-- =\int\int (  g*T*(us*s/r+beta*us*z**2/r)*s dz ds )
+            !-- with r=sqrt(s**2+z**2)
+            ! tmp(:)=-BuoFac*buo_power(:)*rgrav(:)*r(:)*beta(:)*( &
+            ! &      log(or1(:)*(0.5_cp*height(:)+r_cmb))*(       &
+            ! &      two*r_cmb*r_cmb-r(:)*r(:))-                  &
+            ! &      0.5_cp*height(:)*r_cmb )
+            ! pow_3D_b = rInt_R(tmp, r, rscheme)
+            ! pow_3D_b = round_off(two*pi*pow_3D_b)
 
+            tmp(:)=CorFac*pump(:)*ekpump(:)*height(:)*r(:)
+            pum  = rInt_R(tmp, r, rscheme)
+            pum  = round_off(two*pi*pum)
+         end if
+
+
+         write(n_kin_file_2D, '(1P, es20.12, 3es16.8)') time, us2_2D, up2_2D, &
+         &                                              up2_axi_2D
+         write(n_power_file_2D, '(1P, es20.12, 2es16.8)') time, pow_2D, visc_2D
+
+         write(n_rey_file_2D, '(1P, es20.12, 3es16.8)') time, rey_2D, rey_zon_2D, &
+         &                                              rey_fluct_2D
+
+         if ( .not. l_non_rot ) then
+            write(n_kin_file_3D, '(1P, es20.12, 4es16.8)') time, us2_3D, up2_3D, &
+            &                                              uz2_3D, up2_axi_3D
+            write(n_power_file_3D, '(1P, es20.12, 3es16.8)') time, pow_3D, &
+            &                                                visc_3D, pum
+
+            write(n_rey_file_3D, '(1P, es20.12, 3es16.8)') time, rey_3D, &
+            &                                              rey_zon_3D,   &
+            &                                              rey_fluct_3D
+         end if
+
+         !-------
          !-- Lengthscales
+         !-------
          !-- Peak of the spectra
          lus_peak   = maxloc(us2_m(2:n_m_max), dim=1)*minc ! Excluding m=0
          if ( lus_peak > 0 ) then
@@ -475,16 +560,31 @@ contains
          else
             dlekin_int = 0.0_cp
          end if
-         !-- Dissipation lengthscale = \sqrt(2*Ekin/\omega^2)
-         if ( abs(visc) > 10.0_cp*epsilon(one) ) then
-            dl_diss = sqrt(two*(us2+up2)*viscfac/visc)
+         if ( l_non_rot ) then
+            !-- Dissipation lengthscale = \sqrt(2*Ekin/\omega^2)
+            if ( abs(visc_2D) > 10.0_cp*epsilon(one) ) then
+               dl_diss = sqrt(two*(us2_2D+up2_2D)*viscfac/visc_2D)
+            else
+               dl_diss = 0.0_cp
+            end if
          else
-            dl_diss = 0.0_cp
+            !-- Dissipation lengthscale = \sqrt(2*Ekin/\omega^2)
+            if ( abs(visc_3D) > 10.0_cp*epsilon(one) ) then
+               dl_diss = sqrt(two*(us2_3D+up2_3D)*viscfac/visc_3D)
+            else
+               dl_diss = 0.0_cp
+            end if
+
          end if
          write(n_lscale_file, '(1P, es20.12, 5es16.8)') time, dlus_peak,          &
          &                                              dlekin_peak, dlvort_peak, &
          &                                              dlekin_int, dl_diss
-         
+
+         ! At this stage multiply us2_r, up2_r and enstrophy by r(:) and height(:)
+         us2_r(:)    =us2_r(:)*r(:)*height(:)
+         up2_r(:)    =up2_r(:)*r(:)*height(:)
+         enstrophy(:)=enstrophy(:)*r(:)*height(:)
+
       end if
 
       if ( l_rank_has_m0 ) then
@@ -501,15 +601,15 @@ contains
          NuTop = round_off(NuTop)
          NuBot = round_off(NuBot)
 
-         nu_vol = rInt_R(nu_vol_r, r, rscheme)
+         Nu_vol = rInt_R(nu_vol_r, r, rscheme)
          nu_cond_r(:)=dtcond(:)*dtcond(:)*height(:)*r(:)
-         nu_vol = one+nu_vol/rInt_R(nu_cond_r, r, rscheme)
+         Nu_vol = one+Nu_vol/rInt_R(nu_cond_r, r, rscheme)
 
          beta_t = dtcond(int(n_r_max/2))+real(dtemp_Mloc(n_m0,int(n_r_max/2)))
          beta_t = round_off(beta_t)
 
          write(n_heat_file, '(1P, ES20.12, 6ES16.8)') time, NuTop, NuBot, &
-         &                                            nu_vol, tTop, tBot, beta_t
+         &                                            Nu_vol, tTop, tBot, beta_t
       end if
 
    end subroutine get_time_series

@@ -59,7 +59,7 @@ class RotInteg(unittest.TestCase):
         cmd = '%s %s/input_final.nml' % (self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = 'cat e_kin.start e_kin.continue e_kin.final > e_kin.test'
+        cmd = 'cat e_kin_3D.start e_kin_3D.continue e_kin_3D.final > e_kin_3D.test'
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'))
 
 
@@ -100,5 +100,5 @@ class RotInteg(unittest.TestCase):
     def outputFileDiff(self):
         # Kinetic energy
         datRef = readData('%s/reference.out' % self.dir)
-        datTmp = readData('%s/e_kin.test' % self.dir)
+        datTmp = readData('%s/e_kin_3D.test' % self.dir)
         np.testing.assert_allclose(datRef, datTmp, rtol=self.precision, atol=1e-20)

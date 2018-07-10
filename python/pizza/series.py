@@ -121,14 +121,22 @@ class PizzaTs(PizzaSetup):
             self.up2 = data[:, 2]
             self.up2_axi = data[:, 3]
             self.ekin = self.us2+self.up2
+        if self.field == 'e_kin_3D':
+            self.time = data[:, 0]
+            self.us2 = data[:, 1]
+            self.up2 = data[:, 2]
+            self.uz2 = data[:, 3]
+            self.up2_axi = data[:, 4]
+            self.ekin = self.us2+self.up2+self.uz2
         elif self.field == 'heat':
             self.time = data[:, 0]
             self.topnuss = data[:, 1]
             self.botnuss = data[:, 2]
-            self.toptemp = data[:, 3]
-            self.bottemp = data[:, 4]
-            self.beta = data[:, 5]
-        elif self.field == 'reynolds':
+            self.volnuss = data[:, 3]
+            self.toptemp = data[:, 4]
+            self.bottemp = data[:, 5]
+            self.beta = data[:, 6]
+        elif self.field == 'reynolds' or self.field == 'reynolds_3D':
             self.time = data[:, 0]
             self.rey = data[:, 1]
             self.rey_zon = data[:, 2]
@@ -137,6 +145,11 @@ class PizzaTs(PizzaSetup):
             self.time = data[:, 0]
             self.buoPower = data[:, 1]
             self.viscDiss = data[:, 2]
+        elif self.field == 'power_3D':
+            self.time = data[:, 0]
+            self.buoPower = data[:, 1]
+            self.viscDiss = data[:, 2]
+            self.pump = data[:, 3]
         elif self.field == 'length_scales':
             self.time = data[:, 0]
             self.lus_peak = data[:, 1]
@@ -154,16 +167,26 @@ class PizzaTs(PizzaSetup):
         if self.field == 'e_kin':
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.plot(self.time, self.us2, ls='-', c='#30a2da',
-                    label='us**2')
-            ax.plot(self.time, self.up2, ls='-', c='#fc4f30',
-                    label='up**2')
-            ax.plot(self.time, self.up2_axi, ls='--', c='#fc4f30',
+            ax.plot(self.time, self.us2, ls='-', label='us**2', c='#1f77b4')
+            ax.plot(self.time, self.up2, ls='-', label='up**2', c='#d62728')
+            ax.plot(self.time, self.up2_axi, ls='--', c='#d62728',
                     label='up_axi**2')
-            ax.plot(self.time, self.ekin, ls='-', c='#31363B')
+            ax.plot(self.time, self.ekin, ls='-', c='k')
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
-            ax.set_ylabel('Ekin')
+            ax.set_ylabel('Ekin (2D)')
+        elif self.field == 'e_kin_3D':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(self.time, self.us2, ls='-', c='#1f77b4', label='us**2')
+            ax.plot(self.time, self.up2, ls='-', c='#d62728', label='up**2')
+            ax.plot(self.time, self.uz2, ls='-', c='#aec7e8', label='uz**2')
+            ax.plot(self.time, self.up2_axi, ls='--', c='#d62728',
+                    label='up_axi**2')
+            ax.plot(self.time, self.ekin, ls='-', c='k')
+            ax.legend(loc='best', frameon=False)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Ekin (3D)')
         elif self.field == 'reynolds':
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -172,12 +195,22 @@ class PizzaTs(PizzaSetup):
             ax.plot(self.time, self.rey_zon, label='Re zon')
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
-            ax.set_ylabel('Reynolds')
+            ax.set_ylabel('Reynolds (2D)')
+        elif self.field == 'reynolds_3D':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(self.time, self.rey, label='Re_3D')
+            ax.plot(self.time, self.rey_fluct, label='Re_3D fluct')
+            ax.plot(self.time, self.rey_zon, label='Re_3D zon')
+            ax.legend(loc='best', frameon=False)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Reynolds (3D)')
         elif self.field == 'heat':
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.plot(self.time, self.topnuss, label='Top Nusselt')
             ax.plot(self.time, self.botnuss, label='Bottom Nusselt')
+            ax.plot(self.time, self.volnuss, label='Volume Nusselt')
             ax.legend(loc='lower right', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Nusselt number')
@@ -188,7 +221,16 @@ class PizzaTs(PizzaSetup):
             ax.semilogy(self.time, self.viscDiss, label='Viscous diss.')
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
-            ax.set_ylabel('Power')
+            ax.set_ylabel('Power (2D)')
+        elif self.field == 'power_3D':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.semilogy(self.time, self.buoPower, label='Thermal buoyancy')
+            ax.semilogy(self.time, self.viscDiss, label='Viscous diss.')
+            ax.semilogy(self.time, self.pump, label='Ekman friction of zonal flow')
+            ax.legend(loc='best', frameon=False)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Power (3D)')
         elif self.field == 'length_scales':
             fig = plt.figure()
             ax = fig.add_subplot(111)

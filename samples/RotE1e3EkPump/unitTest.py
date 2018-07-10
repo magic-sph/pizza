@@ -85,5 +85,5 @@ class RotE1e3EkPump(unittest.TestCase):
     def outputFileDiff(self):
         # Kinetic energy
         datRef = readData('%s/reference.out' % self.dir)
-        datTmp = readData('%s/e_kin.test' % self.dir)
+        datTmp = readData('%s/e_kin_3D.test' % self.dir)
         np.testing.assert_allclose(datRef, datTmp, rtol=self.precision, atol=1e-20)

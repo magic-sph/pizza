@@ -96,6 +96,6 @@ class TestRestart(unittest.TestCase):
 
     def outputFileDiff(self):
         datRef = readStack('%s/reference.out' % self.dir)
-        datTmp = readStack('%s/e_kin.test' % self.dir)
+        datTmp = readStack('%s/e_kin_3D.test' % self.dir)
         np.testing.assert_allclose(datRef, datTmp, rtol=self.precision,
                                    atol=1e-20)

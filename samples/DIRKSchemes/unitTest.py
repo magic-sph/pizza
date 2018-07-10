@@ -79,7 +79,7 @@ class TestDIRKSchemes(unittest.TestCase):
         cmd = '%s %s/input_final.nml' % (self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = 'cat e_kin.start e_kin.first_continue e_kin.second_continue e_kin.third_continue e_kin.fourth_continue e_kin.final > e_kin.test'
+        cmd = 'cat e_kin_3D.start e_kin_3D.first_continue e_kin_3D.second_continue e_kin_3D.third_continue e_kin_3D.fourth_continue e_kin_3D.final > e_kin_3D.test'
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'))
 
     def tearDown(self):
@@ -128,6 +128,6 @@ class TestDIRKSchemes(unittest.TestCase):
 
     def outputFileDiff(self):
         datRef = readStack('%s/reference.out' % self.dir)
-        datTmp = readStack('%s/e_kin.test' % self.dir)
+        datTmp = readStack('%s/e_kin_3D.test' % self.dir)
         np.testing.assert_allclose(datRef, datTmp, rtol=self.precision,
                                    atol=1e-20)
