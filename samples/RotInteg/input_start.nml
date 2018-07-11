@@ -1,5 +1,5 @@
 &grid
- n_r_max    =48,
+ n_r_max    =49,
  n_cheb_max =32,
  m_max      =32,
  minc       =1,
@@ -18,7 +18,7 @@ l_rerror_fix=.true.,
  courfac    =4.0d0,
  time_scale ="rot",
 /
- &phys_param
+&phys_param
  ra         =5.0E+04,
  pr         =1.0E+00,
  ek         =1.0E-03,
@@ -31,14 +31,14 @@ l_rerror_fix=.true.,
  ktopv      =2,
  kbotv      =2,
  l_ek_pump  =.false.,
- /
- &start_field
+/
+&start_field
 l_start_file=.false.,
-start_file  ="checkpoint_end.testB",
-init_t      =-1,
-amp_t       =1.0e-2,
-init_u      =0,
-amp_u       =3.0e-4,
+ start_file ="checkpoint_end.testB",
+ init_t     =-1,
+ amp_t      =1.0e-2,
+ init_u     =0,
+ amp_u      =3.0e-4,
 /
 &output_control
  n_log_step =20,
