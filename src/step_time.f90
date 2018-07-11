@@ -230,10 +230,15 @@ contains
                !--------------------
                !-- Finish assembling the explicit terms
                !--------------------
+               runStart = MPI_Wtime()
                call finish_explicit_assembly(temp_Mloc, psi_Mloc, us_Mloc,       &
                     &                        up_Mloc, om_Mloc, dVsT_Mloc,        &
                     &                        dVsOm_Mloc, buo_Mloc, dTdt, dpsidt, &
                     &                        tscheme, vp_bal, l_vphi_bal_calc )
+               runStop = MPI_Wtime()
+               if (runStop>runStart) then
+                  run_time_m_loop=run_time_m_loop+(runStop-runStart)
+               end if
             end if
 
             if ( tscheme%istage == 1 ) then
