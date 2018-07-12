@@ -14,14 +14,14 @@ module outputs
    use mem_alloc, only: bytes_allocated
    use namelists, only: tag, BuoFac, ra, pr, l_non_rot, l_vphi_balance, ek, &
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
-       &                ViscFac, CorFac, time_scale, r_cmb
+       &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac
    use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
        &                       beta, ekpump, or1, oheight, or2
    use blocking, only: nMstart, nMstop, nRstart, nRstop, l_rank_has_m0, &
        &               nm_per_rank, m_balance
-   use integration, only: rInt_R
+   use integration, only: rInt_R, simps
    use useful, only: round_off, cc2real, cc22real, getMSD2, abortRun
    use constants, only: pi, two, four, surf, vol_otc, one
    use checkpoints, only: write_checkpoint_mloc
@@ -48,6 +48,7 @@ module outputs
    real(cp), allocatable :: tempR_mean(:), tempR_SD(:)
    real(cp), allocatable :: us2M_mean(:), up2M_mean(:), enstrophyM_mean(:)
    real(cp), allocatable :: us2M_SD(:), up2M_SD(:), enstrophyM_SD(:)
+   real(cp), allocatable :: fluxR_mean(:), fluxR_SD(:)
 
    type, public :: vp_bal_type
       real(cp), allocatable :: rey_stress(:)
@@ -113,6 +114,7 @@ contains
 
          allocate( uphiR_mean(n_r_max), uphiR_SD(n_r_max) )
          allocate( tempR_mean(n_r_max), tempR_SD(n_r_max) )
+         allocate( fluxR_mean(n_r_max), fluxR_SD(n_r_max) )
          allocate( us2R_mean(n_r_max), us2R_SD(n_r_max) )
          allocate( up2R_mean(n_r_max), up2R_SD(n_r_max) )
          allocate( enstrophyR_mean(n_r_max), enstrophyR_SD(n_r_max) )
@@ -122,6 +124,8 @@ contains
          uphiR_SD(:)        = 0.0_cp
          tempR_mean(:)      = 0.0_cp
          tempR_SD(:)        = 0.0_cp
+         fluxR_mean(:)      = 0.0_cp
+         fluxR_SD(:)        = 0.0_cp
          us2R_mean(:)       = 0.0_cp
          us2R_SD(:)         = 0.0_cp
          up2R_mean(:)       = 0.0_cp
@@ -171,6 +175,7 @@ contains
          end if
          deallocate( us2M_mean, up2M_mean, enstrophyM_mean )
          deallocate( us2M_SD, up2M_SD, enstrophyM_SD )
+         deallocate( fluxR_mean, fluxR_SD )
          deallocate( uphiR_mean, uphiR_SD, tempR_mean, tempR_SD )
          deallocate( us2R_mean, up2R_mean, enstrophyR_mean )
          deallocate( us2R_SD, up2R_SD, enstrophyR_SD )
@@ -221,6 +226,7 @@ contains
       character(len=144) :: frame_name
       real(cp) :: us2_m(n_m_max), up2_m(n_m_max), enstrophy_m(n_m_max)
       real(cp) :: us2_r(n_r_max), up2_r(n_r_max), enstrophy_r(n_r_max)
+      real(cp) :: flux_r(n_r_max)
 
       timeAvg_rad  = timeAvg_rad  + tscheme%dt(1)
       timeAvg_spec = timeAvg_spec + tscheme%dt(1)
@@ -260,10 +266,10 @@ contains
       if ( l_log ) then
          call get_time_series(time, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
               &               dtemp_Mloc, us2_m, up2_m, enstrophy_m,      &
-              &               us2_r, up2_r, enstrophy_r)
+              &               us2_r, up2_r, enstrophy_r, flux_r)
 
          call get_radial_averages(timeAvg_rad, l_stop_time, up_Mloc, temp_Mloc, &
-              &                   us2_r, up2_r, enstrophy_r)
+              &                   us2_r, up2_r, enstrophy_r, flux_r)
 
          call get_spec_averages(timeAvg_spec, l_stop_time, us2_m, up2_m, &
               &                 enstrophy_m)
@@ -279,7 +285,7 @@ contains
    end subroutine write_outputs
 !------------------------------------------------------------------------------
    subroutine get_radial_averages(timeAvg_rad, l_stop_time, up_Mloc, temp_Mloc, &
-              &                   us2_r, up2_r, enstrophy_r)
+              &                   us2_r, up2_r, enstrophy_r, flux_r)
 
       !-- Input variables
       real(cp),    intent(in) :: timeAvg_rad
@@ -289,6 +295,7 @@ contains
       real(cp),    intent(in) :: us2_r(n_r_max)
       real(cp),    intent(in) :: up2_r(n_r_max)
       real(cp),    intent(in) :: enstrophy_r(n_r_max)
+      real(cp),    intent(in) :: flux_r(n_r_max)
 
       !-- Local variables
       real(cp) :: dtAvg
@@ -306,6 +313,8 @@ contains
                  &       n_calls, dtAvg, timeAvg_rad)
             call getMSD2(tempR_mean(n_r), tempR_SD(n_r), real(temp_Mloc(idx,n_r)),&
                  &       n_calls, dtAvg, timeAvg_rad)
+            call getMSD2(fluxR_mean(n_r), fluxR_SD(n_r), flux_r(n_r), n_calls, &
+                 &       dtAvg, timeAvg_rad)
             call getMSD2(us2R_mean(n_r), us2R_SD(n_r), two*pi*us2_r(n_r), &
                  &       n_calls, dtAvg, timeAvg_rad)
             call getMSD2(up2R_mean(n_r), up2R_SD(n_r), two*pi*up2_r(n_r), &
@@ -320,17 +329,19 @@ contains
             do n_r=1,n_r_max
                uphiR_SD(n_r)     =sqrt(uphiR_SD(n_r)/timeAvg_rad)
                tempR_SD(n_r)     =sqrt(tempR_SD(n_r)/timeAvg_rad)
+               fluxR_SD(n_r)     =sqrt(fluxR_SD(n_r)/timeAvg_rad)
                us2R_SD(n_r)      =sqrt(us2R_SD(n_r)/timeAvg_rad)
                up2R_SD(n_r)      =sqrt(up2R_SD(n_r)/timeAvg_rad)
                enstrophyR_SD(n_r)=sqrt(enstrophyR_SD(n_r)/timeAvg_rad)
-               write(file_handle, '(es20.12, 10es16.8)') r(n_r),           &
+               write(file_handle, '(es20.12, 12es16.8)') r(n_r),           &
                &     round_off(us2R_mean(n_r)), round_off(us2R_SD(n_r)),   &
                &     round_off(up2R_mean(n_r)), round_off(up2R_SD(n_r)),   &
                &     round_off(enstrophyR_mean(n_r)),                      &
                &     round_off(enstrophyR_SD(n_r)),                        &
                &     round_off(uphiR_mean(n_r)), round_off(uphiR_SD(n_r)), &
                &     round_off(tempR_mean(n_r)+tcond(n_r)),                &
-               &     round_off(tempR_SD(n_r))
+               &     round_off(tempR_SD(n_r)), round_off(fluxR_mean(n_r)), &
+               &     round_off(fluxR_SD(n_r))
             end do
             close(file_handle)
          end if
@@ -341,7 +352,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine get_time_series(time, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
               &               dtemp_Mloc, us2_m, up2_m, enstrophy_m,      &
-              &               us2_r, up2_r, enstrophy)
+              &               us2_r, up2_r, enstrophy, flux_r)
 
       !-- Input variables
       real(cp),    intent(in) :: time
@@ -358,6 +369,7 @@ contains
       real(cp), intent(out) :: us2_r(n_r_max)
       real(cp), intent(out) :: up2_r(n_r_max)
       real(cp), intent(out) :: enstrophy(n_r_max)
+      real(cp), intent(out) :: flux_r(n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, m, n_m0
@@ -368,7 +380,8 @@ contains
       real(cp) :: us2_2D, up2_2D, up2_axi_2D, us2_3D, up2_3D, up2_axi_3D, uz2_3D
       real(cp) :: up2_axi_r(n_r_max), nu_vol_r(n_r_max), nu_cond_r(n_r_max)
       real(cp) :: buo_power(n_r_max), pump(n_r_max), tmp(n_r_max)
-      real(cp) :: NuTop, NuBot, beta_t, Nu_vol
+      real(cp) :: theta(n_r_max)
+      real(cp) :: NuTop, NuBot, beta_t, Nu_vol, Nu_int, fac
       real(cp) :: rey_2D, rey_fluct_2D, rey_zon_2D
       real(cp) :: rey_3D, rey_fluct_3D, rey_zon_3D
 
@@ -380,6 +393,7 @@ contains
          buo_power(n_r)=0.0_cp
          pump(n_r)     =0.0_cp
          nu_vol_r(n_r) =0.0_cp
+         flux_r(n_r)   =0.0_cp
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             us2_r(n_r)    =us2_r(n_r)+cc2real(us_Mloc(n_m,n_r),m)
@@ -392,9 +406,14 @@ contains
             &              +real(m,cp)*real(m,cp)*or2(n_r)*            &
             &                             cc2real(temp_Mloc(n_m,n_r),m)
 
+            flux_r(n_r)   =flux_r(n_r)+cc22real(us_Mloc(n_m,n_r), &
+            &              temp_Mloc(n_m,n_r), m)
+
             if ( m == 0 ) then
                up2_axi_r(n_r)=up2_axi_r(n_r)+cc2real(up_Mloc(n_m,n_r),m)
                pump(n_r)     =pump(n_r)+cc2real(up_Mloc(n_m,n_r),m)
+               flux_r(n_r)   =flux_r(n_r)-TdiffFac*real(dtemp_Mloc(n_m,n_r))-&
+               &              TdiffFac*dtcond(n_r)
             end if
          end do
          nu_vol_r(n_r) =nu_vol_r(n_r)*r(n_r)*height(n_r)
@@ -402,6 +421,7 @@ contains
 
       !-- MPI reductions to get the s-profiles on rank==0
       call reduce_radial_on_rank(nu_vol_r, 0)
+      call reduce_radial_on_rank(flux_r, 0)
       call reduce_radial_on_rank(us2_r, 0)
       call reduce_radial_on_rank(up2_r, 0)
       call reduce_radial_on_rank(up2_axi_r, 0)
@@ -588,6 +608,10 @@ contains
       end if
 
       if ( l_rank_has_m0 ) then
+         !------
+         !-- Heat transfer
+         !------
+
          !-- Top and bottom temperatures
          n_m0 = m2idx(0)
          tTop = real(temp_Mloc(n_m0,1))+tcond(1)
@@ -595,21 +619,51 @@ contains
          tTop = round_off(tTop)
          tBot = round_off(tBot)
 
+         !-- Classical top and bottom Nusselt number
          NuTop = one+real(dtemp_Mloc(n_m0,1))/dtcond(1)
          NuBot = one+real(dtemp_Mloc(n_m0,n_r_max))/dtcond(n_r_max)
          !&       (dtcond(n_r_max)-tadvz_fac*beta(n_r_max)*tcond(n_r_max))
          NuTop = round_off(NuTop)
          NuBot = round_off(NuBot)
 
+         !-- Volume-based Nusselt number
          Nu_vol = rInt_R(nu_vol_r, r, rscheme)
          nu_cond_r(:)=dtcond(:)*dtcond(:)*height(:)*r(:)
          Nu_vol = one+Nu_vol/rInt_R(nu_cond_r, r, rscheme)
+         Nu_vol = round_off(Nu_vol)
 
+         !-- Spherical shell surface-based Nusselt number
+         if ( l_non_rot ) then
+            tmp(:) = -TdiffFac*dtcond(:)*r(:)
+            fac = rInt_R(tmp, r, rscheme)
+            flux_r(:) = flux_r(:)*r(:)/fac
+            Nu_int = rInt_R(flux_r, r, rscheme)
+         else
+            !-- The first sin(theta) comes from the projection of Flux_s to Flux_r
+            !-- The second one from the surface integral on a spherical shell
+            tmp(:) = -TdiffFac*dtcond(:) * (r(:)/r_cmb)**2 ! s/ro is sin(theta)
+            theta(:) = asin(r(:)/r_cmb)
+            !-- Integration over colatitudes (only simpson can work here)
+            fac = simps(tmp, theta)
+
+            !-- Again multiplication by sin(theta)**2 for the spherical surface
+            tmp(:) = flux_r(:) * (r(:)/r_cmb)**2
+            !-- Integration over colatitudes (only simpson can work here)
+            Nu_int = simps(tmp, theta)
+            Nu_int = Nu_int/fac
+
+            !-- Finally transform the flux_r into a Nusselt(s) profile
+            flux_r(:)=flux_r(:) * (r(:)/r_cmb)/fac
+         end if
+         Nu_int = round_off(Nu_int)
+
+         !-- Mid-shell temperature gradient
          beta_t = dtcond(int(n_r_max/2))+real(dtemp_Mloc(n_m0,int(n_r_max/2)))
          beta_t = round_off(beta_t)
 
-         write(n_heat_file, '(1P, ES20.12, 6ES16.8)') time, NuTop, NuBot, &
-         &                                            Nu_vol, tTop, tBot, beta_t
+         write(n_heat_file, '(1P, ES20.12, 7ES16.8)') time, NuTop, NuBot,   &
+         &                                            Nu_vol, Nu_int, tTop, &
+         &                                            tBot, beta_t
       end if
 
    end subroutine get_time_series

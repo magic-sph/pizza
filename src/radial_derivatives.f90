@@ -370,7 +370,7 @@ contains
             call get_dcheb(f,df,nMstart,nMstop,n_r_max,n_r_max)
           
             !-- Transform back:
-            call r_scheme%costf1(f,nMstart,nMstop,n_r_max)
+            if ( l_dct_loc ) call r_scheme%costf1(f,nMstart,nMstop,n_r_max)
             call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
 
          end if
