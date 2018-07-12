@@ -92,10 +92,14 @@ class PizzaAverages:
                                                ts3.topnuss[ind:], std=True)
             self.nu_vol_avg, self.nu_vol_std = avgField(ts3.time[ind:], 
                                                ts3.volnuss[ind:], std=True)
+            self.nu_shell_avg, self.nu_shell_std = avgField(ts3.time[ind:], 
+                                               ts3.shellnuss[ind:], std=True)
+
         else:
             self.nu_bot_avg = avgField(ts3.time[ind:], ts3.botnuss[ind:])
             self.nu_top_avg = avgField(ts3.time[ind:], ts3.topnuss[ind:])
             self.nu_vol_avg = avgField(ts3.time[ind:], ts3.volnuss[ind:])
+            self.nu_shell_avg = avgField(ts3.time[ind:], ts3.shellnuss[ind:])
 
         # power3D.TAG files
         ts4 = PizzaTs(field='power_3D', all=True, iplot=False, tag=tag)
@@ -146,10 +150,11 @@ class PizzaAverages:
         if self.std:
             st_std +='%10.3e%10.3e%10.3e' % (self.rey_std, self.rey_zon_std,
                                           self.rey_fluct_std)
-        st += '%10.3e%10.3e%10.3e' % (self.nu_top_avg, self.nu_bot_avg, self.nu_vol_avg)
+        st += '%10.3e%10.3e%10.3e%10.3e' % (self.nu_top_avg, self.nu_bot_avg,\
+                                            self.nu_vol_avg, self.nu_shell_avg)
         if self.std:
-            st_std += '%10.3e%10.3e%10.3e' % (self.nu_top_std, self.nu_bot_std,
-                                           self.nu_vol_std)
+            st_std += '%10.3e%10.3e%10.3e%10.3e' % (self.nu_top_std, self.nu_bot_std,
+                                                    self.nu_vol_std, self.nu_shell_std)
 
         st += '%12.5e%12.5e' % (self.power_avg, self.visc_avg)
         if self.std:

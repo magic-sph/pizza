@@ -133,9 +133,10 @@ class PizzaTs(PizzaSetup):
             self.topnuss = data[:, 1]
             self.botnuss = data[:, 2]
             self.volnuss = data[:, 3]
-            self.toptemp = data[:, 4]
-            self.bottemp = data[:, 5]
-            self.beta = data[:, 6]
+            self.shellnuss = data[:, 4]
+            self.toptemp = data[:, 5]
+            self.bottemp = data[:, 6]
+            self.beta = data[:, 7]
         elif self.field == 'reynolds' or self.field == 'reynolds_3D':
             self.time = data[:, 0]
             self.rey = data[:, 1]
@@ -211,6 +212,7 @@ class PizzaTs(PizzaSetup):
             ax.plot(self.time, self.topnuss, label='Top Nusselt')
             ax.plot(self.time, self.botnuss, label='Bottom Nusselt')
             ax.plot(self.time, self.volnuss, label='Volume Nusselt')
+            ax.plot(self.time, self.shellnuss, label='Shell Nusselt')
             ax.legend(loc='lower right', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Nusselt number')
