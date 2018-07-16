@@ -3,8 +3,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 import copy
 from .log import PizzaSetup
-from .libpizza import scanDir
+from .libpizza import scanDir, costf
 import os, re
+
+
+def interp_dct(arr, nr_new):
+    """
+    This routine interpolates an input array of size (n_snap, n_r_max)
+    onto a new grid of size (n_snap, n_r_max_new) using Discrete Cosine
+    Transforms
+    """
+
+    nr = arr.shape[-1]
+    # Transform to Chebyshev space and renormalise for the new grid
+    fhat = costf(arr)/np.sqrt((nr-1.)/(nr_new-1.))
+    fout = np.zeros((arr.shape[0], nr_new), 'Float64')
+    # Set the first nr Cheb coefficients and then pad with zeros
+    fout[:, :nr] = fhat
+    # Finally bring back the array on the physical grid
+    fout = costf(fout)
+
+    return fout
+
 
 
 class PizzaBalance(PizzaSetup):
@@ -50,13 +70,14 @@ class PizzaBalance(PizzaSetup):
                                             nml='log.%s' % ending)
 
             for k, file in enumerate(files):
+                print('reading %s' % file)
                 if k == 0:
                     self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
                                self.ek_pump, self.visc = self.read(file, endian)
                 else:
                     radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
                                               self.read(file, endian)
-                    self.add(time, vp, dvpdt, rey_stress, ek_pump, visc)
+                    self.add(time, radius, vp, dvpdt, rey_stress, ek_pump, visc)
 
         # If no tag is specified, the most recent is plotted
         elif not all:
@@ -64,6 +85,7 @@ class PizzaBalance(PizzaSetup):
                 PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
                 name = 'vphi_bal.%s' % self.tag
                 filename = os.path.join(datadir, name)
+                print('reading %s' % filename)
                 self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
                             self.ek_pump, self.visc = self.read(filename, endian)
             else:
@@ -71,6 +93,7 @@ class PizzaBalance(PizzaSetup):
                 dat = [(os.stat(i).st_mtime, i) for i in glob.glob(mot)]
                 dat.sort()
                 filename = dat[-1][1]
+                print('reading %s' % filename)
                 self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
                             self.ek_pump, self.visc = self.read(filename, endian)
 
@@ -81,13 +104,14 @@ class PizzaBalance(PizzaSetup):
             pattern = os.path.join(datadir, 'vphi_bal.*')
             files = scanDir(pattern)
             for k, file in enumerate(files):
+                print('reading %s' % file)
                 if k == 0:
                     self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
                                 self.ek_pump, self.visc = self.read(file, endian)
                 else:
                     radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
                                               self.read(file, endian)
-                    self.add(time, vp, dvpdt, rey_stress, ek_pump, visc)
+                    self.add(time, radius, vp, dvpdt, rey_stress, ek_pump, visc)
 
         if iplot:
             self.plot()
@@ -95,11 +119,19 @@ class PizzaBalance(PizzaSetup):
     def __add__(self, new):
         """
         Built-in functions to sum two vphi force balances
-
-        .. note:: so far this only works when the number of radial grid points is
-                  the same
         """
         out = copy.deepcopy(new)
+        nr_new = new.vp.shape[-1]
+        nr_max = self.vp.shape[-1]
+        if nr_max != nr_new:
+            self.vp = interp_dct(self.vp, nr_new)
+            self.dvpdt = interp_dct(self.dvpdt, nr_new)
+            self.rey_stress = interp_dct(self.rey_stress, nr_new)
+            self.ek_pump = interp_dct(self.ek_pump, nr_new)
+            self.visc = interp_dct(self.visc, nr_new)
+
+            self.radius = radius
+
         if new.time[0] == self.time[-1]:
             out.time = np.concatenate((self.time, new.time[1:]), axis=0)
             out.vp = np.concatenate((self.vp, new.vp[1:, :]), axis=0)
@@ -114,9 +146,21 @@ class PizzaBalance(PizzaSetup):
             out.rey_stress = np.concatenate((self.rey_stress, new.rey_stress), axis=0)
             out.ek_pump = np.concatenate((self.ek_pump, new.ek_pump), axis=0)
             out.visc = np.concatenate((self.visc, new.visc), axis=0)
+
         return out
 
-    def add(self, time, vp, dvpdt, rey_stress, ek_pump, visc):
+    def add(self, time, radius, vp, dvpdt, rey_stress, ek_pump, visc):
+        nr_new = vp.shape[-1]
+        nr_max = self.vp.shape[-1]
+        if nr_max != nr_new:
+            self.vp = interp_dct(self.vp, nr_new)
+            self.dvpdt = interp_dct(self.dvpdt, nr_new)
+            self.rey_stress = interp_dct(self.rey_stress, nr_new)
+            self.ek_pump = interp_dct(self.ek_pump, nr_new)
+            self.visc = interp_dct(self.visc, nr_new)
+
+            self.radius = radius
+
         if time[0] == self.time[-1]:
             self.time = np.concatenate((self.time, time[1:]), axis=0)
             self.vp = np.concatenate((self.vp, vp[1:, :]), axis=0)
