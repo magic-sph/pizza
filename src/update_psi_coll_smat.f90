@@ -206,7 +206,7 @@ contains
 
       !-- Get the radial derivative of psi to calculate uphi
       call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &      rscheme, l_dct=.false.)
+           &      rscheme, l_dct_in=.false.)
 
       !-- Bring psi and omega to the physical space
       runStart = MPI_Wtime()

@@ -24,11 +24,11 @@ module mloop_mod
 
 contains 
 
-   subroutine mloop(temp_Mloc, dtemp_Mloc, psi_Mloc, om_Mloc,  dom_Mloc,   &
-              &     us_Mloc, up_Mloc, buo_Mloc,  dTdt, dpsidt, vp_bal,     &
-              &     tscheme, lMat, l_log_next, l_vphi_bal_calc,            &
-              &     run_time_solve, n_solve_calls, run_time_lu, n_lu_calls,&
-              &     run_time_dct, n_dct_calls)
+   subroutine mloop(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, psi_hat_Mloc,      &
+              &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc, buo_Mloc,&
+              &     dTdt, dpsidt, vp_bal, tscheme, lMat, l_log_next,         &
+              &     l_vphi_bal_calc, run_time_solve, n_solve_calls,          &
+              &     run_time_lu, n_lu_calls, run_time_dct, n_dct_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -38,8 +38,10 @@ contains
       complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
+      complex(cp),       intent(out) :: temp_hat_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(out) :: psi_hat_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: dom_Mloc(nMstart:nMstop,n_r_max)
@@ -75,20 +77,21 @@ contains
                  &                   n_dct_calls)
          end if
       else
-         call update_temp_int(temp_Mloc, dtemp_Mloc, buo_Mloc, dTdt, &
-              &               tscheme, lMat, l_log_next)
+         call update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, buo_Mloc, &
+              &               dTdt, tscheme, lMat, l_log_next)
          if ( l_direct_solve ) then
-            call update_psi_int_smat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
-              &                      buo_Mloc, dpsidt, vp_bal, tscheme, lMat, &
-              &                      l_vphi_bal_calc, run_time_solve,         &
-              &                      n_solve_calls, run_time_lu, n_lu_calls,  &
-              &                      run_time_dct, n_dct_calls)
+            call update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,&
+                 &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
+                 &                   tscheme, lMat, l_vphi_bal_calc,          &
+                 &                   run_time_solve, n_solve_calls,           &
+                 &                   run_time_lu, n_lu_calls, run_time_dct,   &
+                 &                   n_dct_calls)
          else
             call update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
-              &                      buo_Mloc, dpsidt, vp_bal, tscheme, lMat, &
-              &                      l_vphi_bal_calc, run_time_solve,         &
-              &                      n_solve_calls, run_time_lu, n_lu_calls,  &
-              &                      run_time_dct, n_dct_calls)
+                 &                   buo_Mloc, dpsidt, vp_bal, tscheme, lMat, &
+                 &                   l_vphi_bal_calc, run_time_solve,         &
+                 &                   n_solve_calls, run_time_lu, n_lu_calls,  &
+                 &                   run_time_dct, n_dct_calls)
          end if
       end if
 

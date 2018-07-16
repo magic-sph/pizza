@@ -340,7 +340,7 @@ contains
 
       !-- Get the radial derivative of psi to calculate uphi from psi
       call get_dr(psi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme, &
-           &      l_dct=.false.)
+           &      l_dct_in=.false.)
 
       !-- Bring \psi and \omega back the physical space using DCTs
       runStart = MPI_Wtime()
@@ -422,7 +422,7 @@ contains
          end do
       end do
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct=.false.)
+           &       rscheme, nocopy=.true., l_dct_in=.false.)
 
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max

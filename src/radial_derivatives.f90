@@ -304,7 +304,8 @@ contains
 
    end subroutine get_ddcheb_real_1d
 !------------------------------------------------------------------------------
-   subroutine get_dr_complex_2d(f,df,nMstart,nMstop,n_r_max,r_scheme,nocopy,l_dct)
+   subroutine get_dr_complex_2d(f,df,nMstart,nMstop,n_r_max,r_scheme,nocopy,  &
+              &                 l_dct_in,l_dct_out)
       !
       !  Returns first radial derivative df of the input function f.      
       !  Array f(nMstart:nMstop,*) may contain several functions numbered by     
@@ -320,19 +321,26 @@ contains
       complex(cp),         intent(inout) :: f(nMstart:nMstop,n_r_max)
       class(type_rscheme), intent(in) :: r_scheme
       logical, optional,   intent(in) :: nocopy
-      logical, optional,   intent(in) :: l_dct
+      logical, optional,   intent(in) :: l_dct_in
+      logical, optional,   intent(in) :: l_dct_out
     
       !-- Output variables:
       complex(cp), intent(out) :: df(nMstart:nMstop,n_r_max) ! first derivative of f
     
       !-- Local:
       integer :: n_r,n_f,od
-      logical :: copy_array, l_dct_loc
+      logical :: copy_array, l_dct_in_loc, l_dct_out_loc
 
-      if ( present(l_dct) ) then
-         l_dct_loc=l_dct
+      if ( present(l_dct_in) ) then
+         l_dct_in_loc=l_dct_in
       else
-         l_dct_loc=.true.
+         l_dct_in_loc=.true.
+      end if
+
+      if ( present(l_dct_out) ) then
+         l_dct_out_loc=l_dct_out
+      else
+         l_dct_out_loc=.true.
       end if
     
       if ( r_scheme%version == 'cheb' ) then
@@ -351,27 +359,27 @@ contains
             end do
        
             !-- Transform f to cheb space:
-            if ( l_dct_loc ) call r_scheme%costf1(work,nMstart,nMstop,n_r_max)
+            if ( l_dct_in_loc ) call r_scheme%costf1(work,nMstart,nMstop,n_r_max)
           
             !-- Get derivatives:
             !call get_dcheb(work,df,nMstart,nMstop,n_r_max,r_scheme%n_max)
             call get_dcheb(work,df,nMstart,nMstop,n_r_max,n_r_max)
           
             !-- Transform back:
-            call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
+            if ( l_dct_out_loc ) call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
 
          else
 
             !-- Transform f to cheb space:
-            if ( l_dct_loc ) call r_scheme%costf1(f,nMstart,nMstop,n_r_max)
+            if ( l_dct_in_loc ) call r_scheme%costf1(f,nMstart,nMstop,n_r_max)
           
             !-- Get derivatives:
             !call get_dcheb(f,df,nMstart,nMstop,n_r_max,r_scheme%n_max)
             call get_dcheb(f,df,nMstart,nMstop,n_r_max,n_r_max)
           
             !-- Transform back:
-            if ( l_dct_loc ) call r_scheme%costf1(f,nMstart,nMstop,n_r_max)
-            call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
+            if ( l_dct_in_loc ) call r_scheme%costf1(f,nMstart,nMstop,n_r_max)
+            if ( l_dct_out_loc ) call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
 
          end if
        

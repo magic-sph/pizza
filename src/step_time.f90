@@ -1,11 +1,14 @@
 module step_time
+   !
+   ! This module controls the time advance of the code
+   !
 
    use communications, only: transp_m2r, m2r_fields, transp_r2m, r2m_fields, &
        &                     gather_from_mloc_to_rank0, my_reduce_mean,      &
        &                     scatter_from_rank0_to_mloc
    use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
-       &             dom_Mloc
+       &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
        &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt
    use courant_mod, only: dt_courant
@@ -281,11 +284,11 @@ contains
             !-- M-loop (update routines)
             !--------------------
             runStart = MPI_Wtime()
-            call mloop(temp_Mloc, dtemp_Mloc, psi_Mloc, om_Mloc,  dom_Mloc,       &
-                 &     us_Mloc, up_Mloc, buo_Mloc, dTdt, dpsidt, vp_bal, tscheme, &
-                 &     lMat, l_log_next, l_vphi_bal_calc, run_time_solve,         &
-                 &     n_solve_calls, run_time_lu, n_lu_calls, run_time_dct,      &
-                 &     n_dct_calls)
+            call mloop(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, psi_hat_Mloc,         &
+                 &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc,             &
+                 &     buo_Mloc, dTdt, dpsidt, vp_bal, tscheme, lMat, l_log_next,  &
+                 &     l_vphi_bal_calc, run_time_solve, n_solve_calls, run_time_lu,&
+                 &     n_lu_calls, run_time_dct, n_dct_calls)
             runStop = MPI_Wtime()
             if ( .not. lMat ) then
                if (runStop>runStart) then
@@ -447,10 +450,10 @@ contains
                     &                         l_vphi_bal_calc, .true.)
             end if
          else
-            call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,1), &
+            call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt%old(:,:,1), &
                  &                    dTdt%impl(:,:,1), .true.)
             if ( l_direct_solve ) then
-               call get_psi_rhs_imp_int_smat(psi_Mloc,up_Mloc,dpsidt%old(:,:,1),&
+               call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,dpsidt%old(:,:,1),&
                     &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
             else
                call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,dpsidt%old(:,:,1), &

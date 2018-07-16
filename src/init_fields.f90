@@ -103,6 +103,19 @@ contains
          end do
       end do
 
+      !-- When not using Collocation also store temp_hat and psi_hat
+      !-- This saves 2 DCTs per iteration
+      if ( .not. l_cheb_coll ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               temp_hat_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)
+               psi_hat_Mloc(n_m,n_r) =psi_Mloc(n_m,n_r)
+            end do
+         end do
+         call rscheme%costf1(temp_hat_Mloc, nMstart, nMstop, n_r_max)
+         call rscheme%costf1(psi_hat_Mloc, nMstart, nMstop, n_r_max)
+      end if
+
    end subroutine get_start_fields
 !----------------------------------------------------------------------------------
    subroutine initT(temp_Mloc)

@@ -17,7 +17,7 @@ module update_temp_integ
    use band_matrix, only: type_bandmat_real, band_band_product
    use bordered_matrix, only: type_bordmat_real
    use galerkin
-   use chebsparselib, only: intcheb2rmult2, intcheb2rmult2lapl
+   use chebsparselib, only: intcheb2rmult1, intcheb2rmult2lapl, intcheb2rmult2
 
    implicit none
    
@@ -32,7 +32,7 @@ module update_temp_integ
 
    type(type_bordmat_real), allocatable :: LHS_mat_tau(:)
    type(type_bandmat_real), allocatable :: LHS_mat_gal(:)
-   type(type_bandmat_real) :: RHSE_mat, gal_sten
+   type(type_bandmat_real) :: RHSE_mat(2), gal_sten
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
    real(cp), allocatable :: tempfac(:,:) ! Preconditon matrix
 
@@ -58,7 +58,8 @@ contains
          end if
       end if
 
-      call RHSE_mat%initialize(4, 4, n_r_max)
+      call RHSE_mat(1)%initialize(3, 3, n_r_max)
+      call RHSE_mat(2)%initialize(4, 4, n_r_max)
 
       allocate( RHSI_mat(nMstart:nMstop) )
       do n_m=nMstart,nMstop
@@ -77,7 +78,8 @@ contains
          end do
       end if
 
-      call get_rhs_exp_mat(RHSE_mat)
+      call get_rhs_exp_mat(RHSE_mat(1),1)
+      call get_rhs_exp_mat(RHSE_mat(2),2)
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
          call get_rhs_imp_mat(RHSI_mat(n_m), m)
@@ -101,7 +103,8 @@ contains
       !-- Local variables
       integer :: n_m
 
-      call RHSE_mat%finalize()
+      call RHSE_mat(1)%finalize()
+      call RHSE_mat(2)%finalize()
       do n_m=nMstart,nMstop
          call RHSI_mat(n_m)%finalize()
       end do
@@ -122,7 +125,7 @@ contains
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
-   subroutine update_temp_int(temp_Mloc, dtemp_Mloc, buo_Mloc, &
+   subroutine update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, buo_Mloc, &
               &               dTdt, tscheme, lMat, l_log_next)
 
       !-- Input variables
@@ -131,6 +134,7 @@ contains
       logical,             intent(in) :: l_log_next
 
       !-- Output variables
+      complex(cp),       intent(out) :: temp_hat_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       type(type_tarray), intent(inout) :: dTdt
@@ -155,8 +159,8 @@ contains
       end if
 
       !-- Calculation of the implicit part
-      call get_temp_rhs_imp_int(temp_Mloc, dTdt%old(:,:,tscheme%istage),  &
-           &                    dTdt%impl(:,:,tscheme%istage),            &
+      call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt%old(:,:,tscheme%istage),  &
+           &                    dTdt%impl(:,:,tscheme%istage),                &
            &                    tscheme%l_imp_calc_rhs(tscheme%istage))
 
       !-- Now assemble the right hand side and store it in work_Mloc
@@ -197,7 +201,7 @@ contains
          end if
 
          do n_cheb=1,n_r_max
-            temp_Mloc(n_m, n_cheb)=rhs(n_cheb)
+            temp_hat_Mloc(n_m, n_cheb)=rhs(n_cheb)
          end do
 
       end do
@@ -208,6 +212,13 @@ contains
       !      temp_Mloc(n_m,n_cheb)=zero
       !   end do
       !end do
+
+      !-- Copy temp_hat into temp_Mloc
+      do n_cheb=1,n_r_max
+         do n_m=nMstart,nMstop
+            temp_Mloc(n_m,n_cheb)=temp_hat_Mloc(n_m,n_cheb)
+         end do
+      end do
 
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
@@ -274,16 +285,16 @@ contains
          end do
       end do
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct=.false. )
+           &       rscheme, nocopy=.true., l_dct_in=.false.,       &
+           &       l_dct_out=.false. )
 
       !-- Finish calculation of the explicit part for current time step
       if ( l_non_rot ) then
          do n_r=1,n_r_max
             do n_m=nMstart, nMstop
                m = idx2m(n_m)
-               dtemp_exp_last(n_m,n_r)=         dtemp_exp_last(n_m,n_r)   &
-               &                           -or1(n_r)*work_Mloc(n_m,n_r)   &
-               &  -ci*real(m,cp)*or1(n_r)*dtcond(n_r)*psi_Mloc(n_m,n_r)
+               dtemp_exp_last(n_m,n_r)= r(n_r)* dtemp_exp_last(n_m,n_r)   &
+               &           -ci*real(m,cp)*dtcond(n_r)*psi_Mloc(n_m,n_r)
             end do
          end do
       else ! this is rotating
@@ -291,16 +302,24 @@ contains
             h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
             do n_m=nMstart, nMstop
                m = idx2m(n_m)
-               dtemp_exp_last(n_m,n_r)=             dtemp_exp_last(n_m,n_r)   &
-               &                               -or1(n_r)*work_Mloc(n_m,n_r)   &
-               &                -ci*real(m,cp)*(h2*or1(n_r)*dtcond(n_r)+      &
-               &                  tadvz_fac* tcond(n_r))* psi_Mloc(n_m,n_r)
+               dtemp_exp_last(n_m,n_r)=   r(n_r)*   dtemp_exp_last(n_m,n_r)   &
+               &         -ci*real(m,cp)*(h2*dtcond(n_r)+                      &
+               &           tadvz_fac*r(n_r)* tcond(n_r))* psi_Mloc(n_m,n_r)
             end do
          end do
       end if
 
-      !-- Transform the explicit part to chebyshev space
+      !-- Transform the explicit part to Chebyshev space
       call rscheme%costf1(dtemp_exp_last, nMstart, nMstop, n_r_max)
+
+      !-- Add the advection term that is already in Chebyshev space
+      do n_cheb=1,n_cheb_max
+         do n_m=nMstart,nMstop
+            dtemp_exp_last(n_m,n_cheb)=dtemp_exp_last(n_m,n_cheb)- &
+            &                               work_Mloc(n_m,n_cheb)
+         end do
+      end do
+
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
             dtemp_exp_last(n_m,n_cheb)=zero
@@ -313,7 +332,7 @@ contains
             rhs(n_cheb)=dtemp_exp_last(n_m,n_cheb)
          end do
 
-         call RHSE_mat%mat_vec_mul(rhs)
+         call RHSE_mat(1)%mat_vec_mul(rhs)
 
          rhs(1)=zero
          rhs(2)=zero
@@ -324,11 +343,11 @@ contains
 
    end subroutine finish_exp_temp_int
 !------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp_int(temp_Mloc, temp_old, dtemp_imp_Mloc_last,  &
+   subroutine get_temp_rhs_imp_int(temp_hat_Mloc, temp_old, dtemp_imp_Mloc_last, &
               &                    l_calc_rhs_lin)
 
       !-- Input variables
-      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: temp_hat_Mloc(nMstart:nMstop,n_r_max)
       logical,     intent(in) :: l_calc_rhs_lin
 
       !-- Output variable
@@ -336,25 +355,16 @@ contains
       complex(cp), intent(out) :: dtemp_imp_Mloc_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m, n_cheb
-
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            work_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)
-         end do
-      end do
-
-      !-- Transform the implicit part to chebyshev space
-      call rscheme%costf1(work_Mloc, nMstart, nMstop, n_r_max)
+      integer :: n_m, n_cheb
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
       do n_m=nMstart,nMstop
 
          do n_cheb=1,n_r_max
-            rhs(n_cheb)= work_Mloc(n_m,n_cheb)
+            rhs(n_cheb)= temp_hat_Mloc(n_m,n_cheb)
          end do
 
-         call RHSE_mat%mat_vec_mul(rhs)
+         call RHSE_mat(2)%mat_vec_mul(rhs)
 
          rhs(1)=zero
          rhs(2)=zero
@@ -370,7 +380,7 @@ contains
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
             do n_cheb=1,n_r_max
-               rhs(n_cheb)=work_Mloc(n_m,n_cheb)
+               rhs(n_cheb)=temp_hat_Mloc(n_m,n_cheb)
             end do
             call RHSI_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero
@@ -608,7 +618,10 @@ contains
 
    end subroutine get_lhs_mat_tau
 !------------------------------------------------------------------------------
-   subroutine get_rhs_exp_mat(B_mat)
+   subroutine get_rhs_exp_mat(B_mat, i_type)
+
+      !-- Input variable
+      integer, intent(in) :: i_type
 
       !-- Output variable
       type(type_bandmat_real), intent(inout) :: B_mat
@@ -626,7 +639,11 @@ contains
          i_r = n_r+n_boundaries
 
          !-- Define right-hand side equations
-         stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+         if ( i_type == 1 ) then
+            stencilB = intcheb2rmult1(a,b,i_r-1,B_mat%nbands)
+         else if ( i_type == 2 ) then
+            stencilB = intcheb2rmult2(a,b,i_r-1,B_mat%nbands)
+         end if
 
          !-- Roll array for band storage
          do n_band=1,B_mat%nbands

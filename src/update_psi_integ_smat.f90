@@ -23,7 +23,7 @@ module update_psi_integ_smat
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,    &
        &                    intcheb4rmult4, rmult2, intcheb1rmult1,     &
        &                    intcheb2rmult2, intcheb4rmult4laplrot2,     &
-       &                    intcheb4rmult4laplrot
+       &                    intcheb4rmult4laplrot, intcheb4rmult3
 
 
    implicit none
@@ -38,7 +38,7 @@ module update_psi_integ_smat
    type(type_bandmat_complex), allocatable :: LHS_mat_gal(:)
    type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
-   type(type_bandmat_real) :: RHSE_mat(2), gal_sten(2)
+   type(type_bandmat_real) :: RHSE_mat(3), gal_sten(2)
 
    public :: update_psi_int_smat, initialize_psi_integ_smat,    &
    &         finalize_psi_integ_smat, get_psi_rhs_imp_int_smat, &
@@ -90,8 +90,6 @@ contains
       !-- Initialize matrices
       if ( l_non_rot ) then
 
-         call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-         call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
@@ -111,8 +109,6 @@ contains
 
       else ! if this is rotating
 
-         call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
-         call RHSE_mat(2)%initialize(8, 8, n_r_max) ! This is m /= 0
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
@@ -136,9 +132,15 @@ contains
 
       end if
 
+      call RHSE_mat(1)%initialize(4, 4, n_r_max) ! This is m  = 0
+      call RHSE_mat(2)%initialize(8, 8, n_r_max) ! i2r4
+      call RHSE_mat(3)%initialize(7, 7, n_r_max) ! i2r3
+
+
       !-- Fill matrices
       call get_rhs_exp_mat(RHSE_mat(1),1)
       call get_rhs_exp_mat(RHSE_mat(2),2)
+      call get_rhs_exp_mat(RHSE_mat(3),3)
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
          call get_rhs_imp_mat(RHSI_mat(n_m), m)
@@ -167,6 +169,7 @@ contains
       !-- Local variable
       integer :: n_m
 
+      call RHSE_mat(3)%finalize()
       call RHSE_mat(2)%finalize()
       call RHSE_mat(1)%finalize()
       do n_m=nMstart,nMstop
@@ -190,10 +193,11 @@ contains
 
    end subroutine finalize_psi_integ_smat
 !------------------------------------------------------------------------------
-   subroutine update_psi_int_smat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,         &
-              &                   buo_Mloc, dpsidt, vp_bal, tscheme, lMat,     &
-              &                   l_vphi_bal_calc, time_solve, n_solve_calls,  &
-              &                   time_lu, n_lu_calls, time_dct, n_dct_calls)
+   subroutine update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,    &
+              &                   up_Mloc, buo_Mloc, dpsidt, vp_bal, tscheme,  &
+              &                   lMat, l_vphi_bal_calc, time_solve,           &
+              &                   n_solve_calls, time_lu, n_lu_calls, time_dct,&
+              &                   n_dct_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -201,6 +205,7 @@ contains
       logical,             intent(in) :: l_vphi_bal_calc
 
       !-- Output variables
+      complex(cp),       intent(out) :: psi_hat_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
@@ -259,7 +264,7 @@ contains
       end if
 
       !-- Calculation of the implicit part
-      call get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc,                       &
+      call get_psi_rhs_imp_int_smat(psi_hat_Mloc, up_Mloc,                   &
            &                        dpsidt%old(:,:,tscheme%istage),          &
            &                        dpsidt%impl(:,:,tscheme%istage), vp_bal, &
            &                        l_vphi_bal_calc,                         &
@@ -328,7 +333,7 @@ contains
             end do
          else
             do n_cheb=1,n_r_max
-               psi_Mloc(n_m,n_cheb)=rhs(n_cheb)
+               psi_hat_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
          end if
 
@@ -348,6 +353,16 @@ contains
       !   end do
       !end if
 
+      !-- Copy the solution in psi_hat_Mloc
+      do n_cheb=1,n_r_max
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m /= 0 ) then
+               psi_Mloc(n_m,n_cheb)=psi_hat_Mloc(n_m,n_cheb)
+            end if
+         end do
+      end do
+
       !-- Bring uphi0 to the physical space
       if ( l_rank_has_m0 ) then
          call get_dr(uphi0, om0, n_r_max, rscheme, l_dct=.false.)
@@ -356,7 +371,7 @@ contains
 
       !-- Get the radial derivative of psi to calculate uphi, us and omega
       call get_ddr(psi_Mloc, work_Mloc, om_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme,l_dct=.false.)
+           &       rscheme, l_dct=.false.)
 
       !-- Bring psi back the physical space
       runStart = MPI_Wtime()
@@ -441,25 +456,26 @@ contains
       end do
       !-- Finish calculation of advection
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct=.false.)
+           &       rscheme, nocopy=.true., l_dct_in=.false.,        &
+           &       l_dct_out=.false.)
 
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-    &
-               &                      or1(n_r)*work_Mloc(n_m,n_r)
+               dpsi_exp_last(n_m,n_r)=r(n_r)*dpsi_exp_last(n_m,n_r)
 
                !-- If Coriolis force is treated explicitly it is added here:
                if ( .not. l_coriolis_imp ) then
                   dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-   &
-                  &                      CorFac*ci*real(m,cp)*psi_Mloc(n_m,n_r)
+                  &        CorFac*ci*real(m,cp)*r(n_r)*psi_Mloc(n_m,n_r)
                end if
 
                !-- If Buoyancy is treated explicitly
                if ( .not. l_buo_imp ) then 
-                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)+buo_Mloc(n_m,n_r)
+                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)+&
+                  &                      r(n_r)*buo_Mloc(n_m,n_r)
                end if
             end if
          end do
@@ -482,7 +498,7 @@ contains
                   &                      ekp_fac*up_Mloc(n_m,n_r)
                else 
                   dpsi_exp_last(n_m,n_r)=     dpsi_exp_last(n_m,n_r) +       &
-                  &                      ekp_fac*( -om_Mloc(n_m,n_r) +       &
+                  &               ekp_fac*r(n_r)*( -om_Mloc(n_m,n_r) +       &
                   &               half*beta(n_r)*   up_Mloc(n_m,n_r) +       &
                   &   beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
                   &                                 us_Mloc(n_m,n_r) )
@@ -491,8 +507,20 @@ contains
          end do
       end if
 
-      !-- Transform the explicit part to chebyshev space
+      !-- Transform the explicit part to Chebyshev space
       call rscheme%costf1(dpsi_exp_last, nMstart, nMstop, n_r_max)
+
+      !-- Add the advection term that is already in Chebyshev space
+      do n_cheb=1,n_cheb_max
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m /= 0 ) then
+               dpsi_exp_last(n_m,n_cheb)=dpsi_exp_last(n_m,n_cheb)-&
+               &                             work_Mloc(n_m,n_cheb)
+
+            end if
+         end do
+      end do
 
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
@@ -511,7 +539,7 @@ contains
          if ( m == 0 ) then
             call RHSE_mat(1)%mat_vec_mul(rhs)
          else
-            call RHSE_mat(2)%mat_vec_mul(rhs)
+            call RHSE_mat(3)%mat_vec_mul(rhs)
             rhs(3)=zero
             rhs(4)=zero
          end if
@@ -526,12 +554,12 @@ contains
 
    end subroutine finish_exp_psi_int_smat
 !------------------------------------------------------------------------------
-   subroutine get_psi_rhs_imp_int_smat(psi_Mloc, up_Mloc, psi_old,   &
-              &                        dpsi_imp_Mloc_last, vp_bal,   &
+   subroutine get_psi_rhs_imp_int_smat(psi_hat_Mloc, up_Mloc, psi_old,   &
+              &                        dpsi_imp_Mloc_last, vp_bal,       &
               &                        l_vphi_bal_calc, l_calc_lin_rhs)
 
       !-- Input variables
-      complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: psi_hat_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
       logical,     intent(in) :: l_vphi_bal_calc
       logical,     intent(in) :: l_calc_lin_rhs
@@ -543,29 +571,29 @@ contains
 
       !-- Local variables
       real(cp) :: duphi0(n_r_max), d2uphi0(n_r_max), uphi0(n_r_max)
+      real(cp) :: work_r(n_r_max)
       integer :: n_r, n_m, m, m0, n_cheb
 
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m == 0 ) then
-               work_Mloc(n_m,n_r)=up_Mloc(n_m,n_r)
-            else
-               work_Mloc(n_m,n_r)=psi_Mloc(n_m,n_r)
-            end if
+      if ( l_rank_has_m0 ) then
+         do n_r=1,n_r_max
+            work_r(n_r)=real(up_Mloc(m2idx(0),n_r),cp)
          end do
-      end do
-
-      !-- Transform the implicit part to chebyshev space
-      call rscheme%costf1(work_Mloc, nMstart, nMstop, n_r_max)
+         call rscheme%costf1(work_r, n_r_max)
+      end if
 
       !-- Matrix-vector multiplication by the operator -\int^4 r^4 \Delta .
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
-         do n_cheb=1,n_r_max
-            rhs(n_cheb)= work_Mloc(n_m,n_cheb)
-         end do
+         if ( m == 0 ) then
+            do n_cheb=1,n_r_max
+               rhs(n_cheb)=work_r(n_cheb)
+            end do
+         else
+            do n_cheb=1,n_r_max
+               rhs(n_cheb)=psi_hat_Mloc(n_m,n_cheb)
+            end do
+         end if
 
          call RHSI_mat(n_m)%mat_vec_mul(rhs)
 
@@ -601,9 +629,15 @@ contains
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
-            do n_cheb=1,n_r_max
-               rhs(n_cheb)=work_Mloc(n_m,n_cheb)
-            end do
+            if ( m == 0 ) then
+               do n_cheb=1,n_r_max
+                  rhs(n_cheb)=work_r(n_cheb)
+               end do
+            else
+               do n_cheb=1,n_r_max
+                  rhs(n_cheb)=psi_hat_Mloc(n_m,n_cheb)
+               end do
+            end if
             call RHSIL_mat(n_m)%mat_vec_mul(rhs)
             rhs(1)=zero ! vphi equation has only 2 BCs
             rhs(2)=zero
@@ -1066,13 +1100,13 @@ contains
 
    end subroutine get_lhs_mat_tau
 !------------------------------------------------------------------------------
-   subroutine get_rhs_exp_mat(D_mat, m0)
+   subroutine get_rhs_exp_mat(D_mat, i_type)
       !
       ! This corresponds to the matrix that goes in front of the explicit terms
       !
 
       !-- Input variable
-      integer, intent(in) :: m0
+      integer, intent(in) :: i_type
 
       !-- Output variable
       type(type_bandmat_real), intent(inout) :: D_mat
@@ -1085,9 +1119,9 @@ contains
       a = half*(r_cmb-r_icb)
       b = half*(r_cmb+r_icb)
 
-      if ( m0 == 1 ) then ! This is the axisymmetric part
+      if ( i_type == 1 ) then ! This is the axisymmetric part
          n_bounds = 2
-      else                ! This is the non-axisymmetric part
+      else if (i_type == 2 .or. i_type == 3 ) then
          n_bounds = 4
       end if
 
@@ -1096,10 +1130,12 @@ contains
          i_r = n_r+n_bounds
 
          !-- Define right-hand side equations
-         if ( m0 == 1) then
+         if ( i_type == 1) then
             stencilD = intcheb2rmult2(a,b,i_r-1,D_mat%nbands)
-         else ! Non-axisymmetric terms
+         else if ( i_type == 2) then
             stencilD = intcheb4rmult4(a,b,i_r-1,D_mat%nbands)
+         else if ( i_type == 3) then
+            stencilD = intcheb4rmult3(a,b,i_r-1,D_mat%nbands)
          end if
 
          !-- Roll array for band storage
