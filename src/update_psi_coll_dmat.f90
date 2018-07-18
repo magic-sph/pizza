@@ -144,6 +144,10 @@ contains
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
 
+      !$omp parallel default(shared) &
+      !$omp private(n_m,m,rhs_m0,rhs,n_cheb,n_r,runStart,runStop) &
+      !$omp reduction(+:n_solve_calls,time_solve)
+      !$omp do
       do n_m=nMstart,nMstop
 
          m = idx2m(n_m)
@@ -206,13 +210,15 @@ contains
             do n_r=1,n_r_max
                rhs(n_r) = rhs(n_r)*omMat_fac(n_r,1,n_m)
             end do
-            runStart = MPI_Wtime()
+            if ( n_m == nMstop ) runStart = MPI_Wtime()
             call solve_full_mat(omMat(:,:,n_m), n_r_max, n_r_max, &
                  &              omPivot(:, n_m), rhs(:))
-            runStop = MPI_Wtime()
-            if ( runStop > runStart ) then
-               time_solve = time_solve + (runStop-runStart)
-               n_solve_calls = n_solve_calls+1
+            if ( n_m == nMstop ) then
+               runStop = MPI_Wtime()
+               if ( runStop > runStart ) then
+                  time_solve = time_solve + (runStop-runStart)
+                  n_solve_calls = n_solve_calls+1
+               end if
             end if
             do n_r=1,n_r_max
                rhs(n_r) = rhs(n_r)*omMat_fac(n_r,2,n_m)
@@ -225,9 +231,11 @@ contains
          end if
 
       end do
+      !$omp end do
 
       !-- set cheb modes > rscheme%n_max to zero (dealiazing)
       if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
+         !$omp do
          do n_cheb=rscheme%n_max+1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -242,7 +250,9 @@ contains
                end if
             end do
          end do
+         !$omp end do
       end if
+      !$omp end parallel
 
       !-- Bring uphi0 to the physical space
       if ( l_rank_has_m0 ) then
@@ -251,12 +261,15 @@ contains
       end if
 
       !-- Copy omega into work (it allows to keep omega in Cheb space)
+      !$omp parallel do default(shared) &
+      !$omp private(n_r,n_m,m)
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) work_Mloc(n_m,n_r)=om_Mloc(n_m,n_r)
          end do
       end do
+      !$omp end parallel do
 
       !-- Bring  work_Mloc to the physical space
       !-- It will be used in the RHS of the psi equation
@@ -270,6 +283,10 @@ contains
 
 
       !-- Now that omega has been determined let's get psi
+      !$omp parallel default(shared) &
+      !$omp private(n_m,m,rhs_m0,rhs,n_cheb,n_r,runStart,runStop) &
+      !$omp reduction(+:n_solve_calls,time_solve)
+      !$omp do
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
@@ -301,13 +318,15 @@ contains
             do n_r=1,n_r_max
                rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,1,n_m)
             end do
-            runStart = MPI_Wtime()
+            if ( n_m == nMstop ) runStart = MPI_Wtime()
             call solve_full_mat(psiMat(:,:,n_m), n_r_max, n_r_max, &
                  &              psiPivot(:, n_m), rhs(:))
-            runStop = MPI_Wtime()
-            if ( runStop > runStart ) then
-               time_solve = time_solve + (runStop-runStart)
-               n_solve_calls = n_solve_calls+1
+            if ( n_m == nMstop ) then
+               runStop = MPI_Wtime()
+               if ( runStop > runStart ) then
+                  time_solve = time_solve + (runStop-runStart)
+                  n_solve_calls = n_solve_calls+1
+               end if
             end if
             do n_r=1,n_r_max
                rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,2,n_m)
@@ -320,9 +339,11 @@ contains
          end if
 
       end do
+      !$omp end do
 
       !-- set cheb modes > rscheme%n_max to zero (dealiazing)
       if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
+         !$omp do
          do n_cheb=rscheme%n_max+1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -335,7 +356,9 @@ contains
                end if
             end do
          end do
+         !$omp end do
       end if
+      !$omp end parallel
 
 
       !-- If the matrix has been rebuilt one also needs to assemble
@@ -365,6 +388,8 @@ contains
       end if
 
 
+      !$omp parallel do default(shared) &
+      !$omp private(n_r,n_m,m)
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
@@ -379,6 +404,7 @@ contains
             end if
          end do
       end do
+      !$omp end parallel do
 
       !-- Roll the time arrays before filling again the first block
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
@@ -406,6 +432,10 @@ contains
            &       rscheme, nocopy=.true.)
 
       !-- Finish calculation of the explicit part for current time step
+      !-- Finish calculation of the explicit part for current time step
+      !$omp parallel default(shared) &
+      !$omp private(n_r,n_m,m)
+      !$omp do
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
@@ -425,8 +455,10 @@ contains
             end if
          end do
       end do
+      !$omp end do
 
       if ( l_ek_pump ) then
+         !$omp do
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -439,7 +471,9 @@ contains
                end if
             end do
          end do
+         !$omp end do
       end if
+      !$omp end parallel
 
    end subroutine finish_exp_psi_coll_dmat
 !------------------------------------------------------------------------------
@@ -464,6 +498,8 @@ contains
       real(cp) :: dm2
       integer :: n_r, n_m, m, m0
 
+      !$omp parallel do default(shared) &
+      !$omp private(n_r,n_m,m)
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
@@ -474,6 +510,7 @@ contains
             end if
          end do
       end do
+      !$omp end parallel do
 
       if ( l_calc_lin_rhs .or. l_vphi_bal_calc ) then
 
@@ -489,6 +526,8 @@ contains
             call get_ddr(uphi0, duphi0, d2uphi0, n_r_max, rscheme)
          end if
 
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_m,m,dm2)
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -513,6 +552,7 @@ contains
                end if
             end do
          end do
+         !$omp end parallel do
 
       end if ! if wimp /= .or. l_vphi_bal_calc
 

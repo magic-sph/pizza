@@ -82,6 +82,11 @@ contains
 
       idx_m0 = m2idx(0)
 
+      !$omp parallel do default(shared) &
+      !$omp private(n_r, n_m, m, n_phi, us_fluct, us_grid, up_grid, om_grid) &
+      !$omp private(temp_grid, usT_grid, upT_grid, usOm_grid, upOm_grid) &
+      !$omp private(runStart,runStop) &
+      !$omp reduction(+:n_fft_calls, time_fft, usom)
       do n_r=nRstart,nRstop
 
          !-- Calculate Reynolds stress for axisymmetric equation
@@ -101,15 +106,17 @@ contains
          !-----------------
          !-- Bring data on the grid
          !-----------------
-         runStart = MPI_Wtime()
+         if ( n_r == nRstart ) runStart = MPI_Wtime()
          call ifft(us_Rloc(:,n_r), us_grid)
          call ifft(up_Rloc(:,n_r), up_grid)
          call ifft(om_Rloc(:,n_r), om_grid)
          call ifft(temp_Rloc(:,n_r), temp_grid)
-         runStop = MPI_Wtime()
-         if ( runStop > runStart ) then
-            time_fft = time_fft + (runStop-runStart)
-            n_fft_calls = n_fft_calls + 4
+         if ( n_r == nRstart ) then
+            runStop = MPI_Wtime()
+            if ( runStop > runStart ) then
+               time_fft = time_fft + (runStop-runStart)
+               n_fft_calls = n_fft_calls + 4
+            end if
          end if
 
          !-- Courant condition
@@ -127,15 +134,17 @@ contains
          end do
 
          !-- Bring data back on the spectral domain
-         runStart = MPI_Wtime()
+         if ( n_r == nRstart ) runStart = MPI_Wtime()
          call fft(upT_grid, dtempdt_Rloc(:,n_r))
          call fft(usT_grid, dVsT_Rloc(:,n_r))
          call fft(upOm_grid, dpsidt_Rloc(:,n_r))
          call fft(usOm_grid, dVsOm_Rloc(:,n_r))
-         runStop = MPI_Wtime()
-         if ( runStop > runStart ) then
-            time_fft = time_fft + (runStop-runStart)
-            n_fft_calls = n_fft_calls + 4
+         if ( n_r == nRstart ) then
+            runStop = MPI_Wtime()
+            if ( runStop > runStart ) then
+               time_fft = time_fft + (runStop-runStart)
+               n_fft_calls = n_fft_calls + 4
+            end if
          end if
 
          do n_m=1,n_m_max
@@ -151,6 +160,7 @@ contains
          end do
 
       end do
+      !$omp end parallel do
 
    end subroutine radial_loop
 !------------------------------------------------------------------------------

@@ -147,6 +147,8 @@ contains
 
       !-- Assemble first buoyancy part from T^{n}
       if ( l_buo_imp ) then
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_m,m)
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -156,6 +158,7 @@ contains
                end if
             end do
          end do
+         !$omp end parallel do
       end if
 
       !-- Calculation of the implicit part
@@ -166,6 +169,8 @@ contains
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
 
+      !$omp parallel do default(shared) &
+      !$omp private(n_m,m,n_cheb,rhs)
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
@@ -205,6 +210,7 @@ contains
          end do
 
       end do
+      !$omp end parallel do
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
       !do n_cheb=n_cheb_max+1,n_r_max
@@ -214,17 +220,22 @@ contains
       !end do
 
       !-- Copy temp_hat into temp_Mloc
+      !$omp parallel do default(shared) &
+      !$omp private(n_cheb,n_m)
       do n_cheb=1,n_r_max
          do n_m=nMstart,nMstop
             temp_Mloc(n_m,n_cheb)=temp_hat_Mloc(n_m,n_cheb)
          end do
       end do
+      !$omp end parallel do
 
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Finish assembling buoyancy 
       if ( l_buo_imp ) then
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_m,m)
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -235,6 +246,7 @@ contains
                end if
             end do
          end do
+         !$omp end parallel do
       end if
 
       !-- Roll the arrays before filling again the first block
@@ -266,6 +278,8 @@ contains
 
       !-- If buoyancy is treated explicitly
       if ( .not. l_buo_imp ) then
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_m,m)
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -275,21 +289,28 @@ contains
                end if
             end do
          end do
+         !$omp end parallel do
       end if
 
       !-- Finish calculation of advection
       call rscheme%costf1(dVsT_Mloc, nMstart, nMstop, n_r_max)
+      !$omp parallel do default(shared) &
+      !$omp private(n_cheb,n_m)
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
             dVsT_Mloc(n_m,n_cheb)=zero
          end do
       end do
+      !$omp end parallel do
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
            &       rscheme, nocopy=.true., l_dct_in=.false.,       &
            &       l_dct_out=.false. )
 
       !-- Finish calculation of the explicit part for current time step
+      !$omp parallel default(shared) &
+      !$omp private(n_r,n_m,m,h2)
       if ( l_non_rot ) then
+         !$omp do
          do n_r=1,n_r_max
             do n_m=nMstart, nMstop
                m = idx2m(n_m)
@@ -297,7 +318,9 @@ contains
                &           -ci*real(m,cp)*dtcond(n_r)*psi_Mloc(n_m,n_r)
             end do
          end do
+         !$omp end do
       else ! this is rotating
+         !$omp do
          do n_r=1,n_r_max
             h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
             do n_m=nMstart, nMstop
@@ -307,26 +330,35 @@ contains
                &           tadvz_fac*r(n_r)* tcond(n_r))* psi_Mloc(n_m,n_r)
             end do
          end do
+         !$omp end do
       end if
+      !$omp end parallel
 
       !-- Transform the explicit part to Chebyshev space
       call rscheme%costf1(dtemp_exp_last, nMstart, nMstop, n_r_max)
 
       !-- Add the advection term that is already in Chebyshev space
+      !$omp parallel default(shared) &
+      !$omp private(n_cheb,n_m,rhs)
+      !$omp do
       do n_cheb=1,n_cheb_max
          do n_m=nMstart,nMstop
             dtemp_exp_last(n_m,n_cheb)=dtemp_exp_last(n_m,n_cheb)- &
             &                               work_Mloc(n_m,n_cheb)
          end do
       end do
+      !$omp end do
 
+      !$omp do
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
             dtemp_exp_last(n_m,n_cheb)=zero
          end do
       end do
+      !$omp end do
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
+      !$omp do
       do n_m=nMstart,nMstop
          do n_cheb=1,n_r_max
             rhs(n_cheb)=dtemp_exp_last(n_m,n_cheb)
@@ -340,6 +372,8 @@ contains
             dtemp_exp_last(n_m,n_cheb)=rhs(n_cheb)
          end do
       end do
+      !$omp end do
+      !$omp end parallel
 
    end subroutine finish_exp_temp_int
 !------------------------------------------------------------------------------
@@ -358,6 +392,9 @@ contains
       integer :: n_m, n_cheb
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
+      !$omp parallel default(shared) &
+      !$omp private(n_m,n_cheb,rhs)
+      !$omp do
       do n_m=nMstart,nMstop
 
          do n_cheb=1,n_r_max
@@ -374,10 +411,12 @@ contains
          end do
 
       end do
+      !$omp end do
 
       if ( l_calc_rhs_lin ) then
 
          !-- Matrix-vector multiplication by the LHS operator
+         !$omp do
          do n_m=nMstart,nMstop
             do n_cheb=1,n_r_max
                rhs(n_cheb)=temp_hat_Mloc(n_m,n_cheb)
@@ -389,16 +428,20 @@ contains
                work_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
          end do
+         !$omp end do
 
          !-- Finally assemble the right hand side
+         !$omp do
          do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
                dtemp_imp_Mloc_last(n_m,n_cheb)=TdiffFac*hdif_T(n_m)*&
                &                               work_Mloc(n_m,n_cheb) 
             end do
          end do
+         !$omp end do
 
       end if
+      !$omp end parallel
 
    end subroutine get_temp_rhs_imp_int
 !------------------------------------------------------------------------------

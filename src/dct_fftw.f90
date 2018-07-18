@@ -5,6 +5,7 @@ module dct_fftw
    use namelists, only: fftw_plan_flag
    use mem_alloc, only: bytes_allocated
    use blocking, only: nm_per_rank
+   use parallel_mod, only: n_threads
    use constants, only: half
 
    implicit none
@@ -18,7 +19,7 @@ module dct_fftw
 
    type, public :: costf_t
       real(cp) :: cheb_fac
-      type(c_ptr) :: plan
+      type(c_ptr), allocatable :: plan(:)
       type(c_ptr) :: plan_1d
    contains
       procedure :: initialize
@@ -42,9 +43,10 @@ contains
       !--Local variables
       integer :: inembed(1), istride, idist, plan_size(1)
       integer :: onembed(1), ostride, odist
+      integer :: iThread, start_m, stop_m, all_ms, per_thread
       integer(C_INT) :: plan_type(1)
-      real(cp) :: array_in(1:2*(nMstop-nMstart+1), n_r_max)
-      real(cp) :: array_out(1:2*(nMstop-nMstart+1), n_r_max)
+      real(cp), allocatable :: array_in(:,:)
+      real(cp), allocatable :: array_out(:,:)
       real(cp) :: array_in_1d(n_r_max)
       real(cp) :: array_out_1d(n_r_max)
       logical :: l_work_array
@@ -53,15 +55,30 @@ contains
       onembed(1) = 0
       plan_size(1) = n_r_max
       plan_type(1) = FFTW_REDFT00
-      istride = 2*(nMstop-nMstart+1)
-      ostride = 2*(nMstop-nMstart+1)
       idist   = 1
       odist   = 1
 
-      this%plan = fftw_plan_many_r2r(1, plan_size, 2*nM_per_rank, array_in, &
-                  &                  inembed, istride, idist, array_out,    &
-                  &                  onembed, ostride, odist,               &
-                  &                  plan_type, fftw_plan_flag)
+      allocate( this%plan(n_threads) )
+      all_ms = nMstop-nMstart+1
+      per_thread = all_ms/n_threads
+      do iThread=0,n_threads-1
+         start_m = nMstart+iThread*per_thread
+         stop_m  = start_m+per_thread -1
+         if ( iThread == n_threads-1 ) stop_m = nMstop
+         istride = 2*(stop_m-start_m+1)
+         ostride = 2*(stop_m-start_m+1)
+
+         allocate( array_in(1:2*(stop_m-start_m+1),n_r_max) )
+         allocate( array_out(1:2*(stop_m-start_m+1),n_r_max) )
+
+
+         this%plan(iThread+1)=fftw_plan_many_r2r(1, plan_size,2*(stop_m-start_m+1), &
+         &                                       array_in, inembed, istride, idist, &
+         &                                       array_out, onembed, ostride, odist,&
+         &                                       plan_type, fftw_plan_flag)
+
+         deallocate( array_in, array_out )
+      end do
 
       this%plan_1d = fftw_plan_r2r(1, plan_size, array_in_1d, array_out_1d, &
                      &             plan_type, fftw_plan_flag)
@@ -93,6 +110,7 @@ contains
 
       !--Local variable:
       logical :: l_work_array
+      integer :: iThread
 
       if ( present(no_work_array) ) then
          l_work_array=.not. no_work_array
@@ -105,7 +123,9 @@ contains
       end if
 
       call fftw_destroy_plan(this%plan_1d)
-      call fftw_destroy_plan(this%plan)
+      do iThread=1,n_threads
+         call fftw_destroy_plan(this%plan(iThread))
+      end do
 
    end subroutine finalize
 !------------------------------------------------------------------------------
@@ -124,15 +144,36 @@ contains
       !-- Local variables
       real(cp), pointer :: r_input(:,:)
       integer :: n_r, n_m
+      integer :: all_ms, per_thread, start_m, stop_m, iThread
 
       call c_f_pointer(c_loc(array_in), r_input, [2*nm_per_rank, n_r_max])
-      call fftw_execute_r2r(this%plan, r_input, work_r)
+      !$omp parallel default(shared) &
+      !$omp private(iThread, start_m, n_r, n_m, stop_m)
+      !!$omp single
+      all_ms = nMstop-nMstart+1
+      per_thread = all_ms/n_threads
+      !!$omp end single
+      !!$omp barrier
+      !$omp do
+      do iThread=0,n_threads-1
+         start_m=1+iThread*per_thread
+         stop_m =start_m+per_thread-1
+         if ( iThread == n_threads-1 ) stop_m = nMstop-nMstart+1
 
+         call fftw_execute_r2r(this%plan(ithread+1),             &
+              &                r_input(2*start_m-1:2*stop_m,:),  &
+              &                work_r(2*start_m-1:2*stop_m,:))
+      end do
+      !$omp end do
+
+      !$omp do
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             array_in(n_m,n_r)=this%cheb_fac*work(n_m,n_r)
          end do
       end do
+      !$omp end do
+      !$omp end parallel
 
    end subroutine costf_complex_2d
 !------------------------------------------------------------------------------

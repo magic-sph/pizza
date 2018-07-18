@@ -6,6 +6,7 @@ module update_temp_coll
    use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
        &                       rgrav
+   use parallel_mod, only: n_threads
    use hdif, only: hdif_T
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, m2idx
@@ -78,7 +79,7 @@ contains
       complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m, n_r_out, m
+      integer :: n_r, n_m, n_cheb, m
 
       if ( lMat ) lTMat(:)=.false.
 
@@ -91,6 +92,9 @@ contains
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
 
+
+      !$omp parallel do default(shared) &
+      !$omp private(n_m,m,n_r,n_cheb,rhs)
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
@@ -120,18 +124,22 @@ contains
          call solve_full_mat(tMat(:,:,n_m), n_r_max, n_r_max, tPivot(:, n_m), &
               &              rhs(:))
 
-         do n_r_out=1,rscheme%n_max
-            temp_Mloc(n_m, n_r_out)=rhs(n_r_out)
+         do n_cheb=1,rscheme%n_max
+            temp_Mloc(n_m, n_cheb)=rhs(n_cheb)
          end do
 
       end do
+      !$omp end parallel do
 
       !-- set cheb modes > rscheme%n_max to zero (dealiazing)
-      do n_r_out=rscheme%n_max+1,n_r_max
+      !$omp parallel do default(shared) &
+      !$omp private(n_cheb,n_m)
+      do n_cheb=rscheme%n_max+1,n_r_max
          do n_m=nMstart,nMstop
-            temp_Mloc(n_m,n_r_out)=zero
+            temp_Mloc(n_m,n_cheb)=zero
          end do
       end do
+      !$omp end parallel do
 
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
@@ -169,6 +177,8 @@ contains
       integer :: n_r, n_m, m
 
       if ( .not. l_buo_imp ) then
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_m,m)
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -178,6 +188,7 @@ contains
                end if
             end do
          end do
+         !$omp end parallel do
       end if
 
       !-- Finish calculation of advection
@@ -185,6 +196,8 @@ contains
            &       rscheme, nocopy=.true. )
 
       !-- Finish calculation of the explicit part for current time step
+      !$omp parallel do default(shared) &
+      !$omp private(n_r,n_m)
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
             dtemp_exp_last(n_m,n_r)=dtemp_exp_last(n_m,n_r)         & 
@@ -193,6 +206,7 @@ contains
             &                       tadvz_fac*beta(n_r)*tcond(n_r))
          end do
       end do
+      !$omp end parallel do
 
    end subroutine finish_exp_temp_coll
 !------------------------------------------------------------------------------
@@ -212,16 +226,21 @@ contains
       integer :: n_r, n_m, m
       real(cp) :: dm2
 
+      !$omp parallel do default(shared) &
+      !$omp private(n_r,n_m)
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             temp_last(n_m,n_r)=temp_Mloc(n_m,n_r)
          end do
       end do
+      !$omp end parallel do
 
       if ( l_calc_lin_rhs ) then
 
          call get_ddr(temp_Mloc, dtemp_Mloc, work_Mloc, nMstart, nMstop, &
               &       n_r_max, rscheme)
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_m,m,dm2)
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -232,6 +251,7 @@ contains
                &                     -dm2*or2(n_r)*    temp_Mloc(n_m,n_r) )
             end do
          end do
+         !$omp end parallel do
 
       end if
 

@@ -486,6 +486,8 @@ contains
       !-- Local variables:
       integer :: n_o, n_m, n_r, m
 
+      !$omp parallel do default(shared) &
+      !$omp private(n_r,n_m,m,n_o)
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
@@ -499,6 +501,7 @@ contains
             end if
          end do
       end do
+      !$omp end parallel do
 
    end subroutine assemble_implicit_buo
 !------------------------------------------------------------------------------

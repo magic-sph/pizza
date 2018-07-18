@@ -96,15 +96,21 @@ contains
       real(cp) :: fac_cheb
       real(cp) :: threshold(nMstart:nMstop)
 
+      !$omp parallel default(shared) &
+      !$omp private(n_m)
+      !$omp do
       do n_m=nMstart, nMstop
          threshold(n_m) = maxval(abs(f(n_m,:)))*thr
       end do
+      !$omp end do
 
       !-- initialize derivatives:
       do n_cheb=n_cheb_max,n_r_max
+         !$omp do
          do n_m=nMstart,nMstop
             df(n_m,n_cheb)=zero
          end do
+         !$omp end do
       end do
       n_cheb  =n_cheb_max-1
       if ( n_r_max == n_cheb_max ) then
@@ -112,6 +118,7 @@ contains
       else
          fac_cheb=real(2*n_cheb,kind=cp)
       end if
+      !$omp do
       do n_m=nMstart,nMstop
          if ( abs(df(n_m,n_cheb)) >= threshold(n_m) ) then
             df(n_m,n_cheb)=fac_cheb*f(n_m,n_cheb+1)
@@ -119,10 +126,12 @@ contains
             df(n_m,n_cheb)=zero
          end if
       end do
+      !$omp end do
 
       !----- Recursion
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(2*n_cheb,kind=cp)
+         !$omp do
          do n_m=nMstart,nMstop
             if ( abs(f(n_m,n_cheb+1)) >= threshold(n_m) ) then
                df(n_m,n_cheb)=df(n_m,n_cheb+2) + fac_cheb*f(n_m,n_cheb+1)
@@ -130,7 +139,9 @@ contains
                df(n_m,n_cheb)=df(n_m,n_cheb+2)
             end if
          end do
+         !$omp end do
       end do
+      !$omp end parallel
 
    end subroutine get_dcheb_complex_2d
 !------------------------------------------------------------------------------
@@ -201,16 +212,22 @@ contains
       real(cp) :: fac_cheb
       real(cp) :: threshold(nMstart:nMstop)
 
+      !$omp parallel default(shared) &
+      !$omp private(n_m)
+      !$omp do
       do n_m=nMstart, nMstop
          threshold(n_m) = maxval(abs(f(n_m,:)))*thr
       end do
+      !$omp end do
 
       !----- initialize derivatives:
       do n_cheb=n_cheb_max,n_r_max
+         !$omp do
          do n_m=nMstart,nMstop
             df(n_m,n_cheb) =zero
             ddf(n_m,n_cheb)=zero
          end do
+         !$omp end do
       end do
       n_cheb=n_cheb_max-1
       if ( n_cheb_max == n_r_max ) then
@@ -218,6 +235,7 @@ contains
       else
          fac_cheb=real(2*n_cheb,kind=cp)
       end if
+      !$omp do
       do n_m=nMstart,nMstop
          if ( abs(df(n_m,n_cheb)) >= threshold(n_m) ) then
             df(n_m,n_cheb)=fac_cheb*f(n_m,n_cheb+1)
@@ -226,10 +244,12 @@ contains
          end if
          ddf(n_m,n_cheb)=zero
       end do
+      !$omp end do
     
       !----- recursion
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(2*n_cheb,kind=cp)
+         !$omp do
          do n_m=nMstart,nMstop
             if ( abs(f(n_m,n_cheb+1)) >= threshold(n_m) ) then
                df(n_m,n_cheb) = df(n_m,n_cheb+2) + fac_cheb* f(n_m,n_cheb+1)
@@ -242,7 +262,9 @@ contains
                ddf(n_m,n_cheb)=ddf(n_m,n_cheb+2)
             end if
          end do
+         !$omp end do
       end do
+      !$omp end parallel
 
    end subroutine get_ddcheb_complex_2d
 !------------------------------------------------------------------------------
@@ -352,11 +374,14 @@ contains
          end if
     
          if ( copy_array )  then
+            !$omp parallel do default(shared) &
+            !$omp private(n_r,n_f)
             do n_r=1,n_r_max
                do n_f=nMstart,nMstop
                   work(n_f,n_r)=f(n_f,n_r)
                end do
             end do
+            !$omp end parallel do
        
             !-- Transform f to cheb space:
             if ( l_dct_in_loc ) call r_scheme%costf1(work,nMstart,nMstop,n_r_max)
@@ -384,11 +409,14 @@ contains
          end if
        
          !-- New map:
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_f)
          do n_r=1,n_r_max
             do n_f=nMstart,nMstop
                df(n_f,n_r)=r_scheme%drx(n_r)*df(n_f,n_r)
             end do
          end do
+         !$omp end parallel do
 
       else
 
@@ -533,11 +561,14 @@ contains
       if ( r_scheme%version == 'cheb' ) then
     
          !-- Copy input functions:
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_f)
          do n_r=1,n_r_max
             do n_f=nMstart,nMstop
                work(n_f,n_r)=f(n_f,n_r)
             end do
          end do
+         !$omp end parallel do
     
          !-- Transform f to cheb space:
          if ( l_dct_loc ) call r_scheme%costf1(work,nMstart,nMstop,n_r_max)
@@ -551,6 +582,8 @@ contains
          call r_scheme%costf1(ddf,nMstart,nMstop,n_r_max)
     
          !-- New map:
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_f)
          do n_r=1,n_r_max
             do n_f=nMstart,nMstop
                ddf(n_f,n_r)=r_scheme%ddrx(n_r)*df(n_f,n_r)+&
@@ -558,6 +591,7 @@ contains
                df(n_f,n_r) =r_scheme%drx(n_r)*df(n_f,n_r)
             end do
          end do
+         !$omp end parallel do
 
       else
 

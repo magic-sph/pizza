@@ -309,29 +309,38 @@ contains
       !-- Local variables
       integer :: n_stage, n_r, n_m
 
+      !$omp parallel default(shared) &
+      !$omp private(n_r,n_m)
+      !$omp do
       do n_r=1,len_rhs
          do n_m=nMstart,nMstop
             rhs(n_m,n_r)=dfdt%old(n_m,n_r,1)
          end do
       end do
+      !$omp end do
 
       do n_stage=1,this%istage
+         !$omp do
          do n_r=1,len_rhs
             do n_m=nMstart,nMstop
                rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_exp(this%istage+1,n_stage)* &
                &            dfdt%expl(n_m,n_r,n_stage)
             end do
          end do
+         !$omp end do
       end do
 
       do n_stage=1,this%istage
+         !$omp do
          do n_r=1,len_rhs
             do n_m=nMstart,nMstop
                rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_imp(this%istage+1,n_stage)* &
                &                         dfdt%impl(n_m,n_r,n_stage)
             end do
          end do
+         !$omp end do
       end do
+      !$omp end parallel
 
    end subroutine set_imex_rhs
 !------------------------------------------------------------------------------
@@ -374,13 +383,18 @@ contains
       !-- Local variables:
       integer :: n_stage, n_m, n_r, m
 
+      !$omp parallel default(shared) &
+      !$omp private(n_r,n_m,m)
+      !$omp do
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             buo(n_m,n_r)=zero
          end do
       end do
+      !$omp end do
 
       do n_stage=1,this%istage
+         !$omp do
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -392,9 +406,11 @@ contains
                end if
             end do
          end do
+         !$omp end do
       end do
 
       do n_r=1,n_r_max
+         !$omp do
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
@@ -402,7 +418,9 @@ contains
                &            or1(n_r)*BuoFac*ci*real(m,cp)*temp(n_m,n_r)
             end if
          end do
+         !$omp end do
       end do
+      !$omp end parallel
 
    end subroutine assemble_implicit_buo
 !------------------------------------------------------------------------------

@@ -16,6 +16,7 @@ set(ARCH          "64"   CACHE STRING "Architecture of the platform: 32/64")
 set(OUT_PREC      "sngl" CACHE STRING "Precision of the binary outputs")
 set(USE_LAPACKLIB "MKL"  CACHE STRING "Use the Math Kernel Library for lapack calls")
 set(USE_MPI       "yes"  CACHE STRING "Use MPI parallelization")
+set(USE_OMP       "yes"  CACHE STRING "Use OpenMP")
 set(USE_PRECOND   "yes"  CACHE STRING "Use matrix preconditioning")
 find_package(SSE)
 
@@ -124,6 +125,19 @@ else()
       message(STATUS "No MPI: serial job")
 endif()
 
+# Check whether openMP can be used
+if (USE_MPI MATCHES yes)
+   if(MPI_WRAPPER_FOUND OR MPI_Fortran_FOUND)
+      if(USE_OMP MATCHES yes)
+         find_package(OpenMP_Fortran)
+         message(STATUS "Use OpenMP")
+         add_definitions(-DWITH_OMP)
+         set(CMAKE_Fortran_FLAGS ${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS})
+      else()
+         message(STATUS "No OpenMP")
+      endif()
+   endif()
+endif()
 
 # Detect the MKL library and find the libraries
 if(USE_LAPACKLIB MATCHES MKL OR USE_FFTLIB MATCHES MKL)

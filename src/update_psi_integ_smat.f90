@@ -241,6 +241,8 @@ contains
          end if
 
          !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
+         !$omp parallel do default(shared) &
+         !$omp private(n_m, m, n_cheb, rhs)
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
 
@@ -261,6 +263,7 @@ contains
 
             end if
          end do
+         !$omp end parallel do
       end if
 
       !-- Calculation of the implicit part
@@ -274,6 +277,10 @@ contains
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
 
+      !$omp parallel default(shared) &
+      !$omp private(n_m, m, rhs, n_cheb, runStart, runStop ) &
+      !$omp reduction(+:n_solve_calls,time_solve)
+      !$omp do
       do n_m=nMstart,nMstop
 
          m = idx2m(n_m)
@@ -303,7 +310,7 @@ contains
             rhs(n_cheb)=rhs(n_cheb)*psifac(n_cheb,n_m)
          end do
 
-         runStart = MPI_Wtime()
+         if ( n_m == nMstop ) runStart = MPI_Wtime()
          if ( l_galerkin ) then
             if ( m == 0 ) then
                call LHS_mat_gal(n_m)%solve(rhs(3:n_r_max), n_r_max-2)
@@ -321,10 +328,12 @@ contains
          else
             call LHS_mat_tau(n_m)%solve(rhs,n_r_max)
          end if
-         runStop = MPI_Wtime()
-         if ( runStop > runStart ) then
-            time_solve = time_solve + (runStop-runStart)
-            n_solve_calls = n_solve_calls+1
+         if ( n_m == nMstop ) then
+            runStop = MPI_Wtime()
+            if ( runStop > runStart ) then
+               time_solve = time_solve + (runStop-runStart)
+               n_solve_calls = n_solve_calls+1
+            end if
          end if
 
          if ( m == 0 ) then
@@ -338,6 +347,7 @@ contains
          end if
 
       end do
+      !$omp end do
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
       !if ( n_cheb_max < n_r_max ) then ! fill with zeros !
@@ -354,6 +364,7 @@ contains
       !end if
 
       !-- Copy the solution in psi_hat_Mloc
+      !$omp do
       do n_cheb=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
@@ -362,6 +373,8 @@ contains
             end if
          end do
       end do
+      !$omp end do
+      !$omp end parallel
 
       !-- Bring uphi0 to the physical space
       if ( l_rank_has_m0 ) then
@@ -382,7 +395,10 @@ contains
          n_dct_calls = n_dct_calls + 1
       end if
 
+      !$omp parallel default(shared) &
+      !$omp private(m,n_r,n_m,h2)
       if ( l_non_rot ) then
+         !$omp do
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -399,7 +415,9 @@ contains
                end if
             end do
          end do
+         !$omp end do
       else
+         !$omp do
          do n_r=1,n_r_max
             h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
             do n_m=nMstart,nMstop
@@ -420,7 +438,9 @@ contains
                end if
             end do
          end do
+         !$omp end do
       end if
+      !$omp end parallel
 
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
@@ -449,17 +469,22 @@ contains
       real(cp) :: ekp_fac
 
       call rscheme%costf1( dVsOm_Mloc, nMstart, nMstop, n_r_max )
+      !$omp parallel do default(shared) &
+      !$omp private(n_cheb,n_m)
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
             dVsOm_Mloc(n_m,n_cheb)=zero
          end do
       end do
+      !$omp end parallel do
       !-- Finish calculation of advection
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
            &       rscheme, nocopy=.true., l_dct_in=.false.,        &
            &       l_dct_out=.false.)
 
       !-- Finish calculation of the explicit part for current time step
+      !$omp parallel do default(shared) &
+      !$omp private(n_r,n_m,m)
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
@@ -480,6 +505,7 @@ contains
             end if
          end do
       end do
+      !$omp end parallel do
 
       if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
          do n_r=1,n_r_max
@@ -489,6 +515,8 @@ contains
 
       !-- Add Ekman pumping as an explicit term if this is requested
       if ( l_ek_pump ) then
+         !$omp parallel do default(shared) &
+         !$omp private(n_r,n_m,m,ekp_fac)
          do n_r=1,n_r_max
             ekp_fac = CorFac*ekpump(n_r)
             do n_m=nMstart,nMstop
@@ -505,12 +533,16 @@ contains
                end if
             end do
          end do
+         !$omp end parallel do
       end if
 
       !-- Transform the explicit part to Chebyshev space
       call rscheme%costf1(dpsi_exp_last, nMstart, nMstop, n_r_max)
 
       !-- Add the advection term that is already in Chebyshev space
+      !$omp parallel default(shared) &
+      !$omp private(n_cheb,n_m,m,rhs)
+      !$omp do
       do n_cheb=1,n_cheb_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
@@ -521,14 +553,18 @@ contains
             end if
          end do
       end do
+      !$omp end do
 
+      !$omp do
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
             dpsi_exp_last(n_m,n_cheb)=zero
          end do
       end do
+      !$omp end do
 
       !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
+      !$omp do
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
@@ -551,6 +587,8 @@ contains
          end do
 
       end do
+      !$omp end do
+      !$omp end parallel
 
    end subroutine finish_exp_psi_int_smat
 !------------------------------------------------------------------------------
@@ -582,6 +620,8 @@ contains
       end if
 
       !-- Matrix-vector multiplication by the operator -\int^4 r^4 \Delta .
+      !$omp parallel do default(shared) &
+      !$omp private(n_m, m,n_cheb, rhs)
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
 
@@ -609,6 +649,7 @@ contains
          end do
 
       end do
+      !$omp end parallel do
 
       !-- Calculate and store vphi force balance if needed
       if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
@@ -624,9 +665,12 @@ contains
          end do
       end if
 
+      !$omp parallel default(shared) &
+      !$omp private(n_m,m,n_cheb,rhs)
       if ( l_calc_lin_rhs ) then
 
          !-- Matrix-vector multiplication by the LHS operator
+         !$omp do
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m == 0 ) then
@@ -649,15 +693,19 @@ contains
                work_Mloc(n_m,n_cheb)=rhs(n_cheb)
             end do
          end do
+         !$omp end do
 
          !-- Finally assemble the right hand side
+         !$omp do
          do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
                dpsi_imp_Mloc_last(n_m,n_cheb)=work_Mloc(n_m,n_cheb)
             end do
          end do
+         !$omp end do
 
       end if 
+      !$omp end parallel
 
    end subroutine get_psi_rhs_imp_int_smat
 !------------------------------------------------------------------------------
