@@ -169,8 +169,9 @@ contains
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
 
-      !$omp parallel do default(shared) &
+      !$omp parallel default(shared) &
       !$omp private(n_m,m,n_cheb,rhs)
+      !$omp do
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
@@ -210,7 +211,7 @@ contains
          end do
 
       end do
-      !$omp end parallel do
+      !$omp end do
 
       !-- set cheb modes > n_cheb_max to zero (dealiazing)
       !do n_cheb=n_cheb_max+1,n_r_max
@@ -220,14 +221,14 @@ contains
       !end do
 
       !-- Copy temp_hat into temp_Mloc
-      !$omp parallel do default(shared) &
-      !$omp private(n_cheb,n_m)
+      !$omp do
       do n_cheb=1,n_r_max
          do n_m=nMstart,nMstop
             temp_Mloc(n_m,n_cheb)=temp_hat_Mloc(n_m,n_cheb)
          end do
       end do
-      !$omp end parallel do
+      !$omp end do
+      !$omp end parallel
 
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)

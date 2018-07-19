@@ -231,6 +231,10 @@ contains
       this%wimp_lin(1)      = this%dt(1)*this%wimp_lin(1)
       this%butcher_imp(:,:) = this%dt(1)*this%butcher_imp(:,:)
       this%butcher_exp(:,:) = this%dt(1)*this%butcher_exp(:,:)
+
+      !-- This is now in a more cache-friendly configuration:
+      this%butcher_exp = transpose(this%butcher_exp)
+      this%butcher_imp = transpose(this%butcher_imp)
          
    end subroutine set_weights
 !------------------------------------------------------------------------------
@@ -307,39 +311,45 @@ contains
       complex(cp), intent(out) :: rhs(nMstart:nMstop,len_rhs)
 
       !-- Local variables
+      integer :: iThread, start_m, stop_m, per_thread, all_ms
       integer :: n_stage, n_r, n_m
 
       !$omp parallel default(shared) &
-      !$omp private(n_r,n_m)
+      !$omp private(iThread, start_m, stop_m)
+      all_ms = nMstop-nMstart+1
+      per_thread = all_ms/n_threads
       !$omp do
-      do n_r=1,len_rhs
-         do n_m=nMstart,nMstop
-            rhs(n_m,n_r)=dfdt%old(n_m,n_r,1)
+      do iThread=0,n_threads-1
+         start_m=nMstart+iThread*per_thread
+         stop_m = start_m+per_thread-1
+         if ( iThread == n_threads-1 ) stop_m = nMstop
+
+         do n_r=1,len_rhs
+            do n_m=start_m,stop_m
+               rhs(n_m,n_r)=dfdt%old(n_m,n_r,1)
+            end do
          end do
+
+         do n_stage=1,this%istage
+            do n_r=1,len_rhs
+               do n_m=start_m,stop_m
+                  rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_exp(n_stage,this%istage+1)*&
+                  &            dfdt%expl(n_m,n_r,n_stage)
+               end do
+            end do
+         end do
+
+         do n_stage=1,this%istage
+            do n_r=1,len_rhs
+               do n_m=start_m,stop_m
+                  rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_imp(n_stage,this%istage+1)*&
+                  &                         dfdt%impl(n_m,n_r,n_stage)
+               end do
+            end do
+         end do
+
       end do
       !$omp end do
-
-      do n_stage=1,this%istage
-         !$omp do
-         do n_r=1,len_rhs
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_exp(this%istage+1,n_stage)* &
-               &            dfdt%expl(n_m,n_r,n_stage)
-            end do
-         end do
-         !$omp end do
-      end do
-
-      do n_stage=1,this%istage
-         !$omp do
-         do n_r=1,len_rhs
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_imp(this%istage+1,n_stage)* &
-               &                         dfdt%impl(n_m,n_r,n_stage)
-            end do
-         end do
-         !$omp end do
-      end do
       !$omp end parallel
 
    end subroutine set_imex_rhs
@@ -381,46 +391,53 @@ contains
       complex(cp), intent(out) :: buo(nMstart:nMstop,n_r_max)
 
       !-- Local variables:
+      integer :: iThread, start_m, stop_m, per_thread, all_ms
       integer :: n_stage, n_m, n_r, m
 
       !$omp parallel default(shared) &
-      !$omp private(n_r,n_m,m)
+      !$omp private(iThread, start_m, stop_m)
+      all_ms = nMstop-nMstart+1
+      per_thread = all_ms/n_threads
       !$omp do
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            buo(n_m,n_r)=zero
-         end do
-      end do
-      !$omp end do
+      do iThread=0,n_threads-1
+         start_m=nMstart+iThread*per_thread
+         stop_m = start_m+per_thread-1
+         if ( iThread == n_threads-1 ) stop_m = nMstop
 
-      do n_stage=1,this%istage
-         !$omp do
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               buo(n_m,n_r)=zero
+            end do
+         end do
+
+         do n_stage=1,this%istage
+            do n_r=1,n_r_max
+               do n_m=nMstart,nMstop
+                  m = idx2m(n_m)
+                  if ( m /= 0 ) then
+                     buo(n_m,n_r)=buo(n_m,n_r)-                              &
+                     &            this%butcher_imp(n_stage,this%istage+1)*   &
+                     &            rgrav(n_r)*or1(n_r)*BuoFac*ci*real(m,cp)*  &
+                     &            dTdt%old(n_m,n_r,n_stage)
+                  end if
+               end do
+            end do
+         end do
+
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m /= 0 ) then
-                  buo(n_m,n_r)=buo(n_m,n_r)-                              &
-                  &            this%butcher_imp(this%istage+1,n_stage)*   &
-                  &            rgrav(n_r)*or1(n_r)*BuoFac*ci*real(m,cp)*  &
-                  &            dTdt%old(n_m,n_r,n_stage)
+                  buo(n_m,n_r)=buo(n_m,n_r)-this%wimp_lin(1)*rgrav(n_r)*  &
+                  &            or1(n_r)*BuoFac*ci*real(m,cp)*temp(n_m,n_r)
                end if
             end do
          end do
-         !$omp end do
-      end do
 
-      do n_r=1,n_r_max
-         !$omp do
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-               buo(n_m,n_r)=buo(n_m,n_r)-this%wimp_lin(1)*rgrav(n_r)*  &
-               &            or1(n_r)*BuoFac*ci*real(m,cp)*temp(n_m,n_r)
-            end if
-         end do
-         !$omp end do
       end do
+      !$omp end do
       !$omp end parallel
+
 
    end subroutine assemble_implicit_buo
 !------------------------------------------------------------------------------

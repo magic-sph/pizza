@@ -385,38 +385,55 @@ contains
 
       !-- Local variables
       integer :: n_o, n_r, n_m
+      integer :: iThread, start_m, stop_m, per_thread, all_ms
 
-      do n_o=1,this%norder_imp-1
-         if ( n_o == 1 ) then
+      !$omp parallel default(shared) &
+      !$omp private(iThread, start_m, stop_m)
+      all_ms = nMstop-nMstart+1
+      per_thread = all_ms/n_threads
+      !$omp do
+      do iThread=0,n_threads-1
+         start_m=nMstart+iThread*per_thread
+         stop_m = start_m+per_thread-1
+         if ( iThread == n_threads-1 ) stop_m = nMstop
+
+
+         do n_o=1,this%norder_imp-1
+            if ( n_o == 1 ) then
+               do n_r=1,len_rhs
+                  do n_m=start_m,stop_m
+                     rhs(n_m,n_r)=this%wimp(n_o+1)*dfdt%old(n_m,n_r,n_o)
+                  end do
+               end do
+            else
+               do n_r=1,len_rhs
+                  do n_m=start_m,stop_m
+                     rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp(n_o+1)*dfdt%old(n_m,n_r,n_o)
+                  end do
+               end do
+            end if
+         end do
+
+         do n_o=1,this%norder_imp_lin-1
             do n_r=1,len_rhs
-               do n_m=nMstart,nMstop
-                  rhs(n_m,n_r)=this%wimp(n_o+1)*dfdt%old(n_m,n_r,n_o)
+               do n_m=start_m,stop_m
+                  rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp_lin(n_o+1)*dfdt%impl(n_m,n_r,n_o)
                end do
             end do
-         else
+         end do
+
+         do n_o=1,this%norder_exp
             do n_r=1,len_rhs
-               do n_m=nMstart,nMstop
-                  rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp(n_o+1)*dfdt%old(n_m,n_r,n_o)
+               do n_m=start_m,stop_m
+                  rhs(n_m,n_r)=rhs(n_m,n_r)+this%wexp(n_o)*dfdt%expl(n_m,n_r,n_o)
                end do
             end do
-         end if
-      end do
-
-      do n_o=1,this%norder_imp_lin-1
-         do n_r=1,len_rhs
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp_lin(n_o+1)*dfdt%impl(n_m,n_r,n_o)
-            end do
          end do
-      end do
 
-      do n_o=1,this%norder_exp
-         do n_r=1,len_rhs
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%wexp(n_o)*dfdt%expl(n_m,n_r,n_o)
-            end do
-         end do
       end do
+      !$omp end do
+      !$omp end parallel
+
 
    end subroutine set_imex_rhs
 !------------------------------------------------------------------------------
@@ -437,30 +454,45 @@ contains
 
       !-- Local variables:
       integer :: n_o, n_m, n_r
+      integer :: iThread, start_m, stop_m, per_thread, all_ms
 
-      do n_o=this%norder_exp,2,-1
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               dfdt%expl(n_m,n_r,n_o)=dfdt%expl(n_m,n_r,n_o-1)
+      !$omp parallel default(shared) &
+      !$omp private(iThread, start_m, stop_m)
+      all_ms = nMstop-nMstart+1
+      per_thread = all_ms/n_threads
+      !$omp do
+      do iThread=0,n_threads-1
+         start_m=nMstart+iThread*per_thread
+         stop_m = start_m+per_thread-1
+         if ( iThread == n_threads-1 ) stop_m = nMstop
+
+         do n_o=this%norder_exp,2,-1
+            do n_r=1,n_r_max
+               do n_m=start_m,stop_m
+                  dfdt%expl(n_m,n_r,n_o)=dfdt%expl(n_m,n_r,n_o-1)
+               end do
             end do
          end do
-      end do
 
-      do n_o=this%norder_imp-1,2,-1
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               dfdt%old(n_m,n_r,n_o)=dfdt%old(n_m,n_r,n_o-1)
+         do n_o=this%norder_imp-1,2,-1
+            do n_r=1,n_r_max
+               do n_m=start_m,stop_m
+                  dfdt%old(n_m,n_r,n_o)=dfdt%old(n_m,n_r,n_o-1)
+               end do
             end do
          end do
-      end do
 
-      do n_o=this%norder_imp_lin-1,2,-1
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               dfdt%impl(n_m,n_r,n_o)=dfdt%impl(n_m,n_r,n_o-1)
+         do n_o=this%norder_imp_lin-1,2,-1
+            do n_r=1,n_r_max
+               do n_m=start_m,stop_m
+                  dfdt%impl(n_m,n_r,n_o)=dfdt%impl(n_m,n_r,n_o-1)
+               end do
             end do
          end do
+
       end do
+      !$omp end do
+      !$omp end parallel
 
    end subroutine rotate_imex
 !------------------------------------------------------------------------------

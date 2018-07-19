@@ -130,6 +130,8 @@ contains
       !-- Local variables
       integer :: p, ii, n_r, n_m
 
+      !$omp parallel do default(shared) &
+      !$omp private(p,ii,n_r,n_m)
       do p = 0, n_procs-1
          ii = self%sdisp(p)+1
          do n_r=nRstart,nRstop
@@ -139,11 +141,14 @@ contains
             end do
          end do
       end do
+      !$omp end parallel do
 
       call mpi_alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
            &             self%rbuff, self%rcounts, self%rdisp, MPI_DEF_COMPLEX, &
            &             MPI_COMM_WORLD, ierr) 
 
+      !$omp parallel do default(shared) &
+      !$omp private(p,ii,n_r,n_m)
       do p = 0, n_procs-1
          ii = self%rdisp(p)+1
          do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
@@ -153,6 +158,7 @@ contains
             end do
          end do
       end do
+      !$omp end parallel do
 
    end subroutine transp_r2m
 !------------------------------------------------------------------------------
@@ -168,6 +174,8 @@ contains
       !-- Local variables
       integer :: p, ii, n_r, n_m
 
+      !$omp parallel do default(shared) &
+      !$omp private(p,ii,n_r,n_m)
       do p = 0, n_procs-1
          ii = self%sdisp(p)+1
          do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
@@ -177,11 +185,14 @@ contains
             end do
          end do
       end do
+      !$omp end parallel do
 
       call mpi_alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
            &             self%rbuff, self%rcounts, self%rdisp, MPI_DEF_COMPLEX, &
            &             MPI_COMM_WORLD, ierr) 
 
+      !$omp parallel do default(shared) &
+      !$omp private(p,ii,n_r,n_m)
       do p = 0, n_procs-1
          ii = self%rdisp(p)+1
          do n_r=nRstart,nRstop
@@ -191,6 +202,7 @@ contains
             end do
          end do
       end do
+      !$omp end parallel do
 
    end subroutine transp_m2r
 !------------------------------------------------------------------------------

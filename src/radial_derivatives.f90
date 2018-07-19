@@ -4,6 +4,7 @@ module radial_der
    !
 
    use constants, only: zero, one, three
+   use parallel_mod, only: n_threads
    use precision_mod
    use mem_alloc
    use radial_scheme, only: type_rscheme
@@ -96,21 +97,15 @@ contains
       real(cp) :: fac_cheb
       real(cp) :: threshold(nMstart:nMstop)
 
-      !$omp parallel default(shared) &
-      !$omp private(n_m)
-      !$omp do
       do n_m=nMstart, nMstop
          threshold(n_m) = maxval(abs(f(n_m,:)))*thr
       end do
-      !$omp end do
 
       !-- initialize derivatives:
       do n_cheb=n_cheb_max,n_r_max
-         !$omp do
          do n_m=nMstart,nMstop
             df(n_m,n_cheb)=zero
          end do
-         !$omp end do
       end do
       n_cheb  =n_cheb_max-1
       if ( n_r_max == n_cheb_max ) then
@@ -118,7 +113,6 @@ contains
       else
          fac_cheb=real(2*n_cheb,kind=cp)
       end if
-      !$omp do
       do n_m=nMstart,nMstop
          if ( abs(df(n_m,n_cheb)) >= threshold(n_m) ) then
             df(n_m,n_cheb)=fac_cheb*f(n_m,n_cheb+1)
@@ -126,12 +120,10 @@ contains
             df(n_m,n_cheb)=zero
          end if
       end do
-      !$omp end do
 
       !----- Recursion
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(2*n_cheb,kind=cp)
-         !$omp do
          do n_m=nMstart,nMstop
             if ( abs(f(n_m,n_cheb+1)) >= threshold(n_m) ) then
                df(n_m,n_cheb)=df(n_m,n_cheb+2) + fac_cheb*f(n_m,n_cheb+1)
@@ -139,9 +131,7 @@ contains
                df(n_m,n_cheb)=df(n_m,n_cheb+2)
             end if
          end do
-         !$omp end do
       end do
-      !$omp end parallel
 
    end subroutine get_dcheb_complex_2d
 !------------------------------------------------------------------------------
@@ -212,22 +202,16 @@ contains
       real(cp) :: fac_cheb
       real(cp) :: threshold(nMstart:nMstop)
 
-      !$omp parallel default(shared) &
-      !$omp private(n_m)
-      !$omp do
       do n_m=nMstart, nMstop
          threshold(n_m) = maxval(abs(f(n_m,:)))*thr
       end do
-      !$omp end do
 
       !----- initialize derivatives:
       do n_cheb=n_cheb_max,n_r_max
-         !$omp do
          do n_m=nMstart,nMstop
             df(n_m,n_cheb) =zero
             ddf(n_m,n_cheb)=zero
          end do
-         !$omp end do
       end do
       n_cheb=n_cheb_max-1
       if ( n_cheb_max == n_r_max ) then
@@ -235,7 +219,6 @@ contains
       else
          fac_cheb=real(2*n_cheb,kind=cp)
       end if
-      !$omp do
       do n_m=nMstart,nMstop
          if ( abs(df(n_m,n_cheb)) >= threshold(n_m) ) then
             df(n_m,n_cheb)=fac_cheb*f(n_m,n_cheb+1)
@@ -244,12 +227,10 @@ contains
          end if
          ddf(n_m,n_cheb)=zero
       end do
-      !$omp end do
     
       !----- recursion
       do n_cheb=n_cheb_max-2,1,-1
          fac_cheb=real(2*n_cheb,kind=cp)
-         !$omp do
          do n_m=nMstart,nMstop
             if ( abs(f(n_m,n_cheb+1)) >= threshold(n_m) ) then
                df(n_m,n_cheb) = df(n_m,n_cheb+2) + fac_cheb* f(n_m,n_cheb+1)
@@ -262,9 +243,7 @@ contains
                ddf(n_m,n_cheb)=ddf(n_m,n_cheb+2)
             end if
          end do
-         !$omp end do
       end do
-      !$omp end parallel
 
    end subroutine get_ddcheb_complex_2d
 !------------------------------------------------------------------------------
@@ -350,6 +329,7 @@ contains
       complex(cp), intent(out) :: df(nMstart:nMstop,n_r_max) ! first derivative of f
     
       !-- Local:
+      integer :: iThread, start_m, stop_m, per_thread, all_ms
       integer :: n_r,n_f,od
       logical :: copy_array, l_dct_in_loc, l_dct_out_loc
 
@@ -388,7 +368,20 @@ contains
           
             !-- Get derivatives:
             !call get_dcheb(work,df,nMstart,nMstop,n_r_max,r_scheme%n_max)
-            call get_dcheb(work,df,nMstart,nMstop,n_r_max,n_r_max)
+            !$omp parallel default(shared) &
+            !$omp private(iThread, start_m, stop_m)
+            all_ms = nMstop-nMstart+1
+            per_thread = all_ms/n_threads
+            !$omp do
+            do iThread=0,n_threads-1
+               start_m=nMstart+iThread*per_thread
+               stop_m = start_m+per_thread-1
+               if ( iThread == n_threads-1 ) stop_m = nMstop
+               call get_dcheb(work(start_m:stop_m,:),df(start_m:stop_m,:), &
+                    &              start_m,stop_m,n_r_max,n_r_max)
+            end do
+            !$omp end do
+            !$omp end parallel
           
             !-- Transform back:
             if ( l_dct_out_loc ) call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
@@ -400,7 +393,20 @@ contains
           
             !-- Get derivatives:
             !call get_dcheb(f,df,nMstart,nMstop,n_r_max,r_scheme%n_max)
-            call get_dcheb(f,df,nMstart,nMstop,n_r_max,n_r_max)
+            !$omp parallel default(shared) &
+            !$omp private(iThread, start_m, stop_m)
+            all_ms = nMstop-nMstart+1
+            per_thread = all_ms/n_threads
+            !$omp do
+            do iThread=0,n_threads-1
+               start_m=nMstart+iThread*per_thread
+               stop_m = start_m+per_thread-1
+               if ( iThread == n_threads-1 ) stop_m = nMstop
+               call get_dcheb(f(start_m:stop_m,:),df(start_m:stop_m,:), start_m, &
+                    &           stop_m,n_r_max,n_r_max)
+            end do
+            !$omp end do
+            !$omp end parallel
           
             !-- Transform back:
             if ( l_dct_in_loc ) call r_scheme%costf1(f,nMstart,nMstop,n_r_max)
@@ -550,6 +556,7 @@ contains
     
       !-- Local variables:
       logical :: l_dct_loc
+      integer :: iThread, start_m, stop_m, per_thread, all_ms
       integer :: n_r,n_f,od
 
       if ( present(l_dct) ) then
@@ -575,7 +582,20 @@ contains
     
          !-- Get derivatives:
          !call get_ddcheb(work,df,ddf,nMstart,nMstop,n_r_max,r_scheme%n_max)
-         call get_ddcheb(work,df,ddf,nMstart,nMstop,n_r_max,n_r_max)
+         !$omp parallel default(shared) &
+         !$omp private(iThread, start_m, stop_m)
+         all_ms = nMstop-nMstart+1
+         per_thread = all_ms/n_threads
+         !$omp do
+         do iThread=0,n_threads-1
+            start_m=nMstart+iThread*per_thread
+            stop_m = start_m+per_thread-1
+            if ( iThread == n_threads-1 ) stop_m = nMstop
+            call get_ddcheb(work(start_m:stop_m,:),df(start_m:stop_m,:),  &
+                 &          ddf(start_m:stop_m,:),start_m,stop_m,n_r_max,n_r_max)
+         end do
+         !$omp end do
+         !$omp end parallel
     
          !-- Transform back:
          call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
