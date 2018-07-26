@@ -4,18 +4,43 @@ from scipy.fftpack import dct
 import glob
 import os
 
-def costf(f):
+def costf(f, fac=True):
     """
     This routine transform an input array from real to Chebyshev space
 
     :param f: the input array
     :type f: numpy.ndarray
+    :param fac: normalisation factor is used
+    :type f: bool
     :returns: a transformed array
     :rtype: numpy.ndarray
     """
-    fac = np.sqrt(0.5/(f.shape[-1]-1))
-    fhat = fac*dct(f, type=1, axis=-1)
+    if fac:
+        norm = np.sqrt(0.5/(f.shape[-1]-1))
+    else:
+        norm = 1.
+    fhat = norm*dct(f, type=1, axis=-1)
     return fhat
+
+def chebgrid(nr, a, b):
+    """
+    This function defines a Gauss-Lobatto grid from a to b.
+
+    >>> r_icb = 0.5 ; r_cmb = 1.5; n_r_max=65
+    >>> rr = chebgrid(n_r_max, r_icb, r_cmb)
+
+    :param nr: number of radial grid points
+    :type nr: int
+    :param a: lower limit of the Gauss-Lobatto grid
+    :type a: float
+    :param b: upper limit of the Gauss-Lobatto grid
+    :type b: float
+    :returns: the Gauss-Lobatto grid
+    :rtype: numpy.ndarray
+    """
+    rst = (a+b)/(b-a)
+    rr = 0.5*(rst+np.cos(np.pi*(1.-np.arange(nr+1.)/nr)))*(b-a)
+    return rr
 
 def avgField(time, field, tstart=None, std=False):
     """

@@ -34,7 +34,8 @@ def cut(dat, vmax=None, vmin=None):
 
 def equatContour(data, radius, minc=1, label=None, levels=65,
                  cm='seismic', normed=True, vmax=None, vmin=None, cbar=True,
-                 tit=True, normRad=False, deminc=True, stream=False):
+                 tit=True, normRad=False, deminc=True, stream=False,
+                 contourLines=False, fig=None, ax=None):
     """
     Plot the equatorial cut of a given field
 
@@ -68,6 +69,12 @@ def equatContour(data, radius, minc=1, label=None, levels=65,
     :param deminc: a logical to indicate if one wants do get rid of the
                    possible azimuthal symmetry
     :type deminc: bool
+    :param contourLines: a switch to overplot the contour lines
+    :type contourLines: bool
+    :param fig: a pre-existing figure (if needed)
+    :type fig: matplotlib.figure.Figure
+    :param ax: a pre-existing axis
+    :type ax: matplotlib.axes._subplots.AxesSubplot
     """
 
     nphi, ntheta = data.shape
@@ -84,35 +91,41 @@ def equatContour(data, radius, minc=1, label=None, levels=65,
         maxS = np.sqrt(np.mean(data**2, axis=0))
         data[:, maxS!=0.] /= maxS[maxS!=0.]
 
-    if tit and label is not None:
-        if cbar:
-            fig = plt.figure(figsize=(6.5,5.5))
-            ax = fig.add_axes([0.01, 0.01, 0.76, 0.9])
+    if fig is None and ax is None:
+        if tit and label is not None:
+            if cbar:
+                fig = plt.figure(figsize=(6.5,5.5))
+                ax = fig.add_axes([0.01, 0.01, 0.76, 0.9])
+            else:
+                fig = plt.figure(figsize=(5,5.5))
+                ax = fig.add_axes([0.01, 0.01, 0.98, 0.9])
+            ax.set_title(label, fontsize=24)
         else:
-            fig = plt.figure(figsize=(5,5.5))
-            ax = fig.add_axes([0.01, 0.01, 0.98, 0.9])
-        ax.set_title(label, fontsize=24)
-    else:
-        if cbar:
-            fig = plt.figure(figsize=(6.5,5))
-            ax = fig.add_axes([0.01, 0.01, 0.76, 0.98])
-        else:
-            fig = plt.figure(figsize=(5, 5))
-            ax = fig.add_axes([0.01, 0.01, 0.98, 0.98])
+            if cbar:
+                fig = plt.figure(figsize=(6.5,5))
+                ax = fig.add_axes([0.01, 0.01, 0.76, 0.98])
+            else:
+                fig = plt.figure(figsize=(5, 5))
+                ax = fig.add_axes([0.01, 0.01, 0.98, 0.98])
 
-    if not deminc:
-        if minc == 2:
-            w, h = fig.get_size_inches()
-            fig.set_size_inches((2*w, h))
+        if not deminc:
+            if minc == 2:
+                w, h = fig.get_size_inches()
+                fig.set_size_inches((2*w, h))
 
     cmap = plt.get_cmap(cm)
     if vmax is not None or vmin is not None:
         normed = False
         cs = np.linspace(vmin, vmax, levels)
         im = ax.contourf(xx, yy, data, cs, cmap=cmap, extend='both')
+        if contourLines:
+            im1 = ax.contour(xx, yy, data, cs, colors=['k'], linewidths=[0.5], \
+                             extend='both')
     else:
         cs = levels
         im = ax.contourf(xx, yy, data, cs, cmap=cmap)
+        if contourLines:
+            im1 = ax.contour(xx, yy, data, cs, colors=['k'], linewidths=[0.5])
         #im = ax.pcolormesh(xx, yy, data, cmap=cmap, antialiased=True)
 
     ax.plot(radius[0]*np.cos(phi), radius[0]*np.sin(phi), 'k-', lw=1.5)
