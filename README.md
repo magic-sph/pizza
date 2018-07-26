@@ -4,7 +4,7 @@
 
 * **pizza** is a high-performance numerical code that quasi-geostrophic and non-rotating convection in a 2-D annulus geometry. pizza solves for the Navier-Stokes equation including Coriolis force couple with a temperature equation under the Boussinesq approximation.  
 
-* **pizza** uses Chebyshev polynomials in the radial direction and Fourier decomposition in the azimuthal direction. The time-stepping scheme relies on a semi-implicit [Crank-Nicolson]( https://en.wikipedia.org/wiki/Crank–Nicolson_method) for the linear terms of the equations and a [Adams-Bashforth](https://en.wikipedia.org/wiki/Linear_multistep_method) scheme for the non-linear terms and the Coriolis force.  
+* **pizza** uses Chebyshev polynomials in the radial direction and Fourier decomposition in the azimuthal direction. Several Implicit-Explicit (IMEX) time-steppers are implemented including multistep time schemes (Crank-Nicolson-Adams Bashforth, Semi-implicit Backward Difference) as well as IMEX Runge-Kutta schemes.
 
 * **pizza** is written in Fortran and designed to be used on supercomputing clusters. It requires [CMake](https://cmake.org) [MPI](http://www.open-mpi.org/), [FFTW](http://www.fftw.org) and [LAPACK](http://www.netlib.org/lapack/) to be compiled and executed. Postprocessing functions written in python (requiring [matplotlib](http://matplotlib.org/) and [scipy](http://www.scipy.org/)) are also provided to allow a useful data analysis.  
 
@@ -93,4 +93,5 @@ and use them to read time series, graphic files, movies, ...
 
 ```python
 python> ts = PizzaTs(field='e_kin', all=True)
+python> f = PizzaFields(verbose=True)
 python> ...
