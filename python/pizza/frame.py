@@ -58,7 +58,7 @@ class PizzaFields(PizzaSetup):
     physical grid and display them.
     """
 
-    def __init__(self, ivar=None, datadir='.', tag=None, endian='l'):
+    def __init__(self, ivar=None, datadir='.', tag=None, endian='l', verbose=False):
         """
         :param ivar: the number of the snapshot file
         :type ivar: int
@@ -68,9 +68,11 @@ class PizzaFields(PizzaSetup):
         :type tag: str
         :param endian: endianness of the file ('B' or 'l')
         :type endian: str
+        :param verbose: a boolean to display some informations
+        :type verbose: bool
         """
 
-        filename = self.get_filename('frame_temp', ivar, datadir, tag)
+        filename = self.get_filename('frame_temp', ivar, datadir, tag, verbose)
         f = Frame(filename, endian=endian)
         self.ra = f.ra
         self.ek = f.ek
@@ -92,22 +94,22 @@ class PizzaFields(PizzaSetup):
         self.temp_m[0, :] += self.tcond
         self.temp = spec_spat(self.temp_m, self.n_phi_max)
 
-        filename = self.get_filename('frame_us', ivar, datadir, tag)
+        filename = self.get_filename('frame_us', ivar, datadir, tag, verbose)
         f = Frame(filename, endian=endian)
         self.us_m = f.field_m
         self.us = spec_spat(self.us_m, self.n_phi_max)
 
-        filename = self.get_filename('frame_up', ivar, datadir, tag)
+        filename = self.get_filename('frame_up', ivar, datadir, tag, verbose)
         f = Frame(filename, endian=endian)
         self.uphi_m = f.field_m
         self.uphi = spec_spat(self.uphi_m, self.n_phi_max)
 
-        filename = self.get_filename('frame_om', ivar, datadir, tag)
+        filename = self.get_filename('frame_om', ivar, datadir, tag, verbose)
         f = Frame(filename, endian=endian)
         self.vortz_m = f.field_m
         self.vortz = spec_spat(self.vortz_m, self.n_phi_max)
 
-    def get_filename(self, prefix, ivar, datadir, tag):
+    def get_filename(self, prefix, ivar, datadir, tag, verbose):
         """
         This routine determines the filename based on what is available
         in the current directory
@@ -120,6 +122,8 @@ class PizzaFields(PizzaSetup):
         :type datadir: str
         :param tag: extension TAG of the snapshot files
         :type tag: str
+        :param verbose: a boolean to display some informations
+        :type verbose: bool
         """
 
         if tag is not None:
@@ -155,12 +159,14 @@ class PizzaFields(PizzaSetup):
             print('No such file')
             return
 
-        print('read %s' % filename)
+        if verbose:
+            print('read %s' % filename)
         return filename
 
     def equat(self, field='vort', cm='seismic', levels=65, deminc=True,
               normed=True, vmax=None, vmin=None, normRad=False, stream=False,
-              streamNorm='vel', streamDensity=1.5, cbar=True, label=None):
+              streamNorm='vel', streamDensity=1.5, cbar=True, label=None,
+              streamColor='k'):
         """
         Display an equatorial planform of a scalar quantity
 
@@ -193,6 +199,8 @@ class PizzaFields(PizzaSetup):
         :type streamNorm: str
         :param streamDensity: control the number of streamlines
         :type streamDensity: float
+        :param streamColor: color of the streamlines
+        :type streamColor: str
         """
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
@@ -256,5 +264,5 @@ class PizzaFields(PizzaSetup):
             else:
                 lw = 3.*abs(data.T)/abs(self.vortz).max()
             ax1.streamplot(ttheta.T, rr.T, v.T, u.T, density=streamDensity,
-                           linewidth=lw, color='k')
+                           linewidth=lw, color=streamColor)
             ax1.set_ylim(0., rad.max())

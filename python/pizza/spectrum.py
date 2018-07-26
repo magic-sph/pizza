@@ -122,7 +122,7 @@ class PizzaSpectrum(PizzaSetup):
             if abs(self.up2_mean[0]) > 0.:
                 ax.fill_between(self.index[1:]+1, self.us2_mean[1:]-self.us2_std[1:], \
                                 self.us2_mean[1:]+self.us2_std[1:], alpha=0.1)
-                ax.plot(self.index+1, self.us2_mean, label='us**2')
+                ax.plot(self.index[1:]+1, self.us2_mean[1:], label='us**2')
 
                 ax.fill_between(self.index+1, self.up2_mean-self.up2_std, \
                                 self.up2_mean+self.up2_std, alpha=0.1)

@@ -239,6 +239,7 @@ class PizzaBalance(PizzaSetup):
         ax.legend(loc='best', frameon=False)
         ax.set_xlabel('Radius')
         ax.set_ylabel('Forces')
+        fig.tight_layout()
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -253,6 +254,7 @@ class PizzaBalance(PizzaSetup):
         ax.set_xlim(self.radius[-1], self.radius[0])
         ax.set_xlabel('time')
         ax.set_ylabel('up')
+        fig.tight_layout()
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -263,3 +265,4 @@ class PizzaBalance(PizzaSetup):
 
         ax.set_xlabel('Time')
         ax.set_ylabel('Radius')
+        fig.tight_layout()

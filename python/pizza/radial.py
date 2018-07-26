@@ -83,6 +83,8 @@ class PizzaRadial(PizzaSetup):
         self.uphi_std = data[:, 8]
         self.temp_mean = data[:, 9]
         self.temp_std = data[:, 10]
+        self.nushell_mean = data[:, 11]
+        self.nushell_std = data[:, 12]
 
         if iplot:
             self.plot()

@@ -212,7 +212,8 @@ class PizzaTs(PizzaSetup):
             ax.plot(self.time, self.topnuss, label='Top Nusselt')
             ax.plot(self.time, self.botnuss, label='Bottom Nusselt')
             ax.plot(self.time, self.volnuss, label='Volume Nusselt')
-            ax.plot(self.time, self.shellnuss, label='Shell Nusselt')
+            if not self.l_non_rot:
+                ax.plot(self.time, self.shellnuss, label='Shell Nusselt')
             ax.legend(loc='lower right', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Nusselt number')
