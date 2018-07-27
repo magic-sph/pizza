@@ -28,6 +28,7 @@ module outputs
    use output_frames, only: write_snapshot_mloc
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
+   use char_manip, only: capitalize
 
    implicit none
 
@@ -38,7 +39,7 @@ module outputs
    real(cp) :: timeLast_spec, timeAvg_spec
    integer, public :: n_log_file
    integer :: n_rey_file_2D, n_heat_file, n_kin_file_2D, n_power_file_2D
-   integer :: n_lscale_file
+   integer :: n_lscale_file, n_sig_file
    integer :: n_vphi_bal_file, n_rey_file_3D, n_power_file_3D, n_kin_file_3D
    character(len=144), public :: log_file
 
@@ -61,7 +62,7 @@ module outputs
    type(vp_bal_type), public :: vp_bal
 
    public :: initialize_outputs, finalize_outputs, get_time_series, &
-   &         write_outputs, terminate_vp_bal
+   &         write_outputs, terminate_vp_bal, check_signals
 
 contains
 
@@ -105,6 +106,10 @@ contains
             open(newunit=n_rey_file_3D,file=file_name, status='new')
          end if
 
+         file_name = 'signal.'//tag
+         open(newunit=n_sig_file, file=file_name, status='unknown')
+         write(n_sig_file,'(A3)') 'NOT'
+         close(n_sig_file)
       end if 
 
       timeAvg_rad  = 0.0_cp
@@ -196,6 +201,53 @@ contains
       end if
 
    end subroutine finalize_outputs
+!------------------------------------------------------------------------------
+   subroutine check_signals(signals)
+
+      !-- Outputs signals
+      integer, intent(inout) :: signals(4)
+
+      !-- Local variables:
+      character(len=255) :: message
+      character(len=76) :: SIG
+
+      signals(:) = 0
+
+      if ( rank == 0 ) then
+         !----- Signalling via file signal:
+         message='signal.'//tag
+         open(newunit=n_sig_file, file=trim(message), status='old')
+         read(n_sig_file,*) SIG
+         close(n_sig_file)
+         if ( len(trim(SIG)) > 0 ) then ! Non blank string ?
+            call capitalize(SIG)
+
+            if ( index(SIG,'END')/=0 ) signals(1)=1  !n_stop_signal=1
+
+            if ( index(SIG,'FRA')/=0 ) then
+               signals(2)=1
+               open(newunit=n_sig_file, file=trim(message), status='unknown')
+               write(n_sig_file,'(A3)') 'NOT'
+               close(n_sig_file)
+            end if
+            if ( index(SIG,'RST')/=0 ) then
+               signals(3)=1
+               open(newunit=n_sig_file, file=trim(message), status='unknown')
+               write(n_sig_file,'(A3)') 'NOT'
+               close(n_sig_file)
+            end if
+            if ( index(SIG,'SPE')/=0 ) then
+               signals(4)=1
+               open(newunit=n_sig_file, file=trim(message), status='unknown')
+               write(n_sig_file,'(A3)') 'NOT'
+               close(n_sig_file)
+            end if
+         end if
+      end if
+
+      call MPI_Bcast(signals,4,MPI_Integer,0,MPI_COMM_WORLD,ierr)
+
+   end subroutine check_signals
 !------------------------------------------------------------------------------
    subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst,          &
               &             l_spec, l_frame, l_vphi_bal_calc, l_vphi_bal_write,&

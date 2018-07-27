@@ -27,7 +27,8 @@ module step_time
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve
-   use outputs, only: n_log_file, write_outputs, vp_bal, terminate_vp_bal
+   use outputs, only: n_log_file, write_outputs, vp_bal, terminate_vp_bal,&
+       &              check_signals
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
    use time_schemes, only: type_tscheme
    use parallel_mod
@@ -61,19 +62,16 @@ contains
       integer :: n_r_loops, n_mpi_comms, n_m_loops, n_m_loops_mat
       integer :: n_io_calls, n_fft_calls, n_solve_calls, n_dct_calls
       integer :: n_lu_calls, n_stage
+      integer :: n_stop_signal, n_spec_signal, n_rst_signal, n_frame_signal
+      integer :: signals(4)
       real(cp) :: run_time_r_loop, run_time_mpi_comms
       real(cp) :: run_time_m_loop, run_time_m_loop_mat, run_time_fft
       real(cp) :: run_time_tot, run_time_io, run_time_passed, run_time_solve
       real(cp) :: run_time_dct, run_time_lu
       real(cp) :: runStart, runStop, runStartT, runStopT
 
-      logical :: l_new_dt
-      logical :: l_rst
-      logical :: l_frame
-      logical :: l_spec
-      logical :: l_log, l_log_next
-      logical :: l_vphi_bal_calc, l_vphi_bal_write
-      logical :: l_stop_time
+      logical :: l_new_dt, l_rst, l_frame, l_spec, l_log, l_log_next
+      logical :: l_vphi_bal_calc, l_vphi_bal_write, l_stop_time
       logical :: lMat, lMatNext
 
       tenth_n_time_steps=real(n_time_steps,kind=cp)/10.0_cp
@@ -128,6 +126,15 @@ contains
       n_time_steps_go = 0
       outer: do n_time_step=1,n_time_steps_run
 
+         !-----------------
+         !-- Check SIGNALS
+         !-----------------
+         call check_signals(signals)
+         n_stop_signal  = signals(1)
+         n_frame_signal = signals(2)
+         n_rst_signal   = signals(3)
+         n_spec_signal  = signals(4)
+
          !-------------------
          !-- Determine whether we will need outputs at this time step
          !-------------------
@@ -136,9 +143,11 @@ contains
             l_log_next = l_correct_step(n_time_step,n_time_steps,n_log_step,0)
          end if
          l_rst = l_correct_step(n_time_step-1,n_time_steps,n_checkpoint_step, &
-                 &              n_checkpoints)
-         l_frame = l_correct_step(n_time_step-1,n_time_steps,n_frame_step,n_frames)
-         l_spec = l_correct_step(n_time_step-1,n_time_steps,n_spec_step,n_specs)
+                 &              n_checkpoints) .or. n_rst_signal == 1
+         l_frame = l_correct_step(n_time_step-1,n_time_steps,n_frame_step,n_frames) &
+         &         .or. n_frame_signal == 1
+         l_spec = l_correct_step(n_time_step-1,n_time_steps,n_spec_step,n_specs) &
+         &        .or. n_spec_signal == 1
          l_vphi_bal_write = l_log .and. l_vphi_balance
          l_vphi_bal_calc = l_log_next .and. l_vphi_balance
 
@@ -153,6 +162,7 @@ contains
             l_stop_time=.true.
          end if
          !-- Some reasons to stop the run
+         if ( n_stop_signal > 0 ) l_stop_time=.true.
          if ( n_time_step == n_time_steps_run ) l_stop_time=.true.
          if ( time > tEND .and. tEND /= 0.0_cp ) l_stop_time=.true.
 
