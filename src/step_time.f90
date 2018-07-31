@@ -42,7 +42,10 @@ module step_time
 
 contains
 
-   subroutine time_loop(time, tscheme)
+   subroutine time_loop(time, tscheme, run_time_init)
+
+      !-- Input variable
+      real(cp),            intent(in) :: run_time_init
 
       !-- Output variables
       real(cp),            intent(inout) :: time
@@ -154,9 +157,9 @@ contains
          !-------------------
          !-- Check whether the run is not getting out of time
          !-------------------
-         call MPI_Allreduce(MPI_IN_PLACE,run_time_tot,1,MPI_INTEGER8, &
+         call MPI_Allreduce(MPI_IN_PLACE,run_time_tot,1,MPI_DEF_REAL, &
               &             MPI_MAX,MPI_COMM_WORLD,ierr)
-         if ( run_time_tot > run_time_requested ) then
+         if ( run_time_tot+run_time_init+run_time_passed > run_time_requested ) then
             write(message,'("! Run time limit exeeded !")')
             call logWrite(message, n_log_file)
             l_stop_time=.true.
@@ -184,7 +187,7 @@ contains
               &             dtemp_Mloc, dpsidt, dTdt)
          runStop = MPI_Wtime()
          if (runStop>runStart) then
-            n_io_calls  =n_io_calls+1
+            n_io_calls =n_io_calls+1
             run_time_io=run_time_io+(runStop-runStart)
          end if
 
@@ -330,6 +333,8 @@ contains
          !---------------------
          !-- Info about run advance
          !---------------------
+         run_time_passed=run_time_tot
+         run_time_passed=run_time_passed/n_time_steps_go
          if ( real(n_time_step,cp)+tenth_n_time_steps*real(nPercent,cp) >=  &
             & real(n_time_steps,cp)  .or. n_time_steps < 31 ) then
             write(message,'(" ! Time step finished:",i8)') n_time_step
@@ -341,8 +346,6 @@ contains
                call logWrite(message, n_log_file)
                nPercent=nPercent-1
             end if
-            run_time_passed=run_time_tot
-            run_time_passed = run_time_passed/n_time_steps_go
             if ( rank == 0 ) then
                call formatTime(6,' ! Mean wall time for time step:',  &
                &               run_time_passed)
@@ -367,13 +370,13 @@ contains
          call my_reduce_mean(run_time_m_loop, 0)
       end if
       if ( n_m_loops_mat /= 0 ) then
-         run_time_m_loop_mat= run_time_m_loop_mat/n_m_loops_mat
+         run_time_m_loop_mat=run_time_m_loop_mat/n_m_loops_mat
          call my_reduce_mean(run_time_m_loop_mat, 0)
       end if
       run_time_mpi_comms = run_time_mpi_comms/n_mpi_comms
       call my_reduce_mean(run_time_mpi_comms, 0)
       if ( n_time_steps_go /= 0 ) then
-         run_time_tot       = run_time_tot/n_time_steps_go
+         run_time_tot=run_time_tot/n_time_steps_go
          call my_reduce_mean(run_time_tot, 0)
       end if
       run_time_fft = run_time_fft/n_fft_calls

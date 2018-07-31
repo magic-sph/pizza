@@ -41,7 +41,7 @@ program pizza
 
    real(cp) :: time
    class(type_tscheme), pointer :: tscheme
-   real(cp) :: runStop, runStart
+   real(cp) :: run_stop, run_start, run_init
    integer(lip) :: local_bytes_used
    integer :: values(8)
    integer :: n, n_out
@@ -50,7 +50,7 @@ program pizza
    !-- Initialize MPI
    call initialize_mpi()
 
-   runStart = MPI_Wtime()
+   run_start = MPI_Wtime()
 
    !--
    if ( rank == 0 ) then
@@ -159,11 +159,13 @@ program pizza
          write(n_out,'(''   start dt   ='',1p,ES16.4)') tscheme%dt(1)
       end do
    end if
+   run_init = MPI_Wtime()
+   run_init = run_init - run_start
 
    !-- Time integration
-   call time_loop(time, tscheme)
+   call time_loop(time, tscheme, run_init)
 
-   runStop = MPI_Wtime()
+   run_stop = MPI_Wtime()
 
    !--- Write stop time to SDTOUR and logfile:
    if ( rank == 0 ) then
@@ -176,7 +178,7 @@ program pizza
          ! write(n_out,'(''   steps gone='',i10)') (n_time_step-1)
          write(n_out,*)
          write(n_out,*)
-         call formatTime(n_out,'! Total run time:', runStop-runStart)
+         call formatTime(n_out,'! Total run time:', run_stop-run_start)
          write(n_out,*) '!-----------------------------------!'
          write(n_out,*) '!---- Ready for another pizza ? ----!'
          write(n_out,*) '!-----------------------------------!'
