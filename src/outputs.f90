@@ -62,7 +62,7 @@ module outputs
    type(vp_bal_type), public :: vp_bal
 
    public :: initialize_outputs, finalize_outputs, get_time_series, &
-   &         write_outputs, terminate_vp_bal, check_signals
+   &         write_outputs, terminate_vp_bal, read_signal_file
 
 contains
 
@@ -202,7 +202,7 @@ contains
 
    end subroutine finalize_outputs
 !------------------------------------------------------------------------------
-   subroutine check_signals(signals)
+   subroutine read_signal_file(signals)
 
       !-- Outputs signals
       integer, intent(inout) :: signals(4)
@@ -247,7 +247,7 @@ contains
 
       call MPI_Bcast(signals,4,MPI_Integer,0,MPI_COMM_WORLD,ierr)
 
-   end subroutine check_signals
+   end subroutine read_signal_file
 !------------------------------------------------------------------------------
    subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst,          &
               &             l_spec, l_frame, l_vphi_bal_calc, l_vphi_bal_write,&

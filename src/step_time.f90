@@ -28,7 +28,7 @@ module step_time
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve
    use outputs, only: n_log_file, write_outputs, vp_bal, terminate_vp_bal,&
-       &              check_signals
+       &              read_signal_file
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
    use time_schemes, only: type_tscheme
    use parallel_mod
@@ -37,6 +37,8 @@ module step_time
    implicit none
 
    private
+
+   real(cp) :: tsig=0.0_cp ! to measure the time between two signal files
 
    public :: time_loop
 
@@ -91,6 +93,11 @@ contains
       l_vphi_bal_write=.false.
       lMatNext        =.true.
 
+      n_stop_signal  = 0
+      n_spec_signal  = 0
+      n_rst_signal   = 0
+      n_frame_signal = 0
+
       !-- Dummy initial timings
       dtr_Rloc(:) = 1e10_cp
       dth_Rloc(:) = 1e10_cp
@@ -129,15 +136,7 @@ contains
       n_time_steps_go = 0
       outer: do n_time_step=1,n_time_steps_run
 
-         !-----------------
-         !-- Check SIGNALS
-         !-----------------
-         call check_signals(signals)
-         n_stop_signal  = signals(1)
-         n_frame_signal = signals(2)
-         n_rst_signal   = signals(3)
-         n_spec_signal  = signals(4)
-
+         runStartT = MPI_Wtime()
          !-------------------
          !-- Determine whether we will need outputs at this time step
          !-------------------
@@ -154,6 +153,15 @@ contains
          l_vphi_bal_write = l_log .and. l_vphi_balance
          l_vphi_bal_calc = l_log_next .and. l_vphi_balance
 
+         !-----------------
+         !-- Check SIGNALS
+         !-----------------
+         call check_signals(run_time_passed, signals)
+         n_stop_signal  = signals(1)
+         n_frame_signal = signals(2)
+         n_rst_signal   = signals(3)
+         n_spec_signal  = signals(4)
+
          !-------------------
          !-- Check whether the run is not getting out of time
          !-------------------
@@ -164,6 +172,7 @@ contains
             call logWrite(message, n_log_file)
             l_stop_time=.true.
          end if
+
          !-- Some reasons to stop the run
          if ( n_stop_signal > 0 ) l_stop_time=.true.
          if ( n_time_step == n_time_steps_run ) l_stop_time=.true.
@@ -196,7 +205,6 @@ contains
 
          !-- Now loop over the stages
          tscheme%istage = 1
-         runStartT = MPI_Wtime()
          do n_stage=1,tscheme%nstages
 
             if ( tscheme%l_exp_calc(n_stage) ) then
@@ -319,6 +327,9 @@ contains
             tscheme%istage = tscheme%istage+1
 
          end do ! Finish loop over stages
+
+         if ( l_vphi_bal_calc ) call terminate_vp_bal(up_Mloc, vp_bal, tscheme)
+
          !---------------------
          !-- Timings
          !---------------------
@@ -327,8 +338,6 @@ contains
             run_time_tot=run_time_tot+(runStopT-runStartT)
          end if
          n_time_steps_go = n_time_steps_go+1
-
-         if ( l_vphi_bal_calc ) call terminate_vp_bal(up_Mloc, vp_bal, tscheme)
 
          !---------------------
          !-- Info about run advance
@@ -484,5 +493,31 @@ contains
       end if
 
    end subroutine start_from_another_scheme
+!--------------------------------------------------------------------------------
+   subroutine check_signals(run_time_passed, signals)
+
+      !-- Input variable:
+      real(cp), intent(in) :: run_time_passed
+
+      !-- Output variables
+      integer, intent(out) :: signals(4)
+
+      !-- Local variables:
+      logical :: l_check_signal
+
+      tsig = tsig+run_time_passed
+      if ( tsig > 2.0_cp ) then ! Only check signals every second
+         l_check_signal = .true.
+         tsig = 0.0_cp
+      else
+         l_check_signal = .false.
+      end if
+      if ( l_check_signal ) then
+         call read_signal_file(signals)
+      else
+         signals(:) = 0
+      end if
+
+   end subroutine check_signals
 !--------------------------------------------------------------------------------
 end module step_time
