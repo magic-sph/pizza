@@ -4,6 +4,10 @@ from scipy.fftpack import dct
 import glob
 import os
 
+def cc2real(f):
+
+    return 2.*np.sum(abs(f[1:,:])**2, axis=0) + f[0,:].real*f[0,:].real
+
 def costf(f, fac=True):
     """
     This routine transform an input array from real to Chebyshev space

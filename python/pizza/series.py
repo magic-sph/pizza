@@ -60,11 +60,13 @@ class PizzaTs(PizzaSetup):
             # Or the tag is a bit more complicated and we need to find 
             # the corresponding log file
             else:
-                mask = re.compile(r'%s\.(.*)' % self.field)
+                st = os.path.join(datadir, r'%s\.(.*)' % self.field)
+                #mask = re.compile(r'%s\.(.*)' % self.field)
+                mask = re.compile(st)
                 if mask.match(files[-1]):
                     ending = mask.search(files[-1]).groups(0)[0]
-                    if logFiles.__contains__('log.%s' % ending):
-                        PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                    if logFiles.__contains__(os.path.join(datadir, 'log.%s' % ending)):
+                        PizzaSetup.__init__(self, quiet=True, datadir=datadir,
                                             nml='log.%s' % ending)
 
             # Concatenate the files that correspond to the tag
