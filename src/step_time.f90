@@ -506,13 +506,19 @@ contains
       logical :: l_check_signal
 
       tsig = tsig+run_time_passed
-      if ( tsig > 2.0_cp ) then ! Only check signals every second
-         l_check_signal = .true.
-         tsig = 0.0_cp
-      else
-         l_check_signal = .false.
+      if ( rank == 0 ) then
+         if ( tsig > 2.0_cp ) then ! Only check signals every second
+            l_check_signal = .true.
+            tsig = 0.0_cp
+         else
+            l_check_signal = .false.
+         end if
       end if
+
+      call MPI_Bcast(l_check_signal,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
+
       if ( l_check_signal ) then
+         call MPI_Barrier(MPI_COMM_WORLD,ierr)
          call read_signal_file(signals)
       else
          signals(:) = 0
