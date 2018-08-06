@@ -283,18 +283,18 @@ contains
                !----- Advancing time:
                time=time+tscheme%dt(1) ! Update time
 
-               lMat=lMatNext
-               if ( l_new_dt .or. lMat ) then
-                  !----- Calculate matricies for new time step if dt /= dtLast
-                  lMat=.true.
-                  if ( rank == 0 ) then
-                     write(*,'(1p,'' ! Building matricies at time step:'',   &
-                          &              i8,ES16.6)') n_time_step,time
-                  end if
-               end if
-               lMatNext = .false.
-
             end if
+
+            lMat=lMatNext
+            if ( (l_new_dt .or. lMat) .and. (tscheme%istage==1) ) then
+               !----- Calculate matricies for new time step if dt /= dtLast
+               lMat=.true.
+               if ( rank == 0 ) then
+                  write(*,'(1p,'' ! Building matricies at time step:'',   &
+                       &              i8,ES16.6)') n_time_step,time
+               end if
+            end if
+            lMatNext = .false.
 
             !-- If the scheme is a multi-step scheme that is not Crank-Nicolson 
             !-- we have to use a different starting scheme
