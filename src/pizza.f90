@@ -125,9 +125,9 @@ program pizza
 
    local_bytes_used = bytes_allocated
    if ( l_cheb_coll ) then
-      call initialize_temp_coll()
+      call initialize_temp_coll(tscheme%nmats)
       if ( l_direct_solve ) then
-         call initialize_om_coll_smat()
+         call initialize_om_coll_smat(tscheme%nmats)
       else
          call initialize_om_coll_dmat()
       end if

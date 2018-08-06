@@ -57,6 +57,9 @@ contains
          this%norder_exp = 2
          this%nstages = 2
          this%istage = 1
+         this%nmats = 1
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat(:) = 1
          courfac_loc = 1.35_cp
       else if ( index(time_scheme, 'LZ232') /= 0 ) then
          this%time_scheme = 'LZ232'
@@ -65,6 +68,9 @@ contains
          this%norder_exp = 2
          this%nstages = 2
          this%istage = 1
+         this%nmats = 1
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat(:) = 1
          courfac_loc = 1.25_cp
       else if ( index(time_scheme, 'ARS443') /= 0 ) then
          this%time_scheme = 'ARS443'
@@ -73,6 +79,9 @@ contains
          this%norder_exp = 4
          this%nstages = 4
          this%istage = 1
+         this%nmats = 1
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat(:) = 1
          courfac_loc = 0.9_cp
       else if ( index(time_scheme, 'LZ453') /= 0 ) then
          this%time_scheme = 'LZ453'
@@ -81,6 +90,9 @@ contains
          this%norder_exp = 4
          this%nstages = 4
          this%istage = 1
+         this%nmats = 1
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat(:) = 1
          courfac_loc = 1.15_cp
       else if ( index(time_scheme, 'BPR353') /= 0 ) then
          this%time_scheme = 'BPR353'
@@ -89,6 +101,9 @@ contains
          this%norder_exp = 4
          this%nstages = 4
          this%istage = 1
+         this%nmats = 1
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat(:) = 1
          courfac_loc = 1.0_cp
       else if ( index(time_scheme, 'PC2') /= 0 ) then
          this%time_scheme = 'PC2'
@@ -97,7 +112,98 @@ contains
          this%norder_exp = 3
          this%nstages = 3
          this%istage = 1
+         this%nmats = 1
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat(:) = 1
          courfac_loc = 0.8_cp
+      else if ( index(time_scheme, 'LZ453A') /= 0 ) then
+         this%time_scheme = 'LZ453A'
+         this%norder_imp = 5
+         this%norder_imp_lin = 5
+         this%norder_exp = 4
+         this%nstages = 4
+         this%istage = 1
+         this%nmats = 4
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat = [1, 2, 3, 4]
+         courfac_loc = 1.15_cp
+      else if ( index(time_scheme, 'LZ453B') /= 0 ) then
+         this%time_scheme = 'LZ453B'
+         this%norder_imp = 5
+         this%norder_imp_lin = 5
+         this%norder_exp = 4
+         this%nstages = 4
+         this%istage = 1
+         this%nmats = 4
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat = [1, 2, 3, 4]
+         courfac_loc = 1.15_cp
+      else if ( index(time_scheme, 'LZ453C') /= 0 ) then
+         this%time_scheme = 'LZ453C'
+         this%norder_imp = 5
+         this%norder_imp_lin = 5
+         this%norder_exp = 4
+         this%nstages = 4
+         this%istage = 1
+         this%nmats = 4
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat = [1, 2, 3, 4]
+         courfac_loc = 1.15_cp
+      else if ( index(time_scheme, 'LZ574') /= 0 ) then
+         this%time_scheme = 'LZ574'
+         this%norder_imp = 7
+         this%norder_imp_lin = 7
+         this%norder_exp = 6
+         this%nstages = 6
+         this%istage = 1
+         this%nmats = 2
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat = [1, 1, 1, 1, 1, 2]
+         courfac_loc = 1.15_cp
+      else if ( index(time_scheme, 'LZ674') /= 0 ) then
+         this%time_scheme = 'LZ674'
+         this%norder_imp = 7
+         this%norder_imp_lin = 7
+         this%norder_exp = 6
+         this%nstages = 6
+         this%istage = 1
+         this%nmats = 2
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat = [1, 1, 1, 1, 1, 2]
+         courfac_loc = 1.15_cp
+      else if ( index(time_scheme, 'CNRKW3') /= 0 ) then
+         this%time_scheme = 'CNRKW3'
+         this%norder_imp = 4
+         this%norder_imp_lin = 4
+         this%norder_exp = 3
+         this%nstages = 3
+         this%istage = 1
+         this%nmats = 3
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat = [1, 2, 3]
+         courfac_loc = 1.15_cp
+      else if ( index(time_scheme, 'LRR232') /= 0 ) then
+         this%time_scheme = 'LRR232'
+         this%norder_imp = 4
+         this%norder_imp_lin = 4
+         this%norder_exp = 3
+         this%nstages = 3
+         this%istage = 1
+         this%nmats = 3
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat = [1, 2, 3]
+         courfac_loc = 1.15_cp
+      else if ( index(time_scheme, 'FW353') /= 0 ) then
+         this%time_scheme = 'FW353'
+         this%norder_imp = 5
+         this%norder_imp_lin = 5
+         this%norder_exp = 4
+         this%nstages = 4
+         this%istage = 1
+         this%nmats = 3
+         allocate( this%stage2mat(this%nstages) )  
+         this%stage2mat = [1, 2, 2, 3]
+         courfac_loc = 1.15_cp
       end if
 
       if ( abs(courfac_nml) >= 1.0e3_cp ) then
@@ -105,6 +211,10 @@ contains
       else
          this%courfac=courfac_nml
       end if
+
+      allocate ( this%wlhs(this%nstages) )
+      this%wlhs(:)=0.0_cp
+      bytes_allocated = bytes_allocated+this%nstages*SIZEOF_DEF_REAL
 
       allocate( this%butcher_imp(this%nstages+1,this%nstages+1), &
       &         this%butcher_exp(this%nstages+1,this%nstages+1) )
@@ -126,7 +236,7 @@ contains
       class(type_dirk) :: this
 
       deallocate( this%dt, this%wimp_lin, this%butcher_exp, this%butcher_imp )
-      deallocate( this%l_exp_calc, this%l_imp_calc_rhs )
+      deallocate( this%l_exp_calc, this%l_imp_calc_rhs, this%wlhs )
 
    end subroutine finalize
 !------------------------------------------------------------------------------
@@ -136,15 +246,13 @@ contains
       logical, intent(inout) :: lMatNext
 
       !-- Local variables
-      real(cp) :: wimp_old, del, gam
-
-      wimp_old = this%wimp_lin(1)
+      real(cp) :: del, gam
 
       select case ( this%time_scheme )
          case ('ARS222')
             gam = half * (two-sqrt(two))
             del = one-half/gam
-            this%wimp_lin(1) = gam
+            this%wlhs(:) = gam
             this%butcher_imp(:,:) = reshape([  0.0_cp,  0.0_cp, 0.0_cp,  &
                                     &          0.0_cp,  gam   , 0.0_cp,  &
                                     &          0.0_cp, one-gam, gam    ],&
@@ -155,7 +263,7 @@ contains
                                     &          [3,3],order=[2,1])
             this%l_imp_calc_rhs(1)=.false.
          case ('LZ232')
-            this%wimp_lin(1) = half
+            this%wlhs(:) = half
             this%butcher_imp(:,:) = reshape([  0.0_cp,  0.0_cp, 0.0_cp,  &
                                     &        -0.25_cp,    half, 0.0_cp,  &
                                     &            half,  0.0_cp, half ],  &
@@ -165,7 +273,7 @@ contains
                                     &            -one,    two, 0.0_cp], &
                                     &          [3,3],order=[2,1])
          case ('ARS443')
-            this%wimp_lin(1) = half
+            this%wlhs(:) = half
             this%butcher_imp(:,:) = reshape(                               &
             &            [ 0.0_cp,       0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp,   &
             &              0.0_cp,         half, 0.0_cp, 0.0_cp, 0.0_cp,   &
@@ -182,7 +290,7 @@ contains
             &         [5,5],order=[2,1])
             this%l_imp_calc_rhs(1)=.false.
          case ('BPR353')
-            this%wimp_lin(1) = half
+            this%wlhs(:) = half
             this%butcher_imp(:,:) = reshape(                                   &
             &       [         0.0_cp,        0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp,   &
             &                   half,          half, 0.0_cp, 0.0_cp, 0.0_cp,   &
@@ -199,7 +307,7 @@ contains
             &         [5,5],order=[2,1])
             this%l_exp_calc(4)=.false. ! No need to calculte the explicit solve
          case ('LZ453')
-            this%wimp_lin(1) = 1.2_cp
+            this%wlhs(:) = 1.2_cp
             this%butcher_imp(:,:) = reshape(                                                        &
             &[            0.0_cp,           0.0_cp,            0.0_cp,            0.0_cp, 0.0_cp,   &
             &   -44.0_cp/45.0_cp,           1.2_cp,            0.0_cp,            0.0_cp, 0.0_cp,   &
@@ -214,8 +322,60 @@ contains
             &  -281.0_cp/336.0_cp, 187.0_cp/112.0_cp, 0.0_cp, 0.0_cp, 0.0_cp,  &
             &             0.1_cp,             0.0_cp, 0.5_cp, 0.4_cp, 0.0_cp], &
             &  [5,5],order=[2,1])
+
+         case ('LZ453A')
+            this%wlhs(:) = [half,2.0_cp/3.0_cp,two,one]
+            this%butcher_imp(:,:) = reshape(                                            &
+            &[        0.0_cp,          0.0_cp,        0.0_cp,         0.0_cp, 0.0_cp,   &
+            &         0.0_cp,            half,        0.0_cp,         0.0_cp, 0.0_cp,   &
+            &        0.25_cp, -5.0_cp/12.0_cp, 2.0_cp/3.0_cp,         0.0_cp, 0.0_cp,   &
+            &            two,         -3.5_cp,          half,            two, 0.0_cp,   &
+            &  1.0_cp/6.0_cp,          0.0_cp, 2.0_cp/3.0_cp, -5.0_cp/6.0_cp,    one],  &
+            &[5,5],order=[2,1])
+            this%butcher_exp(:,:) = reshape(                                   &
+            & [        0.0_cp,  0.0_cp,        0.0_cp,        0.0_cp, 0.0_cp,  &
+            &            half,  0.0_cp,        0.0_cp,        0.0_cp, 0.0_cp,  &
+            &         0.25_cp, 0.25_cp,        0.0_cp,        0.0_cp, 0.0_cp,  &
+            &          0.0_cp,     one,        0.0_cp,        0.0_cp, 0.0_cp,  &
+            &   1.0_cp/6.0_cp,  0.0_cp, 2.0_cp/3.0_cp, 1.0_cp/6.0_cp, 0.0_cp], &
+            &  [5,5],order=[2,1])
+
+         case ('LZ453B')
+            this%wlhs(:) = [0.2_cp,2.0_cp/3.0_cp,0.4_cp,one]
+            this%butcher_imp(:,:) = reshape(                                            &
+            &[        0.0_cp,          0.0_cp,        0.0_cp,         0.0_cp, 0.0_cp,   &
+            &         0.3_cp,          0.2_cp,        0.0_cp,         0.0_cp, 0.0_cp,   &
+            &        0.25_cp, -5.0_cp/12.0_cp, 2.0_cp/3.0_cp,         0.0_cp, 0.0_cp,   &
+            &         0.4_cp,          0.0_cp,        0.2_cp,         0.4_cp, 0.0_cp,   &
+            &  1.0_cp/6.0_cp,          0.0_cp, 2.0_cp/3.0_cp, -5.0_cp/6.0_cp,    one],  &
+            &[5,5],order=[2,1])
+            this%butcher_exp(:,:) = reshape(                                   &
+            & [        0.0_cp,  0.0_cp,        0.0_cp,        0.0_cp, 0.0_cp,  &
+            &            half,  0.0_cp,        0.0_cp,        0.0_cp, 0.0_cp,  &
+            &         0.25_cp, 0.25_cp,        0.0_cp,        0.0_cp, 0.0_cp,  &
+            &          0.0_cp,     one,        0.0_cp,        0.0_cp, 0.0_cp,  &
+            &   1.0_cp/6.0_cp,  0.0_cp, 2.0_cp/3.0_cp, 1.0_cp/6.0_cp, 0.0_cp], &
+            &  [5,5],order=[2,1])
+
+         case ('LZ453C')
+            this%wlhs(:) = [0.1_cp,0.9_cp,0.3_cp,one]
+            this%butcher_imp(:,:) = reshape(                                      &
+            &[  0.0_cp,          0.0_cp,         0.0_cp,          0.0_cp, 0.0_cp, &
+            &  0.15_cp,          0.1_cp,         0.0_cp,          0.0_cp, 0.0_cp, &
+            &   0.9_cp,         -1.3_cp,         0.9_cp,          0.0_cp, 0.0_cp, &
+            &   1.7_cp,        -2.75_cp,         1.5_cp,          0.3_cp, 0.0_cp, &
+            &      one, -10.0_cp/3.0_cp, 17.0_cp/3.0_cp, -10.0_cp/3.0_cp,    one],&
+            &[5,5],order=[2,1])
+            this%butcher_exp(:,:) = reshape(                                    &
+            & [  0.0_cp,        0.0_cp,         0.0_cp,        0.0_cp, 0.0_cp,  &
+            &   0.25_cp,        0.0_cp,         0.0_cp,        0.0_cp, 0.0_cp,  &
+            &    0.0_cp,          half,         0.0_cp,        0.0_cp, 0.0_cp,  &
+            &     -half,       1.25_cp,         0.0_cp,        0.0_cp, 0.0_cp,  &
+            &    0.0_cp, 2.0_cp/3.0_cp, -1.0_cp/3.0_cp, 2.0_cp/3.0_cp, 0.0_cp], &
+            &  [5,5],order=[2,1])
+
          case ('PC2')
-            this%wimp_lin(1) = half
+            this%wlhs(:) = half
             this%butcher_imp(:,:) = reshape([ 0.0_cp, 0.0_cp, 0.0_cp, 0.0_cp, &
             &                                   half,   half, 0.0_cp, 0.0_cp, &
             &                                   half, 0.0_cp,   half, 0.0_cp, &
@@ -226,9 +386,98 @@ contains
             &                                   half,   half, 0.0_cp, 0.0_cp, &
             &                                   half, 0.0_cp,   half, 0.0_cp],&
             &                               [4,4],order=[2,1])
+         case ('LZ574')
+            this%wlhs = [half, half, half, half, half, 2.0_cp/3.0_cp]
+            this%butcher_imp(:,:) = reshape([ &
+            &        0.0_cp,     0.0_cp,  0.0_cp, 0.0_cp,       0.0_cp,0.0_cp,       0.0_cp, &
+            &-1.0_cp/6.0_cp,       half,  0.0_cp, 0.0_cp,       0.0_cp,0.0_cp,       0.0_cp, &
+            & 1.0_cp/6.0_cp,-1.0/3.0_cp,    half, 0.0_cp,       0.0_cp,0.0_cp,       0.0_cp, &
+            &      0.375_cp,  -0.375_cp,  0.0_cp,   half,       0.0_cp,0.0_cp,       0.0_cp, &
+            &      0.125_cp,     0.0_cp,0.375_cp,  -half,         half,0.0_cp,       0.0_cp, &
+            &         -half,     0.0_cp,  3.0_cp,-3.0_cp,          one,  half,       0.0_cp, &
+            & 1.0_cp/6.0_cp,     0.0_cp,  0.0_cp, 0.0_cp,2.0_cp/3.0_cp, -half,2.0_cp/3.0_cp],&
+            &                              [7,7], order=[2,1])
+            this%butcher_exp(:,:) = reshape([ &
+            &        0.0_cp,   0.0_cp,  0.0_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &1.0_cp/3.0_cp,    0.0_cp,  0.0_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &1.0_cp/6.0_cp,1.0/6.0_cp,  0.0_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &     0.125_cp,    0.0_cp,0.375_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &     0.125_cp,    0.0_cp,0.375_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &         half,    0.0_cp, -1.5_cp,0.0_cp,          two,       0.0_cp,0.0_cp, &
+            & 1.0_cp/6.0_cp,   0.0_cp,  0.0_cp,0.0_cp,2.0_cp/3.0_cp,1.0_cp/6.0_cp,0.0_cp],&
+            &                              [7,7], order=[2,1])
+            this%l_exp_calc(4)=.false. ! No need to calculte the explicit solve
+         case ('LZ674')
+            this%wlhs = [half, half, half, half, half, 2.0_cp/3.0_cp]
+            this%butcher_imp(:,:) = reshape([ &
+            &        0.0_cp,     0.0_cp,  0.0_cp, 0.0_cp,       0.0_cp,0.0_cp,       0.0_cp, &
+            &-1.0_cp/6.0_cp,       half,  0.0_cp, 0.0_cp,       0.0_cp,0.0_cp,       0.0_cp, &
+            & 1.0_cp/6.0_cp,-1.0/3.0_cp,    half, 0.0_cp,       0.0_cp,0.0_cp,       0.0_cp, &
+            &      0.375_cp,  -0.375_cp,  0.0_cp,   half,       0.0_cp,0.0_cp,       0.0_cp, &
+            &      0.125_cp,     0.0_cp,0.375_cp,  -half,         half,0.0_cp,       0.0_cp, &
+            &         -half,     0.0_cp,  3.0_cp,-2.0_cp,       0.0_cp,  half,       0.0_cp, &
+            & 1.0_cp/6.0_cp,     0.0_cp,  0.0_cp, 0.0_cp,2.0_cp/3.0_cp, -half,2.0_cp/3.0_cp],&
+            &                              [7,7], order=[2,1])
+            this%butcher_exp(:,:) = reshape([ &
+            &        0.0_cp,   0.0_cp,  0.0_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &1.0_cp/3.0_cp,    0.0_cp,  0.0_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &1.0_cp/6.0_cp,1.0/6.0_cp,  0.0_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &     0.125_cp,    0.0_cp,0.375_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &     0.125_cp,    0.0_cp,0.375_cp,0.0_cp,       0.0_cp,       0.0_cp,0.0_cp, &
+            &         half,    0.0_cp, -1.5_cp,   one,          one,       0.0_cp,0.0_cp, &
+            & 1.0_cp/6.0_cp,   0.0_cp,  0.0_cp,0.0_cp,2.0_cp/3.0_cp,1.0_cp/6.0_cp,0.0_cp],&
+            &                              [7,7], order=[2,1])
+         case ('CNRKW3')
+            this%wlhs = [4.0_cp/15.0_cp,1.0_cp/15.0_cp,1.0_cp/6.0_cp]
+            this%butcher_imp(:,:) = reshape([                                   &
+            &            0.0_cp,        0.0_cp,         0.0_cp,        0.0_cp,  &
+            &   4.0_cp/15.0_cp, 4.0_cp/15.0_cp,         0.0_cp,        0.0_cp,  &
+            &   4.0_cp/15.0_cp,  1.0_cp/3.0_cp, 1.0_cp/15.0_cp,        0.0_cp,  &
+            &   4.0_cp/15.0_cp,  1.0_cp/3.0_cp, 7.0_cp/30.0_cp, 1.0_cp/6.0_cp], &
+            &                              [4,4], order=[2,1])
+            this%butcher_exp(:,:) = reshape([                     &
+            &           0.0_cp,         0.0_cp,  0.0_cp, 0.0_cp,  &
+            &   8.0_cp/15.0_cp,         0.0_cp,  0.0_cp, 0.0_cp,  &
+            &          0.25_cp, 5.0_cp/12.0_cp,  0.0_cp, 0.0_cp,  &
+            &          0.25_cp,         0.0_cp, 0.75_cp, 0.0_cp], &
+            &                              [4,4], order=[2,1])
+         case ('LRR232')
+            this%wlhs = [half,1.0_cp/3.0_cp,0.25_cp]
+            this%butcher_imp(:,:) = reshape([                    &
+            &          0.0_cp,  0.0_cp,        0.0_cp,  0.0_cp,  &
+            &          0.0_cp,    half,        0.0_cp,  0.0_cp,  &
+            &          0.0_cp,  0.0_cp, 1.0_cp/3.0_cp,  0.0_cp,  &
+            &          0.0_cp,  0.0_cp,       0.75_cp, 0.25_cp], &
+            &                              [4,4], order=[2,1])
+            this%butcher_exp(:,:) = reshape([             &
+            &           0.0_cp, 0.0_cp,  0.0_cp, 0.0_cp,  &
+            &             half, 0.0_cp,  0.0_cp, 0.0_cp,  &
+            &    1.0_cp/3.0_cp, 0.0_cp,  0.0_cp, 0.0_cp,  &
+            &           0.0_cp,    one,  0.0_cp, 0.0_cp], &
+            &                              [4,4], order=[2,1])
+            this%l_exp_calc(3)=.false. ! No need to calculte the explicit solve
+            this%l_imp_calc_rhs(1)=.false.
+         case ('FW353')
+            this%wlhs = [one,half,half,1.0_cp/6.0_cp]
+            this%butcher_imp(:,:) = reshape([                    &
+            &        0.0_cp,        0.0_cp,         0.0_cp,        0.0_cp,         0.0_cp, &
+            &        0.0_cp,           one,         0.0_cp,        0.0_cp,         0.0_cp, &
+            &          half,        0.0_cp,           half,        0.0_cp,         0.0_cp, &
+            &       0.25_cp,      -0.25_cp,         0.0_cp,          half,         0.0_cp, &
+            & 1.0_cp/6.0_cp, 1.0_cp/6.0_cp, -1.0_cp/6.0_cp, 2.0_cp/3.0_cp, 1.0_cp/6.0_cp], &
+            &                              [5,5], order=[2,1])
+            this%butcher_exp(:,:) = reshape([                               &
+            &        0.0_cp,        0.0_cp, 0.0_cp,        0.0_cp, 0.0_cp,  &
+            &           one,        0.0_cp, 0.0_cp,        0.0_cp, 0.0_cp,  &
+            &          half,          half, 0.0_cp,        0.0_cp, 0.0_cp,  &
+            &       0.25_cp,       0.25_cp, 0.0_cp,        0.0_cp, 0.0_cp,  &
+            & 1.0_cp/6.0_cp, 1.0_cp/6.0_cp, 0.0_cp, 2.0_cp/3.0_cp, 0.0_cp], &
+            &                              [5,5], order=[2,1])
+
+            this%l_exp_calc(3)=.false. ! No need to calculte the explicit solve
       end select
 
-      this%wimp_lin(1)      = this%dt(1)*this%wimp_lin(1)
+      this%wlhs(:)          = this%dt(1)*this%wlhs(:)
       this%butcher_imp(:,:) = this%dt(1)*this%butcher_imp(:,:)
       this%butcher_exp(:,:) = this%dt(1)*this%butcher_exp(:,:)
          
@@ -398,7 +647,7 @@ contains
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               buo(n_m,n_r)=buo(n_m,n_r)-this%wimp_lin(1)*rgrav(n_r)*  &
+               buo(n_m,n_r)=buo(n_m,n_r)-this%wlhs(this%istage)*rgrav(n_r)*  &
                &            or1(n_r)*BuoFac*ci*real(m,cp)*temp(n_m,n_r)
             end if
          end do

@@ -46,13 +46,16 @@ contains
       !-- Number of stages per iteration is always one in this case
       this%nstages = 1
       this%istage = 1
+      this%nmats = 1
       this%family = 'MULTISTEP'
 
+      allocate( this%stage2mat(1) )
       allocate( this%l_exp_calc(1) )
       allocate( this%l_imp_calc_rhs(1) )
+      bytes_allocated = bytes_allocated+2*SIZEOF_LOGICAL+SIZEOF_INTEGER
+      this%stage2mat(1) = 1
       this%l_exp_calc(1) = .true.
       this%l_imp_calc_rhs(1) = .true.
-      bytes_allocated = bytes_allocated+2*SIZEOF_LOGICAL
 
       if ( index(time_scheme, 'CNAB2') /= 0 ) then
          this%time_scheme = 'CNAB2'
@@ -111,14 +114,16 @@ contains
       allocate ( this%wimp(this%norder_imp) )
       allocate ( this%wimp_lin(this%norder_imp_lin) )
       allocate ( this%wexp(this%norder_exp) )
+      allocate ( this%wlhs(this%nstages) )
 
       this%dt(:)       = 0.0_cp
       this%wimp(:)     = 0.0_cp
       this%wimp_lin(:) = 0.0_cp
       this%wexp(:)     = 0.0_cp
+      this%wlhs(:)     = 0.0_cp
 
       bytes_allocated = bytes_allocated+(2*this%norder_exp+this%norder_imp+&
-      &                 this%norder_imp_lin)*SIZEOF_DEF_REAL
+      &                 this%norder_imp_lin+this%nstages)*SIZEOF_DEF_REAL
 
    end subroutine initialize
 !------------------------------------------------------------------------------
@@ -126,6 +131,7 @@ contains
 
       class(type_multistep) :: this
 
+      deallocate( this%stage2mat, this%wlhs )
       deallocate( this%l_exp_calc, this%dt, this%wimp, this%wimp_lin, this%wexp )
       deallocate( this%l_imp_calc_rhs )
 
@@ -306,6 +312,8 @@ contains
       end select
 
       if ( this%wimp_lin(1) /= wimp_old ) lMatNext = .true.
+
+      this%wlhs(1) = this%wimp_lin(1)
 
    end subroutine set_weights
 !------------------------------------------------------------------------------

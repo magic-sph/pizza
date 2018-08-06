@@ -20,11 +20,11 @@ module update_temp_coll
    
    private
 
-   logical,  allocatable :: lTmat(:)
-   real(cp), allocatable :: tMat(:, :, :)
-   integer,  allocatable :: tPivot(:, :)
+   logical,  allocatable :: lTmat(:,:)
+   real(cp), allocatable :: tMat(:,:,:,:)
+   integer,  allocatable :: tPivot(:,:,:)
 #ifdef WITH_PRECOND_S
-   real(cp), allocatable :: tMat_fac(:,:)
+   real(cp), allocatable :: tMat_fac(:,:,:)
 #endif
    complex(cp), allocatable :: rhs(:)
 
@@ -33,19 +33,23 @@ module update_temp_coll
 
 contains
 
-   subroutine initialize_temp_coll
+   subroutine initialize_temp_coll(nmat)
 
-      allocate( lTmat(nMstart:nMstop) )
-      lTmat(:)=.false.
-      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
+      !-- Input variables
+      integer, intent(in) :: nmat
 
-      allocate( tMat(n_r_max, n_r_max, nMstart:nMstop) )
-      allocate( tPivot(n_r_max, nMstart:nMstop) )
-      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*n_r_max*n_r_max* &
-      &                 SIZEOF_DEF_REAL+n_r_max*(nMstop-nMstart+1)*SIZEOF_INTEGER
+      allocate( lTmat(nMstart:nMstop,nmat) )
+      lTmat(:,:)=.false.
+      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*nmat*SIZEOF_LOGICAL
+
+      allocate( tMat(n_r_max, n_r_max, nMstart:nMstop, nmat) )
+      allocate( tPivot(n_r_max, nMstart:nMstop, nmat) )
+      bytes_allocated = bytes_allocated+nmat*(nMstop-nMstart+1)*n_r_max*n_r_max* &
+      &                 SIZEOF_DEF_REAL+nmat*n_r_max*(nMstop-nMstart+1)*         &
+      &                 SIZEOF_INTEGER
 #ifdef WITH_PRECOND_S
-      allocate( tMat_fac(n_r_max, nMstart:nMstop) )
-      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*n_r_max*  &
+      allocate( tMat_fac(n_r_max, nMstart:nMstop,nmat) )
+      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*n_r_max*nmat*  &
       &                 SIZEOF_DEF_REAL
 #endif
       allocate( rhs(n_r_max) )
@@ -78,9 +82,11 @@ contains
       complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m, n_r_out, m
+      integer :: n_r, n_m, n_r_out, m, i_mat
 
-      if ( lMat ) lTMat(:)=.false.
+      i_mat = tscheme%stage2mat(tscheme%istage)
+
+      if ( lMat ) lTMat(:,i_mat)=.false.
 
       !-- Calculation of the implicit part
       call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc,          &
@@ -95,14 +101,15 @@ contains
 
          m = idx2m(n_m)
          
-         if ( .not. lTmat(n_m) ) then
+         if ( .not. lTmat(n_m,i_mat) ) then
 #ifdef WITH_PRECOND_S
-            call get_tempMat(tscheme, m, tMat(:,:,n_m), tPivot(:,n_m), &
-                 &           tMat_fac(:,n_m))
+            call get_tempMat(tscheme%wlhs(tscheme%istage), m, tMat(:,:,n_m,i_mat), &
+                 &           tPivot(:,n_m,i_mat), tMat_fac(:,n_m,i_mat))
 #else
-            call get_tempMat(tscheme, m, tMat(:,:,n_m), tPivot(:,n_m))
+            call get_tempMat(tscheme%wlhs(tscheme%istage), m, tMat(:,:,n_m,i_mat), &
+                 &           tPivot(:,n_m,i_mat))
 #endif
-            lTmat(n_m)=.true.
+            lTmat(n_m,i_mat)=.true.
          end if
 
          rhs(1)      =zero
@@ -113,12 +120,12 @@ contains
 
 #ifdef WITH_PRECOND_S
          do n_r=1,n_r_max
-            rhs(n_r) = tMat_fac(n_r,n_m)*rhs(n_r)
+            rhs(n_r) = tMat_fac(n_r,n_m,i_mat)*rhs(n_r)
          end do
 #endif
 
-         call solve_full_mat(tMat(:,:,n_m), n_r_max, n_r_max, tPivot(:, n_m), &
-              &              rhs(:))
+         call solve_full_mat(tMat(:,:,n_m,i_mat), n_r_max, n_r_max, &
+              &              tPivot(:, n_m,i_mat), rhs(:))
 
          do n_r_out=1,rscheme%n_max
             temp_Mloc(n_m, n_r_out)=rhs(n_r_out)
@@ -238,14 +245,14 @@ contains
    end subroutine get_temp_rhs_imp_coll
 !------------------------------------------------------------------------------
 #ifdef WITH_PRECOND_S
-   subroutine get_tempMat(tscheme, m, tMat, tPivot, tMat_fac)
+   subroutine get_tempMat(wimp, m, tMat, tPivot, tMat_fac)
 #else
-   subroutine get_tempMat(tscheme, m, tMat, tPivot)
+   subroutine get_tempMat(wimp, m, tMat, tPivot)
 #endif
 
       !-- Input variables
-      class(type_tscheme), intent(in) :: tscheme        ! time step
-      integer,             intent(in) :: m
+      real(cp), intent(in) :: wimp
+      integer,  intent(in) :: m
 
       !-- Output variables
       real(cp), intent(out) :: tMat(n_r_max,n_r_max)
@@ -287,7 +294,7 @@ contains
          do nR=2,n_r_max-1
             tMat(nR,nR_out)= rscheme%rnorm * (                          &
             &                                 rscheme%rMat(nR,nR_out) - &
-            &              tscheme%wimp_lin(1)*TdiffFac*hdif_T(n_m)*(   &
+            &                             wimp*TdiffFac*hdif_T(n_m)*(   &
             &                               rscheme%d2rMat(nR,nR_out) + &
             &          or1(nR)*              rscheme%drMat(nR,nR_out) - &
             &      dm2*or2(nR)*               rscheme%rMat(nR,nR_out) ) )

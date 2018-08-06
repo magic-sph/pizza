@@ -10,13 +10,16 @@ module time_schemes
    type, abstract, public :: type_tscheme
 
       character(len=10) :: family
+      integer :: nmats
       integer :: nstages
       integer :: istage
       integer :: norder_exp
       integer :: norder_imp
       integer :: norder_imp_lin
       character(len=8) :: time_scheme
+      integer, allocatable :: stage2mat(:)
       real(cp), allocatable :: dt(:)
+      real(cp), allocatable :: wlhs(:)
       real(cp), allocatable :: wimp_lin(:)
       logical,  allocatable :: l_exp_calc(:)
       logical, allocatable :: l_imp_calc_rhs(:)

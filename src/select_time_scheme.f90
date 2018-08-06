@@ -23,7 +23,15 @@ contains
       &    (index(scheme_name, 'ARS443') /= 0) .or. &
       &    (index(scheme_name, 'BPR353') /= 0) .or. &
       &    (index(scheme_name, 'PC2') /= 0)    .or. &
+      &    (index(scheme_name, 'CNRKW3') /= 0) .or. &
       &    (index(scheme_name, 'LZ453') /= 0)  .or. &
+      &    (index(scheme_name, 'LZ674') /= 0)  .or. &
+      &    (index(scheme_name, 'LZ453A') /= 0) .or. &
+      &    (index(scheme_name, 'LZ453B') /= 0) .or. &
+      &    (index(scheme_name, 'LZ453C') /= 0) .or. &
+      &    (index(scheme_name, 'LZ574') /= 0)  .or. &
+      &    (index(scheme_name, 'LRR232') /= 0) .or. &
+      &    (index(scheme_name, 'FW353') /= 0)  .or. &
       &    (index(scheme_name, 'LZ232') /= 0) ) then
          allocate ( type_dirk :: tscheme )
       else

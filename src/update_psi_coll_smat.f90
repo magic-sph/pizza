@@ -22,11 +22,11 @@ module update_psi_coll_smat
    
    private
 
-   logical,  allocatable :: lPsimat(:)
-   complex(cp), allocatable :: psiMat(:,:,:)
-   real(cp), allocatable :: uphiMat(:,:)
-   integer,  allocatable :: psiPivot(:,:)
-   real(cp), allocatable :: psiMat_fac(:,:,:)
+   logical,  allocatable :: lPsimat(:,:)
+   complex(cp), allocatable :: psiMat(:,:,:,:)
+   real(cp), allocatable :: uphiMat(:,:,:)
+   integer,  allocatable :: psiPivot(:,:,:)
+   real(cp), allocatable :: psiMat_fac(:,:,:,:)
    complex(cp), allocatable :: rhs(:)
    real(cp), allocatable :: rhs_m0(:)
 
@@ -35,24 +35,26 @@ module update_psi_coll_smat
 
 contains
 
-   subroutine initialize_om_coll_smat
+   subroutine initialize_om_coll_smat(n_mat)
 
-      allocate( lPsimat(nMstart:nMstop) )
-      lPsimat(:)=.false.
-      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
+      integer, intent(in) :: n_mat ! Number of matrices needed (depends on the time scheme)
 
-      allocate( psiMat(2*n_r_max, 2*n_r_max, nMstart:nMstop) )
-      allocate( psiPivot(2*n_r_max, nMstart:nMstop) )
-      allocate( psiMat_fac(2*n_r_max, 2, nMstart:nMstop) )
+      allocate( lPsimat(nMstart:nMstop,n_mat) )
+      lPsimat(:,:)=.false.
+      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*n_mat*SIZEOF_LOGICAL
+
+      allocate( psiMat(2*n_r_max, 2*n_r_max, nMstart:nMstop,n_mat) )
+      allocate( psiPivot(2*n_r_max, nMstart:nMstop,n_mat) )
+      allocate( psiMat_fac(2*n_r_max, 2, nMstart:nMstop, n_mat) )
       allocate( rhs(2*n_r_max), rhs_m0(n_r_max) )
 
-      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*4*n_r_max*n_r_max* &
-      &                 SIZEOF_DEF_COMPLEX+2*n_r_max*(nMstop-nMstart+1)*      &
-      &                 SIZEOF_INTEGER+ n_r_max*(3+4*(nMstop-nMstart+1))*     &
+      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*4*n_r_max*n_r_max*n_mat* &
+      &                 SIZEOF_DEF_COMPLEX+2*n_r_max*(nMstop-nMstart+1)*n_mat*      &
+      &                 SIZEOF_INTEGER+ n_r_max*(3+4*n_mat*(nMstop-nMstart+1))*     &
       &                 SIZEOF_DEF_REAL
 
-      allocate( uphiMat(n_r_max,n_r_max) )
-      bytes_allocated = bytes_allocated+n_r_max*n_r_max*SIZEOF_DEF_REAL
+      allocate( uphiMat(n_r_max,n_r_max,n_mat) )
+      bytes_allocated = bytes_allocated+n_r_max*n_r_max*n_mat*SIZEOF_DEF_REAL
 
    end subroutine initialize_om_coll_smat
 !------------------------------------------------------------------------------
@@ -91,9 +93,12 @@ contains
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max), runStart, runStop
-      integer :: n_r, n_m, n_cheb, m
+      integer :: n_r, n_m, n_cheb, m, i_mat
 
-      if ( lMat ) lPsimat(:)=.false.
+
+      i_mat = tscheme%stage2mat(tscheme%istage)
+
+      if ( lMat ) lPsimat(:,i_mat)=.false.
 
 
       !-- Calculation of the implicit part
@@ -112,9 +117,10 @@ contains
 
          if ( m == 0 ) then ! Axisymmetric component
 
-            if ( .not. lPsimat(n_m) ) then
-               call get_uphiMat(tscheme, uphiMat(:,:), psiPivot(1:n_r_max,n_m))
-               lPsimat(n_m)=.true.
+            if ( .not. lPsimat(n_m,i_mat) ) then
+               call get_uphiMat(tscheme%wlhs(tscheme%istage), uphiMat(:,:,i_mat), &
+                    &           psiPivot(1:n_r_max,n_m,i_mat))
+               lPsimat(n_m,i_mat)=.true.
             end if
 
             rhs_m0(1)       = 0.0_cp
@@ -129,8 +135,8 @@ contains
                end do
             end if
 
-            call solve_full_mat(uphiMat(:,:), n_r_max, n_r_max,   &
-                 &              psiPivot(1:n_r_max,n_m), rhs_m0(:))
+            call solve_full_mat(uphiMat(:,:,i_mat), n_r_max, n_r_max,   &
+                 &              psiPivot(1:n_r_max,n_m,i_mat), rhs_m0(:))
 
             do n_cheb=1,rscheme%n_max
                uphi0(n_cheb)=rhs_m0(n_cheb)
@@ -138,10 +144,11 @@ contains
 
          else ! Non-axisymmetric components
          
-            if ( .not. lPsimat(n_m) ) then
-               call get_psiMat(tscheme, m, psiMat(:,:,n_m), psiPivot(:,n_m), &
-                    &          psiMat_fac(:,:,n_m), time_lu, n_lu_calls)
-               lPsimat(n_m)=.true.
+            if ( .not. lPsimat(n_m,i_mat) ) then
+               call get_psiMat(tscheme%wlhs(tscheme%istage), m,              &
+                    &          psiMat(:,:,n_m,i_mat), psiPivot(:,n_m,i_mat), &
+                    &          psiMat_fac(:,:,n_m,i_mat), time_lu, n_lu_calls)
+               lPsimat(n_m,i_mat)=.true.
             end if
 
             rhs(1)        =zero
@@ -160,18 +167,18 @@ contains
             end do
 
             do n_r=1,2*n_r_max
-               rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,1,n_m)
+               rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,1,n_m,i_mat)
             end do
             runStart = MPI_Wtime()
-            call solve_full_mat(psiMat(:,:,n_m), 2*n_r_max, 2*n_r_max, &
-                 &              psiPivot(:, n_m), rhs(:))
+            call solve_full_mat(psiMat(:,:,n_m,i_mat), 2*n_r_max, 2*n_r_max, &
+                 &              psiPivot(:,n_m,i_mat), rhs(:))
             runStop = MPI_Wtime()
             if ( runStop > runStart ) then
                time_solve = time_solve + (runStop-runStart)
                n_solve_calls = n_solve_calls+1
             end if
             do n_r=1,2*n_r_max
-               rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,2,n_m)
+               rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,2,n_m,i_mat)
             end do
 
             do n_cheb=1,rscheme%n_max
@@ -366,12 +373,12 @@ contains
 
    end subroutine get_psi_rhs_imp_coll_smat
 !------------------------------------------------------------------------------
-   subroutine get_psiMat(tscheme, m, psiMat, psiPivot, psiMat_fac, time_lu, &
+   subroutine get_psiMat(wimp, m, psiMat, psiPivot, psiMat_fac, time_lu, &
               &          n_lu_calls)
 
       !-- Input variables
-      class(type_tscheme), intent(in) :: tscheme
-      integer,             intent(in) :: m
+      real(cp), intent(in) :: wimp
+      integer,  intent(in) :: m
 
       !-- Output variables
       complex(cp), intent(out) :: psiMat(2*n_r_max,2*n_r_max)
@@ -442,13 +449,13 @@ contains
 
             psiMat(nR,nR_out)= rscheme%rnorm * (                         &
             &                                  rscheme%rMat(nR,nR_out) - &
-            &         tscheme%wimp_lin(1)*(ViscFac*hdif_V(n_m)*(         &
+            &                        wimp*(ViscFac*hdif_V(n_m)*(         &
             &                              rscheme%d2rMat(nR,nR_out) +   &
             &            or1(nR)*           rscheme%drMat(nR,nR_out) -   &
             &            dm2*or2(nR)*        rscheme%rMat(nR,nR_out) ) - &
             &  CorFac*ekpump(nR)*            rscheme%rMat(nR,nR_out) ) )
 
-            psiMat(nR,nR_out_psi)=-rscheme%rnorm*tscheme%wimp_lin(1)*(   &
+            psiMat(nR,nR_out_psi)=-rscheme%rnorm*wimp*(                  &
             &-half*CorFac*ekpump(nR)*beta(nR)*rscheme%drMat(nR,nR_out)+  &
             &  CorFac*( -half*ekpump(nR)*beta(nR)*beta(nR)               &
             &   +ekpump(nR)*beta(nR)*or1(nR)*( dm2+                      &
@@ -457,7 +464,7 @@ contains
 
             if ( l_coriolis_imp ) then
                psiMat(nR,nR_out_psi) = psiMat(nR,nR_out_psi) -        &
-               &                 rscheme%rnorm*tscheme%wimp_lin(1)*   &
+               &                                rscheme%rnorm*wimp*   &
                &               CorFac*beta(nR)*or1(nR)*ci*real(m,cp)* &
                &                rscheme%rMat(nR,nR_out)
             end if
@@ -519,10 +526,10 @@ contains
 
    end subroutine get_psiMat
 !------------------------------------------------------------------------------
-   subroutine get_uphiMat(tscheme, uphiMat, uphiPivot)
+   subroutine get_uphiMat(wimp, uphiMat, uphiPivot)
 
       !-- Input variables
-      class(type_tscheme), intent(in) :: tscheme
+      real(cp), intent(in) :: wimp
 
       !-- Output variables
       real(cp), intent(out) :: uphiMat(n_r_max,n_r_max)
@@ -564,7 +571,7 @@ contains
          do nR=2,n_r_max-1
             uphiMat(nR,nR_out)= rscheme%rnorm * (                     &
             &                               rscheme%rMat(nR,nR_out) - &
-            &tscheme%wimp_lin(1)*(ViscFac*hdif_V(n_m)*(               &
+            &               wimp*(ViscFac*hdif_V(n_m)*(               &
             &                           rscheme%d2rMat(nR,nR_out) +   &
             &            or1(nR)*        rscheme%drMat(nR,nR_out) -   &
             &            or2(nR)*         rscheme%rMat(nR,nR_out) ) - &
