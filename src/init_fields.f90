@@ -1,11 +1,17 @@
 module init_fields
+   !
+   ! This module sets the initial fields either by reading in a checkpoint file
+   ! or by setting a given perturbation in temperature and/or velocity specified
+   ! in the input namelist
+   !
 
    use constants, only: zero, one, two, three, ci, pi, half
    use blocking, only: nRstart, nRstop
    use communications, only: transp_r2m, r2m_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
-       &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot
+       &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
+       &                l_reset_t
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank
@@ -43,6 +49,8 @@ contains
       if ( l_start_file ) then
          call read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, dpsidt, dTdt, &
               &               time, tscheme)
+
+         if ( l_reset_t ) time = 0.0_cp
 
          !-- If integration method is used, since u_s is stored, one needs to
          !-- reconstruct psi(m/=0)

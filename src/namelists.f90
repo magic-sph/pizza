@@ -1,4 +1,9 @@
 module namelists
+   !
+   ! This module defines the different input namelists and their default
+   ! values. This also controls the printing of the input values in the log.TAG
+   ! file.
+   !
 
    use iso_c_binding
    use truncation, only: n_r_max, m_max, n_cheb_max, minc
@@ -64,6 +69,7 @@ module namelists
    integer,  public :: init_u
    real(cp), public :: scale_u
    logical,  public :: l_start_file     ! taking fields from startfile ?
+   logical,  public :: l_reset_t ! Should we reset the time stored in the startfile?
    character(len=72), public :: start_file  ! name of start_file           
 
    integer,  public :: n_log_step
@@ -107,7 +113,7 @@ contains
 
       namelist/grid/n_r_max,n_cheb_max,m_max,minc
       namelist/control/tag,n_time_steps,alpha,l_newmap,map_function,&
-      &                alph1,alph2,dtMax,courfac,tEnd,runHours,     &
+      &                alph1,alph2,dtMax,courfac,tEND,runHours,     &
       &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
@@ -117,7 +123,7 @@ contains
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
       &                   l_temp_3D,tcond_fac,l_temp_advz, beta_shift
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
-      &                    scale_u,init_u,amp_u
+      &                    scale_u,init_u,amp_u,l_reset_t
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
       &                       l_vphi_balance
@@ -422,6 +428,7 @@ contains
       kbotv            =2
 
       !----- Namelist start_field:
+      l_reset_t        =.false.
       l_start_file     =.false.
       start_file       ="no_start_file"
       init_t           =0
@@ -527,6 +534,7 @@ contains
 
       write(n_out,*) "&start_field"
       write(n_out,'(''  l_start_file    ='',l3,'','')') l_start_file
+      write(n_out,'(''  l_reset_t       ='',l3,'','')') l_reset_t
       length=length_to_blank(start_file)
       write(n_out,*) " start_file      = """,start_file(1:length),""","
       write(n_out,'(''  scale_t         ='',ES14.6,'','')') scale_t
