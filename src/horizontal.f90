@@ -1,6 +1,7 @@
-module hdif
+module horizontal
    !
-   ! This module implements support for hyperdiffusion
+   ! This module implements the calculation of m-dependent array
+   ! such as hyperdiffusion or heat flux patterns
    !
 
    use precision_mod
@@ -18,21 +19,31 @@ module hdif
    real(cp), public, allocatable :: hdif_V(:)
    real(cp), public, allocatable :: hdif_T(:)
 
-   public :: initialize_hdif, finalize_hdif
+   public :: initialize_mfunctions, finalize_mfunctions, mfunctions
 
 contains
 
-   subroutine initialize_hdif
+   subroutine initialize_mfunctions
+
+      allocate( hdif_V(nMstart:nMstop) )
+      allocate( hdif_T(nMstart:nMstop) )
+      bytes_allocated = bytes_allocated+2*(nMstop-nMstart+1)*SIZEOF_DEF_REAL
+
+   end subroutine initialize_mfunctions
+!--------------------------------------------------------------------------------
+   subroutine finalize_mfunctions
+
+      deallocate( hdif_V, hdif_T )
+
+   end subroutine finalize_mfunctions
+!--------------------------------------------------------------------------------
+   subroutine mfunctions
 
       !-- Local variables
       integer :: n_m, m, n_p, file_handle
       integer :: displs(0:n_procs-1), recvcounts(0:n_procs-1)
       real(cp) :: eps
       real(cp) :: hdif_T_global(n_m_max), hdif_V_global(n_m_max)
-
-      allocate( hdif_V(nMstart:nMstop) )
-      allocate( hdif_T(nMstart:nMstop) )
-      bytes_allocated = bytes_allocated+2*(nMstop-nMstart+1)*SIZEOF_DEF_REAL
 
       eps = 10.0_cp*epsilon(one)
       if ( abs(hdif_temp) > eps .or. abs(hdif_vel) > eps ) then
@@ -85,12 +96,6 @@ contains
 
       end if
 
-   end subroutine initialize_hdif
+   end subroutine mfunctions
 !--------------------------------------------------------------------------------
-   subroutine finalize_hdif
-
-      deallocate( hdif_V, hdif_T )
-
-   end subroutine finalize_hdif
-!--------------------------------------------------------------------------------
-end module hdif
+end module horizontal

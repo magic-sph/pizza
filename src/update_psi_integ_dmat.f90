@@ -7,7 +7,7 @@ module update_psi_integ_dmat
    use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, ek, l_buo_imp
-   use hdif, only: hdif_V
+   use horizontal, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx, n_cheb_max
@@ -18,7 +18,7 @@ module update_psi_integ_dmat
    use useful, only: abortRun
    use band_matrix, only: type_bandmat_real
    use bordered_matrix, only: type_bordmat_real
-   use chebsparselib, only: rmult2, intcheb1rmult1, intcheb2rmult2,           &
+   use chebsparselib, only: rmult2, intcheb1rmult1, intcheb2rmult2,    &
        &                    intcheb2rmult2laplrot, intcheb2rmult2lapl
 
 

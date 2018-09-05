@@ -5,7 +5,7 @@ module update_psi_coll_dmat
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use outputs, only: vp_bal_type
-   use hdif, only: hdif_V
+   use horizontal, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
        &                l_non_rot, l_ek_pump, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight

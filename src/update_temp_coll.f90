@@ -6,7 +6,7 @@ module update_temp_coll
    use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
        &                       rgrav
-   use hdif, only: hdif_T
+   use horizontal, only: hdif_T
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr

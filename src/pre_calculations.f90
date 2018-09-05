@@ -7,6 +7,7 @@ module pre_calculations
    use radial_functions, only: r, rscheme, radial
    use namelists, only: l_newmap, tag, dtMax, dtMin, pr, l_non_rot, ek, &
        &                r_cmb, r_icb
+   use horizontal, only: mfunctions
    use precision_mod
    use parallel_mod
 
@@ -28,6 +29,7 @@ contains
 
       dtMin = dtMax/1e6_cp
 
+      !-- Set r-dependent arrays
       call radial()
 
       if ( ( l_newmap ) .and. (rank == 0) ) then
@@ -40,6 +42,9 @@ contains
          end do
          close(file_handle)
       end if
+
+      !-- Set m-dependent arrays
+      call mfunctions()
 
       !-- Compute some constants
       vol_oc =four*third*pi*(r_cmb**3-r_icb**3)

@@ -17,7 +17,7 @@ program pizza
        &                courfac
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
-   use hdif, only: initialize_hdif, finalize_hdif
+   use horizontal, only: initialize_mfunctions, finalize_mfunctions
    use radial_functions, only: initialize_radial_functions, &
        &                       finalize_radial_functions
    use truncation, only: initialize_truncation, n_r_max, n_phi_max, & 
@@ -111,7 +111,7 @@ program pizza
    call initialize_radial_loop(n_phi_max)
    call memWrite('R loop', local_bytes_used)
    local_bytes_used = bytes_allocated-local_bytes_used
-   call initialize_hdif()
+   call initialize_mfunctions()
 
 
    if ( rank == 0 ) then
@@ -202,7 +202,7 @@ program pizza
          call finalize_psi_integ_dmat()
       end if
    end if
-   call finalize_hdif()
+   call finalize_mfunctions()
    call finalize_radial_loop()
    call finalize_fourier()
    call finalize_der_arrays()

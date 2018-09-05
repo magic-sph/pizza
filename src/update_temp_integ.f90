@@ -5,7 +5,7 @@ module update_temp_integ
    use constants, only: zero, one, ci, half
    use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, &
        &                TdiffFac, l_non_rot, l_buo_imp, l_galerkin
-   use hdif, only: hdif_T
+   use horizontal, only: hdif_T
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, rgrav, r
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, n_cheb_max, m2idx
