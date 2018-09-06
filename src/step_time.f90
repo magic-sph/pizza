@@ -276,7 +276,7 @@ contains
                call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step,&
                     &                    l_new_dt)
                !-- Store the old weight factor of matrices
-               !-- it it changes because of dt factors moving
+               !-- if it changes because of dt factors moving
                !-- matrix also needs to be rebuilt
                call tscheme%set_weights(lMatNext)
 

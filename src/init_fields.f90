@@ -78,10 +78,10 @@ contains
 
       else
 
-         temp_Mloc(:,:)       =zero
-         us_Mloc(:,:)         =zero
-         up_Mloc(:,:)         =zero
-         psi_Mloc(:,:)        =zero
+         temp_Mloc(:,:)=zero
+         us_Mloc(:,:)  =zero
+         up_Mloc(:,:)  =zero
+         psi_Mloc(:,:) =zero
          call dpsidt%set_initial_values()
          call dTdt%set_initial_values()
 
