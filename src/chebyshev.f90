@@ -5,7 +5,6 @@ module chebyshev
    use constants, only: half, one, two, three, four, pi, third
    use blocking, only: nMstart,nMstop
    use radial_scheme, only: type_rscheme
-   use chebyshev_polynoms_mod, only: cheb_grid
    use dct_fftw, only: costf_t
    use namelists, only: map_function
 
@@ -191,6 +190,54 @@ contains
       call this%chebt%finalize(l_work_array)
 
    end subroutine finalize
+!------------------------------------------------------------------------------
+   subroutine cheb_grid(a,b,n,x,y,a1,a2,x0,lbd,l_map)
+      !
+      !   Given the interval [a,b] the routine returns the
+      !   n+1 points that should be used to support a
+      !   Chebychev expansion. These are the n+1 extrema y(i) of
+      !   the Chebychev polynomial of degree n in the
+      !   interval [-1,1].
+      !   The respective points mapped into the interval of
+      !   question [a,b] are the x(i).
+      !
+      !   .. note:: x(i) and y(i) are stored in the reversed order:
+      !             x(1)=b, x(n+1)=a, y(1)=1, y(n+1)=-1
+      !
+       
+      !-- Input variables
+      real(cp), intent(in) :: a,b   ! interval boundaries
+      integer,  intent(in) :: n ! degree of Cheb polynomial to be represented by the grid points
+      real(cp), intent(in) :: a1,a2,x0,lbd
+      logical,  intent(in) :: l_map ! Chebyshev mapping
+
+      !-- Output variables
+      real(cp), intent(out) :: x(*) ! grid points in interval [a,b]
+      real(cp), intent(out) :: y(*) ! grid points in interval [-1,1]
+       
+      !-- Local variables:
+      real(cp) :: bpa,bma
+      integer :: k
+       
+      bma=half*(b-a)
+      bpa=half*(a+b)
+
+      do k=1,n+1
+         y(k)=cos( pi*real(k-1,cp)/real(n,cp) )
+         if ( l_map ) then
+            if ( index(map_function, 'TAN') /= 0 .or.    &
+            &   index(map_function, 'BAY') /= 0 ) then
+               x(k)=half*(a2+tan(lbd*(y(k)-x0))/a1) + bpa
+            else if ( index(map_function, 'ARCSIN') /= 0 .or. &
+            &         index(map_function, 'KTL') /= 0 ) then
+               x(k)=half*asin(a1*y(k))/asin(a1)+bpa
+            end if
+         else
+            x(k)=bma * y(k) + bpa
+         end if
+      end do
+        
+   end subroutine cheb_grid
 !------------------------------------------------------------------------------
    subroutine get_der_mat(this, n_r_max, l_cheb_coll)
       !
