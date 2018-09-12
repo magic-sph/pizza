@@ -123,13 +123,16 @@ class PizzaTs(PizzaSetup):
             self.up2 = data[:, 2]
             self.up2_axi = data[:, 3]
             self.ekin = self.us2+self.up2
-        if self.field == 'e_kin_3D':
+        elif self.field == 'e_kin_3D':
             self.time = data[:, 0]
             self.us2 = data[:, 1]
             self.up2 = data[:, 2]
             self.uz2 = data[:, 3]
             self.up2_axi = data[:, 4]
             self.ekin = self.us2+self.up2+self.uz2
+        elif self.field == 'timestep':
+            self.time = data[:, 0]
+            self.dt = data[:, 1]
         elif self.field == 'heat':
             self.time = data[:, 0]
             self.topnuss = data[:, 1]

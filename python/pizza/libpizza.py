@@ -46,7 +46,7 @@ def chebgrid(nr, a, b):
     rr = 0.5*(rst+np.cos(np.pi*(1.-np.arange(nr+1.)/nr)))*(b-a)
     return rr
 
-def avgField(time, field, tstart=None, std=False):
+def avgField(time, field, tstart=None, tstop=None, std=False):
     """
     This subroutine computes the time-average (and the std) of a time series
 
@@ -60,6 +60,8 @@ def avgField(time, field, tstart=None, std=False):
     :type field: numpy.ndarray
     :param tstart: the starting time of the averaging
     :type tstart: float
+    :param tstart: the stopping time of the averaging
+    :type tstart: float
     :param std: when set to True, the standard deviation is also calculated
     :type std: bool
     :returns: the time-averaged quantity
@@ -70,11 +72,16 @@ def avgField(time, field, tstart=None, std=False):
         ind = np.nonzero(mask)[0][0]
     else: # the whole input array is taken!
         ind = 0
-    fac = 1./(time[-1]-time[ind])
-    avgField = fac*np.trapz(field[ind:], time[ind:])
+    if tstop is not None:
+        mask = np.where(abs(time-tstop) == min(abs(time-tstop)), 1, 0)
+        ind1 = np.nonzero(mask)[0][0]+1
+    else: # the whole input array is taken!
+        ind1 = len(time)
+    fac = 1./(time[ind1-1]-time[ind])
+    avgField = fac*np.trapz(field[ind:ind1], time[ind:ind1])
 
     if std:
-        stdField = np.sqrt(fac*np.trapz((field[ind:]-avgField)**2, time[ind:]))
+        stdField = np.sqrt(fac*np.trapz((field[ind:ind1]-avgField)**2, time[ind:ind1]))
         return avgField, stdField
     else:
         return avgField
