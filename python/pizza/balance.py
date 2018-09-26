@@ -266,3 +266,175 @@ class PizzaBalance(PizzaSetup):
         ax.set_xlabel('Time')
         ax.set_ylabel('Radius')
         fig.tight_layout()
+
+
+class PizzaVortBalance(PizzaSetup):
+
+    def __init__(self, datadir='.', tag=None, endian='l', iplot=True, all=False):
+        """
+        :param datadir: working directory
+        :type datadir: str
+        :param tag: a specific trailing tag, default is None
+        :type tag: str
+        :param endian: endianness of the file ('B' or 'l')
+        :type endian: str
+        :param iplot: boolean to toggle the display (False by default)
+        :type iplot: bool
+        :param all: when set to True, the complete time series is reconstructed by
+                    stacking all the corresponding files from the working directory
+                    (False by default)
+        :type all: bool
+        """
+        pattern = os.path.join(datadir, 'log.*')
+        logFiles = scanDir(pattern)
+
+        if len(logFiles) != 0:
+            PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
+            name = 'vort_bal.%s' % self.tag
+            filename = os.path.join(datadir, name)
+            print('reading %s' % filename)
+            self.read(filename, endian)
+        else:
+            mot = 'vort_bal.*'
+            dat = [(os.stat(i).st_mtime, i) for i in glob.glob(mot)]
+            dat.sort()
+            filename = dat[-1][1]
+            print('reading %s' % filename)
+            self.read(filename, endian)
+
+        if iplot == True:
+            self.plot()
+
+
+    def read(self, filename, endian='l'):
+        file = open(filename, 'rb')
+        dt = np.dtype("i4, 6Float64")
+        self.version, params = np.fromfile(file, dtype=dt, count=1)[0]
+        self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = params
+        dt = np.dtype("4i4")
+        self.n_r_max, self.n_m_max, self.m_max, self.minc = np.fromfile(file, dtype=dt, count=1)[0]
+
+        dt = np.dtype("%iFloat64" % self.n_r_max)
+        self.radius = np.fromfile(file, dtype=dt, count=1)[0]
+        self.idx2m = np.zeros(self.n_m_max)
+        for i in range(self.n_m_max):
+            self.idx2m[i] = i*self.minc
+
+        dt = np.dtype("(%i,%i)Float64" % (self.n_r_max,self.n_m_max))
+        self.buo = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        self.buo = self.buo.T
+        self.cor = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        self.cor = self.cor.T
+        self.adv = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        self.adv = self.adv.T
+        self.domdt = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        self.domdt = self.domdt.T
+        self.visc = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        self.visc = self.visc.T
+        self.pump = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        self.pump = self.pump.T
+        self.thwind = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        self.thwind = self.thwind.T
+        self.iner = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        self.iner = self.iner.T
+        self.cia = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        self.cia = self.cia.T
+
+    def plot(self, levels=15, cm='magma', cut=1., solid_contour=True, 
+             log_yscale=True):
+        """
+        Plotting function
+
+		:param cm: name of the colormap ('jet', 'seismic', 'RdYlBu_r', etc.)
+		:type cm: str
+		:param levels: the number of levels used in the contour plot
+		:type levels: int
+		:param  cut: a coefficient to change the dynamics of the contour levels
+		:param cut: float
+        :param solid_contour: a boolean to decide whether one also wants the solid
+                              contour lines
+        :type solid_contour: bool
+        :param log_yscale: a boolean to decide whether one wants a logarithmic
+                           y-axis
+        :type log_yscale: bool
+        """
+
+        vmax = cut*np.log10(self.iner[1:,1:-1]).max()
+        vmin = cut*np.log10(self.iner[1:,1:-1]).min()
+        levs = np.linspace(vmin, vmax, levels)
+
+        fig = plt.figure(figsize=(15,4))
+        ax1 = fig.add_subplot(151)
+        im = ax1.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.buo[1:,1:-1]),
+                         levs, extend='both', cmap=plt.get_cmap(cm))
+        if solid_contour:
+            ax1.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.buo[1:,1:-1]),
+                       levs, extend='both', linestyles=['-'], colors=['k'],
+                       linewidths=[0.5])
+        ax1.set_title('Buoyancy')
+        if log_yscale: ax1.set_yscale('log')
+        ax1.set_xlabel('Radius')
+        ax1.set_ylabel('m')
+        
+        ax2 = fig.add_subplot(152, sharey=ax1, sharex=ax1)
+        im = ax2.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.cor[1:,1:-1]),
+                         levs, extend='both', cmap=plt.get_cmap(cm))
+        if solid_contour:
+            ax2.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.cor[1:,1:-1]),
+                       levs, extend='both', linestyles=['-'], colors=['k'],
+                       linewidths=[0.5])
+        ax2.set_title('Coriolis')
+        if log_yscale: ax2.set_yscale('log')
+        ax2.set_xlabel('Radius')
+
+        ax3 = fig.add_subplot(153, sharey=ax1, sharex=ax1)
+        im = ax3.contourf(self.radius, self.idx2m[1:], np.log10(self.iner[1:,:]),
+                         levs, extend='both', cmap=plt.get_cmap(cm))
+        if solid_contour:
+            ax3.contour(self.radius, self.idx2m[1:], np.log10(self.iner[1:,:]),
+                       levs, extend='both', linestyles=['-'], colors=['k'],
+                       linewidths=[0.5])
+        ax3.set_title('Inertia')
+        if log_yscale: ax3.set_yscale('log')
+        ax3.set_xlabel('Radius')
+
+        ax4 = fig.add_subplot(154, sharey=ax1, sharex=ax1)
+        im = ax4.contourf(self.radius, self.idx2m[1:], np.log10(self.visc[1:,:]),
+                         levs, extend='both', cmap=plt.get_cmap(cm))
+        if solid_contour:
+            ax4.contour(self.radius, self.idx2m[1:], np.log10(self.visc[1:,:]),
+                       levs, extend='both', linestyles=['-'], colors=['k'],
+                       linewidths=[0.5])
+        ax4.set_title('Viscosity')
+        if log_yscale: ax4.set_yscale('log')
+        ax4.set_xlabel('Radius')
+
+        ax5 = fig.add_subplot(155, sharey=ax1, sharex=ax1)
+        im = ax5.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.pump[1:,1:-1]),
+                         levs, extend='both', cmap=plt.get_cmap(cm))
+        if solid_contour:
+            ax5.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.pump[1:,1:-1]),
+                       levs, extend='both', linestyles=['-'], colors=['k'],
+                       linewidths=[0.5])
+        ax5.set_title('Ekman pumping')
+        if log_yscale: ax5.set_yscale('log')
+        ax5.set_xlabel('Radius')
+        fig.colorbar(im)
+
+        plt.setp(ax2.get_yticklabels(), visible=False)
+        plt.setp(ax3.get_yticklabels(), visible=False)
+        plt.setp(ax4.get_yticklabels(), visible=False)
+        plt.setp(ax5.get_yticklabels(), visible=False)
+
+        ax1.set_xlim(self.radius[-1], self.radius[0])
+
+        fig.tight_layout()
+
+
+if __name__ == '__main__':
+   
+   r = PizzaVortBal()
+   plt.show()
+
+
+
