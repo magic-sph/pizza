@@ -26,9 +26,9 @@ module step_time
        &                tEND, run_time_requested, n_log_step, n_frames,   &
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
-       &                l_cheb_coll, l_direct_solve
+       &                l_cheb_coll, l_direct_solve, l_vort_balance
    use outputs, only: n_log_file, write_outputs, vp_bal, terminate_vp_bal,&
-       &              read_signal_file
+       &              read_signal_file, vort_bal
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
    use time_schemes, only: type_tscheme
    use parallel_mod
@@ -152,6 +152,7 @@ contains
          &        .or. n_spec_signal == 1
          l_vphi_bal_write = l_log .and. l_vphi_balance
          l_vphi_bal_calc = l_log_next .and. l_vphi_balance
+         vort_bal%l_calc = l_log_next .and. l_vort_balance
 
          !-----------------
          !-- Check SIGNALS
@@ -258,7 +259,8 @@ contains
                call finish_explicit_assembly(temp_Mloc, psi_Mloc, us_Mloc,       &
                     &                        up_Mloc, om_Mloc, dVsT_Mloc,        &
                     &                        dVsOm_Mloc, buo_Mloc, dTdt, dpsidt, &
-                    &                        tscheme, vp_bal, l_vphi_bal_calc )
+                    &                        tscheme, vp_bal, vort_bal,          &
+                    &                        l_vphi_bal_calc )
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   run_time_m_loop=run_time_m_loop+(runStop-runStart)
@@ -306,8 +308,8 @@ contains
             !--------------------
             runStart = MPI_Wtime()
             call mloop(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, psi_hat_Mloc,         &
-                 &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc,             &
-                 &     buo_Mloc, dTdt, dpsidt, vp_bal, tscheme, lMat, l_log_next,  &
+                 &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc, buo_Mloc,   &
+                 &     dTdt, dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next,  &
                  &     l_vphi_bal_calc, run_time_solve, n_solve_calls, run_time_lu,&
                  &     n_lu_calls, run_time_dct, n_dct_calls)
             runStop = MPI_Wtime()
@@ -464,7 +466,7 @@ contains
                call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc,   &
                     &                         dom_Mloc, dpsidt%old(:,:,1), &
                     &                         dpsidt%impl(:,:,1), vp_bal,  &
-                    &                         l_vphi_bal_calc, .true.)
+                    &                         vort_bal, l_vphi_bal_calc, .true.)
             else
                call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc,  &
                     &                         dpsidt%old(:,:,1),           &

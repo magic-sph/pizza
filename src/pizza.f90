@@ -86,7 +86,10 @@ program pizza
    !stop
 
    !-- Open output files
+   local_bytes_used = bytes_allocated
    call initialize_outputs()
+   local_bytes_used = bytes_allocated-local_bytes_used
+   call memWrite('I/O', local_bytes_used)
 
    !-- Initialize time scheme
    call tscheme%initialize(time_scheme, courfac)

@@ -81,6 +81,8 @@ module namelists
    integer,  public :: n_spec_step
    logical,  public :: l_galerkin
    logical,  public :: l_vphi_balance    ! Calculate the vphi force balance
+   logical,  public :: l_vort_balance    ! Calculate the vorticiy balance
+   real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
    logical,  public :: l_heat
    logical,  public :: l_chem
    logical,  public :: l_AB1
@@ -126,7 +128,7 @@ contains
       &                    scale_u,init_u,amp_u,l_reset_t
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
-      &                       l_vphi_balance
+      &                       l_vphi_balance,l_vort_balance,bl_cut
 
    !namelist/control/tag,n_times
 
@@ -447,6 +449,8 @@ contains
       n_specs          =0
       n_spec_step      =0
       l_vphi_balance   =.false.
+      l_vort_balance   =.false.
+      bl_cut           =1.0e-3_cp
 
    end subroutine default_namelists
 !--------------------------------------------------------------------------------
@@ -554,6 +558,8 @@ contains
       write(n_out,'(''  n_specs         ='',i5,'','')') n_specs
       write(n_out,'(''  n_spec_step     ='',i5,'','')') n_spec_step
       write(n_out,'(''  l_vphi_balance  ='',l3,'','')') l_vphi_balance
+      write(n_out,'(''  l_vort_balance  ='',l3,'','')') l_vort_balance
+      write(n_out,'(''  bl_cut          ='',ES14.6,'','')') bl_cut
       write(n_out,*) "/"
 
    end subroutine write_namelists

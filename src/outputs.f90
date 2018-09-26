@@ -14,7 +14,8 @@ module outputs
    use mem_alloc, only: bytes_allocated
    use namelists, only: tag, BuoFac, ra, pr, l_non_rot, l_vphi_balance, ek, &
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
-       &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac
+       &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac,&
+       &                l_vort_balance
    use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
@@ -29,13 +30,14 @@ module outputs
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
    use char_manip, only: capitalize
+   use balances, only: vort_bal_type
 
    implicit none
 
    private
 
    integer :: frame_counter, n_calls, spec_counter
-   real(cp) :: timeLast_rad, timeAvg_rad
+   real(cp) :: timeLast_rad, timeAvg_rad, timeAvg_vortbal
    real(cp) :: timeLast_spec, timeAvg_spec
    integer, public :: n_log_file
    integer :: n_rey_file_2D, n_heat_file, n_kin_file_2D, n_power_file_2D
@@ -61,6 +63,7 @@ module outputs
 
    type(vp_bal_type), public :: vp_bal
 
+   type(vort_bal_type), public :: vort_bal
    public :: initialize_outputs, finalize_outputs, get_time_series, &
    &         write_outputs, terminate_vp_bal, read_signal_file
 
@@ -114,6 +117,7 @@ contains
 
       timeAvg_rad  = 0.0_cp
       timeAvg_spec = 0.0_cp
+      timeAvg_vortbal = 0.0_cp
 
       if ( l_rank_has_m0 ) then
 
@@ -168,9 +172,13 @@ contains
       frame_counter = 1 ! For file suffix
       spec_counter = 1
 
+      if ( l_vort_balance ) call vort_bal%initialize()
+
    end subroutine initialize_outputs
 !------------------------------------------------------------------------------
    subroutine finalize_outputs
+
+      if ( l_vort_balance ) call vort_bal%finalize()
 
       if ( l_rank_has_m0 ) then
          if ( l_vphi_balance ) then
@@ -332,6 +340,11 @@ contains
          do n_r=1,n_r_max
             vp_bal%dvpdt(n_r)=real(up_Mloc(m0,n_r))/tscheme%dt(1)
          end do
+      end if
+
+      if ( vort_bal%l_calc ) then
+         timeAvg_vortbal = timeAvg_vortbal + tscheme%dt(1)
+         call vort_bal%calc_avg(timeAvg_vortbal,l_stop_time)
       end if
 
    end subroutine write_outputs
