@@ -88,14 +88,15 @@ def avgField(time, field, tstart=None, tstop=None, std=False):
 
 def get_dr(f):
     """
-    This routine calculates the radial derivative on a input array.
+    This routine calculates the first radial derivative of a input array using
+    Chebyshev recurrence relation.
 
     :param f: the input array
     :type f: numpy.ndarray
     :returns: the radial derivative of f
     :rtype: numpy.ndarray
     """
-    Nr =f.shape[-1]
+    Nr = f.shape[-1]
     fhat = costf(f)
 
     #eps = np.finfo(1.0e0).eps
@@ -114,28 +115,35 @@ def get_dr(f):
 
     return df
 
-def intcheb(f, z1, z2):
+
+def intcheb(f):
     """
-    This routine computes an integration of a function along radius
+    This routine computes an integration of a function along radius using
+    Chebyshev recurrence relation.
 
     :param f: the input array
     :type f: numpy.ndarray
-    :param z1: bottom boundary
-    :type z1: float
-    :param z2: top boundary
-    :type z2: float
     :returns: the integral of f between z1 and z2
     :rtype: float
     """
     nr = f.shape[-1]-1
     w2 = costf(f)
-    w2[0] *= 0.5
-    w2[-1] *= 0.5
+    w2[..., 0] *= 0.5
+    w2[..., -1] *= 0.5
 
-    int = 0.
-    for i in range(0, nr+1, 2):
-        int = int-(z2-z1)/(i**2-1)*w2[i]
-    int *=  np.sqrt(2./(f.shape[-1]-1))
+    if len(f.shape) == 1:
+        int = 0.
+        for i in range(0, nr+1, 2):
+            int = int-1./(i**2-1)*w2[i]
+    elif len(f.shape) == 2:
+        int = np.zeros(f.shape[0], dtype=f.dtype)
+        for m in range(f.shape[0]):
+            int[m] = 0.
+            for i in range(0, nr+1, 2):
+                int[m] = int[m]-1./(i**2-1)*w2[m, i]
+
+    # Be careful if a mapping is used this would be modified
+    int *= np.sqrt(2./(f.shape[-1]-1))
 
     return int
 
