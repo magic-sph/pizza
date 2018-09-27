@@ -1,4 +1,4 @@
-module balances
+module vort_balance
    !
    ! This module is used to compute the balance of the terms that enter
    ! the vorticity equations.
@@ -540,4 +540,4 @@ contains
 
    end subroutine write_outputs
 !------------------------------------------------------------------------------
-end module balances
+end module vort_balance

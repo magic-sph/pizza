@@ -4,8 +4,8 @@ module mloop_mod
    use time_array, only: type_tarray
    use precision_mod
    use truncation, only: n_r_max
-   use outputs, only: vp_bal_type
-   use balances, only: vort_bal_type
+   use vp_balance, only: vp_bal_type
+   use vort_balance, only: vort_bal_type
    use blocking, only: nMstart, nMstop
    use namelists, only: l_direct_solve, l_cheb_coll
    use update_temp_coll, only: update_temp_co, get_temp_rhs_imp_coll, &
@@ -28,13 +28,12 @@ contains
    subroutine mloop(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, psi_hat_Mloc,        &
               &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc, buo_Mloc,  &
               &     dTdt, dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
-              &     l_vphi_bal_calc, run_time_solve, n_solve_calls,            &
-              &     run_time_lu, n_lu_calls, run_time_dct, n_dct_calls)
+              &     run_time_solve, n_solve_calls, run_time_lu, n_lu_calls,    &
+              &     run_time_dct, n_dct_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
-      logical,             intent(in) :: l_vphi_bal_calc
       logical,             intent(in) :: l_log_next
       complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
@@ -66,14 +65,14 @@ contains
          if ( l_direct_solve ) then
             call update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,    &
                  &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   vort_bal, tscheme, lMat, l_vphi_bal_calc,&
+                 &                   vort_bal, tscheme, lMat,                 &
                  &                   run_time_solve, n_solve_calls,           &
                  &                   run_time_lu, n_lu_calls, run_time_dct,   &
                  &                   n_dct_calls)
          else
             call update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,    &
                  &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   vort_bal, tscheme, lMat, l_vphi_bal_calc,&
+                 &                   vort_bal, tscheme, lMat,                 &
                  &                   run_time_solve, n_solve_calls,           &
                  &                   run_time_lu, n_lu_calls, run_time_dct,   &
                  &                   n_dct_calls)
@@ -84,14 +83,14 @@ contains
          if ( l_direct_solve ) then
             call update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,&
                  &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   vort_bal, tscheme, lMat, l_vphi_bal_calc,&
+                 &                   vort_bal, tscheme, lMat,                 &
                  &                   run_time_solve, n_solve_calls,           &
                  &                   run_time_lu, n_lu_calls, run_time_dct,   &
                  &                   n_dct_calls)
          else
             call update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
                  &                   buo_Mloc, dpsidt, vp_bal, vort_bal,      &
-                 &                   tscheme, lMat, l_vphi_bal_calc,          &
+                 &                   tscheme, lMat,                           &
                  &                   run_time_solve, n_solve_calls,           &
                  &                   run_time_lu, n_lu_calls, run_time_dct,   &
                  &                   n_dct_calls)
@@ -102,8 +101,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine finish_explicit_assembly(temp_Mloc, psi_Mloc, us_Mloc, up_Mloc,   &
               &                        om_Mloc, dVsT_Mloc, dVsOm_Mloc, buo_Mloc,&
-              &                        dTdt, dpsidt, tscheme, vp_bal, vort_bal, &
-              &                        l_vphi_bal_calc)
+              &                        dTdt, dpsidt, tscheme, vp_bal, vort_bal)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -114,7 +112,6 @@ contains
       complex(cp),         intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(inout) :: dVsT_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
-      logical,             intent(in) :: l_vphi_bal_calc
 
       !-- Output variables
       complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
@@ -143,12 +140,12 @@ contains
             call finish_exp_psi_int_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
                  &                       dVsOm_Mloc, buo_Mloc,                &
                  &                       dpsidt%expl(:,:,tscheme%istage),     &
-                 &                       vp_bal, vort_bal, l_vphi_bal_calc)
+                 &                       vp_bal, vort_bal)
          else
             call finish_exp_psi_int_dmat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
                  &                       dVsOm_Mloc, buo_Mloc,                &
                  &                       dpsidt%expl(:,:,tscheme%istage),     &
-                 &                       vp_bal, vort_bal, l_vphi_bal_calc)
+                 &                       vp_bal, vort_bal)
          end if
       end if
 

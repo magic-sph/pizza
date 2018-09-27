@@ -4,7 +4,6 @@ module update_psi_integ_dmat
    use parallel_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
-   use outputs, only: vp_bal_type
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, ek, l_buo_imp
    use horizontal, only: hdif_V
@@ -16,7 +15,8 @@ module update_psi_integ_dmat
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
    use useful, only: abortRun
-   use balances, only: vort_bal_type
+   use vort_balance, only: vort_bal_type
+   use vp_balance, only: vp_bal_type
    use band_matrix, only: type_bandmat_real
    use bordered_matrix, only: type_bordmat_real
    use chebsparselib, only: rmult2, intcheb1rmult1, intcheb2rmult2,    &
@@ -147,14 +147,12 @@ contains
 !------------------------------------------------------------------------------
    subroutine update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,         &
               &                   buo_Mloc, domdt, vp_bal, vort_bal, tscheme,  &
-              &                   lMat, l_vphi_bal_calc, time_solve,           &
-              &                   n_solve_calls, time_lu, n_lu_calls, time_dct,&
-              &                   n_dct_calls)
+              &                   lMat, time_solve, n_solve_calls, time_lu,    &
+              &                   n_lu_calls, time_dct, n_dct_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
-      logical,             intent(in) :: l_vphi_bal_calc
 
       !-- Output variables
       complex(cp),         intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -182,6 +180,11 @@ contains
       !-- Calculate first part of time-derivative of \omega if needed
       if ( vort_bal%l_calc .and. tscheme%istage == 1  ) then
          call vort_bal%initialize_domdt(om_Mloc,tscheme)
+      end if
+
+      !-- Calculate first part of time-derivative of axisymmetric u_\phi if needed
+      if ( vp_bal%l_calc .and. tscheme%istage == 1  ) then
+         call vp_bal%initialize_dvpdt(up_Mloc,tscheme)
       end if
 
       !-- If Ekman pumping is requested, normalisation is different
@@ -234,7 +237,6 @@ contains
       call get_psi_rhs_imp_int_dmat(om_Mloc, up_Mloc,                        &
            &                        domdt%old(:,:,tscheme%istage),           &
            &                        domdt%impl(:,:,tscheme%istage), vp_bal,  &
-           &                        l_vphi_bal_calc,                         &
            &                        tscheme%l_imp_calc_rhs(tscheme%istage))
 
 
@@ -411,6 +413,11 @@ contains
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(domdt, nMstart, nMstop, n_r_max)
 
+      !-- Finish calculation of du_\phi/dt if requested
+      if ( vp_bal%l_calc .and. tscheme%istage == tscheme%nstages  ) then
+         call vp_bal%finalize_dvpdt(up_Mloc, tscheme)
+      end if
+
       !-- Finish calculation of d\omega/dt if requested
       !-- Compute the viscous term and Coriolis
       if ( vort_bal%l_calc .and. tscheme%istage == tscheme%nstages  ) then
@@ -444,7 +451,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine finish_exp_psi_int_dmat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
               &                       dVsOm_Mloc, buo_Mloc, dom_exp_last,  &
-              &                       vp_bal, vort_bal, l_vphi_bal_calc)
+              &                       vp_bal, vort_bal)
 
       !-- Input variables
       complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -453,7 +460,6 @@ contains
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
-      logical,     intent(in) :: l_vphi_bal_calc
 
       !-- Output variables
       type(vp_bal_type),   intent(inout) :: vp_bal
@@ -505,7 +511,7 @@ contains
          end do
       end do
 
-      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
+      if ( l_rank_has_m0 .and. vp_bal%l_calc ) then
          do n_r=1,n_r_max
             vp_bal%rey_stress(n_r)=real(dom_exp_last(m2idx(0),n_r))
          end do
@@ -564,12 +570,11 @@ contains
 !------------------------------------------------------------------------------
    subroutine get_psi_rhs_imp_int_dmat(om_Mloc, up_Mloc, om_old,  &
               &                        dom_imp_Mloc_last, vp_bal, &
-              &                        l_vphi_bal_calc, l_calc_lin_rhs)
+              &                        l_calc_lin_rhs)
 
       !-- Input variables
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      logical,     intent(in) :: l_vphi_bal_calc
       logical,     intent(in) :: l_calc_lin_rhs
 
       !-- Output variables
@@ -614,7 +619,7 @@ contains
       end do
 
       !-- Calculate and store vphi force balance if needed
-      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
+      if ( l_rank_has_m0 .and. vp_bal%l_calc ) then
          m0 = m2idx(0)
          do n_r=1,n_r_max
             uphi0(n_r)=real(up_Mloc(m0, n_r),kind=cp)

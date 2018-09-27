@@ -5,8 +5,6 @@ module outputs
    !        - Time-averaged radial profiles (radial_profiles.TAG)
    !        - Time-averaged spectra (spec_avg.TAG)
    !        - Spectra (spec_#.TAG)
-   ! and one Fortran unformatted binary file that contains the vphi force balance:
-   !        - vphi_bal.TAG
    !
 
    use parallel_mod
@@ -30,7 +28,8 @@ module outputs
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
    use char_manip, only: capitalize
-   use balances, only: vort_bal_type
+   use vp_balance, only: vp_bal_type
+   use vort_balance, only: vort_bal_type
 
    implicit none
 
@@ -42,7 +41,7 @@ module outputs
    integer, public :: n_log_file
    integer :: n_rey_file_2D, n_heat_file, n_kin_file_2D, n_power_file_2D
    integer :: n_lscale_file, n_sig_file
-   integer :: n_vphi_bal_file, n_rey_file_3D, n_power_file_3D, n_kin_file_3D
+   integer :: n_rey_file_3D, n_power_file_3D, n_kin_file_3D
    character(len=144), public :: log_file
 
    real(cp), allocatable :: uphiR_mean(:), uphiR_SD(:)
@@ -53,19 +52,11 @@ module outputs
    real(cp), allocatable :: us2M_SD(:), up2M_SD(:), enstrophyM_SD(:)
    real(cp), allocatable :: fluxR_mean(:), fluxR_SD(:)
 
-   type, public :: vp_bal_type
-      real(cp), allocatable :: rey_stress(:)
-      real(cp), allocatable :: dvpdt(:)
-      real(cp), allocatable :: visc(:)
-      real(cp), allocatable :: pump(:)
-      integer :: n_calls
-   end type vp_bal_type
-
    type(vp_bal_type), public :: vp_bal
 
    type(vort_bal_type), public :: vort_bal
    public :: initialize_outputs, finalize_outputs, get_time_series, &
-   &         write_outputs, terminate_vp_bal, read_signal_file
+   &         write_outputs, read_signal_file
 
 contains
 
@@ -155,23 +146,12 @@ contains
          up2M_SD(:)         = 0.0_cp
          enstrophyM_SD(:)   = 0.0_cp
          timeLast_spec      = 0.0_cp
-
-         if ( l_vphi_balance ) then
-            open(newunit=n_vphi_bal_file, file='vphi_bal.'//tag, &
-            &    form='unformatted', status='new')
-
-            allocate( vp_bal%rey_stress(n_r_max) )
-            allocate( vp_bal%dvpdt(n_r_max) )
-            allocate( vp_bal%visc(n_r_max) )
-            allocate( vp_bal%pump(n_r_max) )
-            vp_bal%n_calls = 0
-            bytes_allocated = bytes_allocated+4*n_r_max*SIZEOF_DEF_REAL
-         end if
       end if
 
       frame_counter = 1 ! For file suffix
       spec_counter = 1
 
+      if ( l_vphi_balance ) call vp_bal%initialize()
       if ( l_vort_balance ) call vort_bal%initialize()
 
    end subroutine initialize_outputs
@@ -180,19 +160,7 @@ contains
 
       if ( l_vort_balance ) call vort_bal%finalize()
 
-      if ( l_rank_has_m0 ) then
-         if ( l_vphi_balance ) then
-            close(n_vphi_bal_file)
-            deallocate( vp_bal%pump, vp_bal%visc )
-            deallocate( vp_bal%dvpdt, vp_bal%rey_stress )
-         end if
-         deallocate( us2M_mean, up2M_mean, enstrophyM_mean )
-         deallocate( us2M_SD, up2M_SD, enstrophyM_SD )
-         deallocate( fluxR_mean, fluxR_SD )
-         deallocate( uphiR_mean, uphiR_SD, tempR_mean, tempR_SD )
-         deallocate( us2R_mean, up2R_mean, enstrophyR_mean )
-         deallocate( us2R_SD, up2R_SD, enstrophyR_SD )
-      end if
+      if ( l_vphi_balance ) call vp_bal%finalize()
 
       if ( rank == 0 ) then
          if ( .not. l_non_rot ) then
@@ -258,7 +226,7 @@ contains
    end subroutine read_signal_file
 !------------------------------------------------------------------------------
    subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst,          &
-              &             l_spec, l_frame, l_vphi_bal_calc, l_vphi_bal_write,&
+              &             l_spec, l_frame, l_vphi_bal_write,                 &
               &             l_stop_time,  us_Mloc, up_Mloc, om_Mloc, temp_Mloc,&
               &             dtemp_Mloc, dpsidt, dTdt)
 
@@ -270,7 +238,6 @@ contains
       logical,             intent(in) :: l_rst
       logical,             intent(in) :: l_spec
       logical,             intent(in) :: l_frame
-      logical,             intent(in) :: l_vphi_bal_calc
       logical,             intent(in) :: l_vphi_bal_write
       logical,             intent(in) :: l_stop_time
       complex(cp),         intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
@@ -282,7 +249,6 @@ contains
       type(type_tarray),   intent(in) :: dTdt
 
       !-- Local variable
-      integer :: m0, n_r
       character(len=144) :: frame_name
       real(cp) :: us2_m(n_m_max), up2_m(n_m_max), enstrophy_m(n_m_max)
       real(cp) :: us2_r(n_r_max), up2_r(n_r_max), enstrophy_r(n_r_max)
@@ -304,11 +270,6 @@ contains
 
       if ( l_spec ) then
          call write_spectra(us2_m, up2_m, enstrophy_m)
-      end if
-
-      if ( l_vphi_bal_write ) then
-         vp_bal%n_calls = vp_bal%n_calls+1
-         call write_vphi_balance(time, up_Mloc)
       end if
 
       if ( l_frame ) then
@@ -335,11 +296,8 @@ contains
               &                 enstrophy_m)
       end if
 
-      if ( l_rank_has_m0 .and. l_vphi_bal_calc ) then
-         m0 = m2idx(0)
-         do n_r=1,n_r_max
-            vp_bal%dvpdt(n_r)=real(up_Mloc(m0,n_r))/tscheme%dt(1)
-         end do
+      if ( l_vphi_bal_write ) then
+         call vp_bal%write_outputs(time, up_Mloc)
       end if
 
       if ( vort_bal%l_calc ) then
@@ -733,31 +691,6 @@ contains
 
    end subroutine get_time_series
 !------------------------------------------------------------------------------
-   subroutine write_vphi_balance(time, up_Mloc)
-
-      !-- Input variables
-      real(cp),    intent(in) :: time
-      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-
-      !-- Local variable
-      integer :: idx_m0
-
-      if ( l_rank_has_m0 ) then
-         idx_m0 = m2idx(0)
-         if ( vp_bal%n_calls == 1 ) then
-            write(n_vphi_bal_file) ra, ek, pr, radratio, raxi, sc
-            write(n_vphi_bal_file) r
-         end if
-         write(n_vphi_bal_file) time
-         write(n_vphi_bal_file) real(up_Mloc(idx_m0,:))
-         write(n_vphi_bal_file) vp_bal%dvpdt
-         write(n_vphi_bal_file) vp_bal%rey_stress
-         write(n_vphi_bal_file) vp_bal%pump
-         write(n_vphi_bal_file) vp_bal%visc
-      end if
-
-   end subroutine write_vphi_balance
-!------------------------------------------------------------------------------
    subroutine calculate_spectra(us_Mloc, up_Mloc, om_Mloc, us2_m_global, &
               &                 up2_m_global, enstrophy_m_global)
 
@@ -890,26 +823,5 @@ contains
       end if
 
    end subroutine get_spec_averages
-!------------------------------------------------------------------------------
-   subroutine terminate_vp_bal(up_Mloc, vphi_bal, tscheme)
-
-      !-- Input variable
-      complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      class(type_tscheme), intent(in) :: tscheme
-
-      !-- Output variable
-      type(vp_bal_type), intent(inout) :: vphi_bal
-
-      !-- Local variables
-      integer :: n_r, m0
-
-      if ( l_rank_has_m0 ) then
-         m0 = m2idx(0)
-         do n_r=1,n_r_max
-            vphi_bal%dvpdt(n_r)=real(up_Mloc(m0,n_r))/tscheme%dt(1)-vphi_bal%dvpdt(n_r)
-         end do
-      end if
-
-   end subroutine terminate_vp_bal
 !------------------------------------------------------------------------------
 end module outputs

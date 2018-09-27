@@ -27,8 +27,8 @@ module step_time
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance
-   use outputs, only: n_log_file, write_outputs, vp_bal, terminate_vp_bal,&
-       &              read_signal_file, vort_bal
+   use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
+       &              read_signal_file
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
    use time_schemes, only: type_tscheme
    use parallel_mod
@@ -76,7 +76,7 @@ contains
       real(cp) :: runStart, runStop, runStartT, runStopT
 
       logical :: l_new_dt, l_rst, l_frame, l_spec, l_log, l_log_next
-      logical :: l_vphi_bal_calc, l_vphi_bal_write, l_stop_time
+      logical :: l_vphi_bal_write, l_stop_time
       logical :: lMat, lMatNext
 
       tenth_n_time_steps=real(n_time_steps,kind=cp)/10.0_cp
@@ -89,7 +89,6 @@ contains
       l_log           =.false.
       l_log_next      =.true.
       l_stop_time     =.false.
-      l_vphi_bal_calc =.false.
       l_vphi_bal_write=.false.
       lMatNext        =.true.
 
@@ -151,7 +150,7 @@ contains
          l_spec = l_correct_step(n_time_step-1,n_time_steps,n_spec_step,n_specs) &
          &        .or. n_spec_signal == 1
          l_vphi_bal_write = l_log .and. l_vphi_balance
-         l_vphi_bal_calc = l_log_next .and. l_vphi_balance
+         vp_bal%l_calc = l_log_next .and. l_vphi_balance
          vort_bal%l_calc = l_log_next .and. l_vort_balance
 
          !-----------------
@@ -192,7 +191,7 @@ contains
          !-- Get time series
          runStart = MPI_Wtime()
          call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_spec,   &
-              &             l_frame, l_vphi_bal_calc, l_vphi_bal_write,         &
+              &             l_frame, l_vphi_bal_write,         &
               &             l_stop_time, us_Mloc,  up_Mloc, om_Mloc, temp_Mloc, &
               &             dtemp_Mloc, dpsidt, dTdt)
          runStop = MPI_Wtime()
@@ -208,7 +207,7 @@ contains
          tscheme%istage = 1
          do n_stage=1,tscheme%nstages
 
-            if ( tscheme%l_exp_calc(n_stage) ) then
+            if ( tscheme%l_exp_calc(n_stage) .or. vp_bal%l_calc .or. vort_bal%l_calc ) then
                !-------------------
                !-- MPI transpositions from m-distributed to r-distributed
                !-------------------
@@ -259,8 +258,7 @@ contains
                call finish_explicit_assembly(temp_Mloc, psi_Mloc, us_Mloc,       &
                     &                        up_Mloc, om_Mloc, dVsT_Mloc,        &
                     &                        dVsOm_Mloc, buo_Mloc, dTdt, dpsidt, &
-                    &                        tscheme, vp_bal, vort_bal,          &
-                    &                        l_vphi_bal_calc )
+                    &                        tscheme, vp_bal, vort_bal)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   run_time_m_loop=run_time_m_loop+(runStop-runStart)
@@ -300,17 +298,16 @@ contains
 
             !-- If the scheme is a multi-step scheme that is not Crank-Nicolson 
             !-- we have to use a different starting scheme
-            call start_from_another_scheme(l_vphi_bal_calc, l_bridge_step, &
-                 &                         n_time_step, tscheme)
+            call start_from_another_scheme(l_bridge_step,n_time_step, tscheme)
 
             !--------------------
             !-- M-loop (update routines)
             !--------------------
             runStart = MPI_Wtime()
-            call mloop(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, psi_hat_Mloc,         &
-                 &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc, buo_Mloc,   &
-                 &     dTdt, dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next,  &
-                 &     l_vphi_bal_calc, run_time_solve, n_solve_calls, run_time_lu,&
+            call mloop(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, psi_hat_Mloc,        &
+                 &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc, buo_Mloc,  &
+                 &     dTdt, dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
+                 &     run_time_solve, n_solve_calls, run_time_lu,                &
                  &     n_lu_calls, run_time_dct, n_dct_calls)
             runStop = MPI_Wtime()
             if ( .not. lMat ) then
@@ -329,8 +326,6 @@ contains
             tscheme%istage = tscheme%istage+1
 
          end do ! Finish loop over stages
-
-         if ( l_vphi_bal_calc ) call terminate_vp_bal(up_Mloc, vp_bal, tscheme)
 
          !---------------------
          !-- Timings
@@ -445,10 +440,8 @@ contains
 
    end subroutine time_loop
 !-------------------------------------------------------------------------------
-   subroutine start_from_another_scheme(l_vphi_bal_calc, l_bridge_step, &
-              &                         n_time_step, tscheme)
+   subroutine start_from_another_scheme(l_bridge_step, n_time_step, tscheme)
 
-      logical,             intent(in) :: l_vphi_bal_calc
       logical,             intent(in) :: l_bridge_step
       integer,             intent(in) :: n_time_step
       class(type_tscheme), intent(inout) :: tscheme
@@ -466,22 +459,22 @@ contains
                call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc,   &
                     &                         dom_Mloc, dpsidt%old(:,:,1), &
                     &                         dpsidt%impl(:,:,1), vp_bal,  &
-                    &                         vort_bal, l_vphi_bal_calc, .true.)
+                    &                         vort_bal,.true.)
             else
                call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc,  &
                     &                         dpsidt%old(:,:,1),           &
                     &                         dpsidt%impl(:,:,1), vp_bal,  &
-                    &                         vort_bal, l_vphi_bal_calc, .true.)
+                    &                         vort_bal,.true.)
             end if
          else
             call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt%old(:,:,1), &
                  &                    dTdt%impl(:,:,1), .true.)
             if ( l_direct_solve ) then
                call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,dpsidt%old(:,:,1),&
-                    &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
+                    &         dpsidt%impl(:,:,1), vp_bal,.true.)
             else
                call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,dpsidt%old(:,:,1), &
-                    &         dpsidt%impl(:,:,1), vp_bal, l_vphi_bal_calc,.true.)
+                    &         dpsidt%impl(:,:,1), vp_bal, .true.)
             end if
          end if
 
