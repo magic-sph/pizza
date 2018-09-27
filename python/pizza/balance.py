@@ -288,19 +288,42 @@ class PizzaVortBalance(PizzaSetup):
         pattern = os.path.join(datadir, 'log.*')
         logFiles = scanDir(pattern)
 
-        if len(logFiles) != 0:
-            PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
-            name = 'vort_bal.%s' % self.tag
-            filename = os.path.join(datadir, name)
+        if tag is not None:
+            pattern = os.path.join(datadir, 'vort_bal.%s' % tag)
+            files = scanDir(pattern)
+
+            # Either the log.tag directly exists and the setup is easy to obtain
+            if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                    nml='log.%s' % tag)
+            # Or the tag is a bit more complicated and we need to find 
+            # the corresponding log file
+            else:
+                mask = re.compile(r'vort_bal\.(.*)')
+                if mask.match(files[-1]):
+                    ending = mask.search(files[-1]).groups(0)[0]
+                    if logFiles.__contains__('log.%s' % ending):
+                        PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                            nml='log.%s' % ending)
+
+            filename = files[-1]
             print('reading %s' % filename)
             self.read(filename, endian)
+
         else:
-            mot = 'vort_bal.*'
-            dat = [(os.stat(i).st_mtime, i) for i in glob.glob(mot)]
-            dat.sort()
-            filename = dat[-1][1]
-            print('reading %s' % filename)
-            self.read(filename, endian)
+            if len(logFiles) != 0:
+                PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
+                name = 'vort_bal.%s' % self.tag
+                filename = os.path.join(datadir, name)
+                print('reading %s' % filename)
+                self.read(filename, endian)
+            else:
+                mot = 'vort_bal.*'
+                dat = [(os.stat(i).st_mtime, i) for i in glob.glob(mot)]
+                dat.sort()
+                filename = dat[-1][1]
+                print('reading %s' % filename)
+                self.read(filename, endian)
 
         if iplot == True:
             self.plot()
