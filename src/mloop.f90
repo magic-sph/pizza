@@ -73,7 +73,7 @@ contains
          else
             call update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,    &
                  &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   tscheme, lMat, l_vphi_bal_calc,          &
+                 &                   vort_bal, tscheme, lMat, l_vphi_bal_calc,&
                  &                   run_time_solve, n_solve_calls,           &
                  &                   run_time_lu, n_lu_calls, run_time_dct,   &
                  &                   n_dct_calls)
@@ -84,16 +84,17 @@ contains
          if ( l_direct_solve ) then
             call update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,&
                  &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   tscheme, lMat, l_vphi_bal_calc,          &
+                 &                   vort_bal, tscheme, lMat, l_vphi_bal_calc,&
                  &                   run_time_solve, n_solve_calls,           &
                  &                   run_time_lu, n_lu_calls, run_time_dct,   &
                  &                   n_dct_calls)
          else
             call update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
-                 &                   buo_Mloc, dpsidt, vp_bal, tscheme, lMat, &
-                 &                   l_vphi_bal_calc, run_time_solve,         &
-                 &                   n_solve_calls, run_time_lu, n_lu_calls,  &
-                 &                   run_time_dct, n_dct_calls)
+                 &                   buo_Mloc, dpsidt, vp_bal, vort_bal,      &
+                 &                   tscheme, lMat, l_vphi_bal_calc,          &
+                 &                   run_time_solve, n_solve_calls,           &
+                 &                   run_time_lu, n_lu_calls, run_time_dct,   &
+                 &                   n_dct_calls)
          end if
       end if
 
@@ -132,7 +133,8 @@ contains
                  &                        vort_bal)
          else
             call finish_exp_psi_coll_dmat(us_Mloc, up_Mloc, om_Mloc, dVsOm_Mloc, &
-                 &                        buo_Mloc, dpsidt%expl(:,:,tscheme%istage))
+                 &                      buo_Mloc,dpsidt%expl(:,:,tscheme%istage),&
+                 &                        vort_bal)
          end if
       else
          call finish_exp_temp_int(temp_Mloc, psi_Mloc, dVsT_Mloc, buo_Mloc, &
@@ -141,12 +143,12 @@ contains
             call finish_exp_psi_int_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
                  &                       dVsOm_Mloc, buo_Mloc,                &
                  &                       dpsidt%expl(:,:,tscheme%istage),     &
-                 &                       vp_bal, l_vphi_bal_calc)
+                 &                       vp_bal, vort_bal, l_vphi_bal_calc)
          else
             call finish_exp_psi_int_dmat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
                  &                       dVsOm_Mloc, buo_Mloc,                &
                  &                       dpsidt%expl(:,:,tscheme%istage),     &
-                 &                       vp_bal, l_vphi_bal_calc)
+                 &                       vp_bal, vort_bal, l_vphi_bal_calc)
          end if
       end if
 

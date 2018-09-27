@@ -16,6 +16,7 @@ module update_psi_integ_dmat
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
    use useful, only: abortRun
+   use balances, only: vort_bal_type
    use band_matrix, only: type_bandmat_real
    use bordered_matrix, only: type_bordmat_real
    use chebsparselib, only: rmult2, intcheb1rmult1, intcheb2rmult2,    &
@@ -145,9 +146,10 @@ contains
    end subroutine finalize_psi_integ_dmat
 !------------------------------------------------------------------------------
    subroutine update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,         &
-              &                   buo_Mloc, domdt, vp_bal, tscheme, lMat,      &
-              &                   l_vphi_bal_calc, time_solve, n_solve_calls,  &
-              &                   time_lu, n_lu_calls, time_dct, n_dct_calls)
+              &                   buo_Mloc, domdt, vp_bal, vort_bal, tscheme,  &
+              &                   lMat, l_vphi_bal_calc, time_solve,           &
+              &                   n_solve_calls, time_lu, n_lu_calls, time_dct,&
+              &                   n_dct_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -155,30 +157,48 @@ contains
       logical,             intent(in) :: l_vphi_bal_calc
 
       !-- Output variables
-      complex(cp),       intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
-      type(vp_bal_type), intent(inout) :: vp_bal
-      type(type_tarray), intent(inout) :: domdt
-      complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
-      real(cp),          intent(inout) :: time_solve
-      integer,           intent(inout) :: n_solve_calls
-      real(cp),          intent(inout) :: time_lu
-      integer,           intent(inout) :: n_lu_calls
-      real(cp),          intent(inout) :: time_dct
-      integer,           intent(inout) :: n_dct_calls
+      complex(cp),         intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
+      type(vp_bal_type),   intent(inout) :: vp_bal
+      type(vort_bal_type), intent(inout) :: vort_bal
+      type(type_tarray),   intent(inout) :: domdt
+      complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      real(cp),            intent(inout) :: time_solve
+      integer,             intent(inout) :: n_solve_calls
+      real(cp),            intent(inout) :: time_lu
+      integer,             intent(inout) :: n_lu_calls
+      real(cp),            intent(inout) :: time_dct
+      integer,             intent(inout) :: n_dct_calls
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
-      real(cp) :: h2, runStart, runStop
+      real(cp) :: h2, runStart, runStop, dm2
       integer :: n_r, n_m, n_cheb, m
 
       if ( lMat ) lPsimat(:)=.false.
 
+      !-- Calculate first part of time-derivative of \omega if needed
+      if ( vort_bal%l_calc .and. tscheme%istage == 1  ) then
+         call vort_bal%initialize_domdt(om_Mloc,tscheme)
+      end if
+
       !-- If Ekman pumping is requested, normalisation is different
       !-- Hence buoyancy has to be multiplied by h^2
       if ( l_buo_imp ) then
+
+         !-- Store buoyancy for the force balance
+         if ( vort_bal%l_calc .and. tscheme%istage == tscheme%nstages  ) then
+            do n_r=1,n_r_max
+               do n_m=nMstart,nMstop
+                  m = idx2m(n_m)
+                  if ( m /= 0 ) then
+                     vort_bal%buo(n_m,n_r)=buo_Mloc(n_m,n_r)/tscheme%dt(1)
+                  end if
+               end do
+            end do
+         end if
 
          !-- Transform buoyancy to Chebyshev space
          runStart = MPI_Wtime()
@@ -391,11 +411,40 @@ contains
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(domdt, nMstart, nMstop, n_r_max)
 
+      !-- Finish calculation of d\omega/dt if requested
+      !-- Compute the viscous term and Coriolis
+      if ( vort_bal%l_calc .and. tscheme%istage == tscheme%nstages  ) then
+         call get_ddr(om_Mloc, dom_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
+              &       rscheme)
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               dm2 = real(m,cp)*real(m,cp)
+               if ( m > 0 ) then
+                  vort_bal%visc(n_m,n_r)=ViscFac*(  work_Mloc(n_m,n_r)+&
+                  &                   or1(n_r)*      dom_Mloc(n_m,n_r)-&
+                  &               dm2*or2(n_r)*       om_Mloc(n_m,n_r) )
+                  if ( .not. l_non_rot ) then
+                     vort_bal%cor(n_m,n_r) =CorFac*beta(n_r)*us_Mloc(n_m,n_r)
+                  end if
+                  if ( l_ek_pump ) then
+                     vort_bal%pump(n_m,n_r)=CorFac*ekpump(n_r)*(             &
+                     &                                     -om_Mloc(n_m,n_r) &
+                     &                    +half*beta(n_r)*  up_Mloc(n_m,n_r) &
+                     & +beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*&
+                     &                                      us_Mloc(n_m,n_r) )
+                  end if
+               end if
+            end do
+         end do
+         call vort_bal%finalize_domdt(om_Mloc, tscheme)
+      end if
+
    end subroutine update_psi_int_dmat
 !------------------------------------------------------------------------------
    subroutine finish_exp_psi_int_dmat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
               &                       dVsOm_Mloc, buo_Mloc, dom_exp_last,  &
-              &                       vp_bal, l_vphi_bal_calc)
+              &                       vp_bal, vort_bal, l_vphi_bal_calc)
 
       !-- Input variables
       complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -407,8 +456,9 @@ contains
       logical,     intent(in) :: l_vphi_bal_calc
 
       !-- Output variables
-      type(vp_bal_type), intent(inout) :: vp_bal
-      complex(cp),       intent(inout) :: dom_exp_last(nMstart:nMstop,n_r_max)
+      type(vp_bal_type),   intent(inout) :: vp_bal
+      type(vort_bal_type), intent(inout) :: vort_bal
+      complex(cp),         intent(inout) :: dom_exp_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, m, n_cheb
@@ -432,6 +482,11 @@ contains
                dom_exp_last(n_m,n_r)=      dom_exp_last(n_m,n_r)-   &
                &                     or1(n_r)*work_Mloc(n_m,n_r)
 
+               !-- Store the advection term when vorticity balance is requested
+               if ( vort_bal%l_calc ) then
+                  vort_bal%adv(n_m,n_r)=dom_exp_last(n_m,n_r)
+               end if
+
                !-- If Coriolis force is required it is added here:
                if ( .not. l_non_rot ) then
                   dom_exp_last(n_m,n_r)=                 dom_exp_last(n_m,n_r)-  &
@@ -440,6 +495,10 @@ contains
 
                !-- If Buoyancy is treated exiplicitly:
                if ( .not. l_buo_imp ) then
+                  !-- Store buoyancy for the vorticity balance:
+                  if ( vort_bal%l_calc ) then
+                     vort_bal%buo(n_m,n_r)=buo_Mloc(n_m,n_r)
+                  end if
                   dom_exp_last(n_m,n_r)=dom_exp_last(n_m,n_r)+buo_Mloc(n_m,n_r)
                end if
             end if

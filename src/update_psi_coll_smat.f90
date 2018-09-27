@@ -7,7 +7,7 @@ module update_psi_coll_smat
    use outputs, only: vp_bal_type
    use horizontal, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
-       &                l_coriolis_imp, l_buo_imp
+       &                l_coriolis_imp, l_buo_imp, l_ek_pump, l_non_rot
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -106,6 +106,7 @@ contains
            &                         vp_bal, vort_bal, l_vphi_bal_calc,      &
            &                         tscheme%l_imp_calc_rhs(tscheme%istage))
 
+      !-- Calculate first part of time-derivative of \omega if needed
       if ( vort_bal%l_calc .and. tscheme%istage == 1  ) then
          call vort_bal%initialize_domdt(om_Mloc,tscheme)
       end if
@@ -151,7 +152,7 @@ contains
                lPsimat(n_m)=.true.
             end if
 
-            if ( vort_bal%l_calc ) then
+            if ( vort_bal%l_calc .and. tscheme%istage == tscheme%nstages ) then
                do n_r=1,n_r_max
                   vort_bal%buo(n_m,n_r)=buo_Mloc(n_m,n_r)/tscheme%dt(1)
                end do
@@ -249,6 +250,7 @@ contains
       !-- Roll the time arrays before filling again the first block
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
 
+      !-- Finish calculation of d\omega/dt if requested
       if ( vort_bal%l_calc .and. tscheme%istage == tscheme%nstages  ) then
          call vort_bal%finalize_domdt(om_Mloc, tscheme)
       end if
@@ -387,15 +389,19 @@ contains
 
                   !-- In case the force balance is requested:
                   if ( vort_bal%l_calc ) then
-                     vort_bal%visc(n_m,n_r)=              work_Mloc(n_m,n_r) &
+                     vort_bal%visc(n_m,n_r)=ViscFac*(     work_Mloc(n_m,n_r) &
                      &                     +or1(n_r)*      dom_Mloc(n_m,n_r) &
-                     &                 -dm2*or2(n_r)*       om_Mloc(n_m,n_r)
-                     vort_bal%cor(n_m,n_r) =CorFac*beta(n_r)*us_Mloc(n_m,n_r)
-                     vort_bal%pump(n_m,n_r)=CorFac*ekpump(n_r)*(             &
-                     &                                     -om_Mloc(n_m,n_r) &
-                     &                    +half*beta(n_r)*  up_Mloc(n_m,n_r) &
-                     & +beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*&
-                     &                                      us_Mloc(n_m,n_r) )
+                     &                 -dm2*or2(n_r)*       om_Mloc(n_m,n_r) )
+                     if ( .not. l_non_rot ) then
+                        vort_bal%cor(n_m,n_r) =CorFac*beta(n_r)*us_Mloc(n_m,n_r)
+                     end if
+                     if ( l_ek_pump ) then
+                        vort_bal%pump(n_m,n_r)=CorFac*ekpump(n_r)*(             &
+                        &                                     -om_Mloc(n_m,n_r) &
+                        &                    +half*beta(n_r)*  up_Mloc(n_m,n_r) &
+                        & +beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*&
+                        &                                      us_Mloc(n_m,n_r) )
+                     end if
                   end if
                end if
             end do

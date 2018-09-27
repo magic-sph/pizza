@@ -471,7 +471,7 @@ contains
                call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc,  &
                     &                         dpsidt%old(:,:,1),           &
                     &                         dpsidt%impl(:,:,1), vp_bal,  &
-                    &                         l_vphi_bal_calc, .true.)
+                    &                         vort_bal, l_vphi_bal_calc, .true.)
             end if
          else
             call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt%old(:,:,1), &
