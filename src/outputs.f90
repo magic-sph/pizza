@@ -3,12 +3,12 @@ module outputs
    ! This module handles the non-binary I/O of pizza:
    !        - Time series (e_kin.TAG, length_scales.TAG, heat.TAG, power.TAG)
    !        - Time-averaged radial profiles (radial_profiles.TAG)
-   !        - Time-averaged spectra (spec_avg.TAG)
-   !        - Spectra (spec_#.TAG)
    !
 
    use parallel_mod
    use precision_mod
+   use spectra, only: spectra_type
+   use communications, only: my_allreduce_maxloc
    use mem_alloc, only: bytes_allocated
    use namelists, only: tag, BuoFac, ra, pr, l_non_rot, l_vphi_balance, ek, &
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
@@ -35,9 +35,9 @@ module outputs
 
    private
 
-   integer :: frame_counter, n_calls, spec_counter
+   integer :: frame_counter, n_calls
    real(cp) :: timeLast_rad, timeAvg_rad, timeAvg_vortbal
-   real(cp) :: timeLast_spec, timeAvg_spec
+   real(cp) :: timeAvg_spec
    integer, public :: n_log_file
    integer :: n_rey_file_2D, n_heat_file, n_kin_file_2D, n_power_file_2D
    integer :: n_lscale_file, n_sig_file
@@ -48,11 +48,10 @@ module outputs
    real(cp), allocatable :: us2R_mean(:), us2R_SD(:), up2R_mean(:), up2R_SD(:)
    real(cp), allocatable :: enstrophyR_mean(:), enstrophyR_SD(:)
    real(cp), allocatable :: tempR_mean(:), tempR_SD(:)
-   real(cp), allocatable :: us2M_mean(:), up2M_mean(:), enstrophyM_mean(:)
-   real(cp), allocatable :: us2M_SD(:), up2M_SD(:), enstrophyM_SD(:)
    real(cp), allocatable :: fluxR_mean(:), fluxR_SD(:)
 
    type(vp_bal_type), public :: vp_bal
+   type(spectra_type), public :: spec
 
    type(vort_bal_type), public :: vort_bal
    public :: initialize_outputs, finalize_outputs, get_time_series, &
@@ -106,8 +105,8 @@ contains
          close(n_sig_file)
       end if 
 
-      timeAvg_rad  = 0.0_cp
-      timeAvg_spec = 0.0_cp
+      timeAvg_rad     = 0.0_cp
+      timeAvg_spec    = 0.0_cp
       timeAvg_vortbal = 0.0_cp
 
       if ( l_rank_has_m0 ) then
@@ -134,22 +133,11 @@ contains
          enstrophyR_SD(:)   = 0.0_cp
          n_calls            = 0
          timeLast_rad       = 0.0_cp
-
-         allocate( us2M_mean(n_m_max), up2M_mean(n_m_max), enstrophyM_mean(n_m_max) )
-         allocate( us2M_SD(n_m_max), up2M_SD(n_m_max), enstrophyM_SD(n_m_max) )
-         bytes_allocated=bytes_allocated+6*n_m_max*SIZEOF_DEF_REAL
-
-         us2M_mean(:)       = 0.0_cp
-         up2M_mean(:)       = 0.0_cp
-         enstrophyM_mean(:) = 0.0_cp
-         us2M_SD(:)         = 0.0_cp
-         up2M_SD(:)         = 0.0_cp
-         enstrophyM_SD(:)   = 0.0_cp
-         timeLast_spec      = 0.0_cp
       end if
 
       frame_counter = 1 ! For file suffix
-      spec_counter = 1
+
+      call spec%initialize()
 
       if ( l_vphi_balance ) call vp_bal%initialize()
       if ( l_vort_balance ) call vort_bal%initialize()
@@ -157,6 +145,14 @@ contains
    end subroutine initialize_outputs
 !------------------------------------------------------------------------------
    subroutine finalize_outputs
+
+      if ( rank == 0 ) then
+         deallocate( uphiR_mean, uphiR_SD, tempR_mean, tempR_SD )
+         deallocate( fluxR_mean, fluxR_SD, us2R_mean, us2R_SD )
+         deallocate( up2R_mean, up2R_SD, enstrophyR_mean, enstrophyR_SD )
+      end if
+
+      call spec%finalize()
 
       if ( l_vort_balance ) call vort_bal%finalize()
 
@@ -225,10 +221,9 @@ contains
 
    end subroutine read_signal_file
 !------------------------------------------------------------------------------
-   subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst,          &
-              &             l_spec, l_frame, l_vphi_bal_write,                 &
-              &             l_stop_time,  us_Mloc, up_Mloc, om_Mloc, temp_Mloc,&
-              &             dtemp_Mloc, dpsidt, dTdt)
+   subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame, &
+              &             l_vphi_bal_write, l_stop_time,  us_Mloc, up_Mloc,  &
+              &             om_Mloc, temp_Mloc, dtemp_Mloc, dpsidt, dTdt)
 
       !-- Input variables
       real(cp),            intent(in) :: time
@@ -236,7 +231,6 @@ contains
       integer,             intent(in) :: n_time_step
       logical,             intent(in) :: l_log
       logical,             intent(in) :: l_rst
-      logical,             intent(in) :: l_spec
       logical,             intent(in) :: l_frame
       logical,             intent(in) :: l_vphi_bal_write
       logical,             intent(in) :: l_stop_time
@@ -250,26 +244,31 @@ contains
 
       !-- Local variable
       character(len=144) :: frame_name
-      real(cp) :: us2_m(n_m_max), up2_m(n_m_max), enstrophy_m(n_m_max)
       real(cp) :: us2_r(n_r_max), up2_r(n_r_max), enstrophy_r(n_r_max)
+      real(cp) :: us2_m_Mloc(nMstart:nMstop), up2_m_Mloc(nMstart:nMstop)
+      real(cp) :: enst_m_Mloc(nMstart:nMstop)
       real(cp) :: flux_r(n_r_max)
 
       timeAvg_rad  = timeAvg_rad  + tscheme%dt(1)
       timeAvg_spec = timeAvg_spec + tscheme%dt(1)
 
+      !-- Write checkpoints
       if ( l_rst ) then
          call write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
               &                     l_stop_time, temp_Mloc, us_Mloc, up_Mloc, &
               &                     dTdt, dpsidt)
       end if
 
-      if ( l_spec .or. l_log ) then
-         call calculate_spectra(us_Mloc, up_Mloc, om_Mloc, us2_m, up2_m, &
-              &                 enstrophy_m)
+      !-- Calculate spectra
+      if ( l_log .or. spec%l_calc ) then
+         call spec%calculate_spectra(timeAvg_spec, l_stop_time, us_Mloc, &
+              &                      up_Mloc, om_Mloc, us2_m_Mloc,       &
+              &                      up2_m_Mloc, enst_m_Mloc)
       end if
 
-      if ( l_spec ) then
-         call write_spectra(us2_m, up2_m, enstrophy_m)
+      !-- Write spectra
+      if ( spec%l_calc ) then
+         call spec%write_spectra(us2_m_Mloc, up2_m_Mloc, enst_m_Mloc)
       end if
 
       if ( l_frame ) then
@@ -285,15 +284,12 @@ contains
       end if
 
       if ( l_log ) then
-         call get_time_series(time, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
-              &               dtemp_Mloc, us2_m, up2_m, enstrophy_m,      &
+         call get_time_series(time, us_Mloc, up_Mloc, om_Mloc, temp_Mloc,      &
+              &               dtemp_Mloc, us2_m_Mloc, up2_m_Mloc, enst_m_Mloc, &
               &               us2_r, up2_r, enstrophy_r, flux_r)
 
          call get_radial_averages(timeAvg_rad, l_stop_time, up_Mloc, temp_Mloc, &
               &                   us2_r, up2_r, enstrophy_r, flux_r)
-
-         call get_spec_averages(timeAvg_spec, l_stop_time, us2_m, up2_m, &
-              &                 enstrophy_m)
       end if
 
       if ( l_vphi_bal_write ) then
@@ -384,9 +380,9 @@ contains
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
-      real(cp),    intent(in) :: us2_m(n_m_max)
-      real(cp),    intent(in) :: up2_m(n_m_max)
-      real(cp),    intent(in) :: enstrophy_m(n_m_max)
+      real(cp),    intent(in) :: us2_m(nMstart:nMstop)
+      real(cp),    intent(in) :: up2_m(nMstart:nMstop)
+      real(cp),    intent(in) :: enstrophy_m(nMstart:nMstop)
 
       !-- Output variables
       real(cp), intent(out) :: us2_r(n_r_max)
@@ -396,10 +392,9 @@ contains
 
       !-- Local variables
       integer :: n_r, n_m, m, n_m0
-      integer :: lus_peak, lekin_peak, lvort_peak
       real(cp) :: dlus_peak, dlekin_peak, dlvort_peak
       real(cp) :: dl_diss, dlekin_int, pow_3D
-      real(cp) :: tTop, tBot, visc_2D, pow_2D, pum, E, Em, visc_3D
+      real(cp) :: tTop, tBot, visc_2D, pow_2D, pum, visc_3D
       real(cp) :: us2_2D, up2_2D, up2_axi_2D, us2_3D, up2_3D, up2_axi_3D, uz2_3D
       real(cp) :: up2_axi_r(n_r_max), nu_vol_r(n_r_max), nu_cond_r(n_r_max)
       real(cp) :: buo_power(n_r_max), pump(n_r_max), tmp(n_r_max)
@@ -451,6 +446,12 @@ contains
       call reduce_radial_on_rank(enstrophy, 0)
       call reduce_radial_on_rank(buo_power, 0)
       call reduce_radial_on_rank(pump, 0)
+
+      !-------
+      !-- Lengthscales
+      !-------
+      call get_lengthscales(us2_m, up2_m, enstrophy_m, dlus_peak, dlekin_peak,  &
+           &                dlvort_peak, dlekin_int)
 
       if ( rank == 0 ) then
 
@@ -568,41 +569,6 @@ contains
             &                                              rey_fluct_3D
          end if
 
-         !-------
-         !-- Lengthscales
-         !-------
-         !-- Peak of the spectra
-         lus_peak   = maxloc(us2_m(2:n_m_max), dim=1)*minc ! Excluding m=0
-         if ( lus_peak > 0 ) then
-            dlus_peak = pi/lus_peak
-         else
-            dlus_peak = 0.0_cp
-         end if
-         lekin_peak = maxloc(us2_m(2:n_m_max)+up2_m(2:n_m_max),dim=1)*minc
-         if ( lekin_peak > 0 ) then
-            dlekin_peak = pi/lekin_peak
-         else
-            dlekin_peak = 0.0_cp
-         end if
-         lvort_peak = maxloc(enstrophy_m(2:n_m_max),dim=1)*minc
-         if ( lvort_peak > 0 ) then
-            dlvort_peak = pi/lvort_peak
-         else
-            dlvort_peak = 0.0_cp
-         end if
-         !-- Integral lengthscale = pi*\sum E(m)/\sum m E(m)
-         E  = 0.0_cp
-         Em = 0.0_cp
-         do n_m=1,n_m_max
-            m =idx2m(n_m)
-            E  = E  + (us2_m(n_m)+up2_m(n_m))
-            Em = Em + real(m,cp)*(us2_m(n_m)+up2_m(n_m))
-         end do
-         if ( abs(E) > 10.0_cp*epsilon(one) ) then
-            dlekin_int = pi*E/Em
-         else
-            dlekin_int = 0.0_cp
-         end if
          if ( l_non_rot ) then
             !-- Dissipation lengthscale = \sqrt(2*Ekin/\omega^2)
             if ( abs(visc_2D) > 10.0_cp*epsilon(one) ) then
@@ -691,137 +657,68 @@ contains
 
    end subroutine get_time_series
 !------------------------------------------------------------------------------
-   subroutine calculate_spectra(us_Mloc, up_Mloc, om_Mloc, us2_m_global, &
-              &                 up2_m_global, enstrophy_m_global)
+   subroutine get_lengthscales(us2_m, up2_m, enst_m, dlus_peak, dlekin_peak, &
+              &                dlvort_peak, dlekin_int)
 
       !-- Input variables
-      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop, n_r_max)
-      complex(cp), intent(in) :: om_Mloc(nMstart:nMstop, n_r_max)
+      real(cp), intent(in) :: us2_m(nMstart:nMstop)
+      real(cp), intent(in) :: up2_m(nMstart:nMstop)
+      real(cp), intent(in) :: enst_m(nMstart:nMstop)
 
       !-- Output variables
-      real(cp), intent(out) :: us2_m_global(n_m_max)
-      real(cp), intent(out) :: up2_m_global(n_m_max)
-      real(cp), intent(out) :: enstrophy_m_global(n_m_max)
+      real(cp), intent(out) :: dlus_peak
+      real(cp), intent(out) :: dlekin_peak
+      real(cp), intent(out) :: dlvort_peak
+      real(cp), intent(out) :: dlekin_int
 
-      !-- Local variables
-      real(cp) :: us2(n_r_max), up2(n_r_max), enst(n_r_max)
-      real(cp) :: us2_m(nMstart:nMstop), enstrophy_m(nMstart:nMstop)
-      real(cp) :: up2_m(nMstart:nMstop)
-      integer :: displs(0:n_procs-1), recvcounts(0:n_procs-1)
-      integer :: n_m, m, n_r, n_p
+      !-- Local variables:
+      real(cp) :: E, Em
+      integer :: lus_peak, lvort_peak, lekin_peak, m, n_m
 
+      !-- Estimate the peak of the spectra (exclude m=0 for practical reason)
+      lus_peak=my_allreduce_maxloc(us2_m(max(2,nMstart):nMstop))*minc
+      if ( lus_peak > 0 ) then
+         dlus_peak = pi/lus_peak
+      else
+         dlus_peak = 0.0_cp
+      end if
 
-      !-- This is not cache-friendly but hopefully it's happening only
-      !-- once in a while (otherwise we need (n_r, n_m) arrays
+      lekin_peak=my_allreduce_maxloc(us2_m(max(2,nMstart):nMstop)+ &
+                 &                   up2_m(max(2,nMstart):nMstop))*minc
+      if ( lekin_peak > 0 ) then
+         dlekin_peak = pi/lekin_peak
+      else
+         dlekin_peak = 0.0_cp
+      end if
+
+      lvort_peak=my_allreduce_maxloc(enst_m(max(2,nMstart):nMstop))*minc
+      if ( lvort_peak > 0 ) then
+         dlvort_peak = pi/lvort_peak
+      else
+         dlvort_peak = 0.0_cp
+      end if
+
+      !-- Integral lengthscale
+      E = 0.0_cp
+      Em = 0.0_cp
       do n_m=nMstart,nMstop
-         m = idx2m(n_m)
-         do n_r=1,n_r_max
-            us2(n_r) =cc2real(us_Mloc(n_m,n_r),m) 
-            up2(n_r) =cc2real(up_Mloc(n_m,n_r),m)
-            enst(n_r)=cc2real(om_Mloc(n_m,n_r),m)
-            us2(n_r) =us2(n_r)*r(n_r)*height(n_r)
-            up2(n_r) =up2(n_r)*r(n_r)*height(n_r)
-            enst(n_r)=enst(n_r)*r(n_r)*height(n_r)
-         end do
-         us2_m(n_m)      =pi*rInt_R(us2, r, rscheme)
-         up2_m(n_m)      =pi*rInt_R(up2, r, rscheme)
-         enstrophy_m(n_m)=pi*rInt_R(enst, r, rscheme)
+         m=idx2m(n_m)
+         E  = E  + (us2_m(n_m)+up2_m(n_m))
+         Em = Em + real(m,cp)*(us2_m(n_m)+up2_m(n_m))
       end do
 
-      do n_p=0,n_procs-1
-         recvcounts(n_p)=m_balance(n_p)%n_per_rank
-      end do
-      displs(0)=0
-      do n_p=1,n_procs-1
-         displs(n_p)=displs(n_p-1)+recvcounts(n_p-1)
-      end do
-      call MPI_GatherV(us2_m, nm_per_rank, MPI_DEF_REAL,        &
-           &           us2_m_global, recvcounts, displs,        &
-           &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(up2_m, nm_per_rank, MPI_DEF_REAL,        &
-           &           up2_m_global, recvcounts, displs,        &
-           &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(enstrophy_m, nm_per_rank, MPI_DEF_REAL,  &
-           &           enstrophy_m_global, recvcounts, displs,  &
-           &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+      !-- MPI reduction
+      call MPI_AllReduce(MPI_IN_PLACE, E, 1, MPI_DEF_REAL, MPI_SUM, &
+           &             MPI_COMM_WORLD, ierr)
+      call MPI_AllReduce(MPI_IN_PLACE, Em, 1, MPI_DEF_REAL, MPI_SUM, &
+           &             MPI_COMM_WORLD, ierr)
 
-   end subroutine calculate_spectra
-!------------------------------------------------------------------------------
-   subroutine write_spectra(us2_m, up2_m, enstrophy_m)
-
-      !-- Input variables
-      real(cp), intent(in) :: us2_m(n_m_max)
-      real(cp), intent(in) :: up2_m(n_m_max)
-      real(cp), intent(in) :: enstrophy_m(n_m_max)
-
-      !-- Local variables
-      character(len=144) :: spec_name
-      integer :: file_handle, n_m, m
-
-      if ( rank == 0 ) then
-         write(spec_name, '(A,I0,A,A)') 'spec_',spec_counter,'.',tag
-
-         open(newunit=file_handle, file=spec_name, position='append')
-         do n_m=1,n_m_max
-            m = idx2m(n_m)
-            write(file_handle, '(I4, 3es16.8)') m,                       &
-            &              round_off(us2_m(n_m)), round_off(up2_m(n_m)), &
-            &              round_off(enstrophy_m(n_m))
-         end do
-         close(file_handle)
-
-         spec_counter = spec_counter+1
+      if ( abs(E) > 10.0_cp*epsilon(one) ) then
+         dlekin_int = pi*E/Em
+      else
+         dlekin_int = 0.0_cp
       end if
 
-   end subroutine write_spectra
-!------------------------------------------------------------------------------
-   subroutine get_spec_averages(timeAvg_spec, l_stop_time, us2_m, up2_m, enstrophy_m)
-
-      !-- Input variables
-      real(cp), intent(in) :: timeAvg_spec
-      logical,  intent(in) :: l_stop_time
-      real(cp), intent(in) :: us2_m(n_m_max)
-      real(cp), intent(in) :: up2_m(n_m_max)
-      real(cp), intent(in) :: enstrophy_m(n_m_max)
-
-      !-- Local variables
-      real(cp) :: dtAvg
-      integer :: n_m, file_handle, m
-
-
-      if ( l_rank_has_m0 ) then
-
-         dtAvg = timeAvg_spec-timeLast_spec
-
-         do n_m=1,n_m_max
-            call getMSD2(us2M_mean(n_m), us2M_SD(n_m), us2_m(n_m), &
-                 &       n_calls, dtAvg, timeAvg_spec)
-            call getMSD2(up2M_mean(n_m), up2M_SD(n_m), up2_m(n_m), &
-                 &       n_calls, dtAvg, timeAvg_spec)
-            call getMSD2(enstrophyM_mean(n_m), enstrophyM_SD(n_m), &
-                 &       enstrophy_m(n_m), n_calls, dtAvg, timeAvg_spec)
-         end do
-         timeLast_spec = timeAvg_spec
-
-         if ( l_stop_time ) then
-            open(newunit=file_handle, file='spec_avg.'//tag)
-            do n_m=1,n_m_max
-               m = idx2m(n_m)
-               us2M_SD(n_m)      =sqrt(us2M_SD(n_m)/timeAvg_spec)
-               up2M_SD(n_m)      =sqrt(up2M_SD(n_m)/timeAvg_spec)
-               enstrophyM_SD(n_m)=sqrt(enstrophyM_SD(n_m)/timeAvg_spec)
-               write(file_handle, '(I4, 6es16.8)') m,                    &
-               &     round_off(us2M_mean(n_m)), round_off(us2M_SD(n_m)), &
-               &     round_off(up2M_mean(n_m)), round_off(up2M_SD(n_m)), &
-               &     round_off(enstrophyM_mean(n_m)),                    &
-               &     round_off(enstrophyM_SD(n_m))
-            end do
-            close(file_handle)
-         end if
-
-      end if
-
-   end subroutine get_spec_averages
+   end subroutine get_lengthscales
 !------------------------------------------------------------------------------
 end module outputs

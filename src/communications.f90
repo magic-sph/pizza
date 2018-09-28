@@ -27,7 +27,7 @@ module communications
    public :: initialize_communications, transp_r2m, transp_m2r,     &
    &         gather_from_mloc_to_rank0, scatter_from_rank0_to_mloc, &
    &         finalize_communications, reduce_radial_on_rank,        &
-   &         my_reduce_mean
+   &         my_reduce_mean, my_allreduce_maxloc
 
 contains
 
@@ -340,5 +340,26 @@ contains
       if ( rank == irank ) scalar = tmp/real(n_procs,cp)
 
    end subroutine my_reduce_mean
+!------------------------------------------------------------------------------
+   function my_allreduce_maxloc(arr) result(ind)
+      !
+      ! This function is the MPI version of the intrinsic Fortran 'maxloc'
+      ! function
+      !
+
+      !-- Input variable:
+      real(cp), intent(in) :: arr(:)
+
+      !-- Local variables:
+      integer :: ind
+      real(cp) :: idx(2), tmp(2)
+
+      idx(2) = maxloc(arr,dim=1)
+      idx(1) = maxval(arr)
+      call MPI_AllReduce(idx, tmp, 1, MPI_2DOUBLE_PRECISION, MPI_MAXLOC, &
+           &             MPI_COMM_WORLD, ierr)
+      ind = int(tmp(2))
+
+   end function my_allreduce_maxloc
 !------------------------------------------------------------------------------
 end module communications

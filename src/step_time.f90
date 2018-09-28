@@ -28,7 +28,7 @@ module step_time
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
-       &              read_signal_file
+       &              read_signal_file, spec
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
    use time_schemes, only: type_tscheme
    use parallel_mod
@@ -75,7 +75,7 @@ contains
       real(cp) :: run_time_dct, run_time_lu
       real(cp) :: runStart, runStop, runStartT, runStopT
 
-      logical :: l_new_dt, l_rst, l_frame, l_spec, l_log, l_log_next
+      logical :: l_new_dt, l_rst, l_frame, l_log, l_log_next
       logical :: l_vphi_bal_write, l_stop_time
       logical :: lMat, lMatNext
 
@@ -85,7 +85,6 @@ contains
       l_new_dt        =.true.
       l_rst           =.false.
       l_frame         =.false.
-      l_spec          =.false.
       l_log           =.false.
       l_log_next      =.true.
       l_stop_time     =.false.
@@ -147,7 +146,7 @@ contains
                  &              n_checkpoints) .or. n_rst_signal == 1
          l_frame = l_correct_step(n_time_step-1,n_time_steps,n_frame_step,n_frames) &
          &         .or. n_frame_signal == 1
-         l_spec = l_correct_step(n_time_step-1,n_time_steps,n_spec_step,n_specs) &
+         spec%l_calc = l_correct_step(n_time_step-1,n_time_steps,n_spec_step,n_specs) &
          &        .or. n_spec_signal == 1
          l_vphi_bal_write = l_log .and. l_vphi_balance
          vp_bal%l_calc = l_log_next .and. l_vphi_balance
@@ -190,10 +189,9 @@ contains
          !-------------------
          !-- Get time series
          runStart = MPI_Wtime()
-         call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_spec,   &
-              &             l_frame, l_vphi_bal_write,         &
-              &             l_stop_time, us_Mloc,  up_Mloc, om_Mloc, temp_Mloc, &
-              &             dtemp_Mloc, dpsidt, dTdt)
+         call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame,  &
+              &             l_vphi_bal_write, l_stop_time, us_Mloc,  up_Mloc,   &
+              &             om_Mloc, temp_Mloc, dtemp_Mloc, dpsidt, dTdt)
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             n_io_calls =n_io_calls+1

@@ -217,11 +217,12 @@ contains
 
    end subroutine finalize_domdt
 !------------------------------------------------------------------------------
-   subroutine mean_sd(this, input, output, outM_mean, outM_SD)
+   subroutine mean_sd(this, time, input, output, outM_mean, outM_SD)
 
       class(vort_bal_type) :: this
 
       !-- Input variables
+      real(cp),    intent(in) :: time
       complex(cp), intent(in) :: input(nMstart:nMstop,n_r_max)
 
       !-- Output variables
@@ -239,7 +240,7 @@ contains
          do n_r=1,n_r_max
             dat(n_r) = cc2real(input(n_m,n_r), m)
             call getMSD2(output(n_m,n_r), sd, dat(n_r), this%n_calls, &
-                 &       this%dt, this%timeLast)
+                 &       this%dt, time)
 
             if ( (r(n_r) >= r_cmb-bl_cut) .or. (r(n_r) <= r_icb+bl_cut) ) then
                dat(n_r)=0.0_cp
@@ -250,7 +251,7 @@ contains
          val_m = simps(dat,r)
          val_m = sqrt(val_m)
          call getMSD2(outM_mean(n_m), outM_SD(n_m), val_m, this%n_calls,&
-              &       this%dt, this%timeLast)
+              &       this%dt, time)
       end do
 
    end subroutine mean_sd
@@ -271,32 +272,32 @@ contains
       !------
       !-- Buoyancy term
       !------
-      call this%mean_sd(this%buo,this%buo_mean,this%buoM_mean,this%buoM_SD)
+      call this%mean_sd(time,this%buo,this%buo_mean,this%buoM_mean,this%buoM_SD)
 
       !------
       !-- Coriolis term
       !------
-      call this%mean_sd(this%cor,this%cor_mean,this%corM_mean,this%corM_SD)
+      call this%mean_sd(time,this%cor,this%cor_mean,this%corM_mean,this%corM_SD)
 
       !------
       !-- Advection term
       !------
-      call this%mean_sd(this%adv,this%adv_mean,this%advM_mean,this%advM_SD)
+      call this%mean_sd(time,this%adv,this%adv_mean,this%advM_mean,this%advM_SD)
 
       !------
       !-- d\omega/dt term
       !------
-      call this%mean_sd(this%dwdt,this%dwdt_mean,this%dwdtM_mean,this%dwdtM_SD)
+      call this%mean_sd(time,this%dwdt,this%dwdt_mean,this%dwdtM_mean,this%dwdtM_SD)
 
       !------
       !-- Viscous term
       !------
-      call this%mean_sd(this%visc,this%visc_mean,this%viscM_mean,this%viscM_SD)
+      call this%mean_sd(time,this%visc,this%visc_mean,this%viscM_mean,this%viscM_SD)
 
       !------
       !-- Ekman pumping term
       !------
-      call this%mean_sd(this%pump,this%pump_mean,this%pumpM_mean,this%pumpM_SD)
+      call this%mean_sd(time,this%pump,this%pump_mean,this%pumpM_mean,this%pumpM_SD)
 
       !------
       !-- Thermal wind balance
@@ -307,7 +308,8 @@ contains
             this%pump(n_m,n_r)=this%buo(n_m,n_r)+this%cor(n_m,n_r)
          end do
       end do
-      call this%mean_sd(this%pump,this%thwind_mean,this%thwindM_mean,this%thwindM_SD)
+      call this%mean_sd(time,this%pump,this%thwind_mean,this%thwindM_mean,&
+           &            this%thwindM_SD)
 
       !------
       !-- Inertial term: d\omega/dt + div( u \omega )
@@ -317,7 +319,8 @@ contains
             this%pump(n_m,n_r)=-this%dwdt(n_m,n_r)+this%adv(n_m,n_r)
          end do
       end do
-      call this%mean_sd(this%pump,this%iner_mean,this%inerM_mean,this%inerM_SD)
+      call this%mean_sd(time,this%pump,this%iner_mean,this%inerM_mean,&
+           &            this%inerM_SD)
 
       !------
       !-- Coriolis-Inertia-Archimedian force balance
@@ -328,7 +331,7 @@ contains
             &                   this%buo(n_m,n_r)+this%cor(n_m,n_r)
          end do
       end do
-      call this%mean_sd(this%pump,this%cia_mean,this%ciaM_mean,this%ciaM_SD)
+      call this%mean_sd(time,this%pump,this%cia_mean,this%ciaM_mean,this%ciaM_SD)
 
       !-- Put zeros in this%pump again!
       do n_r=1,n_r_max
