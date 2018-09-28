@@ -330,6 +330,12 @@ class PizzaVortBalance(PizzaSetup):
 
 
     def read(self, filename, endian='l'):
+        """
+        :param filename: name of the input file
+        :type filename: str
+        :param endian: endianness of the binary file
+        :type endian: str
+        """
         file = open(filename, 'rb')
         dt = np.dtype("i4, 6Float64")
         self.version, params = np.fromfile(file, dtype=dt, count=1)[0]
@@ -362,6 +368,8 @@ class PizzaVortBalance(PizzaSetup):
         self.iner = self.iner.T
         self.cia = np.fromfile(file, dtype=dt, count=1)[0, :, :]
         self.cia = self.cia.T
+
+        file.close()
 
     def plot(self, levels=15, cm='magma', cut=1., solid_contour=True, 
              log_yscale=True):
@@ -458,6 +466,3 @@ if __name__ == '__main__':
    
    r = PizzaVortBal()
    plt.show()
-
-
-
