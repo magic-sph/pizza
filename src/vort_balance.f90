@@ -438,7 +438,15 @@ contains
          do n_m=1,n_m_max
             m = idx2m(n_m)
             if ( m >= 1 ) then
-               corSD_global(n_m) = sqrt(corSD_global(n_m)/this%timeLast)
+               corSD_global(n_m)   =sqrt(corSD_global(n_m)/this%timeLast)
+               buoSD_global(n_m)   =sqrt(buoSD_global(n_m)/this%timeLast)
+               advSD_global(n_m)   =sqrt(advSD_global(n_m)/this%timeLast)
+               dwdtSD_global(n_m)  =sqrt(dwdtSD_global(n_m)/this%timeLast)
+               viscSD_global(n_m)  =sqrt(viscSD_global(n_m)/this%timeLast)
+               pumpSD_global(n_m)  =sqrt(pumpSD_global(n_m)/this%timeLast)
+               thwindSD_global(n_m)=sqrt(thwindSD_global(n_m)/this%timeLast)
+               inerSD_global(n_m)  =sqrt(inerSD_global(n_m)/this%timeLast)
+               ciaSD_global(n_m)   =sqrt(ciaSD_global(n_m)/this%timeLast)
 
                write(file_handle, '(I4,18es16.8)') m,                      &
                &                buoM_global(n_m), buoSD_global(n_m),       &
