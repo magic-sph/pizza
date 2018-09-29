@@ -108,8 +108,8 @@ class PizzaSpectrum(PizzaSetup):
             self.thwind_std = data[:, 14]
             self.iner_mean = data[:, 15]
             self.iner_std = data[:, 16]
-            self.cia_std = data[:, 17]
-            self.cia_mean = data[:, 18]
+            self.cia_mean = data[:, 17]
+            self.cia_std = data[:, 18]
         else:
             if not self.ave:
                 self.us2 = data[:, 1]
@@ -303,7 +303,7 @@ class Pizza2DSpectrum(PizzaSetup):
 
         file.close()
 
-    def plot(self, levels=15, cm='magma', cut=1., solid_contour=True, 
+    def plot(self, levels=65, cm='magma', cut=1., solid_contour=False, 
              log_yscale=True):
         """
         Plotting function
@@ -322,7 +322,7 @@ class Pizza2DSpectrum(PizzaSetup):
         :type log_yscale: bool
         """
 
-        vmax = cut*np.log10(self.ekin+1e-34).max()
+        vmax = cut*np.log10(self.ekin[1:,:]+1e-34).max()
         vmin = cut*np.log10(self.ekin[self.ekin>1e-15]).min()
         levs = np.linspace(vmin, vmax, levels)
 
@@ -342,7 +342,7 @@ class Pizza2DSpectrum(PizzaSetup):
         ax1.set_xlabel('Radius')
         ax1.set_ylabel('m+1')
         
-        vmax = cut*np.log10(self.enst+1e-34).max()
+        vmax = cut*np.log10(self.enst[1:,:]+1e-34).max()
         vmin = cut*np.log10(self.enst[self.enst>1e-15]).min()
         levs = np.linspace(vmin, vmax, levels)
         ax2 = fig.add_subplot(122, sharey=ax1, sharex=ax1)
