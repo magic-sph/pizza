@@ -218,7 +218,6 @@ contains
          open(newunit=file_handle, file='spec_avg.'//tag)
          do n_m=1,n_m_max
             m = idx2m(n_m)
-            print*, us2_SD_global(n_m)
             us2_SD_global(n_m) =sqrt(us2_SD_global(n_m)/this%timeLast)
             up2_SD_global(n_m) =sqrt(up2_SD_global(n_m)/this%timeLast)
             enst_SD_global(n_m)=sqrt(enst_SD_global(n_m)/this%timeLast)
