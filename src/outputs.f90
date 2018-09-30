@@ -296,7 +296,7 @@ contains
          call vp_bal%write_outputs(time, up_Mloc)
       end if
 
-      if ( vort_bal%l_calc .or. l_stop_time ) then
+      if ( vort_bal%l_calc .or. (l_stop_time .and. l_vort_balance) ) then
          timeAvg_vortbal = timeAvg_vortbal + tscheme%dt(1)
          call vort_bal%calc_avg(timeAvg_vortbal,l_stop_time)
       end if
