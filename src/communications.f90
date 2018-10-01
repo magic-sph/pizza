@@ -140,7 +140,7 @@ contains
          end do
       end do
 
-      call mpi_alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
+      call MPI_Alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
            &             self%rbuff, self%rcounts, self%rdisp, MPI_DEF_COMPLEX, &
            &             MPI_COMM_WORLD, ierr) 
 
@@ -178,7 +178,7 @@ contains
          end do
       end do
 
-      call mpi_alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
+      call MPI_Alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
            &             self%rbuff, self%rcounts, self%rdisp, MPI_DEF_COMPLEX, &
            &             MPI_COMM_WORLD, ierr) 
 
@@ -228,7 +228,7 @@ contains
          end do
       end do
 
-      call MPI_gatherv(sbuff, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
+      call MPI_Gatherv(sbuff, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
            &           rbuff, rcounts, rdisp, MPI_DEF_COMPLEX, 0,   &
            &           MPI_COMM_WORLD, ierr)
 
@@ -286,7 +286,7 @@ contains
          end do
       end if
 
-      call MPI_scatterv(sbuff, scounts, sdisp, MPI_DEF_COMPLEX,         &
+      call MPI_Scatterv(sbuff, scounts, sdisp, MPI_DEF_COMPLEX,         &
            &            rbuff, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, 0, &
            &            MPI_COMM_WORLD, ierr)
 

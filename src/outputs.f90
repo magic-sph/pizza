@@ -8,12 +8,12 @@ module outputs
    use parallel_mod
    use precision_mod
    use spectra, only: spectra_type
-   use communications, only: my_allreduce_maxloc
+   use communications, only: my_allreduce_maxloc, reduce_radial_on_rank
    use mem_alloc, only: bytes_allocated
    use namelists, only: tag, BuoFac, ra, pr, l_non_rot, l_vphi_balance, ek, &
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
        &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac,&
-       &                l_vort_balance
+       &                l_vort_balance, l_corr
    use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
@@ -40,7 +40,7 @@ module outputs
    real(cp) :: timeAvg_spec
    integer, public :: n_log_file
    integer :: n_rey_file_2D, n_heat_file, n_kin_file_2D, n_power_file_2D
-   integer :: n_lscale_file, n_sig_file
+   integer :: n_lscale_file, n_sig_file, n_corr_file
    integer :: n_rey_file_3D, n_power_file_3D, n_kin_file_3D
    character(len=144), public :: log_file
 
@@ -97,6 +97,11 @@ contains
                file_name = 'reynolds_3D.'//tag
             end if
             open(newunit=n_rey_file_3D,file=file_name, status='new')
+         end if
+
+         if ( l_corr ) then
+            file_name = 'corr.' // tag
+            open(newunit=n_corr_file, file=file_name, status='new')
          end if
 
          file_name = 'signal.'//tag
@@ -159,6 +164,7 @@ contains
       if ( l_vphi_balance ) call vp_bal%finalize()
 
       if ( rank == 0 ) then
+         if ( l_corr ) close(n_corr_file)
          if ( .not. l_non_rot ) then
             close(n_rey_file_3D)
             close(n_power_file_3D)
@@ -596,6 +602,12 @@ contains
 
       end if
 
+      !-------
+      !-- us uphi correlation
+      !-------
+      if ( l_corr ) call get_corr(time, us_Mloc, up_Mloc, us2_r, up2_r)
+
+
       if ( l_rank_has_m0 ) then
          !------
          !-- Heat transfer
@@ -656,6 +668,63 @@ contains
       end if
 
    end subroutine get_time_series
+!------------------------------------------------------------------------------
+   subroutine get_corr(time, us_Mloc, up_Mloc, us2_r, up2_r)
+      !
+      ! This routine calculates the following u_s u_\phi correlations:
+      !    - stress = [ <u_s u_\phi> ]
+      !    - corr = [<u_s u_\phi>] / [\sqrt{ <u_s^2> <u_\phi^2> } ]
+      !
+      ! where < > corresponds to a phi-average and [] corresponds to
+      ! \int h*s ds
+      !
+
+      !-- Input variables:
+      real(cp),    intent(in) :: time
+      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      real(cp),    intent(in) :: us2_r(n_r_max)
+      real(cp),    intent(in) :: up2_r(n_r_max)
+
+      !-- Local variables:
+      integer :: n_m, m, n_r
+      real(cp) :: tmp(n_r_max)
+      real(cp) :: corr, stress, den
+
+
+      do n_r=1,n_r_max
+         tmp(n_r)=0.0_cp
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            tmp(n_r)=tmp(n_r)+r(n_r)*height(n_r)*&
+            &        cc22real(us_Mloc(n_m,n_r),up_Mloc(n_m,n_r),m)
+         end do
+      end do
+
+      !-- MPI reduction
+      call reduce_radial_on_rank(tmp, 0)
+
+      if ( rank == 0 ) then
+         !-- Radial integration
+         stress = rInt_R(tmp, r, rscheme)
+         stress = two*pi*stress
+
+         ! \int \sqrt{u_s^2*u_\phi^2} *h*s ds
+         tmp(:)=sqrt(us2_r(:)*up2_r(:)*oheight(:)*oheight(:)*or2(:))*&
+         &      r(:)*height(:)
+         den = rInt_R(tmp, r, rscheme)
+         den = two*pi*den
+
+         if ( den > 0.0_cp ) then
+            corr = stress/den
+         else
+            corr = one
+         end if
+
+         write(n_corr_file, '(1P, es20.12, 2es16.8)') time, stress, corr
+      end if
+
+   end subroutine get_corr
 !------------------------------------------------------------------------------
    subroutine get_lengthscales(us2_m, up2_m, enst_m, dlus_peak, dlekin_peak, &
               &                dlvort_peak, dlekin_int)

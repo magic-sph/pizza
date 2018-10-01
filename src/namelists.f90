@@ -83,6 +83,7 @@ module namelists
    logical,  public :: l_vphi_balance    ! Calculate the vphi force balance
    logical,  public :: l_vort_balance    ! Calculate the vorticiy balance
    logical,  public :: l_2D_spectra      ! Calculate 2D spectra
+   logical,  public :: l_corr            ! Calculte the correlation
    real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
    logical,  public :: l_heat
    logical,  public :: l_chem
@@ -130,7 +131,7 @@ contains
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
       &                       l_vphi_balance,l_vort_balance,bl_cut,        &
-      &                       l_2D_spectra
+      &                       l_2D_spectra, l_corr
 
    !namelist/control/tag,n_times
 
@@ -453,6 +454,7 @@ contains
       l_vphi_balance   =.false.
       l_vort_balance   =.false.
       l_2D_spectra     =.false.
+      l_corr           =.false.
       bl_cut           =1.0e-3_cp
 
    end subroutine default_namelists
@@ -564,6 +566,7 @@ contains
       write(n_out,'(''  l_vort_balance  ='',l3,'','')') l_vort_balance
       write(n_out,'(''  bl_cut          ='',ES14.6,'','')') bl_cut
       write(n_out,'(''  l_2D_spectra    ='',l3,'','')') l_2D_spectra
+      write(n_out,'(''  l_corr          ='',l3,'','')') l_corr
       write(n_out,*) "/"
 
    end subroutine write_namelists
