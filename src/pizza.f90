@@ -164,6 +164,8 @@ program pizza
    end if
    run_init = MPI_Wtime()
    run_init = run_init - run_start
+   call MPI_Allreduce(MPI_IN_PLACE,run_init,1,MPI_DEF_REAL,MPI_MAX, &
+        &             MPI_COMM_WORLD, ierr)
 
    !-- Time integration
    call time_loop(time, tscheme, run_init)
