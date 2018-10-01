@@ -163,6 +163,11 @@ class PizzaTs(PizzaSetup):
             self.lvort_peak = data[:, 3]
             self.lint = data[:, 4]
             self.ldiss = data[:, 5]
+        elif self.field == 'corr':
+            self.time = data[:, 0]
+            self.stress = data[:, 1]
+            self.corr = data[:, 2]
+
         if iplot:
             self.plot()
 
@@ -181,6 +186,7 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Ekin (2D)')
+            fig.tight_layout()
         elif self.field == 'e_kin_3D':
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -193,6 +199,7 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Ekin (3D)')
+            fig.tight_layout()
         elif self.field == 'reynolds':
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -202,6 +209,7 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Reynolds (2D)')
+            fig.tight_layout()
         elif self.field == 'reynolds_3D':
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -211,6 +219,7 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Reynolds (3D)')
+            fig.tight_layout()
         elif self.field == 'heat':
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -222,6 +231,7 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='lower right', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Nusselt number')
+            fig.tight_layout()
         elif self.field == 'power':
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -230,6 +240,7 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Power (2D)')
+            fig.tight_layout()
         elif self.field == 'power_3D':
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -239,6 +250,7 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Power (3D)')
+            fig.tight_layout()
         elif self.field == 'length_scales':
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -251,3 +263,11 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Length scales')
+            fig.tight_layout()
+        elif self.field == 'corr':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(self.time, self.corr)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Correlation')
+            fig.tight_layout()
