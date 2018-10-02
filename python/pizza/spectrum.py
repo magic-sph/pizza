@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os, re
+import copy, os, re
 import matplotlib.pyplot as plt
 import numpy as np
 from .log import PizzaSetup
@@ -15,10 +15,12 @@ class PizzaSpectrum(PizzaSetup):
     >>> # display the content of spec_1.TAG
     >>> # where TAG is the most recent file in the current directory
     >>> sp = PizzaSpectrum(ispec=1)
+    >>> # stack the content of spec_ave.test_a to spec_ave.test_c
+    >>> sp = PizzaSpectrum(tag='test_[a-c]', iplot=False)
     """
 
     def __init__(self, field='spec', datadir='.', iplot=True, ispec=None,
-                 ave=True, tag=None):
+                 ave=True, tag=None, all=False):
         """
         :param field: a string to decide which spectra one wants to load and plot
         :type field: str
@@ -33,6 +35,10 @@ class PizzaSpectrum(PizzaSetup):
         :type ave: bool
         :param datadir: current working directory
         :type datadir: str
+        :param all: when set to True, the complete time series is reconstructed by
+                    stacking all the corresponding files from the working directory
+                    (False by default)
+        :type all: bool
         """
 
         if ispec is not None:
@@ -50,31 +56,84 @@ class PizzaSpectrum(PizzaSetup):
             else:
                 self.name = 'spec_'
 
-        if tag is not None:
-            if ispec is not None:
-                file = '%s%i.%s' % (self.name, ispec, tag)
-                filename = os.path.join(datadir, file)
-            else:
-                pattern = os.path.join(datadir, '%s*%s' % (self.name, tag))
+        if not all:
+            if tag is not None:
+                if ispec is not None:
+                    self.name += '%i' % ispec
+                pattern = os.path.join(datadir, '%s.%s' % (self.name, tag))
                 files = scanDir(pattern)
-                if len(files) != 0:
-                    filename = files[-1]
+                # Either the log.tag directly exists and the setup is easy to obtain
+                if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                    PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                        nml='log.%s' % tag)
+                # Or the tag is a bit more complicated and we need to find 
+                # the corresponding log file
                 else:
-                    print('No such tag... try again')
-                    return
+                    mask = re.compile(r'%s\.(.*)' % self.name)
+                    if mask.match(files[-1]):
+                        ending = mask.search(files[-1]).groups(0)[0]
+                        if logFiles.__contains__('log.%s' % ending):
+                            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                                nml='log.%s' % ending)
 
-            if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
-                PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % tag)
-        else:
-            if ispec is not None:
-                pattern = os.path.join(datadir, '%s%i*' % (self.name, ispec))
-                files = scanDir(pattern)
-                filename = files[-1]
+                # Sum the files that correspond to the tag
+                mask = re.compile(r'%s\.(.*)' % self.name)
+                for k, file in enumerate(files):
+                    print('reading %s' % file)
+                    tag = mask.search(file).groups(0)[0]
+                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                    filename = file
+                    if k == 0:
+                        self.tstart = nml.start_time
+                        self.tstop = nml.stop_time # will be overwritten afterwards
+                        data = fast_read(filename)
+                    else:
+                        if os.path.exists(filename):
+                            tmp = fast_read(filename)
+                            data = self.add(data, tmp, nml.stop_time, nml.start_time)
+
             else:
-                pattern = os.path.join(datadir, '%s*' % self.name)
+                if ispec is not None:
+                    pattern = os.path.join(datadir, '%s%i*' % (self.name, ispec))
+                else:
+                    pattern = os.path.join(datadir, '%s*' % self.name)
                 files = scanDir(pattern)
                 filename = files[-1]
+                print('reading %s' % filename)
+                # Determine the setup
+                mask = re.compile(r'%s\.(.*)' % self.name)
+                ending = mask.search(files[-1]).groups(0)[0]
+                if os.path.exists('log.%s' % ending):
+                    try:
+                        PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                        nml='log.%s' % ending)
+                    except AttributeError:
+                        pass
+
+                data = fast_read(filename, skiplines=0)
+
+        else: # if all is requested
+            pattern = os.path.join(datadir, '%s.*' % self.name)
+            files = scanDir(pattern)
+            
+            # Determine the setup
+            mask = re.compile(r'%s\.(.*)' % self.name)
+            for k, file in enumerate(files):
+                print('reading %s' % file)
+                tag = mask.search(file).groups(0)[0]
+                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                filename = file
+                if k == 0:
+                    self.tstart = nml.start_time
+                    self.tstop = nml.stop_time # will be overwritten afterwards
+                    data = fast_read(filename)
+                else:
+                    if os.path.exists(filename):
+                        tmp = fast_read(filename)
+                        data = self.add(data, tmp, nml.stop_time, nml.start_time)
+            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                nml='log.%s' % tag)
+
             # Determine the setup
             mask = re.compile(r'.*\.(.*)')
             ending = mask.search(files[-1]).groups(0)[0]
@@ -82,14 +141,7 @@ class PizzaSpectrum(PizzaSetup):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                     nml='log.%s' % ending)
 
-        if not os.path.exists(filename):
-            print('No such file')
-            return
-
-        data = fast_read(filename)
-
         self.index = data[:, 0]
-
 
         if self.name == 'vort_terms_avg':
             self.buo_mean = data[:, 1]
@@ -125,6 +177,42 @@ class PizzaSpectrum(PizzaSetup):
 
         if iplot:
             self.plot()
+
+    def add(self, data, tmp, stop_time, start_time):
+        """
+        Clean way to stack data
+        """
+        out = copy.deepcopy(data)
+        out[:, 0] = tmp[:, 0]
+
+        nm_new = len(tmp[:, 0])
+        nm_old = len(data[:, 0])
+
+        fac_old = self.tstop-self.tstart
+        fac_new = stop_time-start_time
+        self.tstop = stop_time
+        fac_tot = self.tstop-self.tstart
+
+        if nm_new == nm_old: # Same grid before and after
+            if self.name == 'vort_terms_avg':
+                for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
+                    out[:, j] = (fac_old*data[:,j]+fac_new*tmp[:,j])/fac_tot
+                for j in [2, 4, 6, 8, 10, 12, 14, 16]:
+                    out[:, j] = np.sqrt((fac_old*data[:,j]**2+ \
+                                         fac_new*tmp[:,j]**2)/ fac_tot)
+            else:
+                if not self.ave:
+                    out[:, 1:] = 0.5*(data[:,1:]+tmp[:,1:])
+                else:
+                    for j in [1, 3, 5]:
+                        out[:, j] = (fac_old*data[:,j]+fac_new*tmp[:,j])/fac_tot
+                    for j in [2, 4, 6]:
+                        out[:, j] = np.sqrt((fac_old*data[:,j]**2+ \
+                                             fac_new*tmp[:,j]**2)/ fac_tot)
+        else:
+            print('Not implemented yet ...')
+            
+        return out
 
     def plot(self):
         """
@@ -301,9 +389,15 @@ class Pizza2DSpectrum(PizzaSetup):
 
         self.ekin = self.us2+self.up2
 
+        ind = self.us2[:, 1:-1].argmax(axis=0)
+        self.peaks = np.zeros_like(ind)
+        for k, idx in enumerate(ind):
+            self.peaks[k] = self.idx2m[idx]
+        print(self.peaks)
+
         file.close()
 
-    def plot(self, levels=65, cm='magma', cut=1., solid_contour=False, 
+    def plot(self, levels=17, cm='magma', cut=1., solid_contour=True, 
              log_yscale=True):
         """
         Plotting function
@@ -322,42 +416,42 @@ class Pizza2DSpectrum(PizzaSetup):
         :type log_yscale: bool
         """
 
-        vmax = cut*np.log10(self.ekin[1:,:]+1e-34).max()
-        vmin = cut*np.log10(self.ekin[self.ekin>1e-15]).min()
+        vmax = cut*np.log10(self.us2[1:,:]+1e-34).max()
+        vmin = cut*np.log10(self.us2[self.us2>1e-15]).min()
         levs = np.linspace(vmin, vmax, levels)
 
-        fig = plt.figure(figsize=(8,4))
-        ax1 = fig.add_subplot(121)
-        im = ax1.contourf(self.radius[1:-1], self.idx2m+1,
-                          np.log10(self.ekin[:,1:-1]+1e-20),
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        im = ax1.contourf(self.radius[1:-1], self.idx2m[1:],
+                          np.log10(self.us2[1:,1:-1]+1e-20),
                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax1.contour(self.radius[1:-1], self.idx2m+1,
-                        np.log10(self.ekin[:,1:-1]+1e-20), levs,
+            ax1.contour(self.radius[1:-1], self.idx2m[1:],
+                        np.log10(self.us2[1:,1:-1]+1e-20), levs,
                         extend='both', linestyles=['-'], colors=['k'],
                         linewidths=[0.5])
-        fig.colorbar(im)
-        ax1.set_title('Kinetic energy')
+        ax1.plot(self.radius[1:-1], self.peaks, ls='--')
+        ax1.set_title('us**2')
         if log_yscale: ax1.set_yscale('log')
         ax1.set_xlabel('Radius')
-        ax1.set_ylabel('m+1')
+        ax1.set_ylabel('m')
         
-        vmax = cut*np.log10(self.enst[1:,:]+1e-34).max()
-        vmin = cut*np.log10(self.enst[self.enst>1e-15]).min()
-        levs = np.linspace(vmin, vmax, levels)
-        ax2 = fig.add_subplot(122, sharey=ax1, sharex=ax1)
-        im = ax2.contourf(self.radius, self.idx2m+1, np.log10(self.enst+1e-20),
-                         levs, extend='both', cmap=plt.get_cmap(cm))
-        if solid_contour:
-            ax2.contour(self.radius, self.idx2m+1, np.log10(self.enst+1e-20),
-                       levs, extend='both', linestyles=['-'], colors=['k'],
-                       linewidths=[0.5])
+        #vmax = cut*np.log10(self.enst[1:,:]+1e-34).max()
+        #vmin = cut*np.log10(self.enst[self.enst>1e-15]).min()
+        #levs = np.linspace(vmin, vmax, levels)
+        #ax2 = fig.add_subplot(122, sharey=ax1, sharex=ax1)
+        #im = ax2.contourf(self.radius, self.idx2m[1:], np.log10(self.enst[1:]+1e-20),
+                         #levs, extend='both', cmap=plt.get_cmap(cm))
+        #if solid_contour:
+            #ax2.contour(self.radius, self.idx2m[1:], np.log10(self.enst[1:]+1e-20),
+                       #levs, extend='both', linestyles=['-'], colors=['k'],
+                       #linewidths=[0.5])
+        #ax2.set_title(r'Enstrophy')
+        #if log_yscale: ax2.set_yscale('log')
+        #ax2.set_xlabel('Radius')
+#
+        #plt.setp(ax2.get_yticklabels(), visible=False)
+        #ax1.set_xlim(self.radius[-1], self.radius[0])
+
         fig.colorbar(im)
-        ax2.set_title(r'Enstrophy')
-        if log_yscale: ax2.set_yscale('log')
-        ax2.set_xlabel('Radius')
-
-        plt.setp(ax2.get_yticklabels(), visible=False)
-        ax1.set_xlim(self.radius[-1], self.radius[0])
-
         fig.tight_layout()
