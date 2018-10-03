@@ -9,7 +9,6 @@ module outputs
    use precision_mod
    use spectra, only: spectra_type
    use communications, only: my_allreduce_maxloc, reduce_radial_on_rank
-   use mem_alloc, only: bytes_allocated
    use namelists, only: tag, BuoFac, ra, pr, l_non_rot, l_vphi_balance, ek, &
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
        &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac,&
@@ -30,6 +29,7 @@ module outputs
    use char_manip, only: capitalize
    use vp_balance, only: vp_bal_type
    use vort_balance, only: vort_bal_type
+   use mean_sd, only: mean_sd_type
 
    implicit none
 
@@ -44,11 +44,7 @@ module outputs
    integer :: n_rey_file_3D, n_power_file_3D, n_kin_file_3D
    character(len=144), public :: log_file
 
-   real(cp), allocatable :: uphiR_mean(:), uphiR_SD(:)
-   real(cp), allocatable :: us2R_mean(:), us2R_SD(:), up2R_mean(:), up2R_SD(:)
-   real(cp), allocatable :: enstrophyR_mean(:), enstrophyR_SD(:)
-   real(cp), allocatable :: tempR_mean(:), tempR_SD(:)
-   real(cp), allocatable :: fluxR_mean(:), fluxR_SD(:)
+   type(mean_sd_type) :: uphiR, us2R, up2R, enstrophyR, tempR, fluxR
 
    type(vp_bal_type), public :: vp_bal
    type(spectra_type), public :: spec
@@ -115,27 +111,12 @@ contains
       timeAvg_vortbal = 0.0_cp
 
       if ( l_rank_has_m0 ) then
-
-         allocate( uphiR_mean(n_r_max), uphiR_SD(n_r_max) )
-         allocate( tempR_mean(n_r_max), tempR_SD(n_r_max) )
-         allocate( fluxR_mean(n_r_max), fluxR_SD(n_r_max) )
-         allocate( us2R_mean(n_r_max), us2R_SD(n_r_max) )
-         allocate( up2R_mean(n_r_max), up2R_SD(n_r_max) )
-         allocate( enstrophyR_mean(n_r_max), enstrophyR_SD(n_r_max) )
-         bytes_allocated=bytes_allocated+10*n_r_max*SIZEOF_DEF_REAL
-
-         uphiR_mean(:)      = 0.0_cp
-         uphiR_SD(:)        = 0.0_cp
-         tempR_mean(:)      = 0.0_cp
-         tempR_SD(:)        = 0.0_cp
-         fluxR_mean(:)      = 0.0_cp
-         fluxR_SD(:)        = 0.0_cp
-         us2R_mean(:)       = 0.0_cp
-         us2R_SD(:)         = 0.0_cp
-         up2R_mean(:)       = 0.0_cp
-         up2R_SD(:)         = 0.0_cp
-         enstrophyR_mean(:) = 0.0_cp
-         enstrophyR_SD(:)   = 0.0_cp
+         call uphiR%initialize(1,n_r_max)
+         call tempR%initialize(1,n_r_max)
+         call fluxR%initialize(1,n_r_max)
+         call us2R%initialize(1,n_r_max)
+         call up2R%initialize(1,n_r_max)
+         call enstrophyR%initialize(1,n_r_max)
          n_calls            = 0
          timeLast_rad       = 0.0_cp
       end if
@@ -152,9 +133,12 @@ contains
    subroutine finalize_outputs
 
       if ( rank == 0 ) then
-         deallocate( uphiR_mean, uphiR_SD, tempR_mean, tempR_SD )
-         deallocate( fluxR_mean, fluxR_SD, us2R_mean, us2R_SD )
-         deallocate( up2R_mean, up2R_SD, enstrophyR_mean, enstrophyR_SD )
+         call enstrophyR%finalize()
+         call up2R%finalize()
+         call us2R%finalize()
+         call fluxR%finalize()
+         call tempR%finalize()
+         call uphiR%finalize()
       end if
 
       call spec%finalize()
@@ -334,17 +318,17 @@ contains
 
          idx = m2idx(0)
          do n_r=1,n_r_max
-            call getMSD2(uphiR_mean(n_r), uphiR_SD(n_r), real(up_Mloc(idx,n_r)),&
+            call getMSD2(uphiR%mean(n_r), uphiR%SD(n_r), real(up_Mloc(idx,n_r)),&
                  &       n_calls, dtAvg, timeAvg_rad)
-            call getMSD2(tempR_mean(n_r), tempR_SD(n_r), real(temp_Mloc(idx,n_r)),&
+            call getMSD2(tempR%mean(n_r), tempR%SD(n_r), real(temp_Mloc(idx,n_r)),&
                  &       n_calls, dtAvg, timeAvg_rad)
-            call getMSD2(fluxR_mean(n_r), fluxR_SD(n_r), flux_r(n_r), n_calls, &
+            call getMSD2(fluxR%mean(n_r), fluxR%SD(n_r), flux_r(n_r), n_calls, &
                  &       dtAvg, timeAvg_rad)
-            call getMSD2(us2R_mean(n_r), us2R_SD(n_r), two*pi*us2_r(n_r), &
+            call getMSD2(us2R%mean(n_r), us2R%SD(n_r), two*pi*us2_r(n_r), &
                  &       n_calls, dtAvg, timeAvg_rad)
-            call getMSD2(up2R_mean(n_r), up2R_SD(n_r), two*pi*up2_r(n_r), &
+            call getMSD2(up2R%mean(n_r), up2R%SD(n_r), two*pi*up2_r(n_r), &
                  &       n_calls, dtAvg, timeAvg_rad)
-            call getMSD2(enstrophyR_mean(n_r), enstrophyR_SD(n_r),    &
+            call getMSD2(enstrophyR%mean(n_r), enstrophyR%SD(n_r),    &
                  &       enstrophy_r(n_r), n_calls, dtAvg, timeAvg_rad)
          end do
          timeLast_rad = timeAvg_rad
@@ -352,21 +336,21 @@ contains
          if ( l_stop_time ) then
             open(newunit=file_handle, file='radial_profiles.'//tag)
             do n_r=1,n_r_max
-               uphiR_SD(n_r)     =sqrt(uphiR_SD(n_r)/timeAvg_rad)
-               tempR_SD(n_r)     =sqrt(tempR_SD(n_r)/timeAvg_rad)
-               fluxR_SD(n_r)     =sqrt(fluxR_SD(n_r)/timeAvg_rad)
-               us2R_SD(n_r)      =sqrt(us2R_SD(n_r)/timeAvg_rad)
-               up2R_SD(n_r)      =sqrt(up2R_SD(n_r)/timeAvg_rad)
-               enstrophyR_SD(n_r)=sqrt(enstrophyR_SD(n_r)/timeAvg_rad)
+               uphiR%SD(n_r)     =sqrt(uphiR%SD(n_r)/timeAvg_rad)
+               tempR%SD(n_r)     =sqrt(tempR%SD(n_r)/timeAvg_rad)
+               fluxR%SD(n_r)     =sqrt(fluxR%SD(n_r)/timeAvg_rad)
+               us2R%SD(n_r)      =sqrt(us2R%SD(n_r)/timeAvg_rad)
+               up2R%SD(n_r)      =sqrt(up2R%SD(n_r)/timeAvg_rad)
+               enstrophyR%SD(n_r)=sqrt(enstrophyR%SD(n_r)/timeAvg_rad)
                write(file_handle, '(es20.12, 12es16.8)') r(n_r),           &
-               &     round_off(us2R_mean(n_r)), round_off(us2R_SD(n_r)),   &
-               &     round_off(up2R_mean(n_r)), round_off(up2R_SD(n_r)),   &
-               &     round_off(enstrophyR_mean(n_r)),                      &
-               &     round_off(enstrophyR_SD(n_r)),                        &
-               &     round_off(uphiR_mean(n_r)), round_off(uphiR_SD(n_r)), &
-               &     round_off(tempR_mean(n_r)+tcond(n_r)),                &
-               &     round_off(tempR_SD(n_r)), round_off(fluxR_mean(n_r)), &
-               &     round_off(fluxR_SD(n_r))
+               &     round_off(us2R%mean(n_r)), round_off(us2R%SD(n_r)),   &
+               &     round_off(up2R%mean(n_r)), round_off(up2R%SD(n_r)),   &
+               &     round_off(enstrophyR%mean(n_r)),                      &
+               &     round_off(enstrophyR%SD(n_r)),                        &
+               &     round_off(uphiR%mean(n_r)), round_off(uphiR%SD(n_r)), &
+               &     round_off(tempR%mean(n_r)+tcond(n_r)),                &
+               &     round_off(tempR%SD(n_r)), round_off(fluxR%mean(n_r)), &
+               &     round_off(fluxR%SD(n_r))
             end do
             close(file_handle)
          end if

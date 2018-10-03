@@ -16,6 +16,7 @@ module vort_balance
    use radial_functions, only: r, height
    use integration, only: simps
    use useful, only: cc2real, getMSD2
+   use mean_sd, only: mean_sd_type
 
    implicit none
 
@@ -37,24 +38,15 @@ module vort_balance
       real(cp), allocatable :: iner_mean(:,:)
       real(cp), allocatable :: thwind_mean(:,:)
       real(cp), allocatable :: cia_mean(:,:)
-      real(cp), allocatable :: viscM_mean(:)
-      real(cp), allocatable :: viscM_SD(:)
-      real(cp), allocatable :: pumpM_mean(:)
-      real(cp), allocatable :: pumpM_SD(:)
-      real(cp), allocatable :: buoM_mean(:)
-      real(cp), allocatable :: buoM_SD(:)
-      real(cp), allocatable :: corM_mean(:)
-      real(cp), allocatable :: corM_SD(:)
-      real(cp), allocatable :: advM_mean(:)
-      real(cp), allocatable :: advM_SD(:)
-      real(cp), allocatable :: dwdtM_mean(:)
-      real(cp), allocatable :: dwdtM_SD(:)
-      real(cp), allocatable :: thwindM_mean(:)
-      real(cp), allocatable :: thwindM_SD(:)
-      real(cp), allocatable :: inerM_SD(:)
-      real(cp), allocatable :: inerM_mean(:)
-      real(cp), allocatable :: ciaM_SD(:)
-      real(cp), allocatable :: ciaM_mean(:)
+      type(mean_sd_type) :: viscM
+      type(mean_sd_type) :: pumpM
+      type(mean_sd_type) :: buoM
+      type(mean_sd_type) :: corM
+      type(mean_sd_type) :: advM
+      type(mean_sd_type) :: dwdtM
+      type(mean_sd_type) :: inerM
+      type(mean_sd_type) :: thwindM
+      type(mean_sd_type) :: ciaM
       real(cp) :: timeLast
       real(cp) :: dt
       integer :: n_calls
@@ -125,34 +117,15 @@ contains
       this%timeLast = 0.0_cp
       this%dt = 0.0_cp
 
-      allocate( this%viscM_mean(nMstart:nMstop), this%viscM_SD(nMstart:nMstop) )
-      allocate( this%pumpM_mean(nMstart:nMstop), this%pumpM_SD(nMstart:nMstop) )
-      allocate( this%corM_mean(nMstart:nMstop), this%corM_SD(nMstart:nMstop) )
-      allocate( this%advM_mean(nMstart:nMstop), this%advM_SD(nMstart:nMstop) )
-      allocate( this%buoM_mean(nMstart:nMstop), this%buoM_SD(nMstart:nMstop) )
-      allocate( this%dwdtM_mean(nMstart:nMstop), this%dwdtM_SD(nMstart:nMstop) )
-      allocate( this%thwindM_mean(nMstart:nMstop), this%thwindM_SD(nMstart:nMstop) )
-      allocate( this%ciaM_mean(nMstart:nMstop), this%ciaM_SD(nMstart:nMstop) )
-      allocate( this%inerM_mean(nMstart:nMstop), this%inerM_SD(nMstart:nMstop) )
-      bytes_allocated=bytes_allocated+18*(nMstop-nMstart+1)*SIZEOF_DEF_REAL
-      this%viscM_mean(:)  =0.0_cp
-      this%viscM_SD(:)    =0.0_cp
-      this%pumpM_mean(:)  =0.0_cp
-      this%pumpM_SD(:)    =0.0_cp
-      this%corM_mean(:)   =0.0_cp
-      this%corM_SD(:)     =0.0_cp
-      this%buoM_mean(:)   =0.0_cp
-      this%buoM_SD(:)     =0.0_cp
-      this%advM_mean(:)   =0.0_cp
-      this%advM_SD(:)     =0.0_cp
-      this%dwdtM_mean(:)  =0.0_cp
-      this%dwdtM_SD(:)    =0.0_cp
-      this%thwindM_mean(:)=0.0_cp
-      this%thwindM_SD(:)  =0.0_cp
-      this%inerM_mean(:)  =0.0_cp
-      this%inerM_SD(:)    =0.0_cp
-      this%ciaM_mean(:)   =0.0_cp
-      this%ciaM_SD(:)     =0.0_cp
+      call this%viscM%initialize(nMstart,nMstop)
+      call this%pumpM%initialize(nMstart,nMstop)
+      call this%corM%initialize(nMstart,nMstop)
+      call this%advM%initialize(nMstart,nMstop)
+      call this%buoM%initialize(nMstart,nMstop)
+      call this%dwdtM%initialize(nMstart,nMstop)
+      call this%inerM%initialize(nMstart,nMstop)
+      call this%thwindM%initialize(nMstart,nMstop)
+      call this%ciaM%initialize(nMstart,nMstop)
 
    end subroutine initialize
 !------------------------------------------------------------------------------
@@ -163,15 +136,15 @@ contains
 
       class(vort_bal_type) :: this
 
-      deallocate( this%viscM_mean, this%viscM_SD )
-      deallocate( this%pumpM_mean, this%pumpM_SD )
-      deallocate( this%buoM_mean, this%buoM_SD )
-      deallocate( this%advM_mean, this%advM_SD )
-      deallocate( this%dwdtM_mean, this%dwdtM_SD )
-      deallocate( this%corM_mean, this%corM_SD )
-      deallocate( this%thwindM_mean, this%thwindM_SD )
-      deallocate( this%ciaM_mean, this%ciaM_SD )
-      deallocate( this%inerM_mean, this%inerM_SD )
+      call this%ciaM%finalize()
+      call this%thwindM%finalize()
+      call this%inerM%finalize()
+      call this%dwdtM%finalize()
+      call this%buoM%finalize()
+      call this%advM%finalize()
+      call this%corM%finalize()
+      call this%pumpM%finalize()
+      call this%viscM%finalize()
       deallocate( this%visc_mean, this%cor_mean, this%adv_mean, this%dwdt_mean )
       deallocate( this%pump_mean, this%buo_mean, this%iner_mean, this%cia_mean )
       deallocate( this%thwind_mean)
@@ -217,7 +190,7 @@ contains
 
    end subroutine finalize_domdt
 !------------------------------------------------------------------------------
-   subroutine mean_sd(this, time, input, output, outM_mean, outM_SD)
+   subroutine mean_sd(this, time, input, output, outM)
 
       class(vort_bal_type) :: this
 
@@ -226,9 +199,8 @@ contains
       complex(cp), intent(in) :: input(nMstart:nMstop,n_r_max)
 
       !-- Output variables
-      real(cp), intent(out) :: output(nMstart:nMstop,n_r_max)
-      real(cp), intent(out) :: outM_mean(nMstart:nMstop)
-      real(cp), intent(out) :: outM_SD(nMstart:nMstop)
+      real(cp),           intent(out) :: output(nMstart:nMstop,n_r_max)
+      type(mean_sd_type), intent(inout) :: outM
 
       !-- Local variables
       real(cp) :: dat(n_r_max), sd, val_m
@@ -250,7 +222,7 @@ contains
          end do
          val_m = simps(dat,r)
          val_m = sqrt(val_m)
-         call getMSD2(outM_mean(n_m), outM_SD(n_m), val_m, this%n_calls,&
+         call getMSD2(outM%mean(n_m), outM%SD(n_m), val_m, this%n_calls,&
               &       this%dt, time)
       end do
 
@@ -272,32 +244,32 @@ contains
       !------
       !-- Buoyancy term
       !------
-      call this%mean_sd(time,this%buo,this%buo_mean,this%buoM_mean,this%buoM_SD)
+      call this%mean_sd(time,this%buo,this%buo_mean,this%buoM)
 
       !------
       !-- Coriolis term
       !------
-      call this%mean_sd(time,this%cor,this%cor_mean,this%corM_mean,this%corM_SD)
+      call this%mean_sd(time,this%cor,this%cor_mean,this%corM)
 
       !------
       !-- Advection term
       !------
-      call this%mean_sd(time,this%adv,this%adv_mean,this%advM_mean,this%advM_SD)
+      call this%mean_sd(time,this%adv,this%adv_mean,this%advM)
 
       !------
       !-- d\omega/dt term
       !------
-      call this%mean_sd(time,this%dwdt,this%dwdt_mean,this%dwdtM_mean,this%dwdtM_SD)
+      call this%mean_sd(time,this%dwdt,this%dwdt_mean,this%dwdtM)
 
       !------
       !-- Viscous term
       !------
-      call this%mean_sd(time,this%visc,this%visc_mean,this%viscM_mean,this%viscM_SD)
+      call this%mean_sd(time,this%visc,this%visc_mean,this%viscM)
 
       !------
       !-- Ekman pumping term
       !------
-      call this%mean_sd(time,this%pump,this%pump_mean,this%pumpM_mean,this%pumpM_SD)
+      call this%mean_sd(time,this%pump,this%pump_mean,this%pumpM)
 
       !------
       !-- Thermal wind balance
@@ -308,8 +280,7 @@ contains
             this%pump(n_m,n_r)=this%buo(n_m,n_r)+this%cor(n_m,n_r)
          end do
       end do
-      call this%mean_sd(time,this%pump,this%thwind_mean,this%thwindM_mean,&
-           &            this%thwindM_SD)
+      call this%mean_sd(time,this%pump,this%thwind_mean,this%thwindM)
 
       !------
       !-- Inertial term: d\omega/dt + div( u \omega )
@@ -319,8 +290,7 @@ contains
             this%pump(n_m,n_r)=-this%dwdt(n_m,n_r)+this%adv(n_m,n_r)
          end do
       end do
-      call this%mean_sd(time,this%pump,this%iner_mean,this%inerM_mean,&
-           &            this%inerM_SD)
+      call this%mean_sd(time,this%pump,this%iner_mean,this%inerM)
 
       !------
       !-- Coriolis-Inertia-Archimedian force balance
@@ -331,7 +301,7 @@ contains
             &                   this%buo(n_m,n_r)+this%cor(n_m,n_r)
          end do
       end do
-      call this%mean_sd(time,this%pump,this%cia_mean,this%ciaM_mean,this%ciaM_SD)
+      call this%mean_sd(time,this%pump,this%cia_mean,this%ciaM)
 
       !-- Put zeros in this%pump again!
       do n_r=1,n_r_max
@@ -378,58 +348,58 @@ contains
       do n_p=1,n_procs-1
          displs(n_p)=displs(n_p-1)+recvcounts(n_p-1)
       end do
-      call MPI_GatherV(this%buoM_mean, nm_per_rank, MPI_DEF_REAL,   &
+      call MPI_GatherV(this%buoM%mean, nm_per_rank, MPI_DEF_REAL,   &
            &           buoM_global, recvcounts, displs,             &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%buoM_SD, nm_per_rank, MPI_DEF_REAL,     &
+      call MPI_GatherV(this%buoM%SD, nm_per_rank, MPI_DEF_REAL,     &
            &           buoSD_global, recvcounts, displs,            &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%corM_mean, nm_per_rank, MPI_DEF_REAL,   &
+      call MPI_GatherV(this%corM%mean, nm_per_rank, MPI_DEF_REAL,   &
            &           corM_global, recvcounts, displs,             &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%corM_SD, nm_per_rank, MPI_DEF_REAL,     &
+      call MPI_GatherV(this%corM%SD, nm_per_rank, MPI_DEF_REAL,     &
            &           corSD_global, recvcounts, displs,            &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%advM_mean, nm_per_rank, MPI_DEF_REAL,   &
+      call MPI_GatherV(this%advM%mean, nm_per_rank, MPI_DEF_REAL,   &
            &           advM_global, recvcounts, displs,             &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%advM_SD, nm_per_rank, MPI_DEF_REAL,     &
+      call MPI_GatherV(this%advM%SD, nm_per_rank, MPI_DEF_REAL,     &
            &           advSD_global, recvcounts, displs,            &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%dwdtM_mean, nm_per_rank, MPI_DEF_REAL,  &
+      call MPI_GatherV(this%dwdtM%mean, nm_per_rank, MPI_DEF_REAL,  &
            &           dwdtM_global, recvcounts, displs,            &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%dwdtM_SD, nm_per_rank, MPI_DEF_REAL,    &
+      call MPI_GatherV(this%dwdtM%SD, nm_per_rank, MPI_DEF_REAL,    &
            &           dwdtSD_global, recvcounts, displs,           &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%viscM_mean, nm_per_rank, MPI_DEF_REAL,  &
+      call MPI_GatherV(this%viscM%mean, nm_per_rank, MPI_DEF_REAL,  &
            &           viscM_global, recvcounts, displs,            &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%viscM_SD, nm_per_rank, MPI_DEF_REAL,    &
+      call MPI_GatherV(this%viscM%SD, nm_per_rank, MPI_DEF_REAL,    &
            &           viscSD_global, recvcounts, displs,           &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%pumpM_mean, nm_per_rank, MPI_DEF_REAL,  &
+      call MPI_GatherV(this%pumpM%mean, nm_per_rank, MPI_DEF_REAL,  &
            &           pumpM_global, recvcounts, displs,            &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%pumpM_SD, nm_per_rank, MPI_DEF_REAL,    &
+      call MPI_GatherV(this%pumpM%SD, nm_per_rank, MPI_DEF_REAL,    &
            &           pumpSD_global, recvcounts, displs,           &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%thwindM_mean, nm_per_rank, MPI_DEF_REAL,&
+      call MPI_GatherV(this%thwindM%mean, nm_per_rank, MPI_DEF_REAL,&
            &           thwindM_global, recvcounts, displs,          &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%thwindM_SD, nm_per_rank, MPI_DEF_REAL,  &
+      call MPI_GatherV(this%thwindM%SD, nm_per_rank, MPI_DEF_REAL,  &
            &           thwindSD_global, recvcounts, displs,         &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%ciaM_mean, nm_per_rank, MPI_DEF_REAL,   &
+      call MPI_GatherV(this%ciaM%mean, nm_per_rank, MPI_DEF_REAL,   &
            &           ciaM_global, recvcounts, displs,             &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%ciaM_SD, nm_per_rank, MPI_DEF_REAL,     &
+      call MPI_GatherV(this%ciaM%SD, nm_per_rank, MPI_DEF_REAL,     &
            &           ciaSD_global, recvcounts, displs,            &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%inerM_mean, nm_per_rank, MPI_DEF_REAL,  &
+      call MPI_GatherV(this%inerM%mean, nm_per_rank, MPI_DEF_REAL,  &
            &           inerM_global, recvcounts, displs,            &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%inerM_SD, nm_per_rank, MPI_DEF_REAL,    &
+      call MPI_GatherV(this%inerM%SD, nm_per_rank, MPI_DEF_REAL,    &
            &           inerSD_global, recvcounts, displs,           &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
 

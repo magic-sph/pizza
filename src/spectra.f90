@@ -15,6 +15,7 @@ module spectra
    use useful, only: cc2real, getMSD2, round_off
    use radial_functions, only: r, rscheme, height
    use integration, only: rInt_R
+   use mean_sd, only: mean_sd_type
 
    implicit none
 
@@ -24,12 +25,9 @@ module spectra
       real(cp), allocatable :: us2_mean(:,:)
       real(cp), allocatable :: up2_mean(:,:)
       real(cp), allocatable :: enst_mean(:,:)
-      real(cp), allocatable :: us2M_mean(:)
-      real(cp), allocatable :: us2M_SD(:)
-      real(cp), allocatable :: up2M_mean(:)
-      real(cp), allocatable :: up2M_SD(:)
-      real(cp), allocatable :: enstM_mean(:)
-      real(cp), allocatable :: enstM_SD(:)
+      type(mean_sd_type) :: us2M
+      type(mean_sd_type) :: up2M
+      type(mean_sd_type) :: enstM
       integer :: n_calls
       integer :: ispec_counter
       real(cp) :: dt
@@ -70,17 +68,9 @@ contains
          end do
       end if
 
-      allocate( this%us2M_mean(nMstart:nMstop), this%up2M_mean(nMstart:nMstop) )
-      allocate( this%enstM_mean(nMstart:nMstop), this%us2M_SD(nMstart:nMstop) )
-      allocate( this%up2M_SD(nMstart:nMstop), this%enstM_SD(nMstart:nMstop) )
-      bytes_allocated=bytes_allocated+6*(nMstop-nMstart+1)*SIZEOF_DEF_REAL
-
-      this%us2M_mean(:)  = 0.0_cp
-      this%up2M_mean(:)  = 0.0_cp
-      this%enstM_mean(:) = 0.0_cp
-      this%us2M_SD(:)    = 0.0_cp
-      this%up2M_SD(:)    = 0.0_cp
-      this%enstM_SD(:)   = 0.0_cp
+      call this%us2M%initialize(nMstart,nMstop)
+      call this%up2M%initialize(nMstart,nMstop)
+      call this%enstM%initialize(nMstart,nMstop)
 
       this%ispec_counter = 1
       this%n_calls = 0
@@ -96,8 +86,9 @@ contains
       !
       class(spectra_type) :: this
 
-      deallocate(this%us2M_mean, this%us2M_SD, this%up2M_mean)
-      deallocate(this%up2M_SD, this%enstM_mean, this%enstM_SD)
+      call this%enstM%finalize()
+      call this%up2M%finalize()
+      call this%us2M%finalize()
       if ( l_2D_spectra ) then
          deallocate(this%enst_mean, this%us2_mean, this%up2_mean)
       end if
@@ -155,11 +146,11 @@ contains
          enst_m(n_m)=rInt_R(enst, r, rscheme)
 
          !-- Mean and SD of m-spectra
-         call getMSD2(this%us2M_mean(n_m), this%us2M_SD(n_m), us2_m(n_m), &
+         call getMSD2(this%us2M%mean(n_m), this%us2M%SD(n_m), us2_m(n_m), &
               &       this%n_calls, this%dt, time)
-         call getMSD2(this%up2M_mean(n_m), this%up2M_SD(n_m), up2_m(n_m), &
+         call getMSD2(this%up2M%mean(n_m), this%up2M%SD(n_m), up2_m(n_m), &
               &       this%n_calls, this%dt, time)
-         call getMSD2(this%enstM_mean(n_m), this%enstM_SD(n_m), enst_m(n_m), &
+         call getMSD2(this%enstM%mean(n_m), this%enstM%SD(n_m), enst_m(n_m), &
               &       this%n_calls, this%dt, time)
       end do
       this%timeLast = time
@@ -194,22 +185,22 @@ contains
       do n_p=1,n_procs-1
          displs(n_p)=displs(n_p-1)+recvcounts(n_p-1)
       end do
-      call MPI_GatherV(this%us2M_mean, nm_per_rank, MPI_DEF_REAL,  &
+      call MPI_GatherV(this%us2M%mean, nm_per_rank, MPI_DEF_REAL,  &
            &           us2_mean_global, recvcounts, displs,        &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%us2M_SD, nm_per_rank, MPI_DEF_REAL,    &
+      call MPI_GatherV(this%us2M%SD, nm_per_rank, MPI_DEF_REAL,    &
            &           us2_SD_global, recvcounts, displs,          &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%up2M_mean, nm_per_rank, MPI_DEF_REAL,  &
+      call MPI_GatherV(this%up2M%mean, nm_per_rank, MPI_DEF_REAL,  &
            &           up2_mean_global, recvcounts, displs,        &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%up2M_SD, nm_per_rank, MPI_DEF_REAL,    &
+      call MPI_GatherV(this%up2M%SD, nm_per_rank, MPI_DEF_REAL,    &
            &           up2_SD_global, recvcounts, displs,          &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%enstM_mean, nm_per_rank, MPI_DEF_REAL, &
+      call MPI_GatherV(this%enstM%mean, nm_per_rank, MPI_DEF_REAL, &
            &           enst_mean_global, recvcounts, displs,       &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-      call MPI_GatherV(this%enstM_SD, nm_per_rank, MPI_DEF_REAL,   &
+      call MPI_GatherV(this%enstM%SD, nm_per_rank, MPI_DEF_REAL,   &
            &           enst_SD_global, recvcounts, displs,         &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
 
