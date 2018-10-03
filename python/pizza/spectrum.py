@@ -465,11 +465,8 @@ class Pizza2DSpectrum(PizzaSetup):
 
         dt = np.dtype("(%i,%i)Float64" % (self.n_r_max,self.n_m_max))
         us2 = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        us2 = us2.T
         up2 = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        up2 = up2.T
         enst = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        enst = enst.T
 
         file.close()
 
@@ -479,6 +476,10 @@ class Pizza2DSpectrum(PizzaSetup):
         """
         Compute total kinetic energy and determine the peaks of us**2
         """
+        self.us2 = self.us2.T
+        self.up2 = self.up2.T
+        self.enst = self.enst.T
+
         self.ekin = self.us2+self.up2
 
         ind = self.us2[:, 1:-1].argmax(axis=0)

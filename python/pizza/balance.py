@@ -285,49 +285,93 @@ class PizzaVortBalance(PizzaSetup):
                     (False by default)
         :type all: bool
         """
-        pattern = os.path.join(datadir, 'log.*')
-        logFiles = scanDir(pattern)
 
-        if tag is not None:
-            pattern = os.path.join(datadir, 'vort_bal.%s' % tag)
+        self.name = 'vort_bal'
+
+        if not all:
+            if tag is not None:
+                pattern = os.path.join(datadir, '%s.%s' % (self.name, tag))
+                files = scanDir(pattern)
+                # Either the log.tag directly exists and the setup is easy to obtain
+                if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                    PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                        nml='log.%s' % tag)
+                # Or the tag is a bit more complicated and we need to find 
+                # the corresponding log file
+                else:
+                    mask = re.compile(r'%s\.(.*)' % self.name)
+                    if mask.match(files[-1]):
+                        ending = mask.search(files[-1]).groups(0)[0]
+                        if logFiles.__contains__('log.%s' % ending):
+                            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                                nml='log.%s' % ending)
+
+                # Sum the files that correspond to the tag
+                mask = re.compile(r'%s\.(.*)' % self.name)
+                for k, file in enumerate(files):
+                    print('reading %s' % file)
+                    tag = mask.search(file).groups(0)[0]
+                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                    filename = file
+                    if k == 0:
+                        self.tstart = nml.start_time
+                        self.tstop = nml.stop_time # will be overwritten afterwards
+                        data = self.read(filename, endian)
+                    else:
+                        if os.path.exists(filename):
+                            tmp = self.read(filename, endian)
+                            data = self.add(data,tmp, nml.stop_time, nml.start_time)
+
+            else:
+                pattern = os.path.join(datadir, '%s*' % self.name)
+                files = scanDir(pattern)
+                filename = files[-1]
+                print('reading %s' % filename)
+                # Determine the setup
+                mask = re.compile(r'%s\.(.*)' % self.name)
+                ending = mask.search(files[-1]).groups(0)[0]
+                if os.path.exists('log.%s' % ending):
+                    try:
+                        PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                        nml='log.%s' % ending)
+                    except AttributeError:
+                        pass
+
+                data = self.read(filename, endian)
+
+        else: # if all is requested
+            pattern = os.path.join(datadir, '%s.*' % self.name)
             files = scanDir(pattern)
 
-            # Either the log.tag directly exists and the setup is easy to obtain
-            if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+            # Determine the setup
+            mask = re.compile(r'%s\.(.*)' % self.name)
+            for k, file in enumerate(files):
+                print('reading %s' % file)
+                tag = mask.search(file).groups(0)[0]
+                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                filename = file
+                if k == 0:
+                    self.tstart = nml.start_time
+                    self.tstop = nml.stop_time # will be overwritten afterwards
+                    data = self.read(filename, endian)
+                else:
+                    if os.path.exists(filename):
+                        tmp = self.read(filename, endian)
+                        data = self.add(data,tmp, nml.stop_time, nml.start_time)
+            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                nml='log.%s' % tag)
+
+            # Determine the setup
+            mask = re.compile(r'.*\.(.*)')
+            ending = mask.search(files[-1]).groups(0)[0]
+            if os.path.exists(os.path.join(datadir, 'log.%s' % ending)):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % tag)
-            # Or the tag is a bit more complicated and we need to find 
-            # the corresponding log file
-            else:
-                mask = re.compile(r'vort_bal\.(.*)')
-                if mask.match(files[-1]):
-                    ending = mask.search(files[-1]).groups(0)[0]
-                    if logFiles.__contains__('log.%s' % ending):
-                        PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.%s' % ending)
+                                    nml='log.%s' % ending)
 
-            filename = files[-1]
-            print('reading %s' % filename)
-            self.read(filename, endian)
-
-        else:
-            if len(logFiles) != 0:
-                PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
-                name = 'vort_bal.%s' % self.tag
-                filename = os.path.join(datadir, name)
-                print('reading %s' % filename)
-                self.read(filename, endian)
-            else:
-                mot = 'vort_bal.*'
-                dat = [(os.stat(i).st_mtime, i) for i in glob.glob(mot)]
-                dat.sort()
-                filename = dat[-1][1]
-                print('reading %s' % filename)
-                self.read(filename, endian)
+        self.assemble(data)
 
         if iplot == True:
             self.plot()
-
 
     def read(self, filename, endian='l'):
         """
@@ -335,13 +379,16 @@ class PizzaVortBalance(PizzaSetup):
         :type filename: str
         :param endian: endianness of the binary file
         :type endian: str
+        :returns data: a numpy array that contains all the time-averaged fields
+        :type data: numpy.ndarray
         """
         file = open(filename, 'rb')
         dt = np.dtype("i4, 6Float64")
         self.version, params = np.fromfile(file, dtype=dt, count=1)[0]
         self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = params
         dt = np.dtype("4i4")
-        self.n_r_max, self.n_m_max, self.m_max, self.minc = np.fromfile(file, dtype=dt, count=1)[0]
+        self.n_r_max, self.n_m_max, self.m_max, self.minc = \
+                                       np.fromfile(file, dtype=dt, count=1)[0]
 
         dt = np.dtype("%iFloat64" % self.n_r_max)
         self.radius = np.fromfile(file, dtype=dt, count=1)[0]
@@ -350,27 +397,50 @@ class PizzaVortBalance(PizzaSetup):
             self.idx2m[i] = i*self.minc
 
         dt = np.dtype("(%i,%i)Float64" % (self.n_r_max,self.n_m_max))
-        self.buo = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.buo = self.buo.T
-        self.cor = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.cor = self.cor.T
-        self.adv = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.adv = self.adv.T
-        self.domdt = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.domdt = self.domdt.T
-        self.visc = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.visc = self.visc.T
-        self.pump = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.pump = self.pump.T
-        self.thwind = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.thwind = self.thwind.T
-        self.iner = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.iner = self.iner.T
-        self.cia = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.cia = self.cia.T
+        data = np.fromfile(file,  dtype=dt, count=9)
 
         file.close()
 
+        return data
+
+    def assemble(self, data):
+        """
+        Once the reading is over then assemble the object
+
+        :param data: a numpy array that contains all the time-averaged fields
+        :type data: numpy.ndarray
+        """
+        self.buo = data[0, ...].T
+        self.cor = data[1, ...].T
+        self.adv = data[2, ...].T
+        self.domdt = data[3, ...].T
+        self.visc = data[4, ...].T
+        self.pump = data[5, ...].T
+        self.thwind = data[6, ...].T
+        self.iner = data[7, ...].T
+        self.cia = data[8, ...].T
+
+    def add(self, data, tmp, stop_time, start_time):
+        """
+        Clean way to stack data
+
+        :returns out: a numpy array that contains all the time-averaged fields
+        :type out: numpy.ndarray
+        """
+        out = copy.deepcopy(data)
+    
+        fac_old = self.tstop-self.tstart
+        fac_new = stop_time-start_time
+        self.tstop = stop_time
+        fac_tot = self.tstop-self.tstart
+
+        if data.shape == tmp.shape:
+            out = (fac_old*data+fac_new*tmp)/fac_tot
+        else:
+            print('Not implemented yet...')
+
+        return out
+        
     def plot(self, levels=15, cm='magma', cut=1., solid_contour=True, 
              log_yscale=True):
         """
