@@ -16,6 +16,7 @@ module update_psi_coll_dmat
    use time_schemes, only: type_tscheme
    use vort_balance, only: vort_bal_type
    use vp_balance, only: vp_bal_type
+   use timers_mod, only: timers_type
    use time_array
    use useful, only: abortRun
 
@@ -105,8 +106,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc, &
               &                   buo_Mloc, dpsidt, vp_bal, vort_bal, tscheme,   &
-              &                   lMat, time_solve, n_solve_calls, time_lu,      &
-              &                   n_lu_calls, time_dct, n_dct_calls)
+              &                   lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -122,12 +122,7 @@ contains
       type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
       type(type_tarray),   intent(inout) :: dpsidt
-      real(cp),            intent(inout) :: time_solve
-      integer,             intent(inout) :: n_solve_calls
-      real(cp),            intent(inout) :: time_lu
-      integer,             intent(inout) :: n_lu_calls
-      real(cp),            intent(inout) :: time_dct
-      integer,             intent(inout) :: n_dct_calls
+      type(timers_type),   intent(inout) :: timers
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max), runStart, runStop
@@ -189,7 +184,7 @@ contains
          
             if ( .not. lPsimat(n_m) ) then
                call get_omMat(tscheme, m, omMat(:,:,n_m), omPivot(:,n_m), &
-                    &          omMat_fac(:,:,n_m), time_lu, n_lu_calls)
+                    &          omMat_fac(:,:,n_m), timers%lu, timers%n_lu_calls)
 
                !-- Now solve the first intermediate problem
                !-- L_\omega \omega = 0; \omega(ro)=0; \omega(ri)=1
@@ -228,8 +223,8 @@ contains
                  &              omPivot(:, n_m), rhs(:))
             runStop = MPI_Wtime()
             if ( runStop > runStart ) then
-               time_solve = time_solve + (runStop-runStart)
-               n_solve_calls = n_solve_calls+1
+               timers%solve = timers%solve + (runStop-runStart)
+               timers%n_solve_calls = timers%n_solve_calls+1
             end if
             do n_r=1,n_r_max
                rhs(n_r) = rhs(n_r)*omMat_fac(n_r,2,n_m)
@@ -281,8 +276,8 @@ contains
       call rscheme%costf1(work_Mloc, nMstart, nMstop, n_r_max)
       runStop = MPI_Wtime()
       if ( runStop > runStart ) then
-         time_dct = time_dct + (runStop-runStart)
-         n_dct_calls = n_dct_calls + 1
+         timers%dct = timers%dct + (runStop-runStart)
+         timers%n_dct_calls = timers%n_dct_calls + 1
       end if
 
 
@@ -323,8 +318,8 @@ contains
                  &              psiPivot(:, n_m), rhs(:))
             runStop = MPI_Wtime()
             if ( runStop > runStart ) then
-               time_solve = time_solve + (runStop-runStart)
-               n_solve_calls = n_solve_calls+1
+               timers%solve = timers%solve + (runStop-runStart)
+               timers%n_solve_calls = timers%n_solve_calls+1
             end if
             do n_r=1,n_r_max
                rhs(n_r) = rhs(n_r)*psiMat_fac(n_r,2,n_m)
@@ -377,8 +372,8 @@ contains
       call rscheme%costf1(om_Mloc, nMstart, nMstop, n_r_max)
       runStop = MPI_Wtime()
       if ( runStop > runStart ) then
-         time_dct = time_dct + (runStop-runStart)
-         n_dct_calls = n_dct_calls + 2
+         timers%dct = timers%dct + (runStop-runStart)
+         timers%n_dct_calls = timers%n_dct_calls + 2
       end if
 
 

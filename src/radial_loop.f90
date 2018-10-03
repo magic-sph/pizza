@@ -12,6 +12,7 @@ module rloop
    use fourier, only: fft, ifft
    use useful, only: cc22real
    use time_schemes, only: type_tscheme
+   use timers_mod, only: timers_type
 
    implicit none
 
@@ -56,7 +57,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, temp_Rloc, dtempdt_Rloc, &
               &           dVsT_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc,       &
-              &           dth_Rloc, time_fft, n_fft_calls, tscheme)
+              &           dth_Rloc, timers, tscheme)
 
       !-- Input variables
       complex(cp),         intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
@@ -66,14 +67,13 @@ contains
       class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
-      complex(cp), intent(out) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp), intent(out) :: dtempdt_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp), intent(out) :: dVsT_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp), intent(out) :: dVsOm_Rloc(n_m_max, nRstart:nRstop)
-      real(cp),    intent(out) :: dtr_Rloc(nRstart:nRstop)
-      real(cp),    intent(out) :: dth_Rloc(nRstart:nRstop)
-      real(cp),    intent(inout) :: time_fft
-      integer,     intent(inout) :: n_fft_calls
+      complex(cp),       intent(out) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),       intent(out) :: dtempdt_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),       intent(out) :: dVsT_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),       intent(out) :: dVsOm_Rloc(n_m_max, nRstart:nRstop)
+      real(cp),          intent(out) :: dtr_Rloc(nRstart:nRstop)
+      real(cp),          intent(out) :: dth_Rloc(nRstart:nRstop)
+      type(timers_type), intent(inout) :: timers
 
       !-- Local variables
       real(cp) :: usom, runStart, runStop
@@ -108,8 +108,8 @@ contains
          call ifft(temp_Rloc(:,n_r), temp_grid)
          runStop = MPI_Wtime()
          if ( runStop > runStart ) then
-            time_fft = time_fft + (runStop-runStart)
-            n_fft_calls = n_fft_calls + 4
+            timers%fft = timers%fft + (runStop-runStart)
+            timers%n_fft_calls = timers%n_fft_calls + 4
          end if
 
          !-- Courant condition
@@ -134,8 +134,8 @@ contains
          call fft(usOm_grid, dVsOm_Rloc(:,n_r))
          runStop = MPI_Wtime()
          if ( runStop > runStart ) then
-            time_fft = time_fft + (runStop-runStart)
-            n_fft_calls = n_fft_calls + 4
+            timers%fft = timers%fft + (runStop-runStart)
+            timers%n_fft_calls = timers%n_fft_calls + 4
          end if
 
          do n_m=1,n_m_max

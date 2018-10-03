@@ -16,6 +16,7 @@ module mloop_mod
    use update_psi_integ_dmat, only: update_psi_int_dmat, finish_exp_psi_int_dmat
    use update_psi_coll_dmat, only: update_om_coll_dmat, finish_exp_psi_coll_dmat
    use update_psi_coll_smat, only: update_om_coll_smat, finish_exp_psi_coll_smat
+   use timers_mod, only: timers_type
 
    implicit none
 
@@ -28,8 +29,7 @@ contains
    subroutine mloop(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, psi_hat_Mloc,        &
               &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc, buo_Mloc,  &
               &     dTdt, dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
-              &     run_time_solve, n_solve_calls, run_time_lu, n_lu_calls,    &
-              &     run_time_dct, n_dct_calls)
+              &     timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -51,12 +51,7 @@ contains
       type(vort_bal_type), intent(inout) :: vort_bal
       type(type_tarray),   intent(inout) :: dpsidt
       type(type_tarray),   intent(inout) :: dTdt
-      real(cp),            intent(inout) :: run_time_solve
-      integer,             intent(inout) :: n_solve_calls
-      real(cp),            intent(inout) :: run_time_lu
-      integer,             intent(inout) :: n_lu_calls
-      real(cp),            intent(inout) :: run_time_dct
-      integer,             intent(inout) :: n_dct_calls
+      type(timers_type),   intent(inout) :: timers
 
 
      if ( l_cheb_coll ) then
@@ -65,17 +60,11 @@ contains
          if ( l_direct_solve ) then
             call update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,    &
                  &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   vort_bal, tscheme, lMat,                 &
-                 &                   run_time_solve, n_solve_calls,           &
-                 &                   run_time_lu, n_lu_calls, run_time_dct,   &
-                 &                   n_dct_calls)
+                 &                   vort_bal, tscheme, lMat, timers)
          else
             call update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,    &
                  &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   vort_bal, tscheme, lMat,                 &
-                 &                   run_time_solve, n_solve_calls,           &
-                 &                   run_time_lu, n_lu_calls, run_time_dct,   &
-                 &                   n_dct_calls)
+                 &                   vort_bal, tscheme, lMat, timers)
          end if
       else
          call update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, buo_Mloc, &
@@ -83,17 +72,11 @@ contains
          if ( l_direct_solve ) then
             call update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,&
                  &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   vort_bal, tscheme, lMat,                 &
-                 &                   run_time_solve, n_solve_calls,           &
-                 &                   run_time_lu, n_lu_calls, run_time_dct,   &
-                 &                   n_dct_calls)
+                 &                   vort_bal, tscheme, lMat, timers)
          else
             call update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
                  &                   buo_Mloc, dpsidt, vp_bal, vort_bal,      &
-                 &                   tscheme, lMat,                           &
-                 &                   run_time_solve, n_solve_calls,           &
-                 &                   run_time_lu, n_lu_calls, run_time_dct,   &
-                 &                   n_dct_calls)
+                 &                   tscheme, lMat, timers)
          end if
       end if
 

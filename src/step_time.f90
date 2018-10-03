@@ -33,6 +33,7 @@ module step_time
    use time_schemes, only: type_tscheme
    use parallel_mod
    use precision_mod
+   use timers_mod, only: timers_type
 
    implicit none
 
@@ -64,15 +65,11 @@ contains
       real(cp) :: dtr_Rloc(nRstart:nRstop), dth_Rloc(nRstart:nRstop)
 
       !-- Timings:
-      integer :: n_r_loops, n_mpi_comms, n_m_loops, n_m_loops_mat
-      integer :: n_io_calls, n_fft_calls, n_solve_calls, n_dct_calls
-      integer :: n_lu_calls, n_stage
+      type(timers_type) :: timers
+      integer :: n_stage
       integer :: n_stop_signal, n_spec_signal, n_rst_signal, n_frame_signal
       integer :: signals(4)
-      real(cp) :: run_time_r_loop, run_time_mpi_comms
-      real(cp) :: run_time_m_loop, run_time_m_loop_mat, run_time_fft
-      real(cp) :: run_time_tot, run_time_io, run_time_passed, run_time_solve
-      real(cp) :: run_time_dct, run_time_lu
+      real(cp) :: run_time_passed
       real(cp) :: runStart, runStop, runStartT, runStopT
 
       logical :: l_new_dt, l_rst, l_frame, l_log, l_log_next
@@ -96,29 +93,12 @@ contains
       n_rst_signal   = 0
       n_frame_signal = 0
 
+      !-- Set the counters to zero
+      call timers%initialize()
+
       !-- Dummy initial timings
       dtr_Rloc(:) = 1e10_cp
       dth_Rloc(:) = 1e10_cp
-
-      n_r_loops     = 0
-      n_m_loops     = 0
-      n_m_loops_mat = 0
-      n_mpi_comms   = 0
-      n_io_calls    = 0
-      n_fft_calls   = 0
-      n_solve_calls = 0
-      n_dct_calls   = 0
-      n_lu_calls    = 0
-      run_time_r_loop     = 0.0_cp
-      run_time_m_loop     = 0.0_cp
-      run_time_io         = 0.0_cp
-      run_time_mpi_comms  = 0.0_cp
-      run_time_m_loop_mat = 0.0_cp
-      run_time_fft        = 0.0_cp
-      run_time_lu         = 0.0_cp
-      run_time_solve      = 0.0_cp
-      run_time_dct        = 0.0_cp
-      run_time_tot        = 0.0_cp
 
       !!!!! Time loop starts !!!!!!
       if ( n_time_steps == 1 ) then
@@ -164,9 +144,9 @@ contains
          !-------------------
          !-- Check whether the run is not getting out of time
          !-------------------
-         call MPI_Allreduce(MPI_IN_PLACE,run_time_tot,1,MPI_DEF_REAL, &
+         call MPI_Allreduce(MPI_IN_PLACE,timers%tot,1,MPI_DEF_REAL, &
               &             MPI_MAX,MPI_COMM_WORLD,ierr)
-         if ( run_time_tot+run_time_init > run_time_requested ) then
+         if ( timers%tot+run_time_init > run_time_requested ) then
             write(message,'("! Run time limit exeeded !")')
             call logWrite(message, n_log_file)
             l_stop_time=.true.
@@ -195,8 +175,8 @@ contains
               &             om_Mloc, temp_Mloc, dtemp_Mloc, dpsidt, dTdt)
          runStop = MPI_Wtime()
          if (runStop>runStart) then
-            n_io_calls =n_io_calls+1
-            run_time_io=run_time_io+(runStop-runStart)
+            timers%n_io_calls=timers%n_io_calls+1
+            timers%io        =timers%io+(runStop-runStart)
          end if
 
          !-- If this is running out of time, exit the loop and terminate the calculations
@@ -217,8 +197,8 @@ contains
                call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
-                  n_mpi_comms  =n_mpi_comms+1
-                  run_time_mpi_comms=run_time_mpi_comms+(runStop-runStart)
+                  timers%n_mpi_comms=timers%n_mpi_comms+1
+                  timers%mpi_comms  =timers%mpi_comms+(runStop-runStart)
                end if
 
                !-------------------
@@ -228,11 +208,11 @@ contains
                call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, &
                     &            dtempdt_Rloc, dVsT_Rloc, dpsidt_Rloc, &
                     &            dVsOm_Rloc, dtr_Rloc, dth_Rloc,       &
-                    &            run_time_fft, n_fft_calls, tscheme )
+                    &            timers, tscheme )
                runStop = MPI_Wtime()
                if (runStop>runStart) then
-                  n_r_loops  =n_r_loops+1
-                  run_time_r_loop=run_time_r_loop+(runStop-runStart)
+                  timers%n_r_loops=timers%n_r_loops+1
+                  timers%r_loop   =timers%r_loop+(runStop-runStart)
                end if
 
                !------------------
@@ -247,7 +227,7 @@ contains
                call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
-                  run_time_mpi_comms=run_time_mpi_comms+(runStop-runStart)
+                  timers%mpi_comms=timers%mpi_comms+(runStop-runStart)
                end if
 
                !--------------------
@@ -260,7 +240,7 @@ contains
                     &                        tscheme, vp_bal, vort_bal)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
-                  run_time_m_loop=run_time_m_loop+(runStop-runStart)
+                  timers%m_loop=timers%m_loop+(runStop-runStart)
                end if
             end if
 
@@ -306,18 +286,17 @@ contains
             call mloop(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, psi_hat_Mloc,        &
                  &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc, buo_Mloc,  &
                  &     dTdt, dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
-                 &     run_time_solve, n_solve_calls, run_time_lu,                &
-                 &     n_lu_calls, run_time_dct, n_dct_calls)
+                 &     timers)
             runStop = MPI_Wtime()
             if ( .not. lMat ) then
                if (runStop>runStart) then
-                  n_m_loops  =n_m_loops+1
-                  run_time_m_loop=run_time_m_loop+(runStop-runStart)
+                  timers%n_m_loops=timers%n_m_loops+1
+                  timers%m_loop   =timers%m_loop+(runStop-runStart)
                end if
             else
                if (runStop>runStart) then
-                  n_m_loops_mat  =n_m_loops_mat+1
-                  run_time_m_loop_mat=run_time_m_loop_mat+(runStop-runStart)
+                  timers%n_m_loops_mat=timers%n_m_loops_mat+1
+                  timers%m_loop_mat   =timers%m_loop_mat+(runStop-runStart)
                end if
             end if
 
@@ -331,14 +310,14 @@ contains
          !---------------------
          runStopT = MPI_Wtime()
          if (runStopT>runStartT) then
-            run_time_tot=run_time_tot+(runStopT-runStartT)
+            timers%tot=timers%tot+(runStopT-runStartT)
          end if
          n_time_steps_go = n_time_steps_go+1
 
          !---------------------
          !-- Info about run advance
          !---------------------
-         run_time_passed=run_time_tot
+         run_time_passed=timers%tot
          run_time_passed=run_time_passed/n_time_steps_go
          if ( real(n_time_step,cp)+tenth_n_time_steps*real(nPercent,cp) >=  &
             & real(n_time_steps,cp)  .or. n_time_steps < 31 ) then
@@ -362,80 +341,12 @@ contains
 
       end do outer ! end of time stepping !
 
-      !--------------
-      !-- Calculate wall time for different part of the code
-      !-- and average over the different ranks
-      !--------------
-      run_time_io        = run_time_io/n_io_calls
-      call my_reduce_mean(run_time_io, 0)
-      run_time_r_loop    = run_time_r_loop/n_r_loops
-      call my_reduce_mean(run_time_r_loop, 0)
-      if ( n_m_loops /= 0 ) then
-         run_time_m_loop    = run_time_m_loop/n_m_loops
-         call my_reduce_mean(run_time_m_loop, 0)
-      end if
-      if ( n_m_loops_mat /= 0 ) then
-         run_time_m_loop_mat=run_time_m_loop_mat/n_m_loops_mat
-         call my_reduce_mean(run_time_m_loop_mat, 0)
-      end if
-      run_time_mpi_comms = run_time_mpi_comms/n_mpi_comms
-      call my_reduce_mean(run_time_mpi_comms, 0)
-      if ( n_time_steps_go /= 0 ) then
-         run_time_tot=run_time_tot/n_time_steps_go
-         call my_reduce_mean(run_time_tot, 0)
-      end if
-      run_time_fft = run_time_fft/n_fft_calls
-      call my_reduce_mean(run_time_fft, 0)
-      run_time_lu = run_time_lu/n_lu_calls
-      call my_reduce_mean(run_time_lu, 0)
-      run_time_solve = run_time_solve/n_solve_calls
-      call my_reduce_mean(run_time_solve, 0)
-      run_time_dct = run_time_dct/n_dct_calls
-      call my_reduce_mean(run_time_dct, 0)
+      !-- Average timers over ranks and number of calls
+      call timers%finalize(n_time_steps_go)
 
-      if ( rank == 0 ) then
-         call formatTime(6, &
-         &    '! Mean wall time for radial loop            :',run_time_r_loop)
-         call formatTime(6, &
-         &    '! Mean wall time for pure m loop            :',run_time_m_loop)
-         call formatTime(6, &
-         &    '! Mean wall time for m loop with matrix calc:',run_time_m_loop_mat)
-         call formatTime(6, &
-         &    '! Mean wall time for MPI communications     :',run_time_mpi_comms)
-         call formatTime(6, &
-         &    '! Mean wall time for output writting        :',run_time_io)
-         call formatTime(6, &
-         &    '! Mean wall time for one single FFT (rloop) :',run_time_fft)
-         call formatTime(6, &
-         &    '! Mean wall time for one single 2D-DCT      :',run_time_dct)
-         call formatTime(6, &
-         &    '! Mean wall time for one LU factor. (psi)   :',run_time_lu)
-         call formatTime(6, &
-         &    '! Mean wall time for one linear solve (psi) :',run_time_solve)
-         call formatTime(6, &
-         &    '! Mean wall time for one time step          :',run_time_tot)
-
-         call formatTime(n_log_file, &
-         &    '! Mean wall time for radial loop            :',run_time_r_loop)
-         call formatTime(n_log_file,  &
-         &    '! Mean wall time for pure m loop            :',run_time_m_loop)
-         call formatTime(n_log_file, &
-         &    '! Mean wall time for MPI communications     :',run_time_mpi_comms)
-         call formatTime(n_log_file, &
-         &    '! Mean wall time for m loop with matrix calc:',run_time_m_loop_mat)
-         call formatTime(n_log_file, &
-         &    '! Mean wall time for output writting        :',run_time_io)
-         call formatTime(n_log_file, &
-         &    '! Mean wall time for one single FFT (rloop) :',run_time_fft)
-         call formatTime(n_log_file, &
-         &    '! Mean wall time for one single 2D-DCT      :',run_time_dct)
-         call formatTime(n_log_file, &
-         &    '! Mean wall time for one LU factor. (psi)   :',run_time_lu)
-         call formatTime(n_log_file, &
-         &    '! Mean wall time for one linear solve (psi) :',run_time_solve)
-         call formatTime(n_log_file,  &
-         &    '! Mean wall time for one time step          :',run_time_tot)
-      end if
+      !-- Write timers info in log file  and on display
+      call timers%write_log(n_log_file)
+      call timers%write_log(6)
 
    end subroutine time_loop
 !-------------------------------------------------------------------------------

@@ -19,6 +19,7 @@ module update_psi_integ_dmat
    use vp_balance, only: vp_bal_type
    use band_matrix, only: type_bandmat_real
    use bordered_matrix, only: type_bordmat_real
+   use timers_mod, only: timers_type
    use chebsparselib, only: rmult2, intcheb1rmult1, intcheb2rmult2,    &
        &                    intcheb2rmult2laplrot, intcheb2rmult2lapl
 
@@ -147,8 +148,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,         &
               &                   buo_Mloc, domdt, vp_bal, vort_bal, tscheme,  &
-              &                   lMat, time_solve, n_solve_calls, time_lu,    &
-              &                   n_lu_calls, time_dct, n_dct_calls)
+              &                   lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -163,12 +163,7 @@ contains
       type(vort_bal_type), intent(inout) :: vort_bal
       type(type_tarray),   intent(inout) :: domdt
       complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
-      real(cp),            intent(inout) :: time_solve
-      integer,             intent(inout) :: n_solve_calls
-      real(cp),            intent(inout) :: time_lu
-      integer,             intent(inout) :: n_lu_calls
-      real(cp),            intent(inout) :: time_dct
-      integer,             intent(inout) :: n_dct_calls
+      type(timers_type),   intent(inout) :: timers
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
@@ -208,8 +203,8 @@ contains
          call rscheme%costf1(buo_Mloc, nMstart, nMstop, n_r_max)
          runStop = MPI_Wtime()
          if ( runStop > runStart ) then
-            time_dct = time_dct + (runStop-runStart)
-            n_dct_calls = n_dct_calls + 1
+            timers%dct = timers%dct + (runStop-runStart)
+            timers%n_dct_calls = timers%n_dct_calls + 1
          end if
 
          !-- Matrix-vector multiplication by the operator \int\int r^2:
@@ -250,7 +245,7 @@ contains
 
          if ( .not. lPsimat(n_m) ) then
             call get_lhs_om_mat(tscheme, LHS_om_mat(n_m), omfac(:, n_m), m, &
-                 &              time_lu, n_lu_calls)
+                 &              timers%lu, timers%n_lu_calls)
 
             if ( m /= 0 ) then
                !-- Now solve the first intermediate problem
@@ -286,8 +281,8 @@ contains
          call LHS_om_mat(n_m)%solve(rhs,n_r_max)
          runStop = MPI_Wtime()
          if ( runStop > runStart ) then
-            time_solve = time_solve + (runStop-runStart)
-            n_solve_calls = n_solve_calls+1
+            timers%solve = timers%solve + (runStop-runStart)
+            timers%n_solve_calls = timers%n_solve_calls+1
          end if
 
          if ( m == 0 ) then
@@ -370,8 +365,8 @@ contains
       call rscheme%costf1(om_Mloc, nMstart, nMstop, n_r_max)
       runStop = MPI_Wtime()
       if ( runStop > runStart ) then
-         time_dct = time_dct + (runStop-runStart)
-         n_dct_calls = n_dct_calls + 2
+         timers%dct = timers%dct + (runStop-runStart)
+         timers%n_dct_calls = timers%n_dct_calls + 2
       end if
 
 

@@ -21,6 +21,7 @@ module update_psi_integ_smat
    use galerkin
    use band_matrix, only: type_bandmat_complex, type_bandmat_real, &
        &                  band_band_product
+   use timers_mod, only: timers_type
    use bordered_matrix, only: type_bordmat_complex
    use chebsparselib, only: intcheb4rmult4lapl2, intcheb4rmult4lapl,    &
        &                    intcheb4rmult4, rmult2, intcheb1rmult1,     &
@@ -197,8 +198,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,    &
               &                   up_Mloc, buo_Mloc, dpsidt, vp_bal, vort_bal, &
-              &                   tscheme, lMat, time_solve, n_solve_calls,    &
-              &                   time_lu, n_lu_calls, time_dct, n_dct_calls)
+              &                   tscheme, lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -214,12 +214,7 @@ contains
       type(vort_bal_type), intent(inout) :: vort_bal
       type(type_tarray),   intent(inout) :: dpsidt
       complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
-      real(cp),            intent(inout) :: time_solve
-      integer,             intent(inout) :: n_solve_calls
-      real(cp),            intent(inout) :: time_lu
-      integer,             intent(inout) :: n_lu_calls
-      real(cp),            intent(inout) :: time_dct
-      integer,             intent(inout) :: n_dct_calls
+      type(timers_type),   intent(inout) :: timers
 
       !-- Local variables
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
@@ -257,8 +252,8 @@ contains
          call rscheme%costf1(buo_Mloc, nMstart, nMstop, n_r_max)
          runStop = MPI_Wtime()
          if ( runStop > runStart ) then
-            time_dct = time_dct + (runStop-runStart)
-            n_dct_calls = n_dct_calls + 1
+            timers%dct = timers%dct + (runStop-runStart)
+            timers%n_dct_calls = timers%n_dct_calls + 1
          end if
 
          !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
@@ -301,10 +296,10 @@ contains
          if ( .not. lPsimat(n_m) ) then
             if ( l_galerkin ) then
                call get_lhs_mat_gal(tscheme, LHS_mat_gal(n_m), psifac(:, n_m), m, &
-                    &               time_lu, n_lu_calls)
+                    &               timers%lu, timers%n_lu_calls)
             else
                call get_lhs_mat_tau(tscheme, LHS_mat_tau(n_m), psifac(:, n_m), m, &
-                    &               time_lu, n_lu_calls)
+                    &               timers%lu, timers%n_lu_calls)
             end if
             lPsimat(n_m)=.true.
          end if
@@ -343,8 +338,8 @@ contains
          end if
          runStop = MPI_Wtime()
          if ( runStop > runStart ) then
-            time_solve = time_solve + (runStop-runStart)
-            n_solve_calls = n_solve_calls+1
+            timers%solve = timers%solve + (runStop-runStart)
+            timers%n_solve_calls = timers%n_solve_calls+1
          end if
 
          if ( m == 0 ) then
@@ -398,8 +393,8 @@ contains
       call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
       runStop = MPI_Wtime()
       if ( runStop > runStart ) then
-         time_dct = time_dct + (runStop-runStart)
-         n_dct_calls = n_dct_calls + 1
+         timers%dct = timers%dct + (runStop-runStart)
+         timers%n_dct_calls = timers%n_dct_calls + 1
       end if
 
       if ( l_non_rot ) then
