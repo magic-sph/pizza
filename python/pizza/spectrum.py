@@ -101,7 +101,11 @@ class PizzaSpectrum(PizzaSetup):
                 filename = files[-1]
                 print('reading %s' % filename)
                 # Determine the setup
-                mask = re.compile(r'%s\.(.*)' % self.name)
+                if ispec is not None:
+                    mask = re.compile(r'%s%i\.(.*)' % (self.name, ispec))
+
+                else:
+                    mask = re.compile(r'%s\.(.*)' % self.name)
                 ending = mask.search(files[-1]).groups(0)[0]
                 if os.path.exists('log.%s' % ending):
                     try:
