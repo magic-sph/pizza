@@ -311,7 +311,7 @@ class Pizza2DSpectrum(PizzaSetup):
     >>> sp = Pizza2DSpectrum()
     """
 
-    def __init__(self,  datadir='.', iplot=True, tag=None, endian='l'):
+    def __init__(self,  datadir='.', iplot=True, tag=None, endian='l', all=False):
         """
         :param iplot: display the output plot when set to True (default is True)
         :type iplot: bool
@@ -322,27 +322,97 @@ class Pizza2DSpectrum(PizzaSetup):
         :type datadir: str
         :param endian: control the endianness of the file
         :type endian: str
+        :param all: when set to True, the complete time series is reconstructed by
+                    stacking all the corresponding files from the working directory
+                    (False by default)
+        :type all: bool
         """
-
 
         self.name = '2D_spec_avg'
 
-        if tag is not None:
-            pattern = os.path.join(datadir, '%s*%s' % (self.name, tag))
-            files = scanDir(pattern)
-            if len(files) != 0:
-                filename = files[-1]
-            else:
-                print('No such tag... try again')
-                return
+        if not all:
+            if tag is not None:
+                pattern = os.path.join(datadir, '%s.%s' % (self.name, tag))
+                files = scanDir(pattern)
+                # Either the log.tag directly exists and the setup is easy to obtain
+                if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                    PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                        nml='log.%s' % tag)
+                # Or the tag is a bit more complicated and we need to find 
+                # the corresponding log file
+                else:
+                    mask = re.compile(r'%s\.(.*)' % self.name)
+                    if mask.match(files[-1]):
+                        ending = mask.search(files[-1]).groups(0)[0]
+                        if logFiles.__contains__('log.%s' % ending):
+                            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                                nml='log.%s' % ending)
 
-            if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
-                PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % tag)
-        else:
-            pattern = os.path.join(datadir, '%s*' % self.name)
+                # Sum the files that correspond to the tag
+                mask = re.compile(r'%s\.(.*)' % self.name)
+                for k, file in enumerate(files):
+                    print('reading %s' % file)
+                    tag = mask.search(file).groups(0)[0]
+                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                    filename = file
+                    if k == 0:
+                        self.tstart = nml.start_time
+                        self.tstop = nml.stop_time # will be overwritten afterwards
+                        self.us2, self.up2, self.enst = self.read(filename, endian)
+                    else:
+                        if os.path.exists(filename):
+                            us2_tmp, up2_tmp, enst_tmp = self.read(filename, endian)
+                            self.us2 = self.add(self.us2, us2_tmp, nml.stop_time, 
+                                                nml.start_time)
+                            self.up2 = self.add(self.up2, up2_tmp, nml.stop_time, 
+                                                nml.start_time)
+                            self.enst = self.add(self.enst, enst_tmp, nml.stop_time, 
+                                                nml.start_time)
+
+            else:
+                pattern = os.path.join(datadir, '%s*' % self.name)
+                files = scanDir(pattern)
+                filename = files[-1]
+                print('reading %s' % filename)
+                # Determine the setup
+                mask = re.compile(r'%s\.(.*)' % self.name)
+                ending = mask.search(files[-1]).groups(0)[0]
+                if os.path.exists('log.%s' % ending):
+                    try:
+                        PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                        nml='log.%s' % ending)
+                    except AttributeError:
+                        pass
+
+                self.us2, self.up2, self.enst = self.read(filename, endian)
+
+        else: # if all is requested
+            pattern = os.path.join(datadir, '%s.*' % self.name)
             files = scanDir(pattern)
-            filename = files[-1]
+
+            # Determine the setup
+            mask = re.compile(r'%s\.(.*)' % self.name)
+            for k, file in enumerate(files):
+                print('reading %s' % file)
+                tag = mask.search(file).groups(0)[0]
+                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                filename = file
+                if k == 0:
+                    self.tstart = nml.start_time
+                    self.tstop = nml.stop_time # will be overwritten afterwards
+                    self.us2, self.up2, self.enst = self.read(filename, endian)
+                else:
+                    if os.path.exists(filename):
+                        us2_tmp, up2_tmp, enst_tmp = self.read(filename, endian)
+                        self.us2 = self.add(self.us2, us2_tmp, nml.stop_time, 
+                                            nml.start_time)
+                        self.up2 = self.add(self.up2, up2_tmp, nml.stop_time, 
+                                            nml.start_time)
+                        self.enst = self.add(self.enst, enst_tmp, nml.stop_time, 
+                                             nml.start_time)
+            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                nml='log.%s' % tag)
+
             # Determine the setup
             mask = re.compile(r'.*\.(.*)')
             ending = mask.search(files[-1]).groups(0)[0]
@@ -350,14 +420,27 @@ class Pizza2DSpectrum(PizzaSetup):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                     nml='log.%s' % ending)
 
-        if not os.path.exists(filename):
-            print('No such file')
-            return
-
-        self.read(filename, endian)
+        self.assemble()
 
         if iplot:
             self.plot()
+
+    def add(self, data, tmp, stop_time, start_time):
+        """
+        Clean way to stack data
+        """
+        out = copy.deepcopy(data)
+        fac_old = self.tstop-self.tstart
+        fac_new = stop_time-start_time
+        self.tstop = stop_time
+        fac_tot = self.tstop-self.tstart
+
+        if data.shape == tmp.shape:
+            out = (fac_old*data+fac_new*tmp)/fac_tot
+        else:
+            print('Not implemented yet...')
+
+        return out
 
     def read(self, filename, endian='l'):
         """
@@ -371,7 +454,8 @@ class Pizza2DSpectrum(PizzaSetup):
         self.version, params = np.fromfile(file, dtype=dt, count=1)[0]
         self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = params
         dt = np.dtype("4i4")
-        self.n_r_max, self.n_m_max, self.m_max, self.minc = np.fromfile(file, dtype=dt, count=1)[0]
+        self.n_r_max, self.n_m_max, self.m_max, self.minc = \
+                                         np.fromfile(file, dtype=dt, count=1)[0]
 
         dt = np.dtype("%iFloat64" % self.n_r_max)
         self.radius = np.fromfile(file, dtype=dt, count=1)[0]
@@ -380,22 +464,27 @@ class Pizza2DSpectrum(PizzaSetup):
             self.idx2m[i] = i*self.minc
 
         dt = np.dtype("(%i,%i)Float64" % (self.n_r_max,self.n_m_max))
-        self.us2 = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.us2 = self.us2.T
-        self.up2 = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.up2 = self.up2.T
-        self.enst = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        self.enst = self.enst.T
+        us2 = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        us2 = us2.T
+        up2 = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        up2 = up2.T
+        enst = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        enst = enst.T
 
+        file.close()
+
+        return us2, up2, enst
+
+    def assemble(self):
+        """
+        Compute total kinetic energy and determine the peaks of us**2
+        """
         self.ekin = self.us2+self.up2
 
         ind = self.us2[:, 1:-1].argmax(axis=0)
         self.peaks = np.zeros_like(ind)
         for k, idx in enumerate(ind):
             self.peaks[k] = self.idx2m[idx]
-        print(self.peaks)
-
-        file.close()
 
     def plot(self, levels=17, cm='magma', cut=1., solid_contour=True, 
              log_yscale=True):
