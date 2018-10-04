@@ -729,7 +729,7 @@ contains
       integer :: lus_peak, lvort_peak, lekin_peak, m, n_m
 
       !-- Estimate the peak of the spectra (exclude m=0 for practical reason)
-      lus_peak=my_allreduce_maxloc(us2_m(max(2,nMstart):nMstop))*minc
+      lus_peak=my_allreduce_maxloc(us2_m(max(2,nMstart):nMstop),nMstart)*minc
       if ( lus_peak > 0 ) then
          dlus_peak = pi/lus_peak
       else
@@ -737,14 +737,14 @@ contains
       end if
 
       lekin_peak=my_allreduce_maxloc(us2_m(max(2,nMstart):nMstop)+ &
-                 &                   up2_m(max(2,nMstart):nMstop))*minc
+                 &                   up2_m(max(2,nMstart):nMstop),nMstart)*minc
       if ( lekin_peak > 0 ) then
          dlekin_peak = pi/lekin_peak
       else
          dlekin_peak = 0.0_cp
       end if
 
-      lvort_peak=my_allreduce_maxloc(enst_m(max(2,nMstart):nMstop))*minc
+      lvort_peak=my_allreduce_maxloc(enst_m(max(2,nMstart):nMstop),nMstart)*minc
       if ( lvort_peak > 0 ) then
          dlvort_peak = pi/lvort_peak
       else
