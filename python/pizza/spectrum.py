@@ -225,25 +225,30 @@ class PizzaSpectrum(PizzaSetup):
         if self.name == 'vort_terms_avg':
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.fill_between(self.index, self.buo_mean-self.buo_std, \
-                            self.buo_mean+self.buo_std, alpha=0.1)
-            ax.plot(self.index, self.buo_mean, label='Buoyancy')
+            sd = self.buo_std/np.sqrt(self.buo_mean)/2.
+            ax.fill_between(self.index, np.sqrt(self.buo_mean)-sd, \
+                            np.sqrt(self.buo_mean)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.buo_mean), label='Buoyancy')
 
-            ax.fill_between(self.index, self.cor_mean-self.cor_std, \
-                            self.cor_mean+self.cor_std, alpha=0.1)
-            ax.plot(self.index, self.cor_mean, label='Coriolis')
+            sd = self.cor_std/np.sqrt(self.cor_mean)/2.
+            ax.fill_between(self.index, np.sqrt(self.cor_mean)-sd, \
+                            np.sqrt(self.cor_mean)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.cor_mean), label='Coriolis')
 
-            ax.fill_between(self.index, self.iner_mean-self.iner_std, \
-                            self.iner_mean+self.iner_std, alpha=0.1)
-            ax.plot(self.index, self.iner_mean, label='Inertia')
+            sd = self.iner_std/np.sqrt(self.iner_mean)/2.
+            ax.fill_between(self.index, np.sqrt(self.iner_mean)-sd, \
+                            np.sqrt(self.iner_mean)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.iner_mean), label='Inertia')
 
-            ax.fill_between(self.index, self.visc_mean-self.visc_std, \
-                            self.visc_mean+self.visc_std, alpha=0.1)
-            ax.plot(self.index, self.visc_mean, label='Viscosity')
+            sd = self.visc_std/np.sqrt(self.visc_mean)/2.
+            ax.fill_between(self.index, np.sqrt(self.visc_mean)-sd, \
+                            np.sqrt(self.visc_mean)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.visc_mean), label='Viscosity')
 
-            ax.fill_between(self.index, self.pump_mean-self.pump_std, \
-                            self.pump_mean+self.pump_std, alpha=0.1)
-            ax.plot(self.index, self.pump_mean, label='Ekman pumping')
+            sd = self.pump_std/np.sqrt(self.pump_mean)/2.
+            ax.fill_between(self.index, np.sqrt(self.pump_mean)-sd, \
+                            np.sqrt(self.pump_mean)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.pump_mean), label='Ekman pumping')
 
             ax.set_yscale('log')
             ax.set_xscale('log')
@@ -362,17 +367,11 @@ class Pizza2DSpectrum(PizzaSetup):
                     if k == 0:
                         self.tstart = nml.start_time
                         self.tstop = nml.stop_time # will be overwritten afterwards
-                        self.us2, self.up2, self.enst = self.read(filename, endian)
+                        data = self.read(filename, endian)
                     else:
                         if os.path.exists(filename):
-                            us2_tmp, up2_tmp, enst_tmp = self.read(filename, endian)
-                            self.us2 = self.add(self.us2, us2_tmp, nml.stop_time, 
-                                                nml.start_time)
-                            self.up2 = self.add(self.up2, up2_tmp, nml.stop_time, 
-                                                nml.start_time)
-                            self.enst = self.add(self.enst, enst_tmp, nml.stop_time, 
-                                                nml.start_time)
-
+                            tmp = self.read(filename, endian)
+                            data = self.add(data, tmp, nml.stop_time, nml.start_time)
             else:
                 pattern = os.path.join(datadir, '%s*' % self.name)
                 files = scanDir(pattern)
@@ -388,7 +387,7 @@ class Pizza2DSpectrum(PizzaSetup):
                     except AttributeError:
                         pass
 
-                self.us2, self.up2, self.enst = self.read(filename, endian)
+                data = self.read(filename, endian)
 
         else: # if all is requested
             pattern = os.path.join(datadir, '%s.*' % self.name)
@@ -404,16 +403,11 @@ class Pizza2DSpectrum(PizzaSetup):
                 if k == 0:
                     self.tstart = nml.start_time
                     self.tstop = nml.stop_time # will be overwritten afterwards
-                    self.us2, self.up2, self.enst = self.read(filename, endian)
+                    data = self.read(filename, endian)
                 else:
                     if os.path.exists(filename):
-                        us2_tmp, up2_tmp, enst_tmp = self.read(filename, endian)
-                        self.us2 = self.add(self.us2, us2_tmp, nml.stop_time, 
-                                            nml.start_time)
-                        self.up2 = self.add(self.up2, up2_tmp, nml.stop_time, 
-                                            nml.start_time)
-                        self.enst = self.add(self.enst, enst_tmp, nml.stop_time, 
-                                             nml.start_time)
+                        tmp = self.read(filename, endian)
+                        data = self.add(data, tmp, nml.stop_time, nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                 nml='log.%s' % tag)
 
@@ -424,7 +418,7 @@ class Pizza2DSpectrum(PizzaSetup):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                     nml='log.%s' % ending)
 
-        self.assemble()
+        self.assemble(data)
 
         if iplot:
             self.plot()
@@ -433,16 +427,32 @@ class Pizza2DSpectrum(PizzaSetup):
         """
         Clean way to stack data
         """
-        out = copy.deepcopy(data)
+        if data.shape[0] >= tmp.shape[0]:
+            out = copy.deepcopy(data)
+        else:
+            out = copy.deepcopy(tmp)
         fac_old = self.tstop-self.tstart
         fac_new = stop_time-start_time
         self.tstop = stop_time
         fac_tot = self.tstop-self.tstart
 
-        if data.shape == tmp.shape:
-            out = (fac_old*data+fac_new*tmp)/fac_tot
+        if data.shape[0] == tmp.shape[0]:
+            for j in [0, 2, 4]:
+                out[j, ...] = (fac_old*data[j, ...]+fac_new*tmp[j, ...])/fac_tot
+            for j in [1, 3, 5]:
+                out[j, ...] = np.sqrt((fac_old*data[j, ...]**2+ \
+                                       fac_new*tmp[j, ...]**2)/ fac_tot)
         else:
-            print('Not implemented yet...')
+            if tmp.shape > data.shape:
+                for j in [0, 1, 2]:
+                    out[2*j, ...] = (fac_old*data[j, ...]+fac_new*tmp[2*j, ...])/fac_tot
+                for j in [1, 3, 5]:
+                    out[j, ...] = tmp[j, ...]
+            else:
+                for j in [0, 1, 2]:
+                    out[2*j, ...] = (fac_old*data[2*j, ...]+fac_new*tmp[j, ...])/fac_tot
+                for j in [1, 3, 5]:
+                    out[j, ...] = data[j, ...]
 
         return out
 
@@ -468,25 +478,37 @@ class Pizza2DSpectrum(PizzaSetup):
             self.idx2m[i] = i*self.minc
 
         dt = np.dtype("(%i,%i)Float64" % (self.n_r_max,self.n_m_max))
-        us2 = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        up2 = np.fromfile(file, dtype=dt, count=1)[0, :, :]
-        enst = np.fromfile(file, dtype=dt, count=1)[0, :, :]
+        if self.version == 1:
+            data = np.fromfile(file, dtype=dt, count=3)
+        elif self.version == 2:
+            data = np.fromfile(file, dtype=dt, count=6)
 
         file.close()
 
-        return us2, up2, enst
+        return data
 
-    def assemble(self):
+    def assemble(self, data):
         """
-        Compute total kinetic energy and determine the peaks of us**2
+        Once the reading is over then assemble the object
+
+        :param data: a numpy array that contains all the time-averaged fields
+        :type data: numpy.ndarray
         """
-        self.us2 = self.us2.T
-        self.up2 = self.up2.T
-        self.enst = self.enst.T
+        if data.shape[0] == 3:
+            self.us2_mean = data[0, ...].T
+            self.up2_mean = data[1, ...].T
+            self.enst_mean = data[2, ...].T
+        elif data.shape[0] == 6:
+            self.us2_mean = data[0, ...].T
+            self.us2_std = data[1, ...].T
+            self.up2_mean = data[2, ...].T
+            self.up2_std = data[3, ...].T
+            self.enst_mean = data[4, ...].T
+            self.enst_std = data[4, ...].T
 
-        self.ekin = self.us2+self.up2
+        self.ekin_mean = self.us2_mean+self.up2_mean
 
-        ind = self.us2[:, 1:-1].argmax(axis=0)
+        ind = self.us2_mean[:, 1:-1].argmax(axis=0)
         self.peaks = np.zeros_like(ind)
         for k, idx in enumerate(ind):
             self.peaks[k] = self.idx2m[idx]
@@ -510,18 +532,18 @@ class Pizza2DSpectrum(PizzaSetup):
         :type log_yscale: bool
         """
 
-        vmax = cut*np.log10(self.us2[1:,:]+1e-34).max()
-        vmin = cut*np.log10(self.us2[self.us2>1e-15]).min()
+        vmax = cut*np.log10(self.us2_mean[1:,:]+1e-34).max()
+        vmin = cut*np.log10(self.us2_mean[self.us2_mean>1e-15]).min()
         levs = np.linspace(vmin, vmax, levels)
 
         fig = plt.figure()
         ax1 = fig.add_subplot(111)
         im = ax1.contourf(self.radius[1:-1], self.idx2m[1:],
-                          np.log10(self.us2[1:,1:-1]+1e-20),
+                          np.log10(self.us2_mean[1:,1:-1]+1e-20),
                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
             ax1.contour(self.radius[1:-1], self.idx2m[1:],
-                        np.log10(self.us2[1:,1:-1]+1e-20), levs,
+                        np.log10(self.us2_mean[1:,1:-1]+1e-20), levs,
                         extend='both', linestyles=['-'], colors=['k'],
                         linewidths=[0.5])
         ax1.plot(self.radius[1:-1], self.peaks, ls='--')

@@ -270,7 +270,7 @@ class PizzaBalance(PizzaSetup):
 
 class PizzaVortBalance(PizzaSetup):
 
-    def __init__(self, datadir='.', tag=None, endian='l', iplot=True, all=False):
+    def __init__(self, datadir='.', tag=None, endian='l', iplot=False, all=False):
         """
         :param datadir: working directory
         :type datadir: str
@@ -397,7 +397,10 @@ class PizzaVortBalance(PizzaSetup):
             self.idx2m[i] = i*self.minc
 
         dt = np.dtype("(%i,%i)Float64" % (self.n_r_max,self.n_m_max))
-        data = np.fromfile(file,  dtype=dt, count=9)
+        if self.version == 1:
+            data = np.fromfile(file,  dtype=dt, count=9)
+        elif self.version == 2:
+            data = np.fromfile(file,  dtype=dt, count=18)
 
         file.close()
 
@@ -410,15 +413,35 @@ class PizzaVortBalance(PizzaSetup):
         :param data: a numpy array that contains all the time-averaged fields
         :type data: numpy.ndarray
         """
-        self.buo = data[0, ...].T
-        self.cor = data[1, ...].T
-        self.adv = data[2, ...].T
-        self.domdt = data[3, ...].T
-        self.visc = data[4, ...].T
-        self.pump = data[5, ...].T
-        self.thwind = data[6, ...].T
-        self.iner = data[7, ...].T
-        self.cia = data[8, ...].T
+        if data.shape[0] == 9:
+            self.buo_mean = data[0, ...].T
+            self.cor_mean = data[1, ...].T
+            self.adv_mean = data[2, ...].T
+            self.domdt_mean = data[3, ...].T
+            self.visc_mean = data[4, ...].T
+            self.pump_mean = data[5, ...].T
+            self.thwind_mean = data[6, ...].T
+            self.iner_mean = data[7, ...].T
+            self.cia_mean = data[8, ...].T
+        elif data.shape[0] == 18:
+            self.buo_mean = data[0, ...].T
+            self.buo_std = data[1, ...].T
+            self.cor_mean = data[2, ...].T
+            self.cor_std = data[3, ...].T
+            self.adv_mean = data[4, ...].T
+            self.adv_std = data[5, ...].T
+            self.domdt_mean = data[6, ...].T
+            self.domdt_std = data[7, ...].T
+            self.visc_mean = data[8, ...].T
+            self.visc_std = data[9, ...].T
+            self.pump_mean = data[10, ...].T
+            self.pump_std = data[11, ...].T
+            self.thwind_mean = data[12, ...].T
+            self.thwind_std = data[13, ...].T
+            self.iner_mean = data[14, ...].T
+            self.iner_std = data[15, ...].T
+            self.cia_mean = data[16, ...].T
+            self.cia_std = data[17, ...].T
 
     def add(self, data, tmp, stop_time, start_time):
         """
@@ -427,19 +450,87 @@ class PizzaVortBalance(PizzaSetup):
         :returns out: a numpy array that contains all the time-averaged fields
         :type out: numpy.ndarray
         """
-        out = copy.deepcopy(data)
+        if data.shape[0] >= tmp.shape[0]:
+            out = copy.deepcopy(data)
+        else:
+            out = copy.deepcopy(tmp)
     
         fac_old = self.tstop-self.tstart
         fac_new = stop_time-start_time
         self.tstop = stop_time
         fac_tot = self.tstop-self.tstart
 
-        if data.shape == tmp.shape:
-            out = (fac_old*data+fac_new*tmp)/fac_tot
+        if data.shape[0] == tmp.shape[0]:
+            for j in [0, 2, 4, 6, 8, 10, 12, 14, 16]:
+                out[j, ...] = (fac_old*data[j, ...]+fac_new*tmp[j, ...])/fac_tot
+            for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
+                out[j, ...] = np.sqrt((fac_old*data[j, ...]**2+ \
+                                       fac_new*tmp[j, ...]**2)/ fac_tot)
         else:
-            print('Not implemented yet...')
+            if tmp.shape > data.shape:
+                for j in [0, 1, 2, 3, 4, 5, 6, 7, 8]: 
+                    out[2*j, ...] = (fac_old*data[j, ...]+fac_new*tmp[2*j, ...])/fac_tot           
+                for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
+                    out[j, ...] = tmp[j, ...]
+            else:
+                for j in [0, 1, 2, 3, 4, 5, 6, 7, 8]: 
+                    out[2*j, ...] = (fac_old*data[2*j, ...]+fac_new*tmp[j, ...])/fac_tot           
+                for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
+                    out[j, ...] = data[j, ...]
 
         return out
+
+    def plot_rad(self, r=1.0):
+        """
+        This routine allows to display the force balance at a given radius
+
+        :param r: the radius one wants to display
+        :type r: float
+        """
+
+        idx = np.where(abs(self.radius-r)==abs(self.radius-r).min(), 1, 0)
+        idx = np.nonzero(idx)[0][0]
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+
+        if hasattr(self, 'buo_std'):
+            sd = self.buo_std[1:,idx]/np.sqrt(self.buo_mean[1:,idx])/2.
+            ax.fill_between(self.idx2m[1:], np.sqrt(self.buo_mean[1:,idx])-sd, \
+                            np.sqrt(self.buo_mean[1:,idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.buo_mean[1:, idx]), label='Buoyancy')
+
+        if hasattr(self, 'cor_std'):
+            sd = self.cor_std[1:,idx]/np.sqrt(self.cor_mean[1:,idx])/2.
+            ax.fill_between(self.idx2m[1:], np.sqrt(self.cor_mean[1:,idx])-sd, \
+                            np.sqrt(self.cor_mean[1:,idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.cor_mean[1:, idx]), label='Coriolis')
+
+        if hasattr(self, 'iner_std'):
+            sd = self.iner_std[1:,idx]/np.sqrt(self.iner_mean[1:,idx])/2.
+            ax.fill_between(self.idx2m[1:], np.sqrt(self.iner_mean[1:,idx])-sd, \
+                            np.sqrt(self.iner_mean[1:,idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.iner_mean[1:, idx]), label='Inertia')
+
+        if hasattr(self, 'visc_std'):
+            sd = self.visc_std[1:,idx]/np.sqrt(self.visc_mean[1:,idx])/2.
+            ax.fill_between(self.idx2m[1:], np.sqrt(self.visc_mean[1:,idx])-sd, \
+                            np.sqrt(self.visc_mean[1:,idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.visc_mean[1:, idx]), label='Viscosity')
+
+        if hasattr(self, 'pump_std'):
+            sd = self.pump_std[1:,idx]/np.sqrt(self.pump_mean[1:,idx])/2.
+            ax.fill_between(self.idx2m[1:], np.sqrt(self.pump_mean[1:,idx])-sd, \
+                            np.sqrt(self.pump_mean[1:,idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.pump_mean[1:, idx]), label='Ekman pumping')
+
+        ax.set_yscale('log')
+        ax.set_xscale('log')
+        ax.set_xlabel('m')
+        ax.set_ylabel('Forces')
+        ax.set_xlim(1, self.idx2m[-1])
+        ax.legend(loc='best', frameon=False)
+        fig.tight_layout()
         
     def plot(self, levels=15, cm='magma', cut=1., solid_contour=True, 
              log_yscale=True):
@@ -460,16 +551,16 @@ class PizzaVortBalance(PizzaSetup):
         :type log_yscale: bool
         """
 
-        vmax = cut*np.log10(self.iner[1:,1:-1]).max()
-        vmin = cut*np.log10(self.iner[1:,1:-1]).min()
+        vmax = cut*np.log10(self.iner_mean[1:,1:-1]).max()
+        vmin = cut*np.log10(self.iner_mean[1:,1:-1]).min()
         levs = np.linspace(vmin, vmax, levels)
 
         fig = plt.figure(figsize=(15,4))
         ax1 = fig.add_subplot(151)
-        im = ax1.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.buo[1:,1:-1]),
+        im = ax1.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.buo_mean[1:,1:-1]),
                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax1.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.buo[1:,1:-1]),
+            ax1.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.buo_mean[1:,1:-1]),
                        levs, extend='both', linestyles=['-'], colors=['k'],
                        linewidths=[0.5])
         ax1.set_title('Buoyancy')
@@ -478,10 +569,10 @@ class PizzaVortBalance(PizzaSetup):
         ax1.set_ylabel('m')
         
         ax2 = fig.add_subplot(152, sharey=ax1, sharex=ax1)
-        im = ax2.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.cor[1:,1:-1]),
+        im = ax2.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.cor_mean[1:,1:-1]),
                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax2.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.cor[1:,1:-1]),
+            ax2.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.cor_mean[1:,1:-1]),
                        levs, extend='both', linestyles=['-'], colors=['k'],
                        linewidths=[0.5])
         ax2.set_title('Coriolis')
@@ -489,10 +580,10 @@ class PizzaVortBalance(PizzaSetup):
         ax2.set_xlabel('Radius')
 
         ax3 = fig.add_subplot(153, sharey=ax1, sharex=ax1)
-        im = ax3.contourf(self.radius, self.idx2m[1:], np.log10(self.iner[1:,:]),
+        im = ax3.contourf(self.radius, self.idx2m[1:], np.log10(self.iner_mean[1:,:]),
                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax3.contour(self.radius, self.idx2m[1:], np.log10(self.iner[1:,:]),
+            ax3.contour(self.radius, self.idx2m[1:], np.log10(self.iner_mean[1:,:]),
                        levs, extend='both', linestyles=['-'], colors=['k'],
                        linewidths=[0.5])
         ax3.set_title('Inertia')
@@ -500,10 +591,10 @@ class PizzaVortBalance(PizzaSetup):
         ax3.set_xlabel('Radius')
 
         ax4 = fig.add_subplot(154, sharey=ax1, sharex=ax1)
-        im = ax4.contourf(self.radius, self.idx2m[1:], np.log10(self.visc[1:,:]),
+        im = ax4.contourf(self.radius, self.idx2m[1:], np.log10(self.visc_mean[1:,:]),
                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax4.contour(self.radius, self.idx2m[1:], np.log10(self.visc[1:,:]),
+            ax4.contour(self.radius, self.idx2m[1:], np.log10(self.visc_mean[1:,:]),
                        levs, extend='both', linestyles=['-'], colors=['k'],
                        linewidths=[0.5])
         ax4.set_title('Viscosity')
@@ -511,10 +602,10 @@ class PizzaVortBalance(PizzaSetup):
         ax4.set_xlabel('Radius')
 
         ax5 = fig.add_subplot(155, sharey=ax1, sharex=ax1)
-        im = ax5.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.pump[1:,1:-1]),
+        im = ax5.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.pump_mean[1:,1:-1]),
                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax5.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.pump[1:,1:-1]),
+            ax5.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.pump_mean[1:,1:-1]),
                        levs, extend='both', linestyles=['-'], colors=['k'],
                        linewidths=[0.5])
         ax5.set_title('Ekman pumping')
@@ -530,7 +621,6 @@ class PizzaVortBalance(PizzaSetup):
         ax1.set_xlim(self.radius[-1], self.radius[0])
 
         fig.tight_layout()
-
 
 if __name__ == '__main__':
    
