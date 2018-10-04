@@ -55,7 +55,7 @@ module vort_balance
       procedure :: initialize
       procedure :: finalize
       procedure :: calc_avg
-      procedure :: mean_sd
+      procedure :: mean_sd_loc
       procedure :: initialize_domdt
       procedure :: finalize_domdt
       procedure :: write_outputs
@@ -187,7 +187,7 @@ contains
 
    end subroutine finalize_domdt
 !------------------------------------------------------------------------------
-   subroutine mean_sd(this, time, input, output, outM)
+   subroutine mean_sd_loc(this, time, input, output, outM)
 
       class(vort_bal_type) :: this
 
@@ -228,7 +228,7 @@ contains
               &       this%dt, time)
       end do
 
-   end subroutine mean_sd
+   end subroutine mean_sd_loc
 !------------------------------------------------------------------------------
    subroutine calc_avg(this, time, l_stop_time)
 
@@ -246,32 +246,32 @@ contains
       !------
       !-- Buoyancy term
       !------
-      call this%mean_sd(time,this%buo,this%buo2D,this%buoM)
+      call this%mean_sd_loc(time,this%buo,this%buo2D,this%buoM)
 
       !------
       !-- Coriolis term
       !------
-      call this%mean_sd(time,this%cor,this%cor2D,this%corM)
+      call this%mean_sd_loc(time,this%cor,this%cor2D,this%corM)
 
       !------
       !-- Advection term
       !------
-      call this%mean_sd(time,this%adv,this%adv2D,this%advM)
+      call this%mean_sd_loc(time,this%adv,this%adv2D,this%advM)
 
       !------
       !-- d\omega/dt term
       !------
-      call this%mean_sd(time,this%dwdt,this%dwdt2D,this%dwdtM)
+      call this%mean_sd_loc(time,this%dwdt,this%dwdt2D,this%dwdtM)
 
       !------
       !-- Viscous term
       !------
-      call this%mean_sd(time,this%visc,this%visc2D,this%viscM)
+      call this%mean_sd_loc(time,this%visc,this%visc2D,this%viscM)
 
       !------
       !-- Ekman pumping term
       !------
-      call this%mean_sd(time,this%pump,this%pump2D,this%pumpM)
+      call this%mean_sd_loc(time,this%pump,this%pump2D,this%pumpM)
 
       !------
       !-- Thermal wind balance
@@ -282,7 +282,7 @@ contains
             this%pump(n_m,n_r)=this%buo(n_m,n_r)+this%cor(n_m,n_r)
          end do
       end do
-      call this%mean_sd(time,this%pump,this%thwind2D,this%thwindM)
+      call this%mean_sd_loc(time,this%pump,this%thwind2D,this%thwindM)
 
       !------
       !-- Inertial term: d\omega/dt + div( u \omega )
@@ -292,7 +292,7 @@ contains
             this%pump(n_m,n_r)=-this%dwdt(n_m,n_r)+this%adv(n_m,n_r)
          end do
       end do
-      call this%mean_sd(time,this%pump,this%iner2D,this%inerM)
+      call this%mean_sd_loc(time,this%pump,this%iner2D,this%inerM)
 
       !------
       !-- Coriolis-Inertia-Archimedian force balance
@@ -303,7 +303,7 @@ contains
             &                   this%buo(n_m,n_r)+this%cor(n_m,n_r)
          end do
       end do
-      call this%mean_sd(time,this%pump,this%cia2D,this%ciaM)
+      call this%mean_sd_loc(time,this%pump,this%cia2D,this%ciaM)
 
       !-- Put zeros in this%pump again!
       do n_r=1,n_r_max
