@@ -11,20 +11,21 @@ module spectra
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, idx2m, n_m_max, minc, m_max
    use blocking, only: nMstart, nMstop, nm_per_rank, m_balance
-   use namelists, only: tag, ra, ek, pr, ek, raxi, sc, radratio, l_2D_spectra
+   use namelists, only: tag, ra, ek, pr, ek, raxi, sc, radratio, l_2D_spectra, &
+       &                l_2D_SD
    use useful, only: cc2real, getMSD2, round_off
    use radial_functions, only: r, rscheme, height
    use integration, only: rInt_R
-   use mean_sd, only: mean_sd_type
+   use mean_sd, only: mean_sd_type, mean_sd_2D_type
 
    implicit none
 
    private
 
    type, public :: spectra_type
-      real(cp), allocatable :: us2_mean(:,:)
-      real(cp), allocatable :: up2_mean(:,:)
-      real(cp), allocatable :: enst_mean(:,:)
+      type(mean_sd_2D_type) :: us2
+      type(mean_sd_2D_type) :: up2
+      type(mean_sd_2D_type) :: enst
       type(mean_sd_type) :: us2M
       type(mean_sd_type) :: up2M
       type(mean_sd_type) :: enstM
@@ -37,6 +38,7 @@ module spectra
       procedure :: initialize
       procedure :: finalize
       procedure :: write_spectra
+      procedure :: write_2D_spectra
       procedure :: write_spectra_avg
       procedure :: calculate_spectra
    end type spectra_type
@@ -49,23 +51,10 @@ contains
       !
       class(spectra_type) :: this
 
-      !-- Local variables:
-      integer :: n_r, n_m
-
       if ( l_2D_spectra ) then
-         allocate( this%us2_mean(nMstart:nMstop,n_r_max) )
-         allocate( this%up2_mean(nMstart:nMstop,n_r_max) )
-         allocate( this%enst_mean(nMstart:nMstop,n_r_max) )
-         bytes_allocated = bytes_allocated+3*(nMstop-nMstart+1)*n_r_max*&
-         &                 SIZEOF_DEF_REAL
-
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               this%us2_mean(n_m,n_r) =0.0_cp
-               this%up2_mean(n_m,n_r) =0.0_cp
-               this%enst_mean(n_m,n_r)=0.0_cp
-            end do
-         end do
+         call this%us2%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+         call this%up2%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+         call this%enst%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
       end if
 
       call this%us2M%initialize(nMstart,nMstop)
@@ -90,7 +79,9 @@ contains
       call this%up2M%finalize()
       call this%us2M%finalize()
       if ( l_2D_spectra ) then
-         deallocate(this%enst_mean, this%us2_mean, this%up2_mean)
+         call this%enst%finalize()
+         call this%up2%finalize()
+         call this%us2%finalize()
       end if
 
    end subroutine finalize
@@ -113,7 +104,7 @@ contains
       real(cp), intent(out) :: enst_m(nMstart:nMstop)
 
       !-- Local variables:
-      real(cp) :: us2(n_r_max), up2(n_r_max), enst(n_r_max)
+      real(cp) :: us2R(n_r_max), up2R(n_r_max), enstR(n_r_max)
       real(cp) :: sd
       integer :: n_r, n_m, m
 
@@ -125,25 +116,34 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
          do n_r=1,n_r_max
-            us2(n_r) =cc2real(us_Mloc(n_m,n_r),m)
-            up2(n_r) =cc2real(up_Mloc(n_m,n_r),m)
-            enst(n_r)=cc2real(om_Mloc(n_m,n_r),m)
-            us2(n_r) =pi*us2(n_r)*r(n_r)*height(n_r)
-            up2(n_r) =pi*up2(n_r)*r(n_r)*height(n_r)
-            enst(n_r)=pi*enst(n_r)*r(n_r)*height(n_r)
+            us2R(n_r) =cc2real(us_Mloc(n_m,n_r),m)
+            up2R(n_r) =cc2real(up_Mloc(n_m,n_r),m)
+            enstR(n_r)=cc2real(om_Mloc(n_m,n_r),m)
+            us2R(n_r) =pi*us2R(n_r)*r(n_r)*height(n_r)
+            up2R(n_r) =pi*up2R(n_r)*r(n_r)*height(n_r)
+            enstR(n_r)=pi*enstR(n_r)*r(n_r)*height(n_r)
             if ( l_2D_spectra ) then
-               call getMSD2(this%us2_mean(n_m,n_r), sd, us2(n_r), this%n_calls, &
-                    &       this%dt, time)
-               call getMSD2(this%up2_mean(n_m,n_r), sd, up2(n_r), this%n_calls, &
-                    &       this%dt, time)
-               call getMSD2(this%enst_mean(n_m,n_r), sd, enst(n_r), this%n_calls, &
-                    &       this%dt, time)
+               if ( this%us2%l_SD ) then
+                  call getMSD2(this%us2%mean(n_m,n_r), this%us2%SD(n_m,n_r), &
+                       &       us2R(n_r),this%n_calls, this%dt, time)
+                  call getMSD2(this%up2%mean(n_m,n_r), this%up2%SD(n_m,n_r), &
+                       &       up2R(n_r),this%n_calls, this%dt, time)
+                  call getMSD2(this%enst%mean(n_m,n_r), this%enst%SD(n_m,n_r), &
+                       &       enstR(n_r), this%n_calls, this%dt, time)
+               else
+                  call getMSD2(this%us2%mean(n_m,n_r), sd, us2R(n_r),   &
+                       &       this%n_calls, this%dt, time)
+                  call getMSD2(this%up2%mean(n_m,n_r), sd, up2R(n_r),   &
+                       &       this%n_calls, this%dt, time)
+                  call getMSD2(this%enst%mean(n_m,n_r), sd, enstR(n_r), &
+                       &       this%n_calls, this%dt, time)
+               end if
             end if
          end do
          !--Radial integration
-         us2_m(n_m) =rInt_R(us2, r, rscheme)
-         up2_m(n_m) =rInt_R(up2, r, rscheme)
-         enst_m(n_m)=rInt_R(enst, r, rscheme)
+         us2_m(n_m) =rInt_R(us2R, r, rscheme)
+         up2_m(n_m) =rInt_R(up2R, r, rscheme)
+         enst_m(n_m)=rInt_R(enstR, r, rscheme)
 
          !-- Mean and SD of m-spectra
          call getMSD2(this%us2M%mean(n_m), this%us2M%SD(n_m), us2_m(n_m), &
@@ -170,7 +170,7 @@ contains
       real(cp) :: us2_mean_global(n_m_max), us2_SD_global(n_m_max)
       real(cp) :: up2_mean_global(n_m_max), up2_SD_global(n_m_max)
       real(cp) :: enst_mean_global(n_m_max), enst_SD_global(n_m_max)
-      integer :: file_handle, n_m, m, n_p
+      integer :: file_handle, n_m, m, n_p, n_r
       integer :: displs(0:n_procs-1), recvcounts(0:n_procs-1)
 
       !----------------
@@ -224,7 +224,17 @@ contains
       !- 2nd: store the time-average 2-D spectra in a (r,m) plane)
       !-------------------
       if ( l_2D_spectra ) then
-         call write_2D_spectra(this%us2_mean, this%up2_mean, this%enst_mean)
+         if ( this%us2%l_SD ) then
+            do n_r=1,n_r_max
+               do n_m=nMstart,nMstop
+                  this%us2%SD(n_m,n_r) =sqrt(this%us2%SD(n_m,n_r)/this%timeLast)
+                  this%up2%SD(n_m,n_r) =sqrt(this%up2%SD(n_m,n_r)/this%timeLast)
+                  this%enst%SD(n_m,n_r)=sqrt(this%enst%SD(n_m,n_r)/this%timeLast)
+               end do
+            end do
+         end if
+
+         call this%write_2D_spectra()
       end if
 
    end subroutine write_spectra_avg
@@ -285,12 +295,9 @@ contains
 
    end subroutine write_spectra
 !----------------------------------------------------------------------
-   subroutine write_2D_spectra(us2_mean, up2_mean, enst_mean)
+   subroutine write_2D_spectra(this)
 
-      !-- Input variables:
-      real(cp), intent(in) :: us2_mean(nMstart:nMstop,n_r_max)
-      real(cp), intent(in) :: up2_mean(nMstart:nMstop,n_r_max)
-      real(cp), intent(in) :: enst_mean(nMstart:nMstop,n_r_max)
+      class(spectra_type) :: this
 
       !-- Local variables:
       integer :: info, fh, version, header_size
@@ -300,7 +307,12 @@ contains
       character(len=100) :: spec_file
 
       spec_file='2D_spec_avg.'//tag
-      version = 1
+
+      if ( this%us2%l_SD ) then
+         version = 2
+      else
+         version = 1
+      end if
 
       header_size = SIZEOF_INTEGER+6*SIZEOF_DEF_REAL+4*SIZEOF_INTEGER   &
       &             +n_r_max*SIZEOF_DEF_REAL
@@ -360,12 +372,24 @@ contains
            &                 info, ierr)
 
       !-- Now finally write the fields
-      call MPI_File_Write_all(fh, us2_mean, nm_per_rank*n_r_max,  & 
+      call MPI_File_Write_all(fh, this%us2%mean, nm_per_rank*n_r_max,  & 
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, up2_mean, nm_per_rank*n_r_max,  &
+      if ( this%us2%l_SD ) then
+         call MPI_File_Write_all(fh, this%us2%SD, nm_per_rank*n_r_max, & 
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%up2%mean, nm_per_rank*n_r_max,  &
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, enst_mean, nm_per_rank*n_r_max, &
+      if ( this%up2%l_SD ) then
+         call MPI_File_Write_all(fh, this%up2%SD, nm_per_rank*n_r_max, & 
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%enst%mean, nm_per_rank*n_r_max, &
            &                  MPI_DEF_REAL, istat, ierr)
+      if ( this%enst%l_SD ) then
+         call MPI_File_Write_all(fh, this%enst%SD, nm_per_rank*n_r_max,& 
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
 
       call MPI_Info_free(info, ierr)
       call MPI_File_close(fh, ierr)

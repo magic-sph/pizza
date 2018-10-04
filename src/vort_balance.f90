@@ -6,17 +6,17 @@ module vort_balance
 
    use precision_mod
    use parallel_mod
-   use constants, only: zero
+   use constants, only: zero, vol_otc
    use time_schemes, only: type_tscheme
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
    use blocking, only: nMstart, nMstop, nm_per_rank, m_balance
    use namelists, only: ra, pr, ek, radratio, sc, raxi, tag, r_cmb, r_icb, &
-       &                bl_cut
+       &                bl_cut, l_2D_SD
    use radial_functions, only: r, height
    use integration, only: simps
    use useful, only: cc2real, getMSD2
-   use mean_sd, only: mean_sd_type
+   use mean_sd, only: mean_sd_type, mean_sd_2D_type
 
    implicit none
 
@@ -29,15 +29,15 @@ module vort_balance
       complex(cp), allocatable :: pump(:,:)
       complex(cp), allocatable :: dwdt(:,:)
       complex(cp), allocatable :: buo(:,:)
-      real(cp), allocatable :: visc_mean(:,:)
-      real(cp), allocatable :: cor_mean(:,:)
-      real(cp), allocatable :: pump_mean(:,:)
-      real(cp), allocatable :: adv_mean(:,:)
-      real(cp), allocatable :: dwdt_mean(:,:)
-      real(cp), allocatable :: buo_mean(:,:)
-      real(cp), allocatable :: iner_mean(:,:)
-      real(cp), allocatable :: thwind_mean(:,:)
-      real(cp), allocatable :: cia_mean(:,:)
+      type(mean_sd_2D_type) :: visc2D
+      type(mean_sd_2D_type) :: cor2D
+      type(mean_sd_2D_type) :: pump2D
+      type(mean_sd_2D_type) :: adv2D
+      type(mean_sd_2D_type) :: dwdt2D
+      type(mean_sd_2D_type) :: buo2D
+      type(mean_sd_2D_type) :: iner2D
+      type(mean_sd_2D_type) :: thwind2D
+      type(mean_sd_2D_type) :: cia2D
       type(mean_sd_type) :: viscM
       type(mean_sd_type) :: pumpM
       type(mean_sd_type) :: buoM
@@ -79,18 +79,18 @@ contains
       allocate( this%dwdt(nMstart:nMstop,n_r_max) )
       allocate( this%pump(nMstart:nMstop,n_r_max) )
       allocate( this%buo(nMstart:nMstop,n_r_max) )
-      allocate( this%visc_mean(nMstart:nMstop,n_r_max) )
-      allocate( this%cor_mean(nMstart:nMstop,n_r_max) )
-      allocate( this%dwdt_mean(nMstart:nMstop,n_r_max) )
-      allocate( this%pump_mean(nMstart:nMstop,n_r_max) )
-      allocate( this%adv_mean(nMstart:nMstop,n_r_max) )
-      allocate( this%buo_mean(nMstart:nMstop,n_r_max) )
-      allocate( this%iner_mean(nMstart:nMstop,n_r_max) )
-      allocate( this%cia_mean(nMstart:nMstop,n_r_max) )
-      allocate( this%thwind_mean(nMstart:nMstop,n_r_max) )
       bytes_allocated = bytes_allocated + 6*n_r_max*(nMstop-nMstart+1)* &
-      &                 SIZEOF_DEF_COMPLEX+9*n_r_max*(nMstop-nMstart+1)*&
-      &                 SIZEOF_DEF_REAL
+      &                 SIZEOF_DEF_COMPLEX
+
+      call this%visc2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+      call this%cor2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+      call this%dwdt2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+      call this%pump2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+      call this%adv2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+      call this%buo2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+      call this%iner2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+      call this%thwind2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+      call this%cia2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
@@ -100,15 +100,6 @@ contains
             this%dwdt(n_m,n_r)=zero
             this%buo(n_m,n_r) =zero
             this%pump(n_m,n_r)=zero
-            this%visc_mean(n_m,n_r)  =0.0_cp
-            this%buo_mean(n_m,n_r)   =0.0_cp
-            this%cor_mean(n_m,n_r)   =0.0_cp
-            this%adv_mean(n_m,n_r)   =0.0_cp
-            this%pump_mean(n_m,n_r)  =0.0_cp
-            this%dwdt_mean(n_m,n_r)  =0.0_cp
-            this%iner_mean(n_m,n_r)  =0.0_cp
-            this%thwind_mean(n_m,n_r)=0.0_cp
-            this%cia_mean(n_m,n_r)   =0.0_cp
          end do
       end do
 
@@ -145,9 +136,15 @@ contains
       call this%corM%finalize()
       call this%pumpM%finalize()
       call this%viscM%finalize()
-      deallocate( this%visc_mean, this%cor_mean, this%adv_mean, this%dwdt_mean )
-      deallocate( this%pump_mean, this%buo_mean, this%iner_mean, this%cia_mean )
-      deallocate( this%thwind_mean)
+      call this%cor2D%finalize()
+      call this%buo2D%finalize()
+      call this%adv2D%finalize()
+      call this%dwdt2D%finalize()
+      call this%pump2D%finalize()
+      call this%visc2D%finalize()
+      call this%thwind2D%finalize()
+      call this%iner2D%finalize()
+      call this%cia2D%finalize()
       deallocate( this%visc, this%cor, this%adv, this%dwdt, this%pump, this%buo )
 
    end subroutine finalize
@@ -199,8 +196,8 @@ contains
       complex(cp), intent(in) :: input(nMstart:nMstop,n_r_max)
 
       !-- Output variables
-      real(cp),           intent(out) :: output(nMstart:nMstop,n_r_max)
-      type(mean_sd_type), intent(inout) :: outM
+      type(mean_sd_2D_type), intent(inout) :: output
+      type(mean_sd_type),    intent(inout) :: outM
 
       !-- Local variables
       real(cp) :: dat(n_r_max), sd, val_m
@@ -210,18 +207,23 @@ contains
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
          do n_r=1,n_r_max
-            dat(n_r) = cc2real(input(n_m,n_r), m)
-            call getMSD2(output(n_m,n_r), sd, dat(n_r), this%n_calls, &
-                 &       this%dt, time)
+            dat(n_r)=cc2real(input(n_m,n_r), m)
+            dat(n_r)=dat(n_r)*r(n_r)*height(n_r)
+            if ( output%l_SD ) then
+               call getMSD2(output%mean(n_m,n_r), output%SD(n_m,n_r), dat(n_r), &
+                    &       this%n_calls, this%dt, time)
+            else
+               call getMSD2(output%mean(n_m,n_r), sd, dat(n_r), this%n_calls, &
+                    &       this%dt, time)
+            end if
 
             if ( (r(n_r) >= r_cmb-bl_cut) .or. (r(n_r) <= r_icb+bl_cut) ) then
                dat(n_r)=0.0_cp
-            else
-               dat(n_r)=dat(n_r)*r(n_r)*height(n_r)
             end if
          end do
          val_m = simps(dat,r)
-         val_m = sqrt(val_m)
+         !val_m = sqrt(val_m) ! I rather save the squared forces for a coherent 
+         ! definition of forces: intcheb(mean_2D) = mean_1D; intcheb(SD_2D= SD_1D
          call getMSD2(outM%mean(n_m), outM%SD(n_m), val_m, this%n_calls,&
               &       this%dt, time)
       end do
@@ -244,32 +246,32 @@ contains
       !------
       !-- Buoyancy term
       !------
-      call this%mean_sd(time,this%buo,this%buo_mean,this%buoM)
+      call this%mean_sd(time,this%buo,this%buo2D,this%buoM)
 
       !------
       !-- Coriolis term
       !------
-      call this%mean_sd(time,this%cor,this%cor_mean,this%corM)
+      call this%mean_sd(time,this%cor,this%cor2D,this%corM)
 
       !------
       !-- Advection term
       !------
-      call this%mean_sd(time,this%adv,this%adv_mean,this%advM)
+      call this%mean_sd(time,this%adv,this%adv2D,this%advM)
 
       !------
       !-- d\omega/dt term
       !------
-      call this%mean_sd(time,this%dwdt,this%dwdt_mean,this%dwdtM)
+      call this%mean_sd(time,this%dwdt,this%dwdt2D,this%dwdtM)
 
       !------
       !-- Viscous term
       !------
-      call this%mean_sd(time,this%visc,this%visc_mean,this%viscM)
+      call this%mean_sd(time,this%visc,this%visc2D,this%viscM)
 
       !------
       !-- Ekman pumping term
       !------
-      call this%mean_sd(time,this%pump,this%pump_mean,this%pumpM)
+      call this%mean_sd(time,this%pump,this%pump2D,this%pumpM)
 
       !------
       !-- Thermal wind balance
@@ -280,7 +282,7 @@ contains
             this%pump(n_m,n_r)=this%buo(n_m,n_r)+this%cor(n_m,n_r)
          end do
       end do
-      call this%mean_sd(time,this%pump,this%thwind_mean,this%thwindM)
+      call this%mean_sd(time,this%pump,this%thwind2D,this%thwindM)
 
       !------
       !-- Inertial term: d\omega/dt + div( u \omega )
@@ -290,7 +292,7 @@ contains
             this%pump(n_m,n_r)=-this%dwdt(n_m,n_r)+this%adv(n_m,n_r)
          end do
       end do
-      call this%mean_sd(time,this%pump,this%iner_mean,this%inerM)
+      call this%mean_sd(time,this%pump,this%iner2D,this%inerM)
 
       !------
       !-- Coriolis-Inertia-Archimedian force balance
@@ -301,7 +303,7 @@ contains
             &                   this%buo(n_m,n_r)+this%cor(n_m,n_r)
          end do
       end do
-      call this%mean_sd(time,this%pump,this%cia_mean,this%ciaM)
+      call this%mean_sd(time,this%pump,this%cia2D,this%ciaM)
 
       !-- Put zeros in this%pump again!
       do n_r=1,n_r_max
@@ -321,7 +323,7 @@ contains
       class(vort_bal_type) ::this
 
       !-- Local variables
-      integer :: n_m,file_handle,m,n_p
+      integer :: n_m,file_handle,m,n_p,n_r
       integer :: info, fh, version, header_size, filetype
       integer :: istat(MPI_STATUS_SIZE)
       integer :: arr_size(2), arr_loc_size(2), arr_start(2)
@@ -436,8 +438,29 @@ contains
       !-----------
       !-- 2D force balance file (make use of MPI-IO)
       !-----------
+      do n_r=1,n_r_max
+         do n_m=nMstart,nMstop
+
+            if ( this%cor2D%l_SD ) then
+               this%cor2D%SD(n_m,n_r)   =sqrt(this%cor2D%SD(n_m,n_r)/this%timeLast)
+               this%buo2D%SD(n_m,n_r)   =sqrt(this%buo2D%SD(n_m,n_r)/this%timeLast)
+               this%adv2D%SD(n_m,n_r)   =sqrt(this%adv2D%SD(n_m,n_r)/this%timeLast)
+               this%dwdt2D%SD(n_m,n_r)  =sqrt(this%dwdt2D%SD(n_m,n_r)/this%timeLast)
+               this%visc2D%SD(n_m,n_r)  =sqrt(this%visc2D%SD(n_m,n_r)/this%timeLast)
+               this%pump2D%SD(n_m,n_r)  =sqrt(this%pump2D%SD(n_m,n_r)/this%timeLast)
+               this%iner2D%SD(n_m,n_r)  =sqrt(this%iner2D%SD(n_m,n_r)/this%timeLast)
+               this%thwind2D%SD(n_m,n_r)=sqrt(this%thwind2D%SD(n_m,n_r)/this%timeLast)
+               this%cia2D%SD(n_m,n_r)   =sqrt(this%cia2D%SD(n_m,n_r)/this%timeLast)
+            end if
+         end do
+      end do
+
       forces_file='vort_bal.'//tag
-      version = 1
+      if ( this%cor2D%l_SD ) then
+         version = 2
+      else
+         version = 1
+      end if
 
       header_size = SIZEOF_INTEGER+6*SIZEOF_DEF_REAL+4*SIZEOF_INTEGER   &
       &             +n_r_max*SIZEOF_DEF_REAL
@@ -497,24 +520,60 @@ contains
            &                 info, ierr)
 
       !-- Now finally write the fields
-      call MPI_File_Write_all(fh, this%buo_mean, nm_per_rank*n_r_max, &
+      call MPI_File_Write_all(fh, this%buo2D%mean, nm_per_rank*n_r_max,   &
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, this%cor_mean, nm_per_rank*n_r_max, &
+      if ( this%buo2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%buo2D%SD, nm_per_rank*n_r_max,  &
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%cor2D%mean, nm_per_rank*n_r_max,   &
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, this%adv_mean, nm_per_rank*n_r_max, &
+      if ( this%cor2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%cor2D%SD, nm_per_rank*n_r_max,  &
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%adv2D%mean, nm_per_rank*n_r_max,   &
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, this%dwdt_mean, nm_per_rank*n_r_max, &
+      if ( this%adv2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%adv2D%SD, nm_per_rank*n_r_max,  &
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%dwdt2D%mean, nm_per_rank*n_r_max,  &
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, this%visc_mean, nm_per_rank*n_r_max, &
+      if ( this%dwdt2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%dwdt2D%SD, nm_per_rank*n_r_max, &
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%visc2D%mean, nm_per_rank*n_r_max,  &
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, this%pump_mean, nm_per_rank*n_r_max, &
+      if ( this%visc2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%visc2D%SD, nm_per_rank*n_r_max, &
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%pump2D%mean, nm_per_rank*n_r_max,  &
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, this%thwind_mean, nm_per_rank*n_r_max, &
+      if ( this%pump2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%pump2D%SD, nm_per_rank*n_r_max, &
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%thwind2D%mean, nm_per_rank*n_r_max,&
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, this%iner_mean, nm_per_rank*n_r_max, &
+      if ( this%thwind2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%thwind2D%SD,nm_per_rank*n_r_max,&
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%iner2D%mean, nm_per_rank*n_r_max,  &
            &                  MPI_DEF_REAL, istat, ierr)
-      call MPI_File_Write_all(fh, this%cia_mean, nm_per_rank*n_r_max, &
+      if ( this%iner2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%iner2D%SD, nm_per_rank*n_r_max, &
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%cia2D%mean, nm_per_rank*n_r_max,   &
            &                  MPI_DEF_REAL, istat, ierr)
+      if ( this%cia2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%cia2D%SD, nm_per_rank*n_r_max,  &
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
 
       call MPI_Info_free(info, ierr)
       call MPI_File_close(fh, ierr)
