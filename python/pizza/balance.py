@@ -3,8 +3,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 import copy
 from .log import PizzaSetup
-from .libpizza import scanDir, costf
+from .libpizza import scanDir, costf, get_dr
+from scipy.signal import filtfilt, butter
+from scipy.integrate import simps
 import os, re
+
+def avg_std(time, y):
+    """
+    This routine computes the time-average and the standard deviation of
+    an input array
+
+    :param time: the time vector
+    :type time: numpy.ndarray
+    :param y: the quantity one wants to time average
+    :type y: numpy.ndarray
+    """
+
+    tfac = 1./(time[-1]-time[0])
+    ymean = tfac*simps(y, time, axis=0)
+    ystd = np.sqrt(tfac*simps((y-ymean)**2, time, axis=0))
+
+    return ymean, ystd
+
 
 
 def interp_dct(arr, nr_new):
@@ -213,23 +233,19 @@ class PizzaBalance(PizzaSetup):
         """
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        dvpdtm = self.dvpdt.mean(axis=0)
-        dvpdtstd = self.dvpdt.std(axis=0)
+        dvpdtm, dvpdtstd = avg_std(self.time, self.dvpdt)
         ax.fill_between(self.radius, dvpdtm-dvpdtstd, dvpdtm+dvpdtstd, alpha=0.1)
         ax.plot(self.radius, dvpdtm, label='dvp/dt')
 
-        reym = self.rey_stress.mean(axis=0)
-        reystd = self.rey_stress.std(axis=0)
+        reym, reystd = avg_std(self.time, self.rey_stress)
         ax.fill_between(self.radius, reym-reystd, reym+reystd, alpha=0.1)
         ax.plot(self.radius, reym, label='Reynolds stress')
 
-        ekpm = self.ek_pump.mean(axis=0)
-        ekpstd = self.ek_pump.std(axis=0)
+        ekpm, ekpstd = avg_std(self.time, self.ek_pump)
         ax.fill_between(self.radius, ekpm-ekpstd, ekpm+ekpstd, alpha=0.1)
         ax.plot(self.radius, ekpm, label='Ekman pumping')
         
-        vim = self.visc.mean(axis=0)
-        vistd = self.visc.std(axis=0)
+        vim, vistd = avg_std(self.time, self.visc)
         ax.fill_between(self.radius, vim-vistd, vim+vistd, alpha=0.1)
         ax.plot(self.radius, vim, label='Viscosity')
         tot = self.rey_stress+self.ek_pump+self.visc
@@ -265,6 +281,24 @@ class PizzaBalance(PizzaSetup):
 
         ax.set_xlabel('Time')
         ax.set_ylabel('Radius')
+
+        """
+        omz = get_dr(self.vp*self.radius)/self.radius
+        #omz_filt = np.zeros_like(omz)
+        #b, a = butter(3, 0.1)
+        #for i in range(omz.shape[0]):
+            #omz_filt[i, :] = filtfilt(b, a, omz[i, :])
+        #omz = omz_filt
+        domz = get_dr(omz)
+        beta = np.zeros_like(self.radius)
+        beta[1:] = -self.radius[1:]/(self.radius[0]**2-self.radius[1:]**2)
+        crit = 2./self.ek*beta-domz
+
+        #im =  ax.contourf(self.time, self.radius, crit.T, cs,
+                          #cmap=plt.get_cmap('seismic'), extend='both')
+        im =  ax.contour(self.time, self.radius, crit.T, colors=['k'])
+        """
+
         fig.tight_layout()
 
 
@@ -461,11 +495,14 @@ class PizzaVortBalance(PizzaSetup):
         fac_tot = self.tstop-self.tstart
 
         if data.shape[0] == tmp.shape[0]:
-            for j in [0, 2, 4, 6, 8, 10, 12, 14, 16]:
-                out[j, ...] = (fac_old*data[j, ...]+fac_new*tmp[j, ...])/fac_tot
-            for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
-                out[j, ...] = np.sqrt((fac_old*data[j, ...]**2+ \
-                                       fac_new*tmp[j, ...]**2)/ fac_tot)
+            if self.version == 1:
+                out = (fac_old*data+fac_new*tmp)/fac_tot
+            else:
+                for j in [0, 2, 4, 6, 8, 10, 12, 14, 16]:
+                    out[j, ...] = (fac_old*data[j, ...]+fac_new*tmp[j, ...])/fac_tot
+                for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
+                    out[j, ...] = np.sqrt((fac_old*data[j, ...]**2+ \
+                                           fac_new*tmp[j, ...]**2)/ fac_tot)
         else:
             if tmp.shape > data.shape:
                 for j in [0, 1, 2, 3, 4, 5, 6, 7, 8]: 
