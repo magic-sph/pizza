@@ -201,31 +201,76 @@ class PizzaBalance(PizzaSetup):
         Read one vphi_bal.TAG file
         """
 
-        file = npfile(filename, endian=endian)
+        try:
+            file = npfile(filename, endian=endian)
+            self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc \
+                     = file.fort_read('Float64')
+            radius = file.fort_read('Float64')
+            time = file.fort_read('Float64')
+            vp = file.fort_read('Float64')
+            dvpdt = file.fort_read('Float64')
+            rey_stress = file.fort_read('Float64')
+            ek_pump = file.fort_read('Float64')
+            visc = file.fort_read('Float64')
+            while 1:
+                try:
+                    time = np.append(time, file.fort_read('Float64'))
+                    vp = np.vstack((vp, file.fort_read('Float64')))
+                    dvpdt = np.vstack((dvpdt, file.fort_read('Float64')))
+                    rey_stress = np.vstack((rey_stress, file.fort_read('Float64')))
+                    ek_pump = np.vstack((ek_pump, file.fort_read('Float64')))
+                    visc = np.vstack((visc, file.fort_read('Float64')))
+                except TypeError:
+                    break
 
-        self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc \
-                 = file.fort_read('Float64')
-        radius = file.fort_read('Float64')
-        time = file.fort_read('Float64')
-        vp = file.fort_read('Float64')
-        dvpdt = file.fort_read('Float64')
-        rey_stress = file.fort_read('Float64')
-        ek_pump = file.fort_read('Float64')
-        visc = file.fort_read('Float64')
-        while 1:
-            try:
-                time = np.append(time, file.fort_read('Float64'))
-                vp = np.vstack((vp, file.fort_read('Float64')))
-                dvpdt = np.vstack((dvpdt, file.fort_read('Float64')))
-                rey_stress = np.vstack((rey_stress, file.fort_read('Float64')))
-                ek_pump = np.vstack((ek_pump, file.fort_read('Float64')))
-                visc = np.vstack((visc, file.fort_read('Float64')))
-            except TypeError:
-                break
+            file.close()
+        except:
+            file = open(filename, 'rb')
+            data = np.fromfile(file, dtype='Float64')
+            self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc = \
+                                                                        data[0:6]
+            radius = data[6:7+self.n_r_max-1]
+            data = data[7+self.n_r_max-1:]
+            nsteps = len(data)/(5*self.n_r_max+1)
 
-        file.close()
+            data = data.reshape((nsteps, 5*self.n_r_max+1))
+            time = data[:, 0]
+            vp = data[:, 1:self.n_r_max+1]
+            dvpdt = data[:,self.n_r_max+1:2*self.n_r_max+1]
+            rey_stress = data[:,2*self.n_r_max+1:3*self.n_r_max+1]
+            ek_pump = data[:,3*self.n_r_max+1:4*self.n_r_max+1]
+            visc = data[:,4*self.n_r_max+1:5*self.n_r_max+1]
+
+            file.close()
 
         return radius, time, vp, dvpdt, rey_stress, ek_pump, visc
+
+    def write(self, filename):
+        """
+        This routine writes a snap using stream
+
+        :param filename: the name of the output file
+        :type filename: str
+        """
+
+        out = open('%s' % filename, 'wb')
+        x = np.array([self.ra, self.ek, self.pr, self.radratio,
+                      self.raxi, self.sc], dtype='Float64')
+        x.tofile(out)
+        self.radius.tofile(out)
+
+        nsteps = len(self.time)
+
+        for i in range(nsteps):
+            x = np.array([self.time[i]], dtype='Float64')
+            x.tofile(out)
+            self.vp[i,:].tofile(out)
+            self.dvpdt[i,:].tofile(out)
+            self.rey_stress[i,:].tofile(out)
+            self.ek_pump[i,:].tofile(out)
+            self.visc[i,:].tofile(out)
+
+        out.close()
 
     def plot(self):
         """
