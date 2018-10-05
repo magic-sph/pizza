@@ -44,7 +44,7 @@ contains
 
       if ( l_rank_has_m0 ) then
          open(newunit=this%n_vphi_bal_file, file='vphi_bal.'//tag, &
-         &    form='unformatted', status='new')
+         &    form='unformatted', status='new', access='stream')
 
          allocate( this%rey_stress(n_r_max) )
          allocate( this%dvpdt(n_r_max) )

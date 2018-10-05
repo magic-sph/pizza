@@ -138,9 +138,8 @@ contains
 
       version = 1
 
-      header_size = SIZEOF_INTEGER+8+SIZEOF_DEF_REAL+8+6*SIZEOF_DEF_REAL+8+&
-      &             5*SIZEOF_INTEGER+8+n_r_max*SIZEOF_DEF_REAL+8+n_r_max*  &
-      &             SIZEOF_DEF_REAL+8+n_m_max*SIZEOF_INTEGER
+      header_size = SIZEOF_INTEGER+7*SIZEOF_DEF_REAL+5*SIZEOF_INTEGER+ &
+      &             2*n_r_max*SIZEOF_DEF_REAL+n_m_max*SIZEOF_INTEGER
 
       call MPI_Info_create(info, ierr)
 
@@ -161,62 +160,27 @@ contains
       call MPI_File_Open(MPI_COMM_WORLD, filename, ior(MPI_MODE_WRONLY, &
            &             MPI_MODE_CREATE), info, fh, ierr)
 
-      if ( rank == 0 ) then
-         disp = 0
-      else
-         disp = 8+header_size
-      end if
-      call MPI_File_Set_View(fh, disp, MPI_BYTE, MPI_BYTE, "native", &
-           &                 MPI_INFO_NULL, ierr)
-
       !-- Only rank=0 writes the header of the file
       if ( rank == 0 ) then
-         call MPI_File_Write(fh, SIZEOF_INTEGER, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, version, 1, MPI_INTEGER, istat, ierr)
-         call MPI_File_Write(fh, SIZEOF_INTEGER, 1, MPI_INTEGER, istat, ierr)
-
-         call MPI_File_Write(fh, SIZEOF_DEF_REAL, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, time, 1, MPI_DEF_REAL, istat, ierr)
-         call MPI_File_Write(fh, SIZEOF_DEF_REAL, 1, MPI_INTEGER, istat, ierr)
-
-         call MPI_File_Write(fh, 6*SIZEOF_DEF_REAL, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, ra, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, ek, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, pr, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, radratio, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, sc, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, raxi, 1, MPI_DEF_REAL, istat, ierr)
-         call MPI_File_Write(fh, 6*SIZEOF_DEF_REAL, 1, MPI_INTEGER, istat, ierr)
 
-         call MPI_File_Write(fh, 5*SIZEOF_INTEGER, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, n_r_max, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, n_m_max, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, m_max, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, minc, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, n_phi_max, 1, MPI_INTEGER, istat, ierr)
-         call MPI_File_Write(fh, 5*SIZEOF_INTEGER, 1, MPI_INTEGER, istat, ierr)
 
-         call MPI_File_Write(fh, n_r_max*SIZEOF_DEF_REAL, 1, MPI_INTEGER, &
-              &              istat, ierr)
          call MPI_File_Write(fh, r, n_r_max, MPI_DEF_REAL, istat, ierr)
-         call MPI_File_Write(fh, n_r_max*SIZEOF_DEF_REAL, 1, MPI_INTEGER, &
-              &              istat, ierr)
-
-         call MPI_File_Write(fh, n_r_max*SIZEOF_DEF_REAL, 1, MPI_INTEGER, &
-              &              istat, ierr)
          call MPI_File_Write(fh, tcond, n_r_max, MPI_DEF_REAL, istat, ierr)
-         call MPI_File_Write(fh, n_r_max*SIZEOF_DEF_REAL, 1, MPI_INTEGER, &
-              &              istat, ierr)
 
-         call MPI_File_Write(fh, n_m_max*SIZEOF_INTEGER, 1, MPI_INTEGER, &
-              &              istat, ierr)
          call MPI_File_Write(fh, idx2m, n_m_max, MPI_INTEGER, istat, ierr)
-         call MPI_File_Write(fh, n_m_max*SIZEOF_INTEGER, 1, MPI_INTEGER, &
-              &              istat, ierr)
-
-         !-- Record marker for the field
-         call MPI_File_Write(fh, n_m_max*n_r_max*SIZEOF_DEF_COMPLEX, 1, &
-              &              MPI_INTEGER, istat, ierr)
       end if
 
       arr_size(1) = n_m_max
@@ -231,21 +195,12 @@ contains
       call MPI_Type_Commit(filetype, ierr)
 
       !-- Set the view after the header
-      disp = 8+header_size+4
+      disp = header_size
       call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
            &                 info, ierr)
   
-      call MPI_File_Write_all(fh, arr_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-           &                  istat, ierr)
-
-      !-- Record marker
-      disp = 8+header_size+4+n_m_max*n_r_max*SIZEOF_DEF_COMPLEX
-      call MPI_File_Set_View(fh, disp, MPI_BYTE, MPI_BYTE,"native", &
-           &                 info, ierr)
-      if ( rank == n_procs-1 ) then
-         call MPI_File_Write(fh, n_m_max*n_r_max*SIZEOF_DEF_COMPLEX,1, &
-              &              MPI_INTEGER, istat, ierr)
-      end if
+      call MPI_File_Write_all(fh, arr_Mloc, nm_per_rank*n_r_max, &
+           &                  MPI_DEF_COMPLEX, istat, ierr)
 
       call MPI_Info_free(info, ierr)
       call MPI_File_close(fh, ierr)
