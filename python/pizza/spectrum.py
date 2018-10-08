@@ -69,10 +69,11 @@ class PizzaSpectrum(PizzaSetup):
                 # Or the tag is a bit more complicated and we need to find 
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'%s\.(.*)' % self.name)
+                    mask = re.compile(r'%s/%s\.(.*)' % (datadir,self.name) )
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
-                        if logFiles.__contains__('log.%s' % ending):
+                        pattern = os.path.join(datadir, 'log.%s' % ending)
+                        if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                                 nml='log.%s' % ending)
 
@@ -350,10 +351,11 @@ class Pizza2DSpectrum(PizzaSetup):
                 # Or the tag is a bit more complicated and we need to find 
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'%s\.(.*)' % self.name)
+                    mask = re.compile(r'%s/%s\.(.*)' % (datadir,self.name) )
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
-                        if logFiles.__contains__('log.%s' % ending):
+                        pattern = os.path.join(datadir, 'log.%s' % ending)
+                        if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                                 nml='log.%s' % ending)
 
@@ -437,11 +439,14 @@ class Pizza2DSpectrum(PizzaSetup):
         fac_tot = self.tstop-self.tstart
 
         if data.shape[0] == tmp.shape[0]:
-            for j in [0, 2, 4]:
-                out[j, ...] = (fac_old*data[j, ...]+fac_new*tmp[j, ...])/fac_tot
-            for j in [1, 3, 5]:
-                out[j, ...] = np.sqrt((fac_old*data[j, ...]**2+ \
-                                       fac_new*tmp[j, ...]**2)/ fac_tot)
+            if self.version == 1:
+                out = (fac_old*data+fac_new*tmp)/fac_tot
+            else:
+                for j in [0, 2, 4]:
+                    out[j, ...] = (fac_old*data[j, ...]+fac_new*tmp[j, ...])/fac_tot
+                for j in [1, 3, 5]:
+                    out[j, ...] = np.sqrt((fac_old*data[j, ...]**2+ \
+                                           fac_new*tmp[j, ...]**2)/ fac_tot)
         else:
             if tmp.shape > data.shape:
                 for j in [0, 1, 2]:

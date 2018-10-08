@@ -82,10 +82,11 @@ class PizzaBalance(PizzaSetup):
             # Or the tag is a bit more complicated and we need to find 
             # the corresponding log file
             else:
-                mask = re.compile(r'vphi_bal\.(.*)')
+                mask = re.compile(r'%s/vphi_bal\.(.*)' % (datadir))
                 if mask.match(files[-1]):
                     ending = mask.search(files[-1]).groups(0)[0]
-                    if logFiles.__contains__('log.%s' % ending):
+                    pattern = os.path.join(datadir, 'log.%s' % ending)
+                    if os.path.exists(pattern):
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                             nml='log.%s' % ending)
 
@@ -378,10 +379,11 @@ class PizzaVortBalance(PizzaSetup):
                 # Or the tag is a bit more complicated and we need to find 
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'%s\.(.*)' % self.name)
+                    mask = re.compile(r'%s/%s\.(.*)' % (datadir,self.name))
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
-                        if logFiles.__contains__('log.%s' % ending):
+                        pattern = os.path.join(datadir, 'log.%s' % ending)
+                        if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                                 nml='log.%s' % ending)
 
