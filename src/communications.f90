@@ -357,7 +357,7 @@ contains
 
       idx(2) = maxloc(arr,dim=1)
       idx(1) = maxval(arr)
-      idx(1) = nMstart-1+idx(1)
+      idx(2) = nMstart-1+idx(2)
       call MPI_AllReduce(idx, tmp, 1, MPI_2DOUBLE_PRECISION, MPI_MAXLOC, &
            &             MPI_COMM_WORLD, ierr)
       ind = int(tmp(2))
