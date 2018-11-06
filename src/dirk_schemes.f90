@@ -66,6 +66,14 @@ contains
          this%nstages = 2
          this%istage = 1
          courfac_loc = 1.25_cp
+      else if ( index(time_scheme, 'CK232') /= 0 ) then
+         this%time_scheme = 'CK232'
+         this%norder_imp_lin = 3
+         this%norder_imp = 3
+         this%norder_exp = 2
+         this%nstages = 2
+         this%istage = 1
+         courfac_loc = 1.25_cp
       else if ( index(time_scheme, 'ARS443') /= 0 ) then
          this%time_scheme = 'ARS443'
          this%norder_imp = 5
@@ -164,6 +172,18 @@ contains
                                     &         0.25_cp, 0.0_cp, 0.0_cp,  &
                                     &            -one,    two, 0.0_cp], &
                                     &          [3,3],order=[2,1])
+         case ('CK232')
+            gam = one-half*sqrt(two)
+            this%wimp_lin(1) = gam
+            this%butcher_imp(:,:) = reshape([                                     &
+            &                         0.0_cp,                     0.0_cp, 0.0_cp, &
+            &  -1.0_cp/3.0_cp+half*sqrt(two),                        gam, 0.0_cp, &
+            &      0.75_cp-0.25_cp*sqrt(two), -0.75_cp+0.75_cp*sqrt(two),    gam],&
+            &                               [3,3],order=[2,1])
+            this%butcher_exp(:,:) = reshape([        0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &         2.0_cp/3.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &               0.25_cp, 0.75_cp, 0.0_cp], &
+                                    &        [3,3],order=[2,1])
          case ('ARS443')
             this%wimp_lin(1) = half
             this%butcher_imp(:,:) = reshape(                               &

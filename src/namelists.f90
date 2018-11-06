@@ -320,7 +320,7 @@ contains
          &    time_scheme == 'ARS443' .or. time_scheme=='ARS222' .or.    &
          &    time_scheme == 'BPR353' .or. time_scheme=='PC2' .or.       &
          &    time_scheme == 'LZ453' .or. time_scheme=='TVB33' .or.      &
-         &    time_scheme == 'LZ232' ) then
+         &    time_scheme == 'LZ232' .or. time_scheme == 'CK232' ) then
             l_buo_imp = .false.
             buo_term = 'EXP'
             if ( rank == 0 ) then

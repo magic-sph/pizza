@@ -24,6 +24,7 @@ contains
       &    (index(scheme_name, 'BPR353') /= 0) .or. &
       &    (index(scheme_name, 'PC2') /= 0)    .or. &
       &    (index(scheme_name, 'LZ453') /= 0)  .or. &
+      &    (index(scheme_name, 'CK232') /= 0)  .or. &
       &    (index(scheme_name, 'LZ232') /= 0) ) then
          allocate ( type_dirk :: tscheme )
       else
