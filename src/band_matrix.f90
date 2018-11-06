@@ -50,6 +50,7 @@ module band_matrix
       procedure :: prepare_LU => prepare_LU_band_complex
       procedure :: solve => solve_band_complex_rhs_complex
       procedure :: mat_vec_mul => mat_complex_vec_complex_mul
+      procedure :: write => write_band_complex
    end type type_bandmat_complex
 
    interface band_band_product
@@ -601,5 +602,33 @@ contains
       end do
 
    end subroutine band_complex_band_real_product
+!------------------------------------------------------------------------------
+   subroutine write_band_complex(this)
+
+      class(type_bandmat_complex), intent(in) :: this
+
+      complex(cp) :: tmp(this%nlines)
+      integer :: n_r, n_col, file_handle
+
+      open(file_handle, file='A_mat_gal', form='unformatted', access='stream')
+      write(file_handle) this%nlines
+
+      !-- Bottom blocks (A3 and A4)
+      do n_r=1,this%nlines
+
+         do n_col=1,this%nlines
+            if ( this%kl+this%kl+n_r-n_col > 0 .and. this%kl+this%kl+n_r-n_col < this%nbands+this%kl) then
+               tmp(n_col)=this%dat(this%kl+this%kl+n_r-n_col+1,n_col)
+            else
+               tmp(n_col)=zero
+            end if
+         end do
+         write(file_handle) tmp
+
+      end do
+
+      close(file_handle)
+
+   end subroutine write_band_complex
 !------------------------------------------------------------------------------
 end module band_matrix

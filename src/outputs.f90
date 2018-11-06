@@ -324,9 +324,9 @@ contains
                  &       n_calls, dtAvg, timeAvg_rad)
             call getMSD2(fluxR%mean(n_r), fluxR%SD(n_r), flux_r(n_r), n_calls, &
                  &       dtAvg, timeAvg_rad)
-            call getMSD2(us2R%mean(n_r), us2R%SD(n_r), two*pi*us2_r(n_r), &
+            call getMSD2(us2R%mean(n_r), us2R%SD(n_r), pi*us2_r(n_r), &
                  &       n_calls, dtAvg, timeAvg_rad)
-            call getMSD2(up2R%mean(n_r), up2R%SD(n_r), two*pi*up2_r(n_r), &
+            call getMSD2(up2R%mean(n_r), up2R%SD(n_r), pi*up2_r(n_r), &
                  &       n_calls, dtAvg, timeAvg_rad)
             call getMSD2(enstrophyR%mean(n_r), enstrophyR%SD(n_r),    &
                  &       enstrophy_r(n_r), n_calls, dtAvg, timeAvg_rad)
@@ -498,11 +498,13 @@ contains
          visc_2D = rInt_R(tmp, r, rscheme)
          visc_2D = round_off(two*pi*visc_2D)
          !-- In case of stress-free we need to include the surface contributions
+         !-- \int_v div ( \vec{\omega}\times\vec{u} ) = - \int_S \omega u_\phi dS
+         !--                                          = - \int_S 2 u_\phi^2/s dS
          if ( kbotv == 1 ) then
-            visc_2D = visc_2D-four*or1(n_r_max)*up2_r(n_r_max)
+            visc_2D = visc_2D+four*pi*up2_r(n_r_max)
          end if
          if ( ktopv == 1 ) then
-            visc_2D = visc_2D-four*or1(1)*up2_r(1)
+            visc_2D = visc_2D-four*pi*up2_r(1)
          end if
 
          tmp(:)=BuoFac*buo_power(:)*rgrav(:)*r(:)
