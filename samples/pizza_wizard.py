@@ -16,6 +16,7 @@ import TimeStepChange.unitTest
 import MultistepSchemes.unitTest
 import DIRKSchemes.unitTest
 import GalerkinBases.unitTest
+import InhomogeneousHeatFlux.unitTest
 
 __version__ = '1.0'
 
@@ -183,6 +184,12 @@ def getSuite(startdir, cmd, precision, args):
                                                  '%s/RotInteg' % startdir, 
                                                  execCmd=cmd,
                                                  precision=precision))
+        # Inhomogeneous heat flux at the outer Boundary
+        suite.addTest(InhomogeneousHeatFlux.unitTest.InhomogeneousHeatFlux( \
+                                              'outputFileDiff',
+                                              '%s/InhomogeneousHeatFlux' % startdir,
+                                              execCmd=cmd,
+                                              precision=precision))
         # Test restart from a checkpoint
         suite.addTest(TestRestart.unitTest.TestRestart('outputFileDiff',
                                                   '%s/TestRestart' % startdir, 
