@@ -6,7 +6,7 @@ module update_temp_coll
    use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac, l_buo_imp
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
        &                       rgrav
-   use horizontal, only: hdif_T
+   use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -105,8 +105,9 @@ contains
             lTmat(n_m)=.true.
          end if
 
-         rhs(1)      =zero
-         rhs(n_r_max)=zero
+         !-- Inhomogeneous B.Cs (if not zero)
+         rhs(1)      =topt_Mloc(n_m)
+         rhs(n_r_max)=bott_Mloc(n_m)
          do n_r=2,n_r_max-1
             rhs(n_r)=work_Mloc(n_m,n_r)
          end do

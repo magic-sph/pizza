@@ -10,7 +10,7 @@ module namelists
    use parallel_mod, only: rank
    use useful, only: abortRun
    use char_manip, only: length_to_blank, capitalize
-   use constants, only: one, half, two
+   use constants, only: zero, one, half, two
    use precision_mod
 
    implicit none
@@ -18,6 +18,8 @@ module namelists
    include 'fftw3.f03'
 
    private
+
+   integer, parameter :: n_t_bounds=32 ! Number of parameters supported for t_top and t_bot
 
    character(len=72), public :: tag
    real(cp), public :: ra            ! Rayleigh number
@@ -34,6 +36,8 @@ module namelists
    logical,  public :: l_temp_advz   ! With or without vertical advection of temp
    integer,  public :: ktopt, kbott  ! Temperature boundary condition
    integer,  public :: ktopv, kbotv  ! Velocity boundary condition
+   real(cp), public :: t_bot(3*n_t_bounds)
+   real(cp), public :: t_top(3*n_t_bounds)
    real(cp), public :: g0, g1, g2
 
    !-- For the nonlinear mapping)
@@ -124,9 +128,10 @@ contains
       &                l_rerror_fix, rerror_fac, time_scale,        &
       &                matrix_solve,corio_term,buo_term,bc_method
       namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m
-      namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,  &
-      &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,   &
-      &                   l_temp_3D,tcond_fac,l_temp_advz, beta_shift
+      namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,      &
+      &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
+      &                   l_temp_3D,tcond_fac,l_temp_advz,         &
+      &                   beta_shift,t_bot,t_top
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
@@ -298,6 +303,15 @@ contains
          l_direct_solve = .false.
       end if
 
+      !-- Warning:: Galerkin method can not handle inhomogeneous BCs (yet)
+      if ( l_galerkin .and. index(cheb_method, 'COLL') == 0 .and. &
+      &    maxval(abs(t_top(:))) > 10.0_cp*epsilon(one) ) then
+         call abortRun('! Inhomogeneous BCs not compatible with chosen chebyshev solver !')
+      else if ( l_galerkin .and. index(cheb_method, 'COLL') == 0 .and. &
+      &         maxval(abs(t_bot(:))) > 10.0_cp*epsilon(one) ) then
+         call abortRun('! Inhomogeneous BCs not compatible with chosen chebyshev solver !')
+      end if
+
       !-- Implicit or Explicit treatment of Coriolis force
       call capitalize(corio_term)
       if ( index(corio_term, 'IMP') /= 0 ) then
@@ -368,6 +382,13 @@ contains
    end subroutine read_namelists
 !--------------------------------------------------------------------------------
    subroutine default_namelists
+      !
+      !  Purpose of this subroutine is to set default parameters          
+      !  for the namelists.                                               
+      !
+
+      !-- Local variable:
+      integer :: n
 
       !-- &grid namelist
       n_r_max          =32
@@ -432,6 +453,11 @@ contains
       kbott            =1
       ktopv            =2
       kbotv            =2
+      !----- Parameters for temp. BCs
+      do n=1,3*n_t_bounds
+         t_bot(n)=0.0_cp
+         t_top(n)=0.0_cp
+      end do
 
       !----- Namelist start_field:
       l_reset_t        =.false.

@@ -6,10 +6,11 @@ module radial_functions
 
    use truncation, only: n_r_max, n_cheb_max, m_max
    use radial_der, only: get_dr
-   use constants, only: one, two, three, pi, half
+   use constants, only: one, two, three, pi, half, third
    use namelists, only: tag, alph1, alph2, l_newmap, radratio, g0, g1, g2, &
        &                l_non_rot, ek, l_ek_pump, l_temp_3D, tcond_fac,    &
-       &                r_cmb, r_icb, l_cheb_coll, beta_shift
+       &                r_cmb, r_icb, l_cheb_coll, beta_shift, pr,         &
+       &                ktopt, kbott, t_bot, t_top
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -98,7 +99,7 @@ contains
       integer :: n_r, file_handle
       character(len=100) :: file_name
       real(cp) :: ratio1, ratio2, delmin, c1
-      real(cp) :: ek_pump_fac, h
+      real(cp) :: ek_pump_fac
 
       if ( l_ek_pump .and. (.not. l_non_rot)) then
          ek_pump_fac = one
@@ -138,17 +139,8 @@ contains
          delxr2(n_r)=delmin*delmin
       end do
 
-      if ( l_temp_3D ) then
-         tcond(1) = 0.0_cp
-         do n_r=2,n_r_max
-            h = sqrt(r_cmb**2-r(n_r)**2)
-            tcond(n_r) = r_icb*(r_cmb/h*asinh(h/r(n_r))-one)
-         end do
-         call get_dr(tcond, dtcond, n_r_max, rscheme)
-      else 
-         tcond(:) = tcond_fac*(log(r(:))/log(radratio)-log(r_cmb)/log(radratio))
-         dtcond(:)= tcond_fac*or1(:)/log(radratio)
-      end if
+      !-- calculate conducting temperature
+      call get_conducting_state(tcond,dtcond)
 
       if ( l_non_rot ) then
          beta(:)   =0.0_cp
@@ -186,5 +178,100 @@ contains
       end if
 
    end subroutine radial
+!------------------------------------------------------------------------------
+   subroutine get_conducting_state(tcond, dtcond)
+      !
+      !  Calculates the conducting state of the temperature equation
+      !
+
+      real(cp), intent(inout) ::  tcond(n_r_max)
+      real(cp), intent(inout) :: dtcond(n_r_max)
+
+      !-- Local variables
+      integer :: n, n_r, m_bot, m_top
+      real(cp) :: h(n_r_max)     ! :math:`sqrt(r_cmb^2-r^2)`
+      real(cp) :: tr_bot, tr_top
+      real(cp) :: f_bot, f_top
+      real(cp) :: epsc0 
+
+      f_bot=0.0_cp
+      f_top=0.0_cp
+      do n=1,size(t_bot)/3
+         m_bot =int(t_bot(3*n-2))
+         tr_bot=t_bot(3*n-1)
+         m_top =int(t_top(3*n-2))
+         tr_top=t_top(3*n-1)
+         if ( m_bot == 0 .and. abs(tr_bot) > 10.0_cp*epsilon(one) ) then
+            f_bot=real(tr_bot,kind=cp)
+         end if
+         if ( m_top == 0 .and. abs(tr_top) > 10.0_cp*epsilon(one) ) then
+            f_top=real(tr_top,kind=cp)
+         end if
+      end do
+      if ( rank == 0 ) write(6,*) '! Top Flux', f_top
+      if ( rank == 0 ) write(6,*) '! Bot Flux', f_bot
+
+      !-- Conductive Temperature profile 2D and 3D projected onto QG
+      if ( l_temp_3D ) then
+         !3D-tcond profiles -- Warning! In 3D, tcond(r_cmb) induces division by 0 (in h)
+         tcond(1) = f_top!0.0_cp
+         h = half*height(:)!sqrt(r_cmb**2-r(:)**2)
+         !-- 3D heat sources to compensate for top/bottom fluxes
+         epsc0 = three*(r_icb**2*f_bot - r_cmb**2*f_top)/ &
+         &             (r_cmb**3 - r_icb**3)
+         if ( epsc0<10.0_cp*epsilon(one) ) epsc0=0.0_cp
+         if ( ktopt==1 .and. kbott==1 ) then
+            do n_r=2,n_r_max
+               tcond(n_r) = (r_icb/(r_icb-r_cmb))*(one-r_cmb*asinh(h(n_r)/r(n_r))/h(n_r))
+            end do
+         elseif ( ktopt==2 .and. kbott==1 ) then
+            do n_r=2,n_r_max
+               tcond(n_r) = one + f_top*r_cmb**2*(one/r_icb - asinh(h(n_r)/r(n_r))/h(n_r)) &
+               &          + (epsc0/two)*(r_icb**2 - r(n_r)**2 - third*h(n_r)**2 +          &
+               &             two*r_cmb**3*(one/r_icb-asinh(h(n_r)/r(n_r))/h(n_r)))
+            end do
+         elseif ( ktopt==1 .and. kbott==2 ) then
+            do n_r=2,n_r_max
+               tcond(n_r) = f_bot*r_icb**2*(one/r_cmb - asinh(h(n_r)/r(n_r))/h(n_r)) &
+               &          + (epsc0/two)*(r_cmb**2 - r(n_r)**2 - third*h(n_r)**2 +    &
+               &             two*r_icb**3*(one/r_cmb-asinh(h(n_r)/r(n_r))/h(n_r)))
+            enddo
+         else
+            do n_r=2,n_r_max
+               tcond(n_r) = f_top*r_cmb - f_top*r_cmb**2*(asinh(h(n_r)/r(n_r))/h(n_r)) &
+               &          - (epsc0/two)*(r(n_r)**2 + third*h(n_r)**2 +                 &
+               &             two*r_cmb**3*(asinh(h(n_r)/r(n_r))/h(n_r)))
+            enddo 
+         endif
+         call get_dr(tcond, dtcond, n_r_max, rscheme)
+      else
+      !2D-tcond profiles -- Warning! In 2D, need a geometric factor
+         !-- 2D heat sources to compensate for top/bottom fluxes
+         epsc0 = two*(r_icb*f_bot - r_cmb*f_top)/ &
+         &           (r_cmb**2 - r_icb**2)
+         if ( epsc0<10.0_cp*epsilon(one) ) epsc0=0.0_cp
+         if ( ktopt==1 .and. kbott==1 ) then
+            tcond(:) = tcond_fac*(log(r(:)/r_cmb)/log(radratio))
+            dtcond(:)= tcond_fac*(or1(:)/log(radratio))
+         elseif ( ktopt==2 .and. kbott==1 ) then
+            tcond(:) = tcond_fac*(one + f_top*r_cmb*log(r(:)/r_icb) + (epsc0/two)*  &
+            &                     (r_icb**2 - r(:)**2 + two*r_cmb**2*log(r(:)/r_icb)))
+            dtcond(:)= tcond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
+         elseif( ktopt==1 .and. ktopt==2 ) then
+            tcond(:) = tcond_fac*(f_bot*r_icb*log(r(:)/r_cmb) + (epsc0/two)*        &
+            &                     (r_cmb**2 - r(:)**2 + two*r_icb**2*log(r(:)/r_cmb)))
+            dtcond(:)= tcond_fac*(f_bot*r_icb*or1(:) + epsc0*(r_icb**2*or1(:) - r(:)))
+         else
+            tcond(:) = tcond_fac*(f_top*r_cmb + f_top*r_cmb*log(r(:)) + (epsc0/two)* &
+            &                     (two*r_cmb**2*log(r(:)) - r(:)**2))
+            dtcond(:)= tcond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
+         endif
+      end if
+      !call logWrite('! Sources introduced to balance surface heat flux!')
+      if (rank == 0) write(6,*) '! Warning: Sources introduced to balance surface heat flux'
+      if (rank == 0) write(6,'(''!      epsc0*pr='',ES16.6)') epsc0
+      !call logWrite(message)
+
+   end subroutine get_conducting_state
 !------------------------------------------------------------------------------
 end module radial_functions

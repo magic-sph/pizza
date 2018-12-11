@@ -15,8 +15,6 @@ module pre_calculations
 
    private
    
-   real(cp), public :: epsc0
-
    public :: preCalc
 
 contains

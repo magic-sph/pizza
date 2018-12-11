@@ -5,7 +5,7 @@ module update_temp_integ
    use constants, only: zero, one, ci, half
    use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, &
        &                TdiffFac, l_non_rot, l_buo_imp, l_galerkin
-   use horizontal, only: hdif_T
+   use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, rgrav, r
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, n_cheb_max, m2idx
@@ -182,6 +182,11 @@ contains
          do n_cheb=1,n_r_max
             rhs(n_cheb)=work_Mloc(n_m,n_cheb)
          end do
+         !-- Inhomogeneous heat B.Cs (if not zero or not galerkin)
+         if ( .not. l_galerkin ) then
+            rhs(1)=topt_Mloc(n_m)
+            rhs(2)=bott_Mloc(n_m)
+         endif
 
          !-- Multiply rhs by precond matrix
          do n_cheb=1,n_r_max
