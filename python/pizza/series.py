@@ -254,9 +254,7 @@ class PizzaTs(PizzaSetup):
         elif self.field == 'length_scales':
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.semilogy(self.time, self.lus_peak, label='Peak us**2')
-            ax.semilogy(self.time, self.lekin_peak, label='Peak Ekin')
-            ax.semilogy(self.time, self.lvort_peak, label='Peak w**2')
+            ax.semilogy(self.time, self.lus_peak, label='Peak $u_s^2$')
             ax.semilogy(self.time, self.lint, label='Integral')
             ax.semilogy(self.time, self.ldiss, label='Dissipation')
 

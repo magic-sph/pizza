@@ -273,28 +273,31 @@ class PizzaBalance(PizzaSetup):
 
         out.close()
 
-    def plot(self):
+    def plot(self, nstep=1):
         """
         Display when ``iplot = True``
+
+        :param nstep: time interval (by default 1)
+        :type nstep: int
         """
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        dvpdtm, dvpdtstd = avg_std(self.time, self.dvpdt)
+        dvpdtm, dvpdtstd = avg_std(self.time[::nstep], self.dvpdt[::nstep])
         ax.fill_between(self.radius, dvpdtm-dvpdtstd, dvpdtm+dvpdtstd, alpha=0.1)
         ax.plot(self.radius, dvpdtm, label='dvp/dt')
 
-        reym, reystd = avg_std(self.time, self.rey_stress)
+        reym, reystd = avg_std(self.time[::nstep], self.rey_stress[::nstep])
         ax.fill_between(self.radius, reym-reystd, reym+reystd, alpha=0.1)
         ax.plot(self.radius, reym, label='Reynolds stress')
 
-        ekpm, ekpstd = avg_std(self.time, self.ek_pump)
+        ekpm, ekpstd = avg_std(self.time[::nstep], self.ek_pump[::nstep])
         ax.fill_between(self.radius, ekpm-ekpstd, ekpm+ekpstd, alpha=0.1)
         ax.plot(self.radius, ekpm, label='Ekman pumping')
         
-        vim, vistd = avg_std(self.time, self.visc)
+        vim, vistd = avg_std(self.time[::nstep], self.visc[::nstep])
         ax.fill_between(self.radius, vim-vistd, vim+vistd, alpha=0.1)
         ax.plot(self.radius, vim, label='Viscosity')
-        tot = self.rey_stress+self.ek_pump+self.visc
+        tot = self.rey_stress[::nstep]+self.ek_pump[::nstep]+self.visc[::nstep]
         ax.plot(self.radius, tot.mean(axis=0), label='Total')
 
         ax.set_xlim(self.radius[-1], self.radius[0])
@@ -305,8 +308,8 @@ class PizzaBalance(PizzaSetup):
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        vpm = self.vp.mean(axis=0)
-        vpstd = self.vp.std(axis=0)
+        vpm = self.vp[::nstep].mean(axis=0)
+        vpstd = self.vp[::nstep].std(axis=0)
         vpm_p = vpm + vpstd
         vpm_m = vpm - vpstd
         #xs, ys = mlab.poly_between(self.radius, vpm_m, vpm_p)
@@ -320,9 +323,9 @@ class PizzaBalance(PizzaSetup):
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        vmax = abs(self.vp).max()
+        vmax = abs(self.vp[::nstep]).max()
         cs = np.linspace(-vmax, vmax, 65)
-        ax.contourf(self.time, self.radius, self.vp.T, cs,
+        ax.contourf(self.time[::nstep], self.radius, self.vp[::nstep].T, cs,
                     cmap=plt.get_cmap('seismic'), extend='both')
 
         ax.set_xlabel('Time')
