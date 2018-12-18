@@ -12,11 +12,12 @@ module outputs
    use namelists, only: tag, BuoFac, ra, pr, l_non_rot, l_vphi_balance, ek, &
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
        &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac,&
-       &                l_vort_balance, l_corr
+       &                l_vort_balance, l_corr, l_heat, l_chem, ChemFac
    use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
-       &                       beta, ekpump, or1, oheight, or2
+       &                       beta, ekpump, or1, oheight, or2, xicond,  &
+       &                       dxicond
    use blocking, only: nMstart, nMstop, nRstart, nRstop, l_rank_has_m0, &
        &               nm_per_rank, m_balance
    use integration, only: rInt_R, simps
@@ -40,11 +41,11 @@ module outputs
    real(cp) :: timeAvg_spec
    integer, public :: n_log_file
    integer :: n_rey_file_2D, n_heat_file, n_kin_file_2D, n_power_file_2D
-   integer :: n_lscale_file, n_sig_file, n_corr_file
+   integer :: n_lscale_file, n_sig_file, n_corr_file, n_chem_file
    integer :: n_rey_file_3D, n_power_file_3D, n_kin_file_3D
    character(len=144), public :: log_file
 
-   type(mean_sd_type) :: uphiR, us2R, up2R, enstrophyR, tempR, fluxR
+   type(mean_sd_type) :: uphiR, us2R, up2R, enstrophyR, tempR, fluxR, xiR
 
    type(vp_bal_type), public :: vp_bal
    type(spectra_type), public :: spec
@@ -79,8 +80,16 @@ contains
          open(newunit=n_rey_file_2D,file=file_name, status='new')
          file_name = 'length_scales.'//tag
          open(newunit=n_lscale_file, file=file_name, status='new')
-         file_name = 'heat.'//tag
-         open(newunit=n_heat_file, file=file_name, status='new')
+
+         if ( l_heat ) then
+            file_name = 'heat.'//tag
+            open(newunit=n_heat_file, file=file_name, status='new')
+         end if
+
+         if ( l_chem ) then
+            file_name = 'composition.'//tag
+            open(newunit=n_chem_file, file=file_name, status='new')
+         end if
 
          if ( .not. l_non_rot ) then
             file_name = 'e_kin_3D.' // tag
@@ -113,12 +122,13 @@ contains
       if ( l_rank_has_m0 ) then
          call uphiR%initialize(1,n_r_max)
          call tempR%initialize(1,n_r_max)
+         call xiR%initialize(1,n_r_max)
          call fluxR%initialize(1,n_r_max)
          call us2R%initialize(1,n_r_max)
          call up2R%initialize(1,n_r_max)
          call enstrophyR%initialize(1,n_r_max)
-         n_calls            = 0
-         timeLast_rad       = 0.0_cp
+         n_calls     =0
+         timeLast_rad=0.0_cp
       end if
 
       frame_counter = 1 ! For file suffix
@@ -138,6 +148,7 @@ contains
          call us2R%finalize()
          call fluxR%finalize()
          call tempR%finalize()
+         call xiR%finalize()
          call uphiR%finalize()
       end if
 
@@ -154,7 +165,8 @@ contains
             close(n_power_file_3D)
             close(n_kin_file_3D)
          end if
-         close(n_heat_file)
+         if ( l_heat ) close(n_chem_file)
+         if ( l_heat ) close(n_heat_file)
          close(n_lscale_file)
          close(n_rey_file_2D)
          close(n_power_file_2D)
@@ -213,7 +225,8 @@ contains
 !------------------------------------------------------------------------------
    subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame, &
               &             l_vphi_bal_write, l_stop_time,  us_Mloc, up_Mloc,  &
-              &             om_Mloc, temp_Mloc, dtemp_Mloc, dpsidt, dTdt)
+              &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
+              &             dpsidt, dTdt, dxidt)
 
       !-- Input variables
       real(cp),            intent(in) :: time
@@ -228,9 +241,12 @@ contains
       complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: dxi_Mloc(nMstart:nMstop,n_r_max)
       type(type_tarray),   intent(in) :: dpsidt
       type(type_tarray),   intent(in) :: dTdt
+      type(type_tarray),   intent(in) :: dxidt
 
       !-- Local variable
       character(len=144) :: frame_name
@@ -245,8 +261,8 @@ contains
       !-- Write checkpoints
       if ( l_rst ) then
          call write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
-              &                     l_stop_time, temp_Mloc, us_Mloc, up_Mloc, &
-              &                     dTdt, dpsidt)
+              &                     l_stop_time, temp_Mloc, xi_Mloc, us_Mloc, &
+              &                     up_Mloc, dTdt, dxidt, dpsidt)
       end if
 
       !-- Calculate spectra
@@ -262,8 +278,14 @@ contains
       end if
 
       if ( l_frame ) then
-         write(frame_name, '(A,I0,A,A)') 'frame_temp_',frame_counter,'.',tag
-         call write_snapshot_mloc(frame_name, time, temp_Mloc)
+         if ( l_heat ) then
+            write(frame_name, '(A,I0,A,A)') 'frame_temp_',frame_counter,'.',tag
+            call write_snapshot_mloc(frame_name, time, temp_Mloc)
+         end if
+         if ( l_chem ) then
+            write(frame_name, '(A,I0,A,A)') 'frame_xi_',frame_counter,'.',tag
+            call write_snapshot_mloc(frame_name, time, xi_Mloc)
+         end if
          write(frame_name, '(A,I0,A,A)') 'frame_us_',frame_counter,'.',tag
          call write_snapshot_mloc(frame_name, time, us_Mloc)
          write(frame_name, '(A,I0,A,A)') 'frame_up_',frame_counter,'.',tag
@@ -274,12 +296,13 @@ contains
       end if
 
       if ( l_log ) then
-         call get_time_series(time, us_Mloc, up_Mloc, om_Mloc, temp_Mloc,      &
-              &               dtemp_Mloc, us2_m_Mloc, up2_m_Mloc, enst_m_Mloc, &
-              &               us2_r, up2_r, enstrophy_r, flux_r)
+         call get_time_series(time, us_Mloc, up_Mloc, om_Mloc, temp_Mloc,  &
+              &               dtemp_Mloc, xi_Mloc, dxi_Mloc, us2_m_Mloc,   &
+              &               up2_m_Mloc, enst_m_Mloc, us2_r, up2_r,       &
+              &               enstrophy_r, flux_r)
 
          call get_radial_averages(timeAvg_rad, l_stop_time, up_Mloc, temp_Mloc, &
-              &                   us2_r, up2_r, enstrophy_r, flux_r)
+              &                   xi_Mloc, us2_r, up2_r, enstrophy_r, flux_r)
       end if
 
       if ( l_vphi_bal_write ) then
@@ -294,13 +317,14 @@ contains
    end subroutine write_outputs
 !------------------------------------------------------------------------------
    subroutine get_radial_averages(timeAvg_rad, l_stop_time, up_Mloc, temp_Mloc, &
-              &                   us2_r, up2_r, enstrophy_r, flux_r)
+              &                   xi_Mloc, us2_r, up2_r, enstrophy_r, flux_r)
 
       !-- Input variables
       real(cp),    intent(in) :: timeAvg_rad
       logical,     intent(in) :: l_stop_time
       complex(cp), intent(in) :: up_Mloc(nMstart:nMstop, n_r_max)
       complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp), intent(in) :: xi_Mloc(nMstart:nMstop, n_r_max)
       real(cp),    intent(in) :: us2_r(n_r_max)
       real(cp),    intent(in) :: up2_r(n_r_max)
       real(cp),    intent(in) :: enstrophy_r(n_r_max)
@@ -320,8 +344,14 @@ contains
          do n_r=1,n_r_max
             call getMSD2(uphiR%mean(n_r), uphiR%SD(n_r), real(up_Mloc(idx,n_r)),&
                  &       n_calls, dtAvg, timeAvg_rad)
-            call getMSD2(tempR%mean(n_r), tempR%SD(n_r), real(temp_Mloc(idx,n_r)),&
-                 &       n_calls, dtAvg, timeAvg_rad)
+            if ( l_heat ) then
+               call getMSD2(tempR%mean(n_r), tempR%SD(n_r), &
+                    &       real(temp_Mloc(idx,n_r)), n_calls, dtAvg, timeAvg_rad)
+            end if
+            if ( l_chem ) then
+               call getMSD2(xiR%mean(n_r), xiR%SD(n_r), &
+                    &       real(xi_Mloc(idx,n_r)), n_calls, dtAvg, timeAvg_rad)
+            end if
             call getMSD2(fluxR%mean(n_r), fluxR%SD(n_r), flux_r(n_r), n_calls, &
                  &       dtAvg, timeAvg_rad)
             call getMSD2(us2R%mean(n_r), us2R%SD(n_r), pi*us2_r(n_r), &
@@ -337,19 +367,22 @@ contains
             open(newunit=file_handle, file='radial_profiles.'//tag)
             do n_r=1,n_r_max
                uphiR%SD(n_r)     =sqrt(uphiR%SD(n_r)/timeAvg_rad)
-               tempR%SD(n_r)     =sqrt(tempR%SD(n_r)/timeAvg_rad)
                fluxR%SD(n_r)     =sqrt(fluxR%SD(n_r)/timeAvg_rad)
                us2R%SD(n_r)      =sqrt(us2R%SD(n_r)/timeAvg_rad)
                up2R%SD(n_r)      =sqrt(up2R%SD(n_r)/timeAvg_rad)
                enstrophyR%SD(n_r)=sqrt(enstrophyR%SD(n_r)/timeAvg_rad)
-               write(file_handle, '(es20.12, 12es16.8)') r(n_r),           &
+               if ( l_heat ) tempR%SD(n_r)=sqrt(tempR%SD(n_r)/timeAvg_rad)
+               if ( l_chem ) xiR%SD(n_r)=sqrt(xiR%SD(n_r)/timeAvg_rad)
+               write(file_handle, '(es20.12, 14es16.8)') r(n_r),           &
                &     round_off(us2R%mean(n_r)), round_off(us2R%SD(n_r)),   &
                &     round_off(up2R%mean(n_r)), round_off(up2R%SD(n_r)),   &
                &     round_off(enstrophyR%mean(n_r)),                      &
                &     round_off(enstrophyR%SD(n_r)),                        &
                &     round_off(uphiR%mean(n_r)), round_off(uphiR%SD(n_r)), &
                &     round_off(tempR%mean(n_r)+tcond(n_r)),                &
-               &     round_off(tempR%SD(n_r)), round_off(fluxR%mean(n_r)), &
+               &     round_off(tempR%SD(n_r)),                             &
+               &     round_off(xiR%mean(n_r)+tcond(n_r)),                  &
+               &     round_off(xiR%SD(n_r)), round_off(fluxR%mean(n_r)),   &
                &     round_off(fluxR%SD(n_r))
             end do
             close(file_handle)
@@ -360,8 +393,8 @@ contains
    end subroutine get_radial_averages
 !------------------------------------------------------------------------------
    subroutine get_time_series(time, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
-              &               dtemp_Mloc, us2_m, up2_m, enstrophy_m,      &
-              &               us2_r, up2_r, enstrophy, flux_r)
+              &               dtemp_Mloc, xi_Mloc, dxi_Mloc, us2_m, up2_m,&
+              &               enstrophy_m, us2_r, up2_r, enstrophy, flux_r)
 
       !-- Input variables
       real(cp),    intent(in) :: time
@@ -370,6 +403,8 @@ contains
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: dxi_Mloc(nMstart:nMstop,n_r_max)
       real(cp),    intent(in) :: us2_m(nMstart:nMstop)
       real(cp),    intent(in) :: up2_m(nMstart:nMstop)
       real(cp),    intent(in) :: enstrophy_m(nMstart:nMstop)
@@ -386,56 +421,81 @@ contains
       real(cp) :: dl_diss, dlekin_int, pow_3D
       real(cp) :: tTop, tBot, visc_2D, pow_2D, pum, visc_3D
       real(cp) :: us2_2D, up2_2D, up2_axi_2D, us2_3D, up2_3D, up2_axi_3D, uz2_3D
+      real(cp) :: chem_2D, chem_3D, ShTop, ShBot, beta_xi, Sh_vol, xiTop, xiBot
       real(cp) :: up2_axi_r(n_r_max), nu_vol_r(n_r_max), nu_cond_r(n_r_max)
       real(cp) :: buo_power(n_r_max), pump(n_r_max), tmp(n_r_max)
-      real(cp) :: theta(n_r_max)
+      real(cp) :: chem_power(n_r_max), sh_vol_r(n_r_max)
+      real(cp) :: theta(n_r_max), sh_cond_r(n_r_max)
       real(cp) :: NuTop, NuBot, beta_t, Nu_vol, Nu_int, fac
       real(cp) :: rey_2D, rey_fluct_2D, rey_zon_2D
       real(cp) :: rey_3D, rey_fluct_3D, rey_zon_3D
 
       do n_r=1,n_r_max
-         us2_r(n_r)    =0.0_cp
-         up2_r(n_r)    =0.0_cp
-         up2_axi_r(n_r)=0.0_cp
-         enstrophy(n_r)=0.0_cp
-         buo_power(n_r)=0.0_cp
-         pump(n_r)     =0.0_cp
-         nu_vol_r(n_r) =0.0_cp
-         flux_r(n_r)   =0.0_cp
+         us2_r(n_r)     =0.0_cp
+         up2_r(n_r)     =0.0_cp
+         up2_axi_r(n_r) =0.0_cp
+         enstrophy(n_r) =0.0_cp
+         buo_power(n_r) =0.0_cp
+         chem_power(n_r)=0.0_cp
+         pump(n_r)      =0.0_cp
+         nu_vol_r(n_r)  =0.0_cp
+         sh_vol_r(n_r)  =0.0_cp
+         flux_r(n_r)    =0.0_cp
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             us2_r(n_r)    =us2_r(n_r)+cc2real(us_Mloc(n_m,n_r),m)
             up2_r(n_r)    =up2_r(n_r)+cc2real(up_Mloc(n_m,n_r),m)
             enstrophy(n_r)=enstrophy(n_r)+cc2real(om_Mloc(n_m,n_r),m)
-            buo_power(n_r)=buo_power(n_r)+cc22real(us_Mloc(n_m,n_r), &
-            &              temp_Mloc(n_m,n_r), m)
 
-            nu_vol_r(n_r) =nu_vol_r(n_r)+cc2real(dtemp_Mloc(n_m,n_r),m)&
-            &              +real(m,cp)*real(m,cp)*or2(n_r)*            &
-            &                             cc2real(temp_Mloc(n_m,n_r),m)
+            if ( l_heat ) then
+               buo_power(n_r)=buo_power(n_r)+cc22real(us_Mloc(n_m,n_r), &
+               &                                      temp_Mloc(n_m,n_r), m)
 
-            flux_r(n_r)   =flux_r(n_r)+cc22real(us_Mloc(n_m,n_r), &
-            &              temp_Mloc(n_m,n_r), m)
+               nu_vol_r(n_r) =nu_vol_r(n_r)+cc2real(dtemp_Mloc(n_m,n_r),m)&
+               &              +real(m,cp)*real(m,cp)*or2(n_r)*            &
+               &                             cc2real(temp_Mloc(n_m,n_r),m)
+
+               flux_r(n_r)   =flux_r(n_r)+cc22real(us_Mloc(n_m,n_r), &
+               &                                   temp_Mloc(n_m,n_r), m)
+            end if
+
+            if ( l_chem ) then
+               chem_power(n_r)=chem_power(n_r)+cc22real(us_Mloc(n_m,n_r), &
+               &                                        xi_Mloc(n_m,n_r), m)
+
+               sh_vol_r(n_r) =sh_vol_r(n_r)+cc2real(dxi_Mloc(n_m,n_r),m)  &
+               &              +real(m,cp)*real(m,cp)*or2(n_r)*            &
+               &                             cc2real(xi_Mloc(n_m,n_r),m)
+            end if
 
             if ( m == 0 ) then
                up2_axi_r(n_r)=up2_axi_r(n_r)+cc2real(up_Mloc(n_m,n_r),m)
                pump(n_r)     =pump(n_r)+cc2real(up_Mloc(n_m,n_r),m)
-               flux_r(n_r)   =flux_r(n_r)-TdiffFac*real(dtemp_Mloc(n_m,n_r))-&
-               &              TdiffFac*dtcond(n_r)
+               if ( l_heat ) then
+                  flux_r(n_r)   =flux_r(n_r)-TdiffFac*real(dtemp_Mloc(n_m,n_r))-&
+                  &              TdiffFac*dtcond(n_r)
+               end if
             end if
          end do
-         nu_vol_r(n_r) =nu_vol_r(n_r)*r(n_r)*height(n_r)
+         if ( l_heat ) nu_vol_r(n_r)=nu_vol_r(n_r)*r(n_r)*height(n_r)
+         if ( l_chem ) sh_vol_r(n_r)=sh_vol_r(n_r)*r(n_r)*height(n_r)
       end do
 
       !-- MPI reductions to get the s-profiles on rank==0
-      call reduce_radial_on_rank(nu_vol_r, 0)
-      call reduce_radial_on_rank(flux_r, 0)
       call reduce_radial_on_rank(us2_r, 0)
       call reduce_radial_on_rank(up2_r, 0)
       call reduce_radial_on_rank(up2_axi_r, 0)
       call reduce_radial_on_rank(enstrophy, 0)
-      call reduce_radial_on_rank(buo_power, 0)
       call reduce_radial_on_rank(pump, 0)
+      if ( l_heat ) then
+         call reduce_radial_on_rank(buo_power, 0)
+         call reduce_radial_on_rank(flux_r, 0)
+         call reduce_radial_on_rank(nu_vol_r, 0)
+      end if
+      if ( l_chem ) then
+         call reduce_radial_on_rank(sh_vol_r, 0)
+         call reduce_radial_on_rank(chem_power, 0)
+      end if
 
       !-------
       !-- Lengthscales
@@ -507,9 +567,21 @@ contains
             visc_2D = visc_2D-four*pi*up2_r(1)
          end if
 
-         tmp(:)=BuoFac*buo_power(:)*rgrav(:)*r(:)
-         pow_2D = rInt_R(tmp, r, rscheme)
-         pow_2D = round_off(two*pi*pow_2D)
+         if ( l_heat ) then
+            tmp(:)=BuoFac*buo_power(:)*rgrav(:)*r(:)
+            pow_2D=rInt_R(tmp, r, rscheme)
+            pow_2D=round_off(two*pi*pow_2D)
+         else
+            pow_2D=0.0_cp
+         end if
+
+         if ( l_chem ) then
+            tmp(:)=ChemFac*chem_power(:)*rgrav(:)*r(:)
+            chem_2D=rInt_R(tmp, r, rscheme)
+            chem_2D=round_off(two*pi*chem_2D)
+         else
+            chem_2D=0.0_cp
+         end if
 
          if ( .not. l_non_rot ) then
             tmp(:) = enstrophy(:)*r(:)*height(:)
@@ -523,9 +595,21 @@ contains
                visc_3D = visc_3D-four*or1(1)*up2_r(1)
             end if
 
-            tmp(:)=BuoFac*buo_power(:)*rgrav(:)*r(:)*height(:)
-            pow_3D = rInt_R(tmp, r, rscheme)
-            pow_3D = round_off(two*pi*pow_3D)
+            if ( l_heat ) then
+               tmp(:)=BuoFac*buo_power(:)*rgrav(:)*r(:)*height(:)
+               pow_3D=rInt_R(tmp, r, rscheme)
+               pow_3D=round_off(two*pi*pow_3D)
+            else
+               pow_3D=0.0_cp
+            end if
+
+            if ( l_chem ) then
+               tmp(:)=ChemFac*chem_power(:)*rgrav(:)*r(:)*height(:)
+               chem_3D=rInt_R(tmp, r, rscheme)
+               chem_3D=round_off(two*pi*chem_3D)
+            else
+               chem_3D=0.0_cp
+            end if
 
             !-- \int\int (  g*T*(us*s/r+uz*z/r)*s dz ds )
             !-- =\int\int (  g*T*(us*s/r+beta*us*z**2/r)*s dz ds )
@@ -545,15 +629,17 @@ contains
 
          write(n_kin_file_2D, '(1P, es20.12, 3es16.8)') time, us2_2D, up2_2D, &
          &                                              up2_axi_2D
-         write(n_power_file_2D, '(1P, es20.12, 2es16.8)') time, pow_2D, visc_2D
+         write(n_power_file_2D, '(1P, es20.12, 3es16.8)') time, pow_2D, chem_2D, &
+         &                                                visc_2D
 
-         write(n_rey_file_2D, '(1P, es20.12, 3es16.8)') time, rey_2D, rey_zon_2D, &
+         write(n_rey_file_2D, '(1P, es20.12, 3es16.8)') time, rey_2D, rey_zon_2D,&
          &                                              rey_fluct_2D
 
          if ( .not. l_non_rot ) then
             write(n_kin_file_3D, '(1P, es20.12, 4es16.8)') time, us2_3D, up2_3D, &
             &                                              uz2_3D, up2_axi_3D
-            write(n_power_file_3D, '(1P, es20.12, 3es16.8)') time, pow_3D, &
+            write(n_power_file_3D, '(1P, es20.12, 4es16.8)') time, pow_3D, &
+            &                                                chem_3D,      &
             &                                                visc_3D, pum
 
             write(n_rey_file_3D, '(1P, es20.12, 3es16.8)') time, rey_3D, &
@@ -577,8 +663,8 @@ contains
             end if
 
          end if
-         write(n_lscale_file, '(1P, es20.12, 5es16.8)') time, dlus_peak,          &
-         &                                              dlekin_peak, dlvort_peak, &
+         write(n_lscale_file, '(1P, es20.12, 5es16.8)') time, dlus_peak,         &
+         &                                              dlekin_peak, dlvort_peak,&
          &                                              dlekin_int, dl_diss
 
          ! At this stage multiply us2_r, up2_r and enstrophy by r(:) and height(:)
@@ -594,7 +680,7 @@ contains
       if ( l_corr ) call get_corr(time, us_Mloc, up_Mloc, us2_r, up2_r)
 
 
-      if ( l_rank_has_m0 ) then
+      if ( l_rank_has_m0 .and. l_heat ) then
          !------
          !-- Heat transfer
          !------
@@ -651,6 +737,40 @@ contains
          write(n_heat_file, '(1P, ES20.12, 7ES16.8)') time, NuTop, NuBot,   &
          &                                            Nu_vol, Nu_int, tTop, &
          &                                            tBot, beta_t
+      end if
+
+      if ( l_rank_has_m0 .and. l_chem ) then
+         !------
+         !-- Chemical composition
+         !------
+
+         !-- Top and bottom temperatures
+         n_m0 = m2idx(0)
+         xiTop = real(xi_Mloc(n_m0,1))+xicond(1)
+         xiBot = real(xi_Mloc(n_m0,n_r_max))+xicond(n_r_max)
+         xiTop = round_off(xiTop)
+         xiBot = round_off(xiBot)
+
+         !-- Classical top and bottom Sherwood number
+         ShTop = one+real(dxi_Mloc(n_m0,1))/dxicond(1)
+         ShBot = one+real(dxi_Mloc(n_m0,n_r_max))/dxicond(n_r_max)
+         !&       (dtcond(n_r_max)-tadvz_fac*beta(n_r_max)*tcond(n_r_max))
+         ShTop = round_off(ShTop)
+         ShBot = round_off(ShBot)
+
+         !-- Volume-based Nusselt number
+         Sh_vol = rInt_R(sh_vol_r, r, rscheme)
+         sh_cond_r(:)=dxicond(:)*dxicond(:)*height(:)*r(:)
+         Sh_vol = one+Sh_vol/rInt_R(sh_cond_r, r, rscheme)
+         Sh_vol = round_off(Sh_vol)
+
+         !-- Mid-shell temperature gradient
+         beta_xi = dxicond(int(n_r_max/2))+real(dxi_Mloc(n_m0,int(n_r_max/2)))
+         beta_xi = round_off(beta_xi)
+
+         write(n_chem_file, '(1P, ES20.12, 6ES16.8)') time, ShTop, ShBot,   &
+         &                                            Sh_vol, xiTop,        &
+         &                                            xiBot, beta_xi
       end if
 
    end subroutine get_time_series

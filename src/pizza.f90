@@ -14,7 +14,7 @@ program pizza
        &               nRstart, nRstop
    use namelists, only: read_namelists, write_namelists, tag, time_scheme,    &  
        &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve,&
-       &                courfac
+       &                courfac, l_heat, l_chem
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use horizontal, only: initialize_mfunctions, finalize_mfunctions
@@ -25,6 +25,7 @@ program pizza
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop
    use update_temp_coll, only: initialize_temp_coll, finalize_temp_coll
+   use update_xi_coll, only: initialize_xi_coll, finalize_xi_coll
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
    use update_psi_coll_smat, only: initialize_om_coll_smat, finalize_om_coll_smat
    use update_psi_coll_dmat, only: initialize_om_coll_dmat, finalize_om_coll_dmat
@@ -128,7 +129,8 @@ program pizza
 
    local_bytes_used = bytes_allocated
    if ( l_cheb_coll ) then
-      call initialize_temp_coll()
+      if ( l_heat ) call initialize_temp_coll()
+      if ( l_chem ) call initialize_xi_coll()
       if ( l_direct_solve ) then
          call initialize_om_coll_smat()
       else
@@ -193,7 +195,8 @@ program pizza
 
    !-- Close files
    if ( l_cheb_coll ) then
-      call finalize_temp_coll()
+      if ( l_heat ) call finalize_temp_coll()
+      if ( l_chem ) call finalize_xi_coll()
       if ( l_direct_solve ) then
          call finalize_om_coll_smat()
       else

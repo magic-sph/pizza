@@ -3,7 +3,7 @@ module multistep_schemes
    use precision_mod
    use parallel_mod
    use namelists, only: alpha, l_cheb_coll
-   use constants, only: one, half, two, ci
+   use constants, only: one, half, two, ci, zero
    use mem_alloc, only: bytes_allocated
    use useful, only: abortRun
    use truncation, only: idx2m
@@ -465,7 +465,7 @@ contains
    end subroutine rotate_imex
 !------------------------------------------------------------------------------
    subroutine assemble_implicit_buo(this, buo, temp, dTdt, BuoFac, rgrav, &
-              &                     nMstart, nMstop, n_r_max)
+              &                     nMstart, nMstop, n_r_max, l_init_buo)
       !
       ! This subroutine is used to assemble Buoyancy
       !
@@ -478,6 +478,7 @@ contains
       real(cp),    intent(in) :: BuoFac
       real(cp),    intent(in) :: rgrav(n_r_max)
       complex(cp), intent(in) :: temp(nMstart:nMstop,n_r_max)
+      logical,     intent(in) :: l_init_buo
       type(type_tarray), intent(in) :: dTdt
 
       !-- Output variables:
@@ -486,12 +487,20 @@ contains
       !-- Local variables:
       integer :: n_o, n_m, n_r, m
 
+      if ( l_init_buo ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               buo(n_m,n_r)=zero
+            end do
+         end do
+      end if
+
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               buo(n_m,n_r)=-this%wimp_lin(1)*rgrav(n_r)*or1(n_r)*BuoFac*ci*real(m,cp)*   &
-               &             temp(n_m,n_r)
+               buo(n_m,n_r)=buo(n_m,n_r)-this%wimp_lin(1)*rgrav(n_r)*&
+               &            or1(n_r)*BuoFac*ci*real(m,cp)*temp(n_m,n_r)
                do n_o = 1,this%norder_imp_lin-1
                   buo(n_m,n_r)=buo(n_m,n_r)-this%wimp_lin(n_o+1)*rgrav(n_r)*   &
                   &            or1(n_r)*BuoFac*ci*real(m,cp)*dTdt%old(n_m,n_r,n_o)

@@ -250,7 +250,7 @@ contains
 
       !-- Input variables:
       complex(cp), intent(in) :: c1,c2
-      integer,         intent(in) :: m
+      integer,     intent(in) :: m
 
       if ( m == 0 ) then
          cc22real=real(c1)*real(c2)

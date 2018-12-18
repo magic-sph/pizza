@@ -89,7 +89,7 @@ module time_schemes
       end subroutine rotate_imex_if
 
       subroutine assemble_implicit_buo_if(this, buo, temp, dTdt, BuoFac, rgrav, &
-                 &                     nMstart, nMstop, n_r_max)
+                 &                     nMstart, nMstop, n_r_max, l_init_buo)
          import
          class(type_tscheme) :: this
          integer,           intent(in) :: nMstart
@@ -100,6 +100,7 @@ module time_schemes
          complex(cp),       intent(in) :: temp(nMstart:nMstop,n_r_max)
          type(type_tarray), intent(in) :: dTdt
          complex(cp),       intent(out) :: buo(nMstart:nMstop,n_r_max)
+         logical,           intent(in) :: l_init_buo
       end subroutine assemble_implicit_buo_if
 
       subroutine bridge_with_cnab2_if(this)

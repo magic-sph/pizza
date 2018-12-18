@@ -9,7 +9,7 @@ module output_frames
    use blocking, only: nRstart, nRstop, nr_per_rank, nMstart, nMstop, &
        &               nm_per_rank
    use truncation, only: n_r_max, n_m_max, m_max, minc, n_phi_max, idx2m
-   use radial_functions, only: r, tcond
+   use radial_functions, only: r, tcond, xicond
 
    implicit none
 
@@ -136,10 +136,10 @@ contains
       integer :: arr_size(2), arr_loc_size(2), arr_start(2)
       integer(kind=MPI_OFFSET_KIND) :: disp
 
-      version = 1
+      version = 2
 
       header_size = SIZEOF_INTEGER+7*SIZEOF_DEF_REAL+5*SIZEOF_INTEGER+ &
-      &             2*n_r_max*SIZEOF_DEF_REAL+n_m_max*SIZEOF_INTEGER
+      &             3*n_r_max*SIZEOF_DEF_REAL+n_m_max*SIZEOF_INTEGER
 
       call MPI_Info_create(info, ierr)
 
@@ -179,6 +179,7 @@ contains
 
          call MPI_File_Write(fh, r, n_r_max, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, tcond, n_r_max, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, xicond, n_r_max, MPI_DEF_REAL, istat, ierr)
 
          call MPI_File_Write(fh, idx2m, n_m_max, MPI_INTEGER, istat, ierr)
       end if

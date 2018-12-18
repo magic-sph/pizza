@@ -9,8 +9,9 @@ module radial_functions
    use constants, only: one, two, three, pi, half, third
    use namelists, only: tag, alph1, alph2, l_newmap, radratio, g0, g1, g2, &
        &                l_non_rot, ek, l_ek_pump, l_temp_3D, tcond_fac,    &
-       &                r_cmb, r_icb, l_cheb_coll, beta_shift, pr,         &
-       &                ktopt, kbott, t_bot, t_top
+       &                r_cmb, r_icb, l_cheb_coll, beta_shift, xicond_fac, &
+       &                ktopt, kbott, t_bot, t_top, l_heat, l_chem, xi_bot,&
+       &                xi_top, l_xi_3D, ktopxi, kbotxi
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -35,7 +36,9 @@ module radial_functions
    real(cp), public, allocatable :: delxh2(:) ! Auxiliary arrays containing effective Courant grid intervals
 
    real(cp), public, allocatable :: tcond(:) ! Conducting temperature
-   real(cp), public, allocatable :: dtcond(:) ! Conducting temperature
+   real(cp), public, allocatable :: dtcond(:)! radial derivative of conducting temperature
+   real(cp), public, allocatable :: xicond(:) ! Conducting chemical composition
+   real(cp), public, allocatable :: dxicond(:)! radial derivative
 
 
    real(cp), public :: alpha1   ! Input parameter for non-linear map to define degree of spacing (0.0:2.0)
@@ -64,7 +67,8 @@ contains
       allocate( rgrav(n_r_max), ekpump(n_r_max), oheight(n_r_max) )
       allocate( delxr2(n_r_max), delxh2(n_r_max) )
       allocate( tcond(n_r_max), dtcond(n_r_max))
-      bytes_allocated = bytes_allocated+13*n_r_max*SIZEOF_DEF_REAL
+      allocate( xicond(n_r_max), dxicond(n_r_max))
+      bytes_allocated = bytes_allocated+15*n_r_max*SIZEOF_DEF_REAL
 
       allocate ( type_cheb :: rscheme )
 
@@ -83,9 +87,8 @@ contains
 
       call rscheme%finalize()
 
-      deallocate( tcond, dtcond )
-      deallocate( delxr2, delxh2 )
-      deallocate( rgrav )
+      deallocate( tcond, dtcond, xicond, dxicond )
+      deallocate( delxr2, delxh2, rgrav )
       deallocate( beta, dbeta, height, ekpump, oheight )
       deallocate( r, or1, or2 )
 
@@ -139,8 +142,13 @@ contains
          delxr2(n_r)=delmin*delmin
       end do
 
-      !-- calculate conducting temperature
-      call get_conducting_state(tcond,dtcond)
+      !-- Calculate conducting temperature
+      if ( l_heat ) call get_conducting_state(tcond,dtcond,l_temp_3D,tcond_fac,&
+                         &                    ktopt,kbott,t_top,t_bot)
+
+      !-- Calculate chemical composition
+      if ( l_chem ) call get_conducting_state(xicond,dxicond,l_xi_3D,xicond_fac,&
+                         &                    ktopxi,kbotxi,xi_top,xi_bot)
 
       if ( l_non_rot ) then
          beta(:)   =0.0_cp
@@ -179,11 +187,21 @@ contains
 
    end subroutine radial
 !------------------------------------------------------------------------------
-   subroutine get_conducting_state(tcond, dtcond)
+   subroutine get_conducting_state(tcond, dtcond, l_3D, cond_fac, ktop, kbot, &
+              &                    t_top, t_bot)
       !
       !  Calculates the conducting state of the temperature equation
       !
 
+      !-- Input variables
+      logical,  intent(in) :: l_3D
+      integer,  intent(in) :: ktop
+      integer,  intent(in) :: kbot
+      real(cp), intent(in) :: cond_fac
+      real(cp), intent(in) :: t_bot(:)
+      real(cp), intent(in) :: t_top(:)
+
+      !-- Output variables
       real(cp), intent(inout) ::  tcond(n_r_max)
       real(cp), intent(inout) :: dtcond(n_r_max)
 
@@ -212,7 +230,7 @@ contains
       if ( rank == 0 ) write(6,*) '! Bot Flux', f_bot
 
       !-- Conductive Temperature profile 2D and 3D projected onto QG
-      if ( l_temp_3D ) then
+      if ( l_3D ) then
          !3D-tcond profiles -- Warning! In 3D, tcond(r_cmb) induces division by 0 (in h)
          tcond(1) = f_top!0.0_cp
          h = half*height(:)!sqrt(r_cmb**2-r(:)**2)
@@ -220,17 +238,17 @@ contains
          epsc0 = three*(r_icb**2*f_bot - r_cmb**2*f_top)/ &
          &             (r_cmb**3 - r_icb**3)
          if ( epsc0<10.0_cp*epsilon(one) ) epsc0=0.0_cp
-         if ( ktopt==1 .and. kbott==1 ) then
+         if ( ktop==1 .and. kbot==1 ) then
             do n_r=2,n_r_max
                tcond(n_r) = (r_icb/(r_icb-r_cmb))*(one-r_cmb*asinh(h(n_r)/r(n_r))/h(n_r))
             end do
-         elseif ( ktopt==2 .and. kbott==1 ) then
+         elseif ( ktop==2 .and. kbot==1 ) then
             do n_r=2,n_r_max
                tcond(n_r) = one + f_top*r_cmb**2*(one/r_icb - asinh(h(n_r)/r(n_r))/h(n_r)) &
                &          + (epsc0/two)*(r_icb**2 - r(n_r)**2 - third*h(n_r)**2 +          &
                &             two*r_cmb**3*(one/r_icb-asinh(h(n_r)/r(n_r))/h(n_r)))
             end do
-         elseif ( ktopt==1 .and. kbott==2 ) then
+         elseif ( ktop==1 .and. kbot==2 ) then
             do n_r=2,n_r_max
                tcond(n_r) = f_bot*r_icb**2*(one/r_cmb - asinh(h(n_r)/r(n_r))/h(n_r)) &
                &          + (epsc0/two)*(r_cmb**2 - r(n_r)**2 - third*h(n_r)**2 +    &
@@ -250,21 +268,21 @@ contains
          epsc0 = two*(r_icb*f_bot - r_cmb*f_top)/ &
          &           (r_cmb**2 - r_icb**2)
          if ( epsc0<10.0_cp*epsilon(one) ) epsc0=0.0_cp
-         if ( ktopt==1 .and. kbott==1 ) then
-            tcond(:) = tcond_fac*(log(r(:)/r_cmb)/log(radratio))
-            dtcond(:)= tcond_fac*(or1(:)/log(radratio))
-         elseif ( ktopt==2 .and. kbott==1 ) then
-            tcond(:) = tcond_fac*(one + f_top*r_cmb*log(r(:)/r_icb) + (epsc0/two)*  &
+         if ( ktop==1 .and. kbot==1 ) then
+            tcond(:) = cond_fac*(log(r(:)/r_cmb)/log(radratio))
+            dtcond(:)= cond_fac*(or1(:)/log(radratio))
+         elseif ( ktop==2 .and. kbot==1 ) then
+            tcond(:) = cond_fac*(one + f_top*r_cmb*log(r(:)/r_icb) + (epsc0/two)*  &
             &                     (r_icb**2 - r(:)**2 + two*r_cmb**2*log(r(:)/r_icb)))
-            dtcond(:)= tcond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
-         elseif( ktopt==1 .and. ktopt==2 ) then
-            tcond(:) = tcond_fac*(f_bot*r_icb*log(r(:)/r_cmb) + (epsc0/two)*        &
+            dtcond(:)= cond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
+         elseif( ktop==1 .and. ktop==2 ) then
+            tcond(:) = cond_fac*(f_bot*r_icb*log(r(:)/r_cmb) + (epsc0/two)*        &
             &                     (r_cmb**2 - r(:)**2 + two*r_icb**2*log(r(:)/r_cmb)))
-            dtcond(:)= tcond_fac*(f_bot*r_icb*or1(:) + epsc0*(r_icb**2*or1(:) - r(:)))
+            dtcond(:)= cond_fac*(f_bot*r_icb*or1(:) + epsc0*(r_icb**2*or1(:) - r(:)))
          else
-            tcond(:) = tcond_fac*(f_top*r_cmb + f_top*r_cmb*log(r(:)) + (epsc0/two)* &
+            tcond(:) = cond_fac*(f_top*r_cmb + f_top*r_cmb*log(r(:)) + (epsc0/two)* &
             &                     (two*r_cmb**2*log(r(:)) - r(:)**2))
-            dtcond(:)= tcond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
+            dtcond(:)= cond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
          endif
       end if
       !call logWrite('! Sources introduced to balance surface heat flux!')

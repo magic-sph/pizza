@@ -8,9 +8,11 @@ module step_time
        &                     scatter_from_rank0_to_mloc
    use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
-       &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc
+       &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,    &
+       &             xi_Rloc, dxi_Mloc, xi_hat_Mloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
-       &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt
+       &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,  &
+       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
@@ -26,7 +28,8 @@ module step_time
        &                tEND, run_time_requested, n_log_step, n_frames,   &
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
-       &                l_cheb_coll, l_direct_solve, l_vort_balance
+       &                l_cheb_coll, l_direct_solve, l_vort_balance,      &
+       &                l_heat, l_chem
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
@@ -170,9 +173,10 @@ contains
          !-------------------
          !-- Get time series
          runStart = MPI_Wtime()
-         call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame,  &
-              &             l_vphi_bal_write, l_stop_time, us_Mloc,  up_Mloc,   &
-              &             om_Mloc, temp_Mloc, dtemp_Mloc, dpsidt, dTdt)
+         call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame, &
+              &             l_vphi_bal_write, l_stop_time, us_Mloc,  up_Mloc,  &
+              &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
+              &             dpsidt, dTdt, dxidt)
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             timers%n_io_calls=timers%n_io_calls+1
@@ -193,8 +197,9 @@ contains
                runStart = MPI_Wtime()
                call transp_m2r(m2r_fields, us_Mloc, us_Rloc)
                call transp_m2r(m2r_fields, up_Mloc, up_Rloc)
-               call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
                call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
+               if ( l_heat ) call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
+               if ( l_chem ) call transp_m2r(m2r_fields, xi_Mloc, xi_Rloc)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%n_mpi_comms=timers%n_mpi_comms+1
@@ -205,10 +210,10 @@ contains
                !-- Radial loop
                !-------------------
                runStart = MPI_Wtime()
-               call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, &
-                    &            dtempdt_Rloc, dVsT_Rloc, dpsidt_Rloc, &
-                    &            dVsOm_Rloc, dtr_Rloc, dth_Rloc,       &
-                    &            timers, tscheme )
+               call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc, &
+                    &            dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc,           &
+                    &            dVsXi_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc, &
+                    &            dth_Rloc, timers, tscheme )
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%n_r_loops=timers%n_r_loops+1
@@ -219,11 +224,18 @@ contains
                !-- MPI transpositions from r-distributed to m-distributed
                !------------------
                runStart = MPI_Wtime()
-               call transp_r2m(r2m_fields, dtempdt_Rloc, &
-                    &          dTdt%expl(:,:,tscheme%istage))
+               if ( l_heat ) then
+                  call transp_r2m(r2m_fields, dtempdt_Rloc, &
+                       &          dTdt%expl(:,:,tscheme%istage))
+                  call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
+               end if
+               if ( l_chem ) then
+                  call transp_r2m(r2m_fields, dxidt_Rloc, &
+                       &          dxidt%expl(:,:,tscheme%istage))
+                  call transp_r2m(r2m_fields, dVsXi_Rloc, dVsXi_Mloc)
+               end if
                call transp_r2m(r2m_fields, dpsidt_Rloc, &
                     &          dpsidt%expl(:,:,tscheme%istage))
-               call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
                call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
@@ -234,9 +246,10 @@ contains
                !-- Finish assembling the explicit terms
                !--------------------
                runStart = MPI_Wtime()
-               call finish_explicit_assembly(temp_Mloc, psi_Mloc, us_Mloc,       &
-                    &                        up_Mloc, om_Mloc, dVsT_Mloc,        &
-                    &                        dVsOm_Mloc, buo_Mloc, dTdt, dpsidt, &
+               call finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc,      &
+                    &                        us_Mloc, up_Mloc, om_Mloc,         &
+                    &                        dVsT_Mloc, dVsXi_Mloc, dVsOm_Mloc, &
+                    &                        buo_Mloc, dTdt, dxidt, dpsidt,     &
                     &                        tscheme, vp_bal, vort_bal)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
@@ -283,9 +296,10 @@ contains
             !-- M-loop (update routines)
             !--------------------
             runStart = MPI_Wtime()
-            call mloop(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, psi_hat_Mloc,        &
-                 &     psi_Mloc, om_Mloc,  dom_Mloc, us_Mloc, up_Mloc, buo_Mloc,  &
-                 &     dTdt, dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
+            call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,   &
+                 &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,  &
+                 &     dom_Mloc, us_Mloc, up_Mloc, buo_Mloc, dTdt, dxidt,   &
+                 &     dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
                  &     timers)
             runStop = MPI_Wtime()
             if ( .not. lMat ) then

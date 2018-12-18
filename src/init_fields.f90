@@ -11,7 +11,7 @@ module init_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
-       &                l_reset_t
+       &                l_reset_t, l_chem, l_heat, amp_xi, init_xi
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank
@@ -47,8 +47,8 @@ contains
       character(len=76) :: message
 
       if ( l_start_file ) then
-         call read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, dpsidt, dTdt, &
-              &               time, tscheme)
+         call read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, dpsidt, &
+              &               dTdt, dxidt, time, tscheme)
 
          if ( l_reset_t ) time = 0.0_cp
 
@@ -78,12 +78,14 @@ contains
 
       else
 
-         temp_Mloc(:,:)=zero
+         if ( l_heat ) temp_Mloc(:,:)=zero
+         if ( l_chem ) xi_Mloc(:,:)  =zero
          us_Mloc(:,:)  =zero
          up_Mloc(:,:)  =zero
          psi_Mloc(:,:) =zero
          call dpsidt%set_initial_values()
-         call dTdt%set_initial_values()
+         if ( l_heat ) call dTdt%set_initial_values()
+         if ( l_chem ) call dxidt%set_initial_values()
 
          time=0.0_cp
          tscheme%dt(:)=dtMax
@@ -96,12 +98,17 @@ contains
       !-- Initialize the weights of the time scheme
       call tscheme%set_weights(lMat)
 
-      if ( init_t /= 0 ) call initT(temp_Mloc)
+      if ( init_t /= 0 .and. l_heat ) call initProp(temp_Mloc, init_t, amp_t)
+
+      if ( init_xi /= 0 .and. l_chem ) call initProp(xi_Mloc, init_xi, amp_xi)
 
       if ( init_u /= 0 ) call initU(us_Mloc, up_Mloc)
 
       !-- Reconstruct missing fields, dtemp_Mloc, om_Mloc
-      call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, n_r_max, rscheme)
+      if ( l_heat ) call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, &
+                         &      n_r_max, rscheme)
+      if ( l_chem ) call get_dr(xi_Mloc, dxi_Mloc, nMstart, nMstop, &
+                         &      n_r_max, rscheme)
       call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
@@ -126,10 +133,12 @@ contains
 
    end subroutine get_start_fields
 !----------------------------------------------------------------------------------
-   subroutine initT(temp_Mloc)
+   subroutine initProp(prop_Mloc, init_prop, amp_prop)
 
       !-- Output variables
-      complex(cp), intent(inout) :: temp_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp), intent(inout) :: prop_Mloc(nMstart:nMstop, n_r_max)
+      real(cp),    intent(in) :: amp_prop
+      integer,     intent(in) :: init_prop
 
       !-- Local variables
       integer :: m_pertu, n_r, idx, n_phi, n_m, ir
@@ -144,9 +153,9 @@ contains
          t1(n_r)=sin(pi*(r(n_r)-r_icb))
       end do
 
-      if ( init_t > 0 ) then ! Initialize a peculiar m mode
+      if ( init_prop > 0 ) then ! Initialize a peculiar m mode
          
-         m_pertu = init_t
+         m_pertu = init_prop
 
          if ( mod(m_pertu,minc) /= 0 ) then
             write(*,*) '! Wave number of mode for temperature initialisation'
@@ -162,12 +171,12 @@ contains
          idx = m2idx(m_pertu)
          if ( idx >= nMstart .and. idx <= nMstop ) then
             do n_r=1,n_r_max
-               c_r=t1(n_r)*amp_t
-               temp_Mloc(idx,n_r)=temp_Mloc(idx,n_r)+cmplx(c_r,0.0_cp,kind=cp)
+               c_r=t1(n_r)*amp_prop
+               prop_Mloc(idx,n_r)=prop_Mloc(idx,n_r)+cmplx(c_r,0.0_cp,kind=cp)
             end do
          end if
 
-      else if ( init_t == -1 ) then ! bubble = Gaussian in r and phi
+      else if ( init_prop == -1 ) then ! bubble = Gaussian in r and phi
 
          sigma_r = 0.1_cp/sqrt(two)
          rc = half*(r_cmb+r_icb)
@@ -210,7 +219,7 @@ contains
          !-- Now finally define the bubble
          phi0 = pi/minc
          do n_r=nRstart,nRstop
-            c_r = amp_t*gasp(n_r)
+            c_r = amp_prop*gasp(n_r)
             do n_phi=1,n_phi_max
                phi = (n_phi-1)*two*pi/minc/(n_phi_max)
                phi_func(n_phi)=c_r*exp(-(phi-phi0)**2/0.2_cp**2)
@@ -225,7 +234,7 @@ contains
 
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
-               temp_Mloc(n_m,n_r) = temp_Mloc(n_m,n_r)+work_Mloc(n_m,n_r)
+               prop_Mloc(n_m,n_r) = prop_Mloc(n_m,n_r)+work_Mloc(n_m,n_r)
             end do
          end do
 
@@ -240,14 +249,14 @@ contains
                m_pertu = idx2m(n_m)
                if ( m_pertu > 0 ) then
                   call random_number(rdm)
-                  temp_Mloc(n_m, n_r) = amp_t*rdm*m_pertu**(-1.5_cp)*t1(n_r)
+                  prop_Mloc(n_m, n_r) = amp_prop*rdm*m_pertu**(-1.5_cp)*t1(n_r)
                end if
             end do
          end do
 
       end if
 
-   end subroutine initT
+   end subroutine initProp
 !----------------------------------------------------------------------------------
    subroutine initU(us_Mloc, up_Mloc)
 
@@ -303,7 +312,7 @@ contains
          idx = m2idx(0)
          if ( idx >= nMstart .and. idx <= nMstop ) then
             do n_r=1,n_r_max
-               c_r=amp_t*sin(pi*(r(n_r)-r_icb))
+               c_r=amp_u*sin(pi*(r(n_r)-r_icb))
                up_Mloc(idx,n_r)=up_Mloc(idx,n_r)+cmplx(c_r,0.0_cp,kind=cp)
             end do
          end if

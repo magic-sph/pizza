@@ -29,15 +29,18 @@ module namelists
    real(cp), public :: raxi          ! Compisitional Rayleigh number
    real(cp), public :: sc            ! Schmidt number
    real(cp), public :: tcond_fac     ! Rescaling of the conducting temperature
+   real(cp), public :: xicond_fac    ! Rescaling of the conducting composition
    real(cp), public :: beta_shift    ! Shift the upper bound of \beta
    logical,  public :: l_non_rot     ! Switch to do a non-rotatig annulus
    logical,  public :: l_temp_3D     ! 2D or 3D temperature background
+   logical,  public :: l_xi_3D       ! 2D or 3D composition background
    logical,  public :: l_ek_pump     ! With or without Ekman pumping
    logical,  public :: l_temp_advz   ! With or without vertical advection of temp
    integer,  public :: ktopt, kbott  ! Temperature boundary condition
+   integer,  public :: ktopxi, kbotxi! Boundary conditions for chemical composition
    integer,  public :: ktopv, kbotv  ! Velocity boundary condition
-   real(cp), public :: t_bot(3*n_t_bounds)
-   real(cp), public :: t_top(3*n_t_bounds)
+   real(cp), public :: t_bot(3*n_t_bounds), xi_bot(3*n_t_bounds)
+   real(cp), public :: t_top(3*n_t_bounds), xi_top(3*n_t_bounds)
    real(cp), public :: g0, g1, g2
 
    !-- For the nonlinear mapping)
@@ -68,7 +71,10 @@ module namelists
 
    real(cp), public :: amp_t
    integer,  public :: init_t
+   real(cp), public :: amp_xi
+   integer,  public :: init_xi
    real(cp), public :: scale_t
+   real(cp), public :: scale_xi
    real(cp), public :: amp_u
    integer,  public :: init_u
    real(cp), public :: scale_u
@@ -101,8 +107,9 @@ module namelists
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb           ! Outer core radius
    real(cp), public :: r_icb           ! Inner core radius
-   real(cp), public :: CorFac, BuoFac, TdiffFac, ViscFac
+   real(cp), public :: CorFac, BuoFac, TdiffFac, ViscFac, XiDiffFac, ChemFac
    real(cp), public :: hdif_temp       ! Hyperdiffusion amplitude on temperature
+   real(cp), public :: hdif_comp       ! Hyperdiffusion amplitude on composition
    real(cp), public :: hdif_vel        ! Hyperdiffusion amplitude on velocity
    integer,  public :: hdif_exp        ! Exponent of the hyperdiffusion profile
    integer,  public :: hdif_m          ! Azimuthal wavenumber for hdif
@@ -127,13 +134,15 @@ contains
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
       &                matrix_solve,corio_term,buo_term,bc_method
-      namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m
+      namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,      &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
       &                   l_temp_3D,tcond_fac,l_temp_advz,         &
-      &                   beta_shift,t_bot,t_top
+      &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
+      &                   xi_bot,xi_top, l_xi_3D, xicond_fac
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
-      &                    scale_u,init_u,amp_u,l_reset_t
+      &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
+      &                    scale_xi
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
       &                       l_vphi_balance,l_vort_balance,bl_cut,        &
@@ -250,7 +259,7 @@ contains
       if ( raxi == 0.0_cp ) then
          l_chem=.false.
       else
-         l_heat=.true.
+         l_chem=.true.
       end if
 
       !-- Determine whether we also consider vertical advection of temperature
@@ -305,10 +314,12 @@ contains
 
       !-- Warning:: Galerkin method can not handle inhomogeneous BCs (yet)
       if ( l_galerkin .and. index(cheb_method, 'COLL') == 0 .and. &
-      &    maxval(abs(t_top(:))) > 10.0_cp*epsilon(one) ) then
+      &    ( maxval(abs(t_top(:))) > 0.0_cp .or.                  &
+      &      maxval(abs(xi_top(:))) > 0.0_cp) ) then
          call abortRun('! Inhomogeneous BCs not compatible with chosen chebyshev solver !')
       else if ( l_galerkin .and. index(cheb_method, 'COLL') == 0 .and. &
-      &         maxval(abs(t_bot(:))) > 10.0_cp*epsilon(one) ) then
+      &         ( maxval(abs(t_bot(:))) > 0.0_cp .or.                  &
+      &           maxval(abs(xi_bot(:))) > 0.0_cp) ) then
          call abortRun('! Inhomogeneous BCs not compatible with chosen chebyshev solver !')
       end if
 
@@ -361,19 +372,55 @@ contains
       call capitalize(time_scale) 
       if ( l_non_rot ) then
          CorFac = 0.0_cp
-         BuoFac = ra/pr
-         TdiffFac = one/pr
+         if ( l_heat ) then
+            BuoFac = ra/pr
+            TdiffFac = one/pr
+         else
+            BuoFac = 0.0_cp
+            TdiffFac = 0.0_cp
+         end if
+         if ( l_chem ) then
+            ChemFac = raxi/sc
+            XidiffFac = one/sc
+         else
+            ChemFac = 0.0_cp
+            XidiffFac = 0.0_cp
+         end if
          viscFac = one
       else
          if ( index(time_scale, 'ROT') /= 0 ) then
             CorFac = two
-            BuoFac = ra*ek*ek/pr
-            TdiffFac = ek/pr
+            if ( l_heat ) then
+               BuoFac = ra*ek*ek/pr
+               TdiffFac = ek/pr
+            else
+               BuoFac = 0.0_cp
+               TdiffFac = 0.0_cp
+            end if
+            if ( l_chem ) then
+               ChemFac = raxi*ek*ek/sc
+               XidiffFac = ek/sc
+            else
+               ChemFac = 0.0_cp
+               XidiffFac = 0.0_cp
+            end if
             viscFac = ek
          else
             CorFac = two/ek
-            BuoFac = ra/pr
-            TdiffFac = one/pr
+            if ( l_heat ) then
+               BuoFac = ra/pr
+               TdiffFac = one/pr
+            else
+               BuoFac = 0.0_cp
+               TdiffFac = 0.0_cp
+            end if
+            if ( l_chem ) then
+               ChemFac = raxi/sc
+               XidiffFac = one/sc
+            else
+               ChemFac = 0.0_cp
+               XidiffFac = 0.0_cp
+            end if
             viscFac = one
          end if
       end if
@@ -428,6 +475,7 @@ contains
       !-- Hyperdiffusion
       hdif_vel         =0.0_cp
       hdif_temp        =0.0_cp
+      hdif_comp        =0.0_cp
       hdif_m           =0
       hdif_exp         =0
 
@@ -436,6 +484,7 @@ contains
       l_ek_pump        =.false.
       l_temp_advz      =.false.
       l_temp_3D        =.false.
+      l_xi_3D          =.false.
       ra               =1.0e5_cp
       pr               =one
       ek               =1.0e-3_cp
@@ -443,6 +492,7 @@ contains
       sc               =0.0_cp
       radratio         =0.35_cp
       tcond_fac        =one
+      xicond_fac       =one
       beta_shift       =0.0_cp
       !----- Gravity parameters: defaut value g propto r (i.e. g1=1)
       g0               =0.0_cp
@@ -451,12 +501,16 @@ contains
       !----- Boundary conditions        
       ktopt            =1
       kbott            =1
+      ktopxi           =1
+      kbotxi           =1
       ktopv            =2
       kbotv            =2
       !----- Parameters for temp. BCs
       do n=1,3*n_t_bounds
-         t_bot(n)=0.0_cp
-         t_top(n)=0.0_cp
+         t_bot(n) =0.0_cp
+         t_top(n) =0.0_cp
+         xi_bot(n)=0.0_cp
+         xi_top(n)=0.0_cp
       end do
 
       !----- Namelist start_field:
@@ -466,6 +520,9 @@ contains
       init_t           =0
       scale_t          =1.0_cp
       amp_t            =0.0_cp
+      init_xi          =0
+      scale_xi         =1.0_cp
+      amp_xi           =0.0_cp
       init_u           =0
       scale_u          =1.0_cp
       amp_u            =0.0_cp
@@ -543,6 +600,7 @@ contains
       length=length_to_blank(tag)
       write(n_out,'(''  hdif_vel        ='',ES14.6,'','')') hdif_vel
       write(n_out,'(''  hdif_temp       ='',ES14.6,'','')') hdif_temp
+      write(n_out,'(''  hdif_comp       ='',ES14.6,'','')') hdif_comp
       write(n_out,'(''  hdif_exp        ='',i4,'','')') hdif_exp
       write(n_out,'(''  hdif_m          ='',i4,'','')') hdif_m
       write(n_out,*) "/"
@@ -555,6 +613,7 @@ contains
       write(n_out,'(''  sc              ='',ES14.6,'','')') sc
       write(n_out,'(''  radratio        ='',ES14.6,'','')') radratio
       write(n_out,'(''  tcond_fac       ='',ES14.6,'','')') tcond_fac
+      write(n_out,'(''  xicond_fac      ='',ES14.6,'','')') xicond_fac
       write(n_out,'(''  beta_shift      ='',ES14.6,'','')') beta_shift
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1
@@ -562,9 +621,12 @@ contains
       write(n_out,'(''  l_ek_pump       ='',l3,'','')') l_ek_pump
       write(n_out,'(''  l_temp_advz     ='',l3,'','')') l_temp_advz
       write(n_out,'(''  l_temp_3D       ='',l3,'','')') l_temp_3D
+      write(n_out,'(''  l_xi_3D         ='',l3,'','')') l_xi_3D
       !--- Heat boundary condition:
       write(n_out,'(''  ktopt           ='',i3,'','')') ktopt
       write(n_out,'(''  kbott           ='',i3,'','')') kbott
+      write(n_out,'(''  ktopxi          ='',i3,'','')') ktopxi
+      write(n_out,'(''  kbotxi          ='',i3,'','')') kbotxi
       write(n_out,'(''  ktopv           ='',i3,'','')') ktopv
       write(n_out,'(''  kbotv           ='',i3,'','')') kbotv
       write(n_out,*) "/"
@@ -577,6 +639,9 @@ contains
       write(n_out,'(''  scale_t         ='',ES14.6,'','')') scale_t
       write(n_out,'(''  init_t          ='',i7,'','')') init_t
       write(n_out,'(''  amp_t           ='',ES14.6,'','')') amp_t
+      write(n_out,'(''  scale_xi        ='',ES14.6,'','')') scale_xi
+      write(n_out,'(''  init_xi         ='',i7,'','')') init_xi
+      write(n_out,'(''  amp_xi          ='',ES14.6,'','')') amp_xi
       write(n_out,'(''  scale_u         ='',ES14.6,'','')') scale_u
       write(n_out,'(''  init_u          ='',i7,'','')') init_u
       write(n_out,'(''  amp_u           ='',ES14.6,'','')') amp_u

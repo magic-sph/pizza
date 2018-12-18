@@ -373,7 +373,7 @@ contains
    end subroutine rotate_imex
 !------------------------------------------------------------------------------
    subroutine assemble_implicit_buo(this, buo, temp, dTdt, BuoFac, rgrav, &
-              &                     nMstart, nMstop, n_r_max)
+              &                     nMstart, nMstop, n_r_max, l_init_buo)
       !
       ! This subroutine is used to assemble Buoyancy
       !
@@ -387,6 +387,7 @@ contains
       real(cp),    intent(in) :: rgrav(n_r_max)
       complex(cp), intent(in) :: temp(nMstart:nMstop,n_r_max)
       type(type_tarray), intent(in) :: dTdt
+      logical,     intent(in) :: l_init_buo
 
       !-- Output variables:
       complex(cp), intent(out) :: buo(nMstart:nMstop,n_r_max)
@@ -394,11 +395,13 @@ contains
       !-- Local variables:
       integer :: n_stage, n_m, n_r, m
 
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            buo(n_m,n_r)=zero
+      if ( l_init_buo ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               buo(n_m,n_r)=zero
+            end do
          end do
-      end do
+      end if
 
       do n_stage=1,this%istage
          do n_r=1,n_r_max
