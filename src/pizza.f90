@@ -27,6 +27,7 @@ program pizza
    use update_temp_coll, only: initialize_temp_coll, finalize_temp_coll
    use update_xi_coll, only: initialize_xi_coll, finalize_xi_coll
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
+   use update_xi_integ, only: initialize_xi_integ, finalize_xi_integ
    use update_psi_coll_smat, only: initialize_om_coll_smat, finalize_om_coll_smat
    use update_psi_coll_dmat, only: initialize_om_coll_dmat, finalize_om_coll_dmat
    use update_psi_integ_smat, only: initialize_psi_integ_smat, &
@@ -137,7 +138,8 @@ program pizza
          call initialize_om_coll_dmat()
       end if
    else
-      call initialize_temp_integ()
+      if ( l_heat ) call initialize_temp_integ()
+      if ( l_chem ) call initialize_xi_integ()
       if ( l_direct_solve ) then
          call initialize_psi_integ_smat()
       else
@@ -203,7 +205,8 @@ program pizza
          call finalize_om_coll_dmat()
       end if
    else
-      call finalize_temp_integ()
+      if ( l_heat ) call finalize_temp_integ()
+      if ( l_chem ) call finalize_xi_integ()
       if ( l_direct_solve ) then
          call finalize_psi_integ_smat()
       else

@@ -136,7 +136,7 @@ contains
 
       if ( l_heat ) then
          deallocate( temp_Mloc, dtemp_Mloc, temp_Rloc )
-         if ( .not. l_cheb_coll ) deallocate( psi_hat_Mloc )
+         if ( .not. l_cheb_coll ) deallocate( temp_hat_Mloc )
       end if
       if ( l_chem ) then
          deallocate( xi_Mloc, dxi_Mloc, xi_Rloc )

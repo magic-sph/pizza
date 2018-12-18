@@ -176,15 +176,27 @@ contains
       integer :: n_r, n_m, m
 
       if ( .not. l_buo_imp ) then
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m /= 0 ) then
-                  buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
-                  &                  *ChemFac*ci*real(m,cp)*xi_Mloc(n_m,n_r)
-               end if
+         if ( l_heat ) then
+            do n_r=1,n_r_max
+               do n_m=nMstart,nMstop
+                  m = idx2m(n_m)
+                  if ( m /= 0 ) then
+                     buo_Mloc(n_m,n_r)=buo_Mloc(n_m,n_r)-rgrav(n_r)*or1(n_r) &
+                     &                 *ChemFac*ci*real(m,cp)*xi_Mloc(n_m,n_r)
+                  end if
+               end do
             end do
-         end do
+         else
+            do n_r=1,n_r_max
+               do n_m=nMstart,nMstop
+                  m = idx2m(n_m)
+                  if ( m /= 0 ) then
+                     buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
+                     &                  *ChemFac*ci*real(m,cp)*xi_Mloc(n_m,n_r)
+                  end if
+               end do
+            end do
+         end if
       end if
 
       !-- Finish calculation of advection

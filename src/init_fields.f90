@@ -123,11 +123,15 @@ contains
       if ( .not. l_cheb_coll ) then
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
-               temp_hat_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)
+               if ( l_heat ) temp_hat_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)
+               if ( l_chem ) xi_hat_Mloc(n_m,n_r)=xi_Mloc(n_m,n_r)
                psi_hat_Mloc(n_m,n_r) =psi_Mloc(n_m,n_r)
             end do
          end do
-         call rscheme%costf1(temp_hat_Mloc, nMstart, nMstop, n_r_max)
+         if ( l_heat ) call rscheme%costf1(temp_hat_Mloc, nMstart, nMstop, &
+                            &              n_r_max)
+         if ( l_chem ) call rscheme%costf1(xi_hat_Mloc, nMstart, nMstop, &
+                            &              n_r_max)
          call rscheme%costf1(psi_hat_Mloc, nMstart, nMstop, n_r_max)
       end if
 

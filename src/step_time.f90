@@ -17,7 +17,9 @@ module step_time
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
    use update_temp_coll, only: get_temp_rhs_imp_coll
+   use update_xi_coll, only: get_xi_rhs_imp_coll
    use update_temp_integ, only: get_temp_rhs_imp_int
+   use update_xi_integ, only: get_xi_rhs_imp_int
    use update_psi_integ_smat, only: get_psi_rhs_imp_int_smat
    use update_psi_integ_dmat, only: get_psi_rhs_imp_int_dmat
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
@@ -377,8 +379,13 @@ contains
            tscheme%family=='MULTISTEP' ) then
 
          if ( l_cheb_coll ) then
-            call get_temp_rhs_imp_coll(temp_Mloc,dtemp_Mloc, dTdt%old(:,:,1), &
-                 &                     dTdt%impl(:,:,1),.true.)
+
+            if ( l_heat ) call get_temp_rhs_imp_coll(temp_Mloc,dtemp_Mloc, &
+                               &                     dTdt%old(:,:,1),      &
+                               &                     dTdt%impl(:,:,1),.true.)
+            if ( l_chem ) call get_xi_rhs_imp_coll(xi_Mloc,dxi_Mloc,      &
+                               &                   dxidt%old(:,:,1),      &
+                               &                   dxidt%impl(:,:,1),.true.)
             if ( l_direct_solve ) then
                call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc,   &
                     &                         dom_Mloc, dpsidt%old(:,:,1), &
@@ -391,14 +398,19 @@ contains
                     &                         vort_bal,.true.)
             end if
          else
-            call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt%old(:,:,1), &
-                 &                    dTdt%impl(:,:,1), .true.)
+            if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc,          &
+                          &                         dTdt%old(:,:,1),        &
+                          &                         dTdt%impl(:,:,1), .true.)
+            if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc,             &
+                          &                       dxidt%old(:,:,1),        &
+                          &                       dxidt%impl(:,:,1), .true.)
             if ( l_direct_solve ) then
-               call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,dpsidt%old(:,:,1),&
-                    &         dpsidt%impl(:,:,1), vp_bal,.true.)
+               call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc, &
+                    &                        dpsidt%old(:,:,1),    &
+                    &                        dpsidt%impl(:,:,1), vp_bal,.true.)
             else
                call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,dpsidt%old(:,:,1), &
-                    &         dpsidt%impl(:,:,1), vp_bal, .true.)
+                    &                        dpsidt%impl(:,:,1), vp_bal, .true.)
             end if
          end if
 
