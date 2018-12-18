@@ -122,8 +122,16 @@ class PizzaRadial(PizzaSetup):
         self.uphi_std = data[:, 8]
         self.temp_mean = data[:, 9]
         self.temp_std = data[:, 10]
-        self.nushell_mean = data[:, 11]
-        self.nushell_std = data[:, 12]
+        if data.shape[-1] == 15:
+            self.xi_mean = data[:, 11]
+            self.xi_std = data[:, 12]
+            self.nushell_mean = data[:, 13]
+            self.nushell_std = data[:, 14]
+        else:
+            self.nushell_mean = data[:, 11]
+            self.nushell_std = data[:, 12]
+            self.xi_mean = np.zeros_like(self.temp_mean)
+            self.xi_mean = np.zeros_like(self.temp_mean)
 
         self.vortz_mean = 1./self.radius * get_dr(self.radius*self.uphi_mean)
         h = np.sqrt(self.radius[0]**2-self.radius**2)
@@ -163,7 +171,6 @@ class PizzaRadial(PizzaSetup):
             print('Not implemented yet ...')
 
         return out
-
 
     def plot(self):
         """

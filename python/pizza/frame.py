@@ -35,7 +35,7 @@ class Frame:
         try:
 
             file = npfile(filename, endian=endian)
-            version = file.fort_read('i4')
+            self.version = file.fort_read('i4')
             self.time = file.fort_read('Float64')
             self.ra, self.ek, self.pr, self.radratio, self.sc, \
                           self.raxi = file.fort_read('Float64')
@@ -54,7 +54,7 @@ class Frame:
         except:
 
             file = open(filename, 'rb')
-            version = np.fromfile(file, dtype='i4', count=1)[0]
+            self.version = np.fromfile(file, dtype='i4', count=1)[0]
             self.time, self.ra, self.ek, self.pr, self.radratio, self.sc, \
                      self.raxi = np.fromfile(file, dtype='7Float64', count=1)[0]
             self.n_r_max, self.n_m_max, self.m_max, self.minc, \
@@ -64,6 +64,9 @@ class Frame:
                                       count=1)[0]
             self.tcond = np.fromfile(file, dtype='%iFloat64' % self.n_r_max,
                                      count=1)[0]
+            if self.version == 2:
+                self.xicond = np.fromfile(file, dtype='%iFloat64' % self.n_r_max,
+                                          count=1)[0]
 
             self.idx2m = np.fromfile(file, dtype='%ii4' % self.n_m_max,
                                      count=1)[0]
@@ -119,8 +122,9 @@ class PizzaFields(PizzaSetup):
         :type verbose: bool
         """
 
-        filename = self.get_filename('frame_temp', ivar, datadir, tag, verbose)
+        filename = self.get_filename('frame_us', ivar, datadir, tag, verbose)
         f = Frame(filename, endian=endian)
+
         self.ra = f.ra
         self.ek = f.ek
         self.pr = f.pr
@@ -134,15 +138,14 @@ class PizzaFields(PizzaSetup):
         self.minc = f.minc
         self.radius = f.radius
         self.tcond = f.tcond
+        if f.version == 2:
+            self.xicond = f.xicond
+        else:
+            self.xicond = np.zeros_like(self.tcond)
+
         self.idx2m = f.idx2m
         self.time = f.time
 
-        self.temp_m = f.field_m
-        self.temp_m[0, :] += self.tcond
-        self.temp = spec_spat(self.temp_m, self.n_phi_max)
-
-        filename = self.get_filename('frame_us', ivar, datadir, tag, verbose)
-        f = Frame(filename, endian=endian)
         self.us_m = f.field_m
         self.us = spec_spat(self.us_m, self.n_phi_max)
 
@@ -155,6 +158,20 @@ class PizzaFields(PizzaSetup):
         f = Frame(filename, endian=endian)
         self.vortz_m = f.field_m
         self.vortz = spec_spat(self.vortz_m, self.n_phi_max)
+
+        filename = self.get_filename('frame_temp', ivar, datadir, tag, verbose)
+        if os.path.exists(filename):
+            f = Frame(filename, endian=endian)
+            self.temp_m = f.field_m
+            self.temp_m[0, :] += self.tcond
+            self.temp = spec_spat(self.temp_m, self.n_phi_max)
+
+        filename = self.get_filename('frame_xi', ivar, datadir, tag, verbose)
+        if os.path.exists(filename):
+            f = Frame(filename, endian=endian)
+            self.xi_m = f.field_m
+            self.xi_m[0, :] += self.xicond
+            self.xi = spec_spat(self.xi_m, self.n_phi_max)
 
     def get_filename(self, prefix, ivar, datadir, tag, verbose):
         """
@@ -254,8 +271,13 @@ class PizzaFields(PizzaSetup):
             data = self.vortz
         elif field in ('temperature', 'Temperature', 'temp', 'Temp', 't', 'T'):
             data = self.temp
+        elif field in ('composition', 'Composition', 'xi', 'Xi', 'chem', 'Chem',
+                       'comp', 'Comp'):
+            data = self.xi
         elif field in ('tfluct', 'tempfluct'):
             data = self.temp-self.temp_m[0,:]
+        elif field in ('xifluct', 'chemfluct', 'compfluct'):
+            data = self.xi-self.xi_m[0,:]
         elif field in ('us', 'Us', 'ur', 'Ur', 'vs', 'Vs', 'Vr', 'vr'):
             data = self.us
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):

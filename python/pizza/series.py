@@ -14,6 +14,7 @@ class PizzaTs(PizzaSetup):
 
        * Kinetic energy: e_kin.TAG
        * Heat transfer: heat.TAG
+       * Chemical composition: composition.TAG
        * Power budget: power.TAG
        * Length scales: length_scales.TAG
 
@@ -141,7 +142,15 @@ class PizzaTs(PizzaSetup):
             self.shellnuss = data[:, 4]
             self.toptemp = data[:, 5]
             self.bottemp = data[:, 6]
-            self.beta = data[:, 7]
+            self.beta_t = data[:, 7]
+        elif self.field == 'comp' or self.field == 'composition':
+            self.time = data[:, 0]
+            self.topsh = data[:, 1]
+            self.botsh = data[:, 2]
+            self.volsh = data[:, 3]
+            self.topxi = data[:, 4]
+            self.botxi = data[:, 5]
+            self.beta_xi = data[:, 6]
         elif self.field == 'reynolds' or self.field == 'reynolds_3D':
             self.time = data[:, 0]
             self.rey = data[:, 1]
@@ -150,12 +159,21 @@ class PizzaTs(PizzaSetup):
         elif self.field == 'power':
             self.time = data[:, 0]
             self.buoPower = data[:, 1]
-            self.viscDiss = data[:, 2]
+            if data.shape[-1] == 4:
+                self.chemPower = data[:, 2]
+                self.viscDiss = data[:, 3]
+            else:
+                self.chemPower = np.zeros_like(self.buoPower)
+                self.viscDiss = data[:, 2]
         elif self.field == 'power_3D':
             self.time = data[:, 0]
             self.buoPower = data[:, 1]
-            self.viscDiss = data[:, 2]
-            self.pump = data[:, 3]
+            if data.shape[-1] == 5:
+                self.chemPower = data[:, 2]
+            else:
+                self.chemPower = np.zeros_like(self.buoPower)
+                self.viscDiss = data[:, 2]
+                self.pump = data[:, 3]
         elif self.field == 'length_scales':
             self.time = data[:, 0]
             self.lus_peak = data[:, 1]
@@ -232,10 +250,23 @@ class PizzaTs(PizzaSetup):
             ax.set_xlabel('Time')
             ax.set_ylabel('Nusselt number')
             fig.tight_layout()
+        elif self.field == 'comp' or self.field == 'composition':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(self.time, self.topsh, label='Top Sherwood')
+            ax.plot(self.time, self.botsh, label='Bottom Sherwood')
+            ax.plot(self.time, self.volsh, label='Volume Sherwood')
+            ax.legend(loc='lower right', frameon=False)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Sherwood number')
+            fig.tight_layout()
         elif self.field == 'power':
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.semilogy(self.time, self.buoPower, label='Thermal buoyancy')
+            if abs(self.buoPower).max() > 0.:
+                ax.semilogy(self.time, self.buoPower, label='Thermal buoyancy')
+            if abs(self.chemPower).max() > 0.:
+                ax.semilogy(self.time, self.chemPower, label='Chemical buoyancy')
             ax.semilogy(self.time, self.viscDiss, label='Viscous diss.')
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
@@ -244,7 +275,10 @@ class PizzaTs(PizzaSetup):
         elif self.field == 'power_3D':
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.semilogy(self.time, self.buoPower, label='Thermal buoyancy')
+            if abs(self.buoPower).max() > 0.:
+                ax.semilogy(self.time, self.buoPower, label='Thermal buoyancy')
+            if abs(self.chemPower).max() > 0.:
+                ax.semilogy(self.time, self.chemPower, label='Chemical buoyancy')
             ax.semilogy(self.time, self.viscDiss, label='Viscous diss.')
             ax.semilogy(self.time, self.pump, label='Ekman friction of zonal flow')
             ax.legend(loc='best', frameon=False)
