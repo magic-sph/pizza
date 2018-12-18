@@ -1,0 +1,47 @@
+&grid
+   n_r_max    =49,
+   n_cheb_max =32,
+   m_max      =32,
+   minc       =1,
+/
+&control
+   tag        ="continue",
+   l_newmap   =.false.,
+ n_time_steps =500,
+   dtMax      =1d-3,
+   l_non_rot  =.true.,
+   cheb_method="collocation",
+   time_scheme="BPR353",
+n_fft_optim_lev=2,
+/
+ &phys_param
+  ra          =-1.0E+04,
+  pr          =0.3E+00,
+  raxi        =2.0E+04,
+  sc          =3.0E+00,
+  ek          =1.00E-03,
+  radratio    =3.50E-01,
+  g0          =1.00E+00,
+  g1          =0.00E+00,
+  g2          =0.00E+00,
+  ktopt       =1,
+  kbott       =1,
+  ktopxi      =1,
+  kbotxi      =1,
+  ktopv       =2,
+  kbotv       =2,
+ /
+ &start_field
+  l_start_file=.true.,
+  start_file  ="checkpoint_end.start",
+  init_t      =0,
+  amp_t       =2.5e-4,
+  init_xi     =0,
+  amp_xi      =2.5e-4,
+  init_u      =0,
+  amp_u       =3.0e-4,
+/
+&output_control
+  n_log_step  =100,
+  n_frames    =1,
+/

@@ -17,6 +17,7 @@ import MultistepSchemes.unitTest
 import DIRKSchemes.unitTest
 import GalerkinBases.unitTest
 import InhomogeneousHeatFlux.unitTest
+import FingConv.unitTest
 
 __version__ = '1.0'
 
@@ -179,6 +180,11 @@ def getSuite(startdir, cmd, precision, args):
                                                   '%s/RotE1e3EkPump' % startdir, 
                                                   execCmd=cmd,
                                                   precision=precision))
+        # Fingering convection
+        suite.addTest(FingConv.unitTest.FingConv('outputFileDiff',
+                                                 '%s/FingConv' % startdir, 
+                                                 execCmd=cmd,
+                                                 precision=precision))
         # QG case with Cheb integration method
         suite.addTest(RotInteg.unitTest.RotInteg('outputFileDiff',
                                                  '%s/RotInteg' % startdir, 
