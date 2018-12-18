@@ -70,12 +70,12 @@ contains
          xi_Mloc(:,:) =zero
          dxi_Mloc(:,:)=zero
       end if
-      psi_Mloc(:,:)  =zero
-      om_Mloc(:,:)   =zero
-      dom_Mloc(:,:)  =zero
-      us_Mloc(:,:)   =zero
-      up_Mloc(:,:)   =zero
-      work_Mloc(:,:) =zero
+      psi_Mloc(:,:) =zero
+      om_Mloc(:,:)  =zero
+      dom_Mloc(:,:) =zero
+      us_Mloc(:,:)  =zero
+      up_Mloc(:,:)  =zero
+      work_Mloc(:,:)=zero
 
       if ( .not. l_cheb_coll ) then
          allocate( psi_hat_Mloc(nMstart:nMstop,n_r_max) )
@@ -125,10 +125,10 @@ contains
       &                 n_m_max*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
 
       if ( l_heat ) temp_Rloc(:,:)=zero
-      if ( l_chem ) xi_Rloc(:,:)  =zero
-      us_Rloc(:,:)   =zero
-      up_Rloc(:,:)   =zero
-      om_Rloc(:,:)   =zero
+      if ( l_chem ) xi_Rloc(:,:)=zero
+      us_Rloc(:,:)=zero
+      up_Rloc(:,:)=zero
+      om_Rloc(:,:)=zero
 
    end subroutine initialize_fields
 !----------------------------------------------------------------------------
