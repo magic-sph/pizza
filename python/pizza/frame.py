@@ -160,14 +160,14 @@ class PizzaFields(PizzaSetup):
         self.vortz = spec_spat(self.vortz_m, self.n_phi_max)
 
         filename = self.get_filename('frame_temp', ivar, datadir, tag, verbose)
-        if os.path.exists(filename):
+        if filename is not None:
             f = Frame(filename, endian=endian)
             self.temp_m = f.field_m
             self.temp_m[0, :] += self.tcond
             self.temp = spec_spat(self.temp_m, self.n_phi_max)
 
         filename = self.get_filename('frame_xi', ivar, datadir, tag, verbose)
-        if os.path.exists(filename):
+        if filename is not None:
             f = Frame(filename, endian=endian)
             self.xi_m = f.field_m
             self.xi_m[0, :] += self.xicond
@@ -207,11 +207,17 @@ class PizzaFields(PizzaSetup):
                                     nml='log.%s' % tag)
         else:
             if ivar is not None:
-                files = scanDir('%s_%i*' % (prefix, ivar))
-                filename = os.path.join(datadir, files[-1])
+                files = scanDir('%s_%i.*' % (prefix, ivar))
+                if len(files) != 0:
+                    filename = os.path.join(datadir, files[-1])
+                else:
+                    return
             else:
                 files = scanDir('%s_*' % prefix)
-                filename = os.path.join(datadir, files[-1])
+                if len(files) != 0:
+                    filename = os.path.join(datadir, files[-1])
+                else:
+                    return
             # Determine the setup
             mask = re.compile(r'.*\.(.*)')
             ending = mask.search(files[-1]).groups(0)[0]
