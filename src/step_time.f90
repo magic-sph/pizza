@@ -44,7 +44,7 @@ module step_time
 
    private
 
-   real(cp) :: tsig=0.0_cp ! to measure the time between two signal files
+   real(cp) :: tsig ! to measure the time between two signal files
 
    public :: time_loop
 
@@ -92,6 +92,9 @@ contains
       l_stop_time     =.false.
       l_vphi_bal_write=.false.
       lMatNext        =.true.
+
+      tsig           =0.0_cp
+      run_time_passed=0.0_cp
 
       n_stop_signal  = 0
       n_spec_signal  = 0
@@ -155,7 +158,6 @@ contains
             write(message,'("! Run time limit exeeded !")')
             call logWrite(message, n_log_file)
             l_stop_time=.true.
-            !print*, rank, l_stop_time, run_time_tot
          end if
 
          !-- Some reasons to stop the run
