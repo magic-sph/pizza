@@ -199,7 +199,6 @@ class PizzaFields(PizzaSetup):
                 if len(files) != 0:
                     filename = os.path.join(datadir, files[-1])
                 else:
-                    print('No such tag... try again')
                     return
 
             if os.path.exists('log.%s' % tag):
@@ -226,7 +225,6 @@ class PizzaFields(PizzaSetup):
                                     nml='log.%s' % ending)
 
         if not os.path.exists(filename):
-            print('No such file')
             return
 
         if verbose:
