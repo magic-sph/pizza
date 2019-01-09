@@ -170,6 +170,8 @@ class PizzaTs(PizzaSetup):
             self.buoPower = data[:, 1]
             if data.shape[-1] == 5:
                 self.chemPower = data[:, 2]
+                self.viscDiss = data[:, 3]
+                self.pump = data[:, 4]
             else:
                 self.chemPower = np.zeros_like(self.buoPower)
                 self.viscDiss = data[:, 2]
