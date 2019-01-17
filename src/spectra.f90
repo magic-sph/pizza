@@ -212,7 +212,7 @@ contains
             us2_SD_global(n_m) =sqrt(us2_SD_global(n_m)/this%timeLast)
             up2_SD_global(n_m) =sqrt(up2_SD_global(n_m)/this%timeLast)
             enst_SD_global(n_m)=sqrt(enst_SD_global(n_m)/this%timeLast)
-            write(file_handle, '(I4, 6es16.8)') m,                                &
+            write(file_handle, '(I5, 6es16.8)') m,                                &
             &     round_off(us2_mean_global(n_m)), round_off(us2_SD_global(n_m)), &
             &     round_off(up2_mean_global(n_m)), round_off(up2_SD_global(n_m)), &
             &     round_off(enst_mean_global(n_m)), round_off(enst_SD_global(n_m))
@@ -282,7 +282,7 @@ contains
          open(newunit=file_handle, file=spec_name, position='append')
          do n_m=1,n_m_max
             m = idx2m(n_m)
-            write(file_handle, '(I4, 3es16.8)') m,       &
+            write(file_handle, '(I5, 3es16.8)') m,       &
             &              round_off(us2_m_global(n_m)), &
             &              round_off(up2_m_global(n_m)), &
             &              round_off(enst_m_global(n_m))

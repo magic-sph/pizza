@@ -386,7 +386,7 @@ contains
             ChemFac = 0.0_cp
             XidiffFac = 0.0_cp
          end if
-         viscFac = one
+         ViscFac = one
       else
          if ( index(time_scale, 'ROT') /= 0 ) then
             CorFac = two
@@ -404,7 +404,7 @@ contains
                ChemFac = 0.0_cp
                XidiffFac = 0.0_cp
             end if
-            viscFac = ek
+            ViscFac = ek
          else
             CorFac = two/ek
             if ( l_heat ) then
@@ -421,10 +421,9 @@ contains
                ChemFac = 0.0_cp
                XidiffFac = 0.0_cp
             end if
-            viscFac = one
+            ViscFac = one
          end if
       end if
-
 
    end subroutine read_namelists
 !--------------------------------------------------------------------------------

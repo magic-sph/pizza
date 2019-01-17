@@ -420,7 +420,7 @@ contains
                inerSD_global(n_m)  =sqrt(inerSD_global(n_m)/this%timeLast)
                ciaSD_global(n_m)   =sqrt(ciaSD_global(n_m)/this%timeLast)
 
-               write(file_handle, '(I4,18es16.8)') m,                      &
+               write(file_handle, '(I5,18es16.8)') m,                      &
                &                buoM_global(n_m), buoSD_global(n_m),       &
                &                corM_global(n_m), corSD_global(n_m),       &
                &                advM_global(n_m), advSD_global(n_m),       &
