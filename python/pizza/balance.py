@@ -51,6 +51,9 @@ class PizzaBalance(PizzaSetup):
     """
     This module is used to load and display the output files that
     contain the azimuthal force balance vphi_bal.TAG
+
+    >>> bal = PizzaBalance(all=True)
+    >>> bal.plot()
     """
 
     def __init__(self, datadir='.', tag=None, endian='l', iplot=False, all=False):
@@ -202,7 +205,17 @@ class PizzaBalance(PizzaSetup):
         Read one vphi_bal.TAG file
         """
 
-        try:
+        # Since n_r_max is not in the file, one needs to get from the log file
+        # This is right now the only way to properly stack vphi_bal files that
+        # have different radial resolution
+        tag = filename.split('vphi_bal.')[-1]
+        if os.path.exists('log.%s' % tag):
+            stp = PizzaSetup(nml='log.%s' % tag, quiet=True)
+            n_r_max = stp.n_r_max
+        else:
+            n_r_max = self.n_r_max
+
+        try: # Old file format (with record markers)
             file = npfile(filename, endian=endian)
             self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc \
                      = file.fort_read('Float64')
@@ -225,22 +238,22 @@ class PizzaBalance(PizzaSetup):
                     break
 
             file.close()
-        except:
+        except: # New file format (without record marker)
             file = open(filename, 'rb')
             data = np.fromfile(file, dtype='Float64')
             self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc = \
                                                                         data[0:6]
-            radius = data[6:7+self.n_r_max-1]
-            data = data[7+self.n_r_max-1:]
-            nsteps = len(data)/(5*self.n_r_max+1)
+            radius = data[6:7+n_r_max-1]
+            data = data[7+n_r_max-1:]
+            nsteps = len(data)/(5*n_r_max+1)
 
-            data = data.reshape((nsteps, 5*self.n_r_max+1))
+            data = data.reshape((nsteps, 5*n_r_max+1))
             time = data[:, 0]
-            vp = data[:, 1:self.n_r_max+1]
-            dvpdt = data[:,self.n_r_max+1:2*self.n_r_max+1]
-            rey_stress = data[:,2*self.n_r_max+1:3*self.n_r_max+1]
-            ek_pump = data[:,3*self.n_r_max+1:4*self.n_r_max+1]
-            visc = data[:,4*self.n_r_max+1:5*self.n_r_max+1]
+            vp = data[:, 1:n_r_max+1]
+            dvpdt = data[:,n_r_max+1:2*n_r_max+1]
+            rey_stress = data[:,2*n_r_max+1:3*n_r_max+1]
+            ek_pump = data[:,3*n_r_max+1:4*n_r_max+1]
+            visc = data[:,4*n_r_max+1:5*n_r_max+1]
 
             file.close()
 

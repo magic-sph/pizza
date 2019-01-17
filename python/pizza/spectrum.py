@@ -321,9 +321,9 @@ class Pizza2DSpectrum(PizzaSetup):
     >>> sp = Pizza2DSpectrum()
     """
 
-    def __init__(self,  datadir='.', iplot=True, tag=None, endian='l', all=False):
+    def __init__(self,  datadir='.', iplot=False, tag=None, endian='l', all=False):
         """
-        :param iplot: display the output plot when set to True (default is True)
+        :param iplot: display the output plot when set to True (default is False)
         :type iplot: bool
         :param tag: file suffix (tag), if not specified the most recent one in
                     the current directory is chosen
@@ -517,6 +517,47 @@ class Pizza2DSpectrum(PizzaSetup):
         self.peaks = np.zeros_like(ind)
         for k, idx in enumerate(ind):
             self.peaks[k] = self.idx2m[idx]
+
+    def plot_rad(self, r=1.0):
+        """
+        This routine allows to plot the spectra at a given radius
+
+        :param r: the radius one wants to display
+        :type r: float
+        """
+
+        idx = np.where(abs(self.radius-r)==abs(self.radius-r).min(), 1, 0)
+        idx = np.nonzero(idx)[0][0]
+    
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+
+
+        #if hasattr(self, 'us2_std'):
+        #    sd = self.us2_std[1:,idx]
+        #    ax.fill_between(self.idx2m[1:]+1, self.us2_mean[1:,idx]-sd, \
+        #                    self.us2_mean[1:,idx]+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:]+1, self.us2_mean[1:,idx], label='us2')
+        #if hasattr(self, 'up2_std'):
+        #    sd = self.up2_std[:,idx]
+        #    ax.fill_between(self.idx2m+1, self.up2_mean[:,idx]-sd, \
+        #                    self.up2_mean[:,idx]+sd, alpha=0.1)
+        ax.plot(self.idx2m+1, self.up2_mean[:,idx], label='up2')
+        ax.plot(self.idx2m+1, self.ekin_mean[:,idx], label='Ekin')
+        #if hasattr(self, 'enst_std'):
+        #    sd = self.enst_std[1:,idx]
+        #    ax.fill_between(self.idx2m[1:], self.enst_mean[1:,idx]-sd, \
+        #                    self.enst_mean[1:,idx]+sd, alpha=0.1)
+        ax.plot(self.idx2m+1, self.enst_mean[:,idx], label='Enst')
+
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+
+        ax.set_xlabel('m+1')
+        ax.set_ylabel('Spectra')
+
+        ax.legend(loc='best', frameon=False)
+
 
     def plot(self, levels=17, cm='magma', cut=1., solid_contour=True, 
              log_yscale=True):
