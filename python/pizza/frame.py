@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-import os, re
-from .npfile import *
+import os
+import re
+from .npfile import npfile
 import numpy as np
 from .log import PizzaSetup
 from .plotlib import equatContour
 from .libpizza import spec_spat, symmetrize, scanDir
 import scipy.interpolate as inp
+
 
 def my_interp2d(f, rad, radnew):
     r = rad[::-1]
@@ -15,7 +17,7 @@ def my_interp2d(f, rad, radnew):
         val = f[i, ::-1]
         tckp = inp.splrep(r, val)
         fnew[i, :] = inp.splev(rnew, tckp)
-    
+
     return fnew[:, ::-1]
 
 
@@ -34,13 +36,13 @@ class Frame:
 
         try:
 
-            file = npfile(filename, endian=endian)
+            file = npfile.npfile(filename, endian=endian)
             self.version = file.fort_read('i4')
             self.time = file.fort_read('Float64')
             self.ra, self.ek, self.pr, self.radratio, self.sc, \
-                          self.raxi = file.fort_read('Float64')
+                self.raxi = file.fort_read('Float64')
             self.n_r_max, self.n_m_max, self.m_max, self.minc, \
-                          self.n_phi_max = file.fort_read('i4')
+                self.n_phi_max = file.fort_read('i4')
 
             self.radius = file.fort_read('Float64')
             self.tcond = file.fort_read('Float64')
@@ -56,16 +58,17 @@ class Frame:
             file = open(filename, 'rb')
             self.version = np.fromfile(file, dtype='i4', count=1)[0]
             self.time, self.ra, self.ek, self.pr, self.radratio, self.sc, \
-                     self.raxi = np.fromfile(file, dtype='7Float64', count=1)[0]
+                self.raxi = np.fromfile(file, dtype='7Float64', count=1)[0]
             self.n_r_max, self.n_m_max, self.m_max, self.minc, \
-                     self.n_phi_max = np.fromfile(file, dtype='5i4', count=1)[0]
+                self.n_phi_max = np.fromfile(file, dtype='5i4', count=1)[0]
 
             self.radius = np.fromfile(file, dtype='%iFloat64' % self.n_r_max,
                                       count=1)[0]
             self.tcond = np.fromfile(file, dtype='%iFloat64' % self.n_r_max,
                                      count=1)[0]
             if self.version == 2:
-                self.xicond = np.fromfile(file, dtype='%iFloat64' % self.n_r_max,
+                self.xicond = np.fromfile(file,
+                                          dtype='%iFloat64' % self.n_r_max,
                                           count=1)[0]
 
             self.idx2m = np.fromfile(file, dtype='%ii4' % self.n_m_max,
@@ -108,7 +111,8 @@ class PizzaFields(PizzaSetup):
     physical grid and display them.
     """
 
-    def __init__(self, ivar=None, datadir='.', tag=None, endian='l', verbose=False):
+    def __init__(self, ivar=None, datadir='.', tag=None, endian='l',
+                 verbose=False):
         """
         :param ivar: the number of the snapshot file
         :type ivar: int
@@ -178,7 +182,8 @@ class PizzaFields(PizzaSetup):
         This routine determines the filename based on what is available
         in the current directory
 
-        :param prefix: the file prefix ('frame_temp', 'frame_us', 'frame_om', ...)
+        :param prefix: the file prefix ('frame_temp', 'frame_us',
+                       'frame_om', ...)
         :type prefix: str
         :param ivar: the number of the snapshot file
         :type ivar: int
@@ -275,13 +280,13 @@ class PizzaFields(PizzaSetup):
             data = self.vortz
         elif field in ('temperature', 'Temperature', 'temp', 'Temp', 't', 'T'):
             data = self.temp
-        elif field in ('composition', 'Composition', 'xi', 'Xi', 'chem', 'Chem',
-                       'comp', 'Comp'):
+        elif field in ('composition', 'Composition', 'xi', 'Xi', 'chem',
+                       'Chem', 'comp', 'Comp'):
             data = self.xi
         elif field in ('tfluct', 'tempfluct'):
-            data = self.temp-self.temp_m[0,:]
+            data = self.temp-self.temp_m[0, :]
         elif field in ('xifluct', 'chemfluct', 'compfluct'):
-            data = self.xi-self.xi_m[0,:]
+            data = self.xi-self.xi_m[0, :]
         elif field in ('us', 'Us', 'ur', 'Ur', 'vs', 'Vs', 'Vr', 'vr'):
             data = self.us
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
@@ -290,9 +295,12 @@ class PizzaFields(PizzaSetup):
         if deminc:
             data = symmetrize(data, ms=self.minc)
 
-        self.fig, xx, yy = equatContour(data, self.radius, minc=self.minc, levels=levels,
-                          cm=cm, deminc=deminc, normed=normed, vmax=vmax, vmin=vmin,
-                          normRad=normRad, cbar=cbar, label=label)
+        self.fig, xx, yy = equatContour(data, self.radius, minc=self.minc,
+                                        levels=levels, cm=cm, deminc=deminc,
+                                        normed=normed, vmax=vmax, vmin=vmin,
+                                        normRad=normRad, cbar=cbar,
+                                        label=label)
+
         if stream:
             ax = self.fig.get_axes()[0]
             bbox = ax.get_position()
@@ -313,7 +321,7 @@ class PizzaFields(PizzaSetup):
             ax1.axis('off')
 
             if deminc:
-                #theta = np.linspace(-np.pi, np.pi, data.shape[0])
+                # theta = np.linspace(-np.pi, np.pi, data.shape[0])
                 theta = np.linspace(0., 2.*np.pi, data.shape[0])
             else:
                 theta = np.linspace(0., 2*np.pi/self.minc, data.shape[0])
@@ -322,12 +330,12 @@ class PizzaFields(PizzaSetup):
             rr, ttheta = np.meshgrid(rad, theta)
             if deminc:
                 u = symmetrize(self.us, self.minc)
-                v = symmetrize(self.uphi,self.minc)
+                v = symmetrize(self.uphi, self.minc)
             else:
                 u = self.us
                 v = self.uphi
             v /= self.radius
-            
+
             u = my_interp2d(u, self.radius, rad)
             v = my_interp2d(v, self.radius, rad)
             speed = np.sqrt(u**2+v**2)

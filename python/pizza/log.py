@@ -5,8 +5,8 @@ import os
 
 class PizzaSetup:
     """
-    This class allows to read the input namelist or the log file of a current job
-    and creates an object that contains all the parameters found in the
+    This class allows to read the input namelist or the log file of a current
+    job and creates an object that contains all the parameters found in the
     namelist/log file.
 
     >>> stp = PizzaSetup(nml='log.test', quiet=True)
@@ -24,14 +24,13 @@ class PizzaSetup:
         :type quiet: bool
         """
         logFile = re.compile(r'log\.(.*)')
-        valueInt  = re.compile(r'^([0-9]+)$')
+        valueInt = re.compile(r'^([0-9]+)$')
         valueReal = re.compile(r'[+-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+)')
-        valueNumber = re.compile(r'\b(([\+\-]?[0-9]+)?\.)?[0-9]*([eE][-+]?[0-9]+)?')
-        valueFalse = re.compile(r"(\.(true|false|t|f)\.)",re.I)
-        valueTrue = re.compile(r"(\.(true|t)\.)",re.I)
-        valueNone = re.compile(r"(NONE)",re.I)
+        valueFalse = re.compile(r"(\.(true|false|t|f)\.)", re.I)
+        valueTrue = re.compile(r"(\.(true|t)\.)", re.I)
+        valueNone = re.compile(r"(NONE)", re.I)
         filename = os.path.join(datadir, nml)
-        file = open(filename,'r')
+        file = open(filename, 'r')
         tab = file.readlines()
         tab2 = []
         for i in tab:
@@ -63,7 +62,7 @@ class PizzaSetup:
             elif valueInt.match(rhs):
                 rhs = int(rhs)
             setattr(self, lhs, rhs)
-            
+
         self.ra = float(self.ra)
         if not quiet:
             print(self)

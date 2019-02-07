@@ -1,21 +1,27 @@
 # -*- coding: utf-8 -*-
-import copy, os, re
+import copy
+import os
+import re
 import matplotlib.pyplot as plt
 import numpy as np
 from .log import PizzaSetup
 from .libpizza import fast_read, scanDir, get_dr
 
+
 def plotSpan(ax, idx, s):
     for i in range(len(idx)):
         if i > 0:
             if i % 2:
-                ax.axvspan(s[idx[i-1]], s[idx[i]], facecolor='0.75', edgecolor='None')
+                ax.axvspan(s[idx[i-1]], s[idx[i]], facecolor='0.75',
+                           edgecolor='None')
             else:
-                ax.axvspan(s[idx[i-1]], s[idx[i]], facecolor='0.97', edgecolor='None')
+                ax.axvspan(s[idx[i-1]], s[idx[i]], facecolor='0.97',
+                           edgecolor='None')
+
 
 class PizzaRadial(PizzaSetup):
     """
-    This class can be used to read and display the time and 
+    This class can be used to read and display the time and
     horizontally averaged files radial_profiles.TAG
 
     >>> rad = PizzaRadial() # display the content of radial_profiles.tag
@@ -29,9 +35,9 @@ class PizzaRadial(PizzaSetup):
         :type iplot: bool
         :param tag: a specific tag, default is None
         :type tag: str
-        :param all: if all=True, then all the radial profiles from the directory
-                    are stacked together and averaged by their respective time
-                    span
+        :param all: if all=True, then all the radial profiles from the
+                    directory are stacked together and averaged by their
+                    respective time span
         :type all: bool
         """
 
@@ -42,11 +48,12 @@ class PizzaRadial(PizzaSetup):
                 pattern = os.path.join(datadir, '%s.%s' % (name, tag))
                 files = scanDir(pattern)
 
-                # Either the log.tag directly exists and the setup is easy to obtain
+                # Either the log.tag directly exists and the setup is easy to
+                # obtain
                 if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
                     PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                         nml='log.%s' % tag)
-                # Or the tag is a bit more complicated and we need to find 
+                # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
                     mask = re.compile(r'%s\/%s\.(.*)' % (datadir, name))
@@ -54,7 +61,8 @@ class PizzaRadial(PizzaSetup):
                         ending = mask.search(files[-1]).groups(0)[0]
                         pattern = os.path.join(datadir, 'log.%s' % ending)
                         if os.path.exists(pattern):
-                            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                            PizzaSetup.__init__(self, datadir=datadir,
+                                                quiet=True,
                                                 nml='log.%s' % ending)
 
                 # Sum the files that correspond to the tag
@@ -62,19 +70,21 @@ class PizzaRadial(PizzaSetup):
                 for k, file in enumerate(files):
                     print('reading %s' % file)
                     tag = mask.search(file).groups(0)[0]
-                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                                     quiet=True)
                     filename = file
                     if k == 0:
                         self.tstart = nml.start_time
-                        self.tstop = nml.stop_time # will be overwritten afterwards
+                        self.tstop = nml.stop_time  # will be overwritten
                         data = fast_read(filename)
                     else:
                         if os.path.exists(filename):
                             tmp = fast_read(filename)
-                            data = self.add(data, tmp, nml.stop_time, nml.start_time)
+                            data = self.add(data, tmp, nml.stop_time,
+                                            nml.start_time)
 
-            else: # if all
-                pattern = os.path.join(datadir, '%s.*'% name)
+            else:  # if all
+                pattern = os.path.join(datadir, '%s.*' % name)
                 files = scanDir(pattern)
                 filename = files[-1]
                 print('reading %s' % filename)
@@ -83,8 +93,8 @@ class PizzaRadial(PizzaSetup):
                 ending = mask.search(files[-1]).groups(0)[0]
                 if os.path.exists('log.%s' % ending):
                     try:
-                        PizzaSetup.__init__(self, datadir=datadir, quiet=True, 
-                                        nml='log.%s' % ending)
+                        PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                            nml='log.%s' % ending)
                     except AttributeError:
                         pass
 
@@ -98,16 +108,18 @@ class PizzaRadial(PizzaSetup):
             for k, file in enumerate(files):
                 print('reading %s' % file)
                 tag = mask.search(file).groups(0)[0]
-                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                                 quiet=True)
                 filename = file
                 if k == 0:
                     self.tstart = nml.start_time
-                    self.tstop = nml.stop_time # will be overwritten afterwards
+                    self.tstop = nml.stop_time  # will be overwritten later
                     data = fast_read(filename)
                 else:
                     if os.path.exists(filename):
                         tmp = fast_read(filename)
-                        data = self.add(data, tmp, nml.stop_time, nml.start_time)
+                        data = self.add(data, tmp, nml.stop_time,
+                                        nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                 nml='log.%s' % tag)
 
@@ -161,12 +173,12 @@ class PizzaRadial(PizzaSetup):
         self.tstop = stop_time
         fac_tot = self.tstop-self.tstart
 
-        if nr_new == nr_old: # Same grid before and after
+        if nr_new == nr_old:  # Same grid before and after
             for j in [1, 3, 5, 7, 9, 11]:
-                out[:, j] = (fac_old*data[:,j]+fac_new*tmp[:,j])/fac_tot
+                out[:, j] = (fac_old*data[:, j]+fac_new*tmp[:, j])/fac_tot
             for j in [2, 4, 6, 8, 10, 12]:
-                out[:, j] = np.sqrt((fac_old*data[:,j]**2+ \
-                                     fac_new*tmp[:,j]**2)/ fac_tot)
+                out[:, j] = np.sqrt((fac_old*data[:, j]**2 +
+                                     fac_new*tmp[:, j]**2) / fac_tot)
         else:
             print('Not implemented yet ...')
 
@@ -179,8 +191,8 @@ class PizzaRadial(PizzaSetup):
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        ax.fill_between(self.radius, self.temp_mean-self.temp_std, self.temp_mean+\
-                        self.temp_std, alpha=0.1)
+        ax.fill_between(self.radius, self.temp_mean-self.temp_std,
+                        self.temp_mean+self.temp_std, alpha=0.1)
         ax.plot(self.radius, self.temp_mean)
         ax.set_xlabel('Radius')
         ax.set_ylabel('Temperature')
@@ -191,8 +203,8 @@ class PizzaRadial(PizzaSetup):
         if abs(self.uphi_mean).max() > 0.:
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.fill_between(self.radius, self.uphi_mean-self.uphi_std, self.uphi_mean+\
-                            self.uphi_std, alpha=0.1)
+            ax.fill_between(self.radius, self.uphi_mean-self.uphi_std,
+                            self.uphi_mean+self.uphi_std, alpha=0.1)
             ax.plot(self.radius, self.uphi_mean)
             ax.set_xlabel('Radius')
             ax.set_ylabel('Uphi')
@@ -201,14 +213,14 @@ class PizzaRadial(PizzaSetup):
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        ax.fill_between(self.radius, self.us2_mean-self.us2_std, self.us2_mean+\
-                        self.us2_std, alpha=0.1)
+        ax.fill_between(self.radius, self.us2_mean-self.us2_std,
+                        self.us2_mean+self.us2_std, alpha=0.1)
         ax.plot(self.radius, self.us2_mean, label='us**2')
-        ax.fill_between(self.radius, self.up2_mean-self.up2_std, self.up2_mean+\
-                        self.up2_std, alpha=0.1)
+        ax.fill_between(self.radius, self.up2_mean-self.up2_std,
+                        self.up2_mean+self.up2_std, alpha=0.1)
         ax.plot(self.radius, self.up2_mean, label='up**2')
-        ax.fill_between(self.radius, self.enst_mean-self.enst_std, self.enst_mean+\
-                        self.enst_std, alpha=0.1)
+        ax.fill_between(self.radius, self.enst_mean-self.enst_std,
+                        self.enst_mean+self.enst_std, alpha=0.1)
         ax.plot(self.radius, self.enst_mean, label='omega**2')
         ax.legend(loc='best', frameon=False)
         ax.set_xlabel('Radius')
@@ -256,12 +268,11 @@ class PizzaRadial(PizzaSetup):
                 lamb_us[k-1] = 2.*np.pi*np.sqrt(vs_loc*self.ek/beta_loc)
                 coord[k-1] = self.radius[idx[k-1]:idx[k]].mean()
 
-
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        ax.plot(coord , jet_widths, marker='o', label='Jet width')
-        ax.plot(coord , lamb_uzon, marker='s', label='Rhines scale (Uzon)')
-        ax.plot(coord , lamb_us, marker='s', label='Rhines scale (Us)')
+        ax.plot(coord, jet_widths, marker='o', label='Jet width')
+        ax.plot(coord, lamb_uzon, marker='s', label='Rhines scale (Uzon)')
+        ax.plot(coord, lamb_us, marker='s', label='Rhines scale (Us)')
         plotSpan(ax, idx, self.radius)
 
         ax.set_xlabel('Radius')

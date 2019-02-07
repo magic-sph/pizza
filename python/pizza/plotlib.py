@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+
 
 def cut(dat, vmax=None, vmin=None):
     """
-    This functions truncates the values of an input array that are beyond 
+    This functions truncates the values of an input array that are beyond
     vmax or below vmin and replace them by vmax and vmin, respectively.
 
     >>> # Keep only values between -1e3 and 1e3
@@ -22,13 +22,12 @@ def cut(dat, vmax=None, vmin=None):
     :rtype: numpy.ndarray
     """
     if vmax is not None:
-        mask = np.where(dat>=vmax, 1, 0)
+        mask = np.where(dat >= vmax, 1, 0)
         dat = dat*(mask == 0) + vmax*(mask == 1)
-        normed = False
     if vmin is not None:
-        mask = np.where(dat<=vmin, 1, 0)
+        mask = np.where(dat <= vmin, 1, 0)
         dat = dat*(mask == 0) + vmin*(mask == 1)
-        normed = False
+
     return dat
 
 
@@ -87,22 +86,22 @@ def equatContour(data, radius, minc=1, label=None, levels=65,
     xx = rr * np.cos(pphi)
     yy = rr * np.sin(pphi)
 
-    if normRad: # Normalise each radius
+    if normRad:  # Normalise each radius
         maxS = np.sqrt(np.mean(data**2, axis=0))
-        data[:, maxS!=0.] /= maxS[maxS!=0.]
+        data[:, maxS != 0.] /= maxS[maxS != 0.]
 
     if fig is None and ax is None:
         if tit and label is not None:
             if cbar:
-                fig = plt.figure(figsize=(6.5,5.5))
+                fig = plt.figure(figsize=(6.5, 5.5))
                 ax = fig.add_axes([0.01, 0.01, 0.76, 0.9])
             else:
-                fig = plt.figure(figsize=(5,5.5))
+                fig = plt.figure(figsize=(5, 5.5))
                 ax = fig.add_axes([0.01, 0.01, 0.98, 0.9])
             ax.set_title(label, fontsize=24)
         else:
             if cbar:
-                fig = plt.figure(figsize=(6.5,5))
+                fig = plt.figure(figsize=(6.5, 5))
                 ax = fig.add_axes([0.01, 0.01, 0.76, 0.98])
             else:
                 fig = plt.figure(figsize=(5, 5))
@@ -119,14 +118,14 @@ def equatContour(data, radius, minc=1, label=None, levels=65,
         cs = np.linspace(vmin, vmax, levels)
         im = ax.contourf(xx, yy, data, cs, cmap=cmap, extend='both')
         if contourLines:
-            im1 = ax.contour(xx, yy, data, cs, colors=['k'], linewidths=[0.5], \
-                             extend='both')
+            ax.contour(xx, yy, data, cs, colors=['k'], linewidths=[0.5],
+                       extend='both')
     else:
         cs = levels
         im = ax.contourf(xx, yy, data, cs, cmap=cmap)
         if contourLines:
-            im1 = ax.contour(xx, yy, data, cs, colors=['k'], linewidths=[0.5])
-        #im = ax.pcolormesh(xx, yy, data, cmap=cmap, antialiased=True)
+            ax.contour(xx, yy, data, cs, colors=['k'], linewidths=[0.5])
+        # im = ax.pcolormesh(xx, yy, data, cmap=cmap, antialiased=True)
 
     ax.plot(radius[0]*np.cos(phi), radius[0]*np.sin(phi), 'k-', lw=1.5)
     ax.plot(radius[-1]*np.cos(phi), radius[-1]*np.sin(phi), 'k-', lw=1.5)
@@ -163,14 +162,15 @@ def equatContour(data, radius, minc=1, label=None, levels=65,
             cax = fig.add_axes([0.85, 0.46-0.7*h/2., 0.03, 0.7*h])
         else:
             cax = fig.add_axes([0.85, 0.5-0.7*h/2., 0.03, 0.7*h])
-        mir = fig.colorbar(im, cax=cax)
+        fig.colorbar(im, cax=cax)
 
-    # Normalise data 
+    # Normalise data
     if normed:
         im.set_clim(-max(abs(data.max()), abs(data.min())),
-                     max(abs(data.max()), abs(data.min())))
+                    max(abs(data.max()), abs(data.min())))
 
     return fig, xx, yy
+
 
 def spec2D(field_m, n_cheb_max=None):
     """
@@ -202,7 +202,7 @@ def spec2D(field_m, n_cheb_max=None):
     ax = fig.add_subplot(111, projection='3d')
     eps = 1e-15
     eps = 1e-15
-    dat = np.log10(abs(field_m[1:,:n_cheb_max])+eps)
+    dat = np.log10(abs(field_m[1:, :n_cheb_max])+eps)
     im = ax.plot_surface(xx, yy, dat, cmap=plt.get_cmap('magma'),
                          antialiased=False, linewidth=0.)
     ax.set_ylabel(r'$\log_{10}(m)$')
@@ -214,5 +214,3 @@ def spec2D(field_m, n_cheb_max=None):
     ax.view_init(30, 60)
     fig.colorbar(im)
     fig.tight_layout()
-
-

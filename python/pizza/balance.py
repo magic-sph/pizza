@@ -1,12 +1,14 @@
-from .npfile import *
+# -*- coding: utf-8 -*-
+from .npfile import npfile
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
 from .log import PizzaSetup
-from .libpizza import scanDir, costf, get_dr
-from scipy.signal import filtfilt, butter
+from .libpizza import scanDir, costf
 from scipy.integrate import simps
-import os, re
+import os
+import re
+
 
 def avg_std(time, y):
     """
@@ -24,7 +26,6 @@ def avg_std(time, y):
     ystd = np.sqrt(tfac*simps((y-ymean)**2, time, axis=0))
 
     return ymean, ystd
-
 
 
 def interp_dct(arr, nr_new):
@@ -46,7 +47,6 @@ def interp_dct(arr, nr_new):
     return fout
 
 
-
 class PizzaBalance(PizzaSetup):
     """
     This module is used to load and display the output files that
@@ -56,7 +56,8 @@ class PizzaBalance(PizzaSetup):
     >>> bal.plot()
     """
 
-    def __init__(self, datadir='.', tag=None, endian='l', iplot=False, all=False):
+    def __init__(self, datadir='.', tag=None, endian='l', iplot=False,
+                 all=False):
         """
         :param datadir: working directory
         :type datadir: str
@@ -66,9 +67,9 @@ class PizzaBalance(PizzaSetup):
         :type endian: str
         :param iplot: boolean to toggle the display (False by default)
         :type iplot: bool
-        :param all: when set to True, the complete time series is reconstructed by
-                    stacking all the corresponding files from the working directory
-                    (False by default)
+        :param all: when set to True, the complete time series is reconstructed
+                    by stacking all the corresponding files from the working
+                    directory (False by default)
         :type all: bool
         """
         pattern = os.path.join(datadir, 'log.*')
@@ -78,12 +79,13 @@ class PizzaBalance(PizzaSetup):
             pattern = os.path.join(datadir, 'vphi_bal.%s' % tag)
             files = scanDir(pattern)
 
-            # Either the log.tag directly exists and the setup is easy to obtain
+            #  Either the log.tag directly exists and the setup is easy
+            #  to obtain
             if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                     nml='log.%s' % tag)
-            # Or the tag is a bit more complicated and we need to find 
-            # the corresponding log file
+            #  Or the tag is a bit more complicated and we need to find
+            #  the corresponding log file
             else:
                 mask = re.compile(r'%s/vphi_bal\.(.*)' % (datadir))
                 if mask.match(files[-1]):
@@ -96,12 +98,14 @@ class PizzaBalance(PizzaSetup):
             for k, file in enumerate(files):
                 print('reading %s' % file)
                 if k == 0:
-                    self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
-                               self.ek_pump, self.visc = self.read(file, endian)
+                    self.radius, self.time, self.vp, self.dvpdt, \
+                        self.rey_stress, self.ek_pump, self.visc = \
+                        self.read(file, endian)
                 else:
                     radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
                                               self.read(file, endian)
-                    self.add(time, radius, vp, dvpdt, rey_stress, ek_pump, visc)
+                    self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
+                             visc)
 
         # If no tag is specified, the most recent is plotted
         elif not all:
@@ -111,15 +115,13 @@ class PizzaBalance(PizzaSetup):
                 filename = os.path.join(datadir, name)
                 print('reading %s' % filename)
                 self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
-                            self.ek_pump, self.visc = self.read(filename, endian)
+                    self.ek_pump, self.visc = self.read(filename, endian)
             else:
-                mot = 'vphi_bal.*'
-                dat = [(os.stat(i).st_mtime, i) for i in glob.glob(mot)]
-                dat.sort()
+                dat = scanDir('vphi_bal.*')
                 filename = dat[-1][1]
                 print('reading %s' % filename)
                 self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
-                            self.ek_pump, self.visc = self.read(filename, endian)
+                    self.ek_pump, self.visc = self.read(filename, endian)
 
         # If no tag is specified but all=True, all the directory is plotted
         else:
@@ -130,12 +132,14 @@ class PizzaBalance(PizzaSetup):
             for k, file in enumerate(files):
                 print('reading %s' % file)
                 if k == 0:
-                    self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
-                                self.ek_pump, self.visc = self.read(file, endian)
+                    self.radius, self.time, self.vp, self.dvpdt, \
+                        self.rey_stress, self.ek_pump, self.visc = \
+                        self.read(file, endian)
                 else:
                     radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
-                                              self.read(file, endian)
-                    self.add(time, radius, vp, dvpdt, rey_stress, ek_pump, visc)
+                        self.read(file, endian)
+                    self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
+                             visc)
 
         if iplot:
             self.plot()
@@ -154,20 +158,24 @@ class PizzaBalance(PizzaSetup):
             self.ek_pump = interp_dct(self.ek_pump, nr_new)
             self.visc = interp_dct(self.visc, nr_new)
 
+            # We have a situation here:
             self.radius = radius
 
         if new.time[0] == self.time[-1]:
             out.time = np.concatenate((self.time, new.time[1:]), axis=0)
             out.vp = np.concatenate((self.vp, new.vp[1:, :]), axis=0)
             out.dvpdt = np.concatenate((self.dvpdt, new.dvpdt[1:, :]), axis=0)
-            out.rey_stress = np.concatenate((self.rey_stress, new.rey_stress[1:, :]), axis=0)
-            out.ek_pump = np.concatenate((self.ek_pump, new.ek_pump[1:, :]), axis=0)
+            out.rey_stress = np.concatenate((self.rey_stress,
+                                             new.rey_stress[1:, :]), axis=0)
+            out.ek_pump = np.concatenate((self.ek_pump, new.ek_pump[1:, :]),
+                                         axis=0)
             out.visc = np.concatenate((self.visc, new.visc[1:, :]), axis=0)
         else:
             out.time = np.concatenate((self.time, new.time), axis=0)
             out.vp = np.concatenate((self.vp, new.vp), axis=0)
             out.dvpdt = np.concatenate((self.dvpdt, new.dvpdt), axis=0)
-            out.rey_stress = np.concatenate((self.rey_stress, new.rey_stress), axis=0)
+            out.rey_stress = np.concatenate((self.rey_stress, new.rey_stress),
+                                            axis=0)
             out.ek_pump = np.concatenate((self.ek_pump, new.ek_pump), axis=0)
             out.visc = np.concatenate((self.visc, new.visc), axis=0)
 
@@ -189,14 +197,17 @@ class PizzaBalance(PizzaSetup):
             self.time = np.concatenate((self.time, time[1:]), axis=0)
             self.vp = np.concatenate((self.vp, vp[1:, :]), axis=0)
             self.dvpdt = np.concatenate((self.dvpdt, dvpdt[1:, :]), axis=0)
-            self.rey_stress = np.concatenate((self.rey_stress, rey_stress[1:, :]), axis=0)
-            self.ek_pump = np.concatenate((self.ek_pump, ek_pump[1:, :]), axis=0)
+            self.rey_stress = np.concatenate((self.rey_stress,
+                                              rey_stress[1:, :]), axis=0)
+            self.ek_pump = np.concatenate((self.ek_pump, ek_pump[1:, :]),
+                                          axis=0)
             self.visc = np.concatenate((self.visc, visc[1:, :]), axis=0)
         else:
             self.time = np.concatenate((self.time, time), axis=0)
             self.vp = np.concatenate((self.vp, vp), axis=0)
             self.dvpdt = np.concatenate((self.dvpdt, dvpdt), axis=0)
-            self.rey_stress = np.concatenate((self.rey_stress, rey_stress), axis=0)
+            self.rey_stress = np.concatenate((self.rey_stress, rey_stress),
+                                             axis=0)
             self.ek_pump = np.concatenate((self.ek_pump, ek_pump), axis=0)
             self.visc = np.concatenate((self.visc, visc), axis=0)
 
@@ -215,10 +226,10 @@ class PizzaBalance(PizzaSetup):
         else:
             n_r_max = self.n_r_max
 
-        try: # Old file format (with record markers)
+        try:  # Old file format (with record markers)
             file = npfile(filename, endian=endian)
             self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc \
-                     = file.fort_read('Float64')
+                = file.fort_read('Float64')
             radius = file.fort_read('Float64')
             time = file.fort_read('Float64')
             vp = file.fort_read('Float64')
@@ -231,18 +242,19 @@ class PizzaBalance(PizzaSetup):
                     time = np.append(time, file.fort_read('Float64'))
                     vp = np.vstack((vp, file.fort_read('Float64')))
                     dvpdt = np.vstack((dvpdt, file.fort_read('Float64')))
-                    rey_stress = np.vstack((rey_stress, file.fort_read('Float64')))
+                    rey_stress = np.vstack((rey_stress,
+                                            file.fort_read('Float64')))
                     ek_pump = np.vstack((ek_pump, file.fort_read('Float64')))
                     visc = np.vstack((visc, file.fort_read('Float64')))
                 except TypeError:
                     break
 
             file.close()
-        except: # New file format (without record marker)
+        except:  # New file format (without record marker)
             file = open(filename, 'rb')
             data = np.fromfile(file, dtype='Float64')
             self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc = \
-                                                                        data[0:6]
+                data[0:6]
             radius = data[6:7+n_r_max-1]
             data = data[7+n_r_max-1:]
             nsteps = len(data)/(5*n_r_max+1)
@@ -250,10 +262,10 @@ class PizzaBalance(PizzaSetup):
             data = data.reshape((nsteps, 5*n_r_max+1))
             time = data[:, 0]
             vp = data[:, 1:n_r_max+1]
-            dvpdt = data[:,n_r_max+1:2*n_r_max+1]
-            rey_stress = data[:,2*n_r_max+1:3*n_r_max+1]
-            ek_pump = data[:,3*n_r_max+1:4*n_r_max+1]
-            visc = data[:,4*n_r_max+1:5*n_r_max+1]
+            dvpdt = data[:, n_r_max+1:2*n_r_max+1]
+            rey_stress = data[:, 2*n_r_max+1:3*n_r_max+1]
+            ek_pump = data[:, 3*n_r_max+1:4*n_r_max+1]
+            visc = data[:, 4*n_r_max+1:5*n_r_max+1]
 
             file.close()
 
@@ -278,11 +290,11 @@ class PizzaBalance(PizzaSetup):
         for i in range(nsteps):
             x = np.array([self.time[i]], dtype='Float64')
             x.tofile(out)
-            self.vp[i,:].tofile(out)
-            self.dvpdt[i,:].tofile(out)
-            self.rey_stress[i,:].tofile(out)
-            self.ek_pump[i,:].tofile(out)
-            self.visc[i,:].tofile(out)
+            self.vp[i, :].tofile(out)
+            self.dvpdt[i, :].tofile(out)
+            self.rey_stress[i, :].tofile(out)
+            self.ek_pump[i, :].tofile(out)
+            self.visc[i, :].tofile(out)
 
         out.close()
 
@@ -296,7 +308,8 @@ class PizzaBalance(PizzaSetup):
         fig = plt.figure()
         ax = fig.add_subplot(111)
         dvpdtm, dvpdtstd = avg_std(self.time[::nstep], self.dvpdt[::nstep])
-        ax.fill_between(self.radius, dvpdtm-dvpdtstd, dvpdtm+dvpdtstd, alpha=0.1)
+        ax.fill_between(self.radius, dvpdtm-dvpdtstd, dvpdtm+dvpdtstd,
+                        alpha=0.1)
         ax.plot(self.radius, dvpdtm, label='dvp/dt')
 
         reym, reystd = avg_std(self.time[::nstep], self.rey_stress[::nstep])
@@ -306,7 +319,7 @@ class PizzaBalance(PizzaSetup):
         ekpm, ekpstd = avg_std(self.time[::nstep], self.ek_pump[::nstep])
         ax.fill_between(self.radius, ekpm-ekpstd, ekpm+ekpstd, alpha=0.1)
         ax.plot(self.radius, ekpm, label='Ekman pumping')
-        
+
         vim, vistd = avg_std(self.time[::nstep], self.visc[::nstep])
         ax.fill_between(self.radius, vim-vistd, vim+vistd, alpha=0.1)
         ax.plot(self.radius, vim, label='Viscosity')
@@ -325,10 +338,10 @@ class PizzaBalance(PizzaSetup):
         vpstd = self.vp[::nstep].std(axis=0)
         vpm_p = vpm + vpstd
         vpm_m = vpm - vpstd
-        #xs, ys = mlab.poly_between(self.radius, vpm_m, vpm_p)
+        # xs, ys = mlab.poly_between(self.radius, vpm_m, vpm_p)
         ax.fill_between(self.radius, vpm_m, vpm_p, alpha=0.1)
         ax.plot(self.radius, vpm)
-        #ax.plot(self.radius, vm)
+        # ax.plot(self.radius, vm)
         ax.set_xlim(self.radius[-1], self.radius[0])
         ax.set_xlabel('time')
         ax.set_ylabel('up')
@@ -366,7 +379,8 @@ class PizzaBalance(PizzaSetup):
 
 class PizzaVortBalance(PizzaSetup):
 
-    def __init__(self, datadir='.', tag=None, endian='l', iplot=False, all=False):
+    def __init__(self, datadir='.', tag=None, endian='l', iplot=False,
+                 all=False):
         """
         :param datadir: working directory
         :type datadir: str
@@ -376,9 +390,9 @@ class PizzaVortBalance(PizzaSetup):
         :type endian: str
         :param iplot: boolean to toggle the display (False by default)
         :type iplot: bool
-        :param all: when set to True, the complete time series is reconstructed by
-                    stacking all the corresponding files from the working directory
-                    (False by default)
+        :param all: when set to True, the complete time series is reconstructed
+                    by stacking all the corresponding files from the working
+                    directory (False by default)
         :type all: bool
         """
 
@@ -388,19 +402,21 @@ class PizzaVortBalance(PizzaSetup):
             if tag is not None:
                 pattern = os.path.join(datadir, '%s.%s' % (self.name, tag))
                 files = scanDir(pattern)
-                # Either the log.tag directly exists and the setup is easy to obtain
+                # Either the log.tag directly exists and the setup is easy
+                # to obtain
                 if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
                     PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                         nml='log.%s' % tag)
-                # Or the tag is a bit more complicated and we need to find 
+                # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'%s/%s\.(.*)' % (datadir,self.name))
+                    mask = re.compile(r'%s/%s\.(.*)' % (datadir, self.name))
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
                         pattern = os.path.join(datadir, 'log.%s' % ending)
                         if os.path.exists(pattern):
-                            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                            PizzaSetup.__init__(self, datadir=datadir,
+                                                quiet=True,
                                                 nml='log.%s' % ending)
 
                 # Sum the files that correspond to the tag
@@ -408,16 +424,18 @@ class PizzaVortBalance(PizzaSetup):
                 for k, file in enumerate(files):
                     print('reading %s' % file)
                     tag = mask.search(file).groups(0)[0]
-                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                                     quiet=True)
                     filename = file
                     if k == 0:
                         self.tstart = nml.start_time
-                        self.tstop = nml.stop_time # will be overwritten afterwards
+                        self.tstop = nml.stop_time  # will be replaced later
                         data = self.read(filename, endian)
                     else:
                         if os.path.exists(filename):
                             tmp = self.read(filename, endian)
-                            data = self.add(data,tmp, nml.stop_time, nml.start_time)
+                            data = self.add(data, tmp, nml.stop_time,
+                                            nml.start_time)
 
             else:
                 pattern = os.path.join(datadir, '%s*' % self.name)
@@ -430,13 +448,13 @@ class PizzaVortBalance(PizzaSetup):
                 if os.path.exists('log.%s' % ending):
                     try:
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                        nml='log.%s' % ending)
+                                            nml='log.%s' % ending)
                     except AttributeError:
                         pass
 
                 data = self.read(filename, endian)
 
-        else: # if all is requested
+        else:  # if all is requested
             pattern = os.path.join(datadir, '%s.*' % self.name)
             files = scanDir(pattern)
 
@@ -445,16 +463,18 @@ class PizzaVortBalance(PizzaSetup):
             for k, file in enumerate(files):
                 print('reading %s' % file)
                 tag = mask.search(file).groups(0)[0]
-                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir, quiet=True)
+                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                                 quiet=True)
                 filename = file
                 if k == 0:
                     self.tstart = nml.start_time
-                    self.tstop = nml.stop_time # will be overwritten afterwards
+                    self.tstop = nml.stop_time  # will be overwritten later
                     data = self.read(filename, endian)
                 else:
                     if os.path.exists(filename):
                         tmp = self.read(filename, endian)
-                        data = self.add(data,tmp, nml.stop_time, nml.start_time)
+                        data = self.add(data, tmp, nml.stop_time,
+                                        nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                 nml='log.%s' % tag)
 
@@ -467,7 +487,7 @@ class PizzaVortBalance(PizzaSetup):
 
         self.assemble(data)
 
-        if iplot == True:
+        if iplot:
             self.plot()
 
     def read(self, filename, endian='l'):
@@ -485,7 +505,7 @@ class PizzaVortBalance(PizzaSetup):
         self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = params
         dt = np.dtype("4i4")
         self.n_r_max, self.n_m_max, self.m_max, self.minc = \
-                                       np.fromfile(file, dtype=dt, count=1)[0]
+            np.fromfile(file, dtype=dt, count=1)[0]
 
         dt = np.dtype("%iFloat64" % self.n_r_max)
         self.radius = np.fromfile(file, dtype=dt, count=1)[0]
@@ -493,7 +513,7 @@ class PizzaVortBalance(PizzaSetup):
         for i in range(self.n_m_max):
             self.idx2m[i] = i*self.minc
 
-        dt = np.dtype("(%i,%i)Float64" % (self.n_r_max,self.n_m_max))
+        dt = np.dtype("(%i,%i)Float64" % (self.n_r_max, self.n_m_max))
         if self.version == 1:
             data = np.fromfile(file,  dtype=dt, count=9)
         elif self.version == 2:
@@ -551,7 +571,7 @@ class PizzaVortBalance(PizzaSetup):
             out = copy.deepcopy(data)
         else:
             out = copy.deepcopy(tmp)
-    
+
         fac_old = self.tstop-self.tstart
         fac_new = stop_time-start_time
         self.tstop = stop_time
@@ -562,19 +582,22 @@ class PizzaVortBalance(PizzaSetup):
                 out = (fac_old*data+fac_new*tmp)/fac_tot
             else:
                 for j in [0, 2, 4, 6, 8, 10, 12, 14, 16]:
-                    out[j, ...] = (fac_old*data[j, ...]+fac_new*tmp[j, ...])/fac_tot
+                    out[j, ...] = (fac_old*data[j, ...] +
+                                   fac_new*tmp[j, ...])/fac_tot
                 for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
-                    out[j, ...] = np.sqrt((fac_old*data[j, ...]**2+ \
-                                           fac_new*tmp[j, ...]**2)/ fac_tot)
+                    out[j, ...] = np.sqrt((fac_old*data[j, ...]**2 +
+                                           fac_new*tmp[j, ...]**2) / fac_tot)
         else:
             if tmp.shape > data.shape:
-                for j in [0, 1, 2, 3, 4, 5, 6, 7, 8]: 
-                    out[2*j, ...] = (fac_old*data[j, ...]+fac_new*tmp[2*j, ...])/fac_tot           
+                for j in [0, 1, 2, 3, 4, 5, 6, 7, 8]:
+                    out[2*j, ...] = (fac_old*data[j, ...] +
+                                     fac_new*tmp[2*j, ...]) / fac_tot
                 for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
                     out[j, ...] = tmp[j, ...]
             else:
-                for j in [0, 1, 2, 3, 4, 5, 6, 7, 8]: 
-                    out[2*j, ...] = (fac_old*data[2*j, ...]+fac_new*tmp[j, ...])/fac_tot           
+                for j in [0, 1, 2, 3, 4, 5, 6, 7, 8]:
+                    out[2*j, ...] = (fac_old*data[2*j, ...] +
+                                     fac_new*tmp[j, ...]) / fac_tot
                 for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
                     out[j, ...] = data[j, ...]
 
@@ -588,41 +611,49 @@ class PizzaVortBalance(PizzaSetup):
         :type r: float
         """
 
-        idx = np.where(abs(self.radius-r)==abs(self.radius-r).min(), 1, 0)
+        idx = np.where(abs(self.radius-r) == abs(self.radius-r).min(), 1, 0)
         idx = np.nonzero(idx)[0][0]
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
         if hasattr(self, 'buo_std'):
-            sd = self.buo_std[1:,idx]/np.sqrt(self.buo_mean[1:,idx])/2.
-            ax.fill_between(self.idx2m[1:], np.sqrt(self.buo_mean[1:,idx])-sd, \
-                            np.sqrt(self.buo_mean[1:,idx])+sd, alpha=0.1)
-        ax.plot(self.idx2m[1:], np.sqrt(self.buo_mean[1:, idx]), label='Buoyancy')
+            sd = self.buo_std[1:, idx]/np.sqrt(self.buo_mean[1:, idx])/2.
+            ax.fill_between(self.idx2m[1:], np.sqrt(self.buo_mean[1:, idx])-sd,
+                            np.sqrt(self.buo_mean[1:, idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.buo_mean[1:, idx]),
+                label='Buoyancy')
 
         if hasattr(self, 'cor_std'):
-            sd = self.cor_std[1:,idx]/np.sqrt(self.cor_mean[1:,idx])/2.
-            ax.fill_between(self.idx2m[1:], np.sqrt(self.cor_mean[1:,idx])-sd, \
-                            np.sqrt(self.cor_mean[1:,idx])+sd, alpha=0.1)
-        ax.plot(self.idx2m[1:], np.sqrt(self.cor_mean[1:, idx]), label='Coriolis')
+            sd = self.cor_std[1:, idx]/np.sqrt(self.cor_mean[1:, idx])/2.
+            ax.fill_between(self.idx2m[1:], np.sqrt(self.cor_mean[1:, idx])-sd,
+                            np.sqrt(self.cor_mean[1:, idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.cor_mean[1:, idx]),
+                label='Coriolis')
 
         if hasattr(self, 'iner_std'):
-            sd = self.iner_std[1:,idx]/np.sqrt(self.iner_mean[1:,idx])/2.
-            ax.fill_between(self.idx2m[1:], np.sqrt(self.iner_mean[1:,idx])-sd, \
-                            np.sqrt(self.iner_mean[1:,idx])+sd, alpha=0.1)
-        ax.plot(self.idx2m[1:], np.sqrt(self.iner_mean[1:, idx]), label='Inertia')
+            sd = self.iner_std[1:, idx]/np.sqrt(self.iner_mean[1:, idx])/2.
+            ax.fill_between(self.idx2m[1:],
+                            np.sqrt(self.iner_mean[1:, idx])-sd,
+                            np.sqrt(self.iner_mean[1:, idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.iner_mean[1:, idx]),
+                label='Inertia')
 
         if hasattr(self, 'visc_std'):
-            sd = self.visc_std[1:,idx]/np.sqrt(self.visc_mean[1:,idx])/2.
-            ax.fill_between(self.idx2m[1:], np.sqrt(self.visc_mean[1:,idx])-sd, \
-                            np.sqrt(self.visc_mean[1:,idx])+sd, alpha=0.1)
-        ax.plot(self.idx2m[1:], np.sqrt(self.visc_mean[1:, idx]), label='Viscosity')
+            sd = self.visc_std[1:, idx]/np.sqrt(self.visc_mean[1:, idx])/2.
+            ax.fill_between(self.idx2m[1:],
+                            np.sqrt(self.visc_mean[1:, idx])-sd,
+                            np.sqrt(self.visc_mean[1:, idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.visc_mean[1:, idx]),
+                label='Viscosity')
 
         if hasattr(self, 'pump_std'):
-            sd = self.pump_std[1:,idx]/np.sqrt(self.pump_mean[1:,idx])/2.
-            ax.fill_between(self.idx2m[1:], np.sqrt(self.pump_mean[1:,idx])-sd, \
-                            np.sqrt(self.pump_mean[1:,idx])+sd, alpha=0.1)
-        ax.plot(self.idx2m[1:], np.sqrt(self.pump_mean[1:, idx]), label='Ekman pumping')
+            sd = self.pump_std[1:, idx]/np.sqrt(self.pump_mean[1:, idx])/2.
+            ax.fill_between(self.idx2m[1:],
+                            np.sqrt(self.pump_mean[1:, idx])-sd,
+                            np.sqrt(self.pump_mean[1:, idx])+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:], np.sqrt(self.pump_mean[1:, idx]),
+                label='Ekman pumping')
 
         ax.set_yscale('log')
         ax.set_xscale('log')
@@ -631,85 +662,100 @@ class PizzaVortBalance(PizzaSetup):
         ax.set_xlim(1, self.idx2m[-1])
         ax.legend(loc='best', frameon=False)
         fig.tight_layout()
-        
-    def plot(self, levels=15, cm='magma', cut=1., solid_contour=True, 
+
+    def plot(self, levels=15, cm='magma', cut=1., solid_contour=True,
              log_yscale=True):
         """
         Plotting function
 
-		:param cm: name of the colormap ('jet', 'seismic', 'RdYlBu_r', etc.)
-		:type cm: str
-		:param levels: the number of levels used in the contour plot
-		:type levels: int
-		:param  cut: a coefficient to change the dynamics of the contour levels
-		:param cut: float
-        :param solid_contour: a boolean to decide whether one also wants the solid
-                              contour lines
+        :param cm: name of the colormap ('jet', 'seismic', 'RdYlBu_r', etc.)
+        :type cm: str
+        :param levels: the number of levels used in the contour plot
+        :type levels: int
+        :param  cut: a coefficient to change the dynamics of the contour levels
+        :param cut: float
+        :param solid_contour: a boolean to decide whether one also wants the
+                              solid contour lines
         :type solid_contour: bool
         :param log_yscale: a boolean to decide whether one wants a logarithmic
                            y-axis
         :type log_yscale: bool
         """
 
-        vmax = cut*np.log10(self.iner_mean[1:,1:-1]).max()
-        vmin = cut*np.log10(self.iner_mean[1:,1:-1]).min()
+        vmax = cut*np.log10(self.iner_mean[1:, 1:-1]).max()
+        vmin = cut*np.log10(self.iner_mean[1:, 1:-1]).min()
         levs = np.linspace(vmin, vmax, levels)
 
-        fig = plt.figure(figsize=(15,4))
+        fig = plt.figure(figsize=(15, 4))
         ax1 = fig.add_subplot(151)
-        im = ax1.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.buo_mean[1:,1:-1]),
-                         levs, extend='both', cmap=plt.get_cmap(cm))
+        im = ax1.contourf(self.radius[1:-1], self.idx2m[1:],
+                          np.log10(self.buo_mean[1:, 1:-1]),
+                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax1.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.buo_mean[1:,1:-1]),
-                       levs, extend='both', linestyles=['-'], colors=['k'],
-                       linewidths=[0.5])
+            ax1.contour(self.radius[1:-1], self.idx2m[1:],
+                        np.log10(self.buo_mean[1:, 1:-1]),
+                        levs, extend='both', linestyles=['-'], colors=['k'],
+                        linewidths=[0.5])
         ax1.set_title('Buoyancy')
-        if log_yscale: ax1.set_yscale('log')
+        if log_yscale:
+            ax1.set_yscale('log')
         ax1.set_xlabel('Radius')
         ax1.set_ylabel('m')
-        
+
         ax2 = fig.add_subplot(152, sharey=ax1, sharex=ax1)
-        im = ax2.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.cor_mean[1:,1:-1]),
-                         levs, extend='both', cmap=plt.get_cmap(cm))
+        im = ax2.contourf(self.radius[1:-1], self.idx2m[1:],
+                          np.log10(self.cor_mean[1:, 1:-1]),
+                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax2.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.cor_mean[1:,1:-1]),
-                       levs, extend='both', linestyles=['-'], colors=['k'],
-                       linewidths=[0.5])
+            ax2.contour(self.radius[1:-1], self.idx2m[1:],
+                        np.log10(self.cor_mean[1:, 1:-1]),
+                        levs, extend='both', linestyles=['-'], colors=['k'],
+                        linewidths=[0.5])
         ax2.set_title('Coriolis')
-        if log_yscale: ax2.set_yscale('log')
+        if log_yscale:
+            ax2.set_yscale('log')
         ax2.set_xlabel('Radius')
 
         ax3 = fig.add_subplot(153, sharey=ax1, sharex=ax1)
-        im = ax3.contourf(self.radius, self.idx2m[1:], np.log10(self.iner_mean[1:,:]),
-                         levs, extend='both', cmap=plt.get_cmap(cm))
+        im = ax3.contourf(self.radius, self.idx2m[1:],
+                          np.log10(self.iner_mean[1:, :]),
+                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax3.contour(self.radius, self.idx2m[1:], np.log10(self.iner_mean[1:,:]),
-                       levs, extend='both', linestyles=['-'], colors=['k'],
-                       linewidths=[0.5])
+            ax3.contour(self.radius, self.idx2m[1:],
+                        np.log10(self.iner_mean[1:, :]),
+                        levs, extend='both', linestyles=['-'], colors=['k'],
+                        linewidths=[0.5])
         ax3.set_title('Inertia')
-        if log_yscale: ax3.set_yscale('log')
+        if log_yscale:
+            ax3.set_yscale('log')
         ax3.set_xlabel('Radius')
 
         ax4 = fig.add_subplot(154, sharey=ax1, sharex=ax1)
-        im = ax4.contourf(self.radius, self.idx2m[1:], np.log10(self.visc_mean[1:,:]),
-                         levs, extend='both', cmap=plt.get_cmap(cm))
+        im = ax4.contourf(self.radius, self.idx2m[1:],
+                          np.log10(self.visc_mean[1:, :]),
+                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax4.contour(self.radius, self.idx2m[1:], np.log10(self.visc_mean[1:,:]),
-                       levs, extend='both', linestyles=['-'], colors=['k'],
-                       linewidths=[0.5])
+            ax4.contour(self.radius, self.idx2m[1:],
+                        np.log10(self.visc_mean[1:, :]),
+                        levs, extend='both', linestyles=['-'], colors=['k'],
+                        linewidths=[0.5])
         ax4.set_title('Viscosity')
-        if log_yscale: ax4.set_yscale('log')
+        if log_yscale:
+            ax4.set_yscale('log')
         ax4.set_xlabel('Radius')
 
         ax5 = fig.add_subplot(155, sharey=ax1, sharex=ax1)
-        im = ax5.contourf(self.radius[1:-1], self.idx2m[1:], np.log10(self.pump_mean[1:,1:-1]),
-                         levs, extend='both', cmap=plt.get_cmap(cm))
+        im = ax5.contourf(self.radius[1:-1], self.idx2m[1:],
+                          np.log10(self.pump_mean[1:, 1:-1]),
+                          levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
-            ax5.contour(self.radius[1:-1], self.idx2m[1:], np.log10(self.pump_mean[1:,1:-1]),
-                       levs, extend='both', linestyles=['-'], colors=['k'],
-                       linewidths=[0.5])
+            ax5.contour(self.radius[1:-1], self.idx2m[1:],
+                        np.log10(self.pump_mean[1:, 1:-1]),
+                        levs, extend='both', linestyles=['-'], colors=['k'],
+                        linewidths=[0.5])
         ax5.set_title('Ekman pumping')
-        if log_yscale: ax5.set_yscale('log')
+        if log_yscale:
+            ax5.set_yscale('log')
         ax5.set_xlabel('Radius')
         fig.colorbar(im)
 
@@ -722,7 +768,7 @@ class PizzaVortBalance(PizzaSetup):
 
         fig.tight_layout()
 
+
 if __name__ == '__main__':
-   
-   r = PizzaVortBal()
-   plt.show()
+    r = PizzaVortBalance()
+    plt.show()

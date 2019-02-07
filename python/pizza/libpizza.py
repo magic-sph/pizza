@@ -1,12 +1,15 @@
-from .npfile import *
+# -*- coding: utf-8 -*-
+from .npfile import npfile
 import numpy as np
 from scipy.fftpack import dct
 import glob
 import os
 
+
 def cc2real(f):
 
-    return 2.*np.sum(abs(f[1:,:])**2, axis=0) + f[0,:].real*f[0,:].real
+    return 2.*np.sum(abs(f[1:, :])**2, axis=0) + f[0, :].real*f[0, :].real
+
 
 def costf(f, fac=True):
     """
@@ -19,12 +22,19 @@ def costf(f, fac=True):
     :returns: a transformed array
     :rtype: numpy.ndarray
     """
+    # nr = f.shape[-1]
     if fac:
         norm = np.sqrt(0.5/(f.shape[-1]-1))
     else:
         norm = 1.
+    # fbig = np.hstack((f[..., :], f[..., -2:0:-1]))
+    # fbig = fbig.astype('complex256')
+    # fhat = norm*np.fft.fft(fbig, axis=-1)[..., :nr]
+
     fhat = norm*dct(f, type=1, axis=-1)
+
     return fhat
+
 
 def chebgrid(nr, a, b):
     """
@@ -45,6 +55,7 @@ def chebgrid(nr, a, b):
     rst = (a+b)/(b-a)
     rr = 0.5*(rst+np.cos(np.pi*(1.-np.arange(nr+1.)/nr)))*(b-a)
     return rr
+
 
 def avgField(time, field, tstart=None, tstop=None, std=False):
     """
@@ -70,21 +81,23 @@ def avgField(time, field, tstart=None, tstop=None, std=False):
     if tstart is not None:
         mask = np.where(abs(time-tstart) == min(abs(time-tstart)), 1, 0)
         ind = np.nonzero(mask)[0][0]
-    else: # the whole input array is taken!
+    else:  # the whole input array is taken!
         ind = 0
     if tstop is not None:
         mask = np.where(abs(time-tstop) == min(abs(time-tstop)), 1, 0)
         ind1 = np.nonzero(mask)[0][0]+1
-    else: # the whole input array is taken!
+    else:  # the whole input array is taken!
         ind1 = len(time)
     fac = 1./(time[ind1-1]-time[ind])
     avgField = fac*np.trapz(field[ind:ind1], time[ind:ind1])
 
     if std:
-        stdField = np.sqrt(fac*np.trapz((field[ind:ind1]-avgField)**2, time[ind:ind1]))
+        stdField = np.sqrt(fac*np.trapz((field[ind:ind1]-avgField)**2,
+                           time[ind:ind1]))
         return avgField, stdField
     else:
         return avgField
+
 
 def get_dr(f):
     """
@@ -99,15 +112,15 @@ def get_dr(f):
     Nr = f.shape[-1]
     fhat = costf(f)
 
-    #eps = np.finfo(1.0e0).eps
-    #valmin = 500. * eps*abs(fhat).max()
+    # eps = np.finfo(1.0e0).eps
+    # valmin = 500. * eps*abs(fhat).max()
 
-    df = np.zeros_like(f)
-    df[..., -1] = 0
-    df[..., -2] = (Nr-1)*fhat[...,-1]
+    df = np.zeros_like(fhat)
+    df[..., -1] = 0.
+    df[..., -2] = (Nr-1)*fhat[..., -1]
 
     for i in range(Nr-3, -1, -1):
-        df[..., i] = df[..., i+2]+2.*(i+1)*fhat[...,i+1]
+        df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
 
     df[..., :] = 2.*df[..., :]
 
@@ -147,6 +160,7 @@ def intcheb(f):
 
     return int
 
+
 def spat_spec(arr_grid, n_m_max):
     """
     This routine computes a spectral transform from a spatial represenation
@@ -161,6 +175,7 @@ def spat_spec(arr_grid, n_m_max):
     """
     n_phi = arr_grid.shape[0]
     return np.fft.fft(arr_grid, axis=0)[:n_m_max]/n_phi
+
 
 def spec_spat(arr_M, n_phi_max):
     """
@@ -179,21 +194,22 @@ def spec_spat(arr_M, n_phi_max):
     tmp[:n_m, :] = arr_M
     return np.fft.irfft(tmp, n=n_phi_max, axis=0)*n_phi_max
 
+
 def scanDir(pattern, tfix=None):
     """
-    This function sorts the files which match a given input pattern from the oldest
-    to the most recent one (in the current working directory)
-    
+    This function sorts the files which match a given input pattern from the
+    oldest to the most recent one (in the current working directory)
+
     >>> dat = scanDir('log.*')
     >>> print(log)
 
     :param pattern: a classical regexp pattern
     :type pattern: str
-    :param tfix: in case you want to add only the files that are more recent than   
-                 a certain date, use tfix (computer 1970 format!!)
+    :param tfix: in case you want to add only the files that are more recent
+                 than   a certain date, use tfix (computer 1970 format!!)
     :type tfix: float
     :returns: a list of files that match the input pattern
-    :rtype: list 
+    :rtype: list
     """
     dat = [(os.stat(i).st_mtime, i) for i in glob.glob(pattern)]
     dat.sort()
@@ -206,15 +222,18 @@ def scanDir(pattern, tfix=None):
         out = [i[1] for i in dat]
     return out
 
+
 def symmetrize(data, ms, reversed=False):
     """
-    Symmetrise an array which is defined only with an azimuthal symmetry minc=ms
+    Symmetrise an array which is defined only with an azimuthal symmetry
+    minc=ms
 
     :param data: the input array
     :type data: numpy.ndarray
     :param ms: the azimuthal symmetry
     :type ms: int
-    :param reversed: set to True, in case the array is reversed (i.e. n_phi is the last column)
+    :param reversed: set to True, in case the array is reversed (i.e. n_phi
+                     is the last column)
     :type reversed: bool
     :returns: an output array of dimension (data.shape[0]*ms+1)
     :rtype: numpy.ndarray
@@ -222,15 +241,15 @@ def symmetrize(data, ms, reversed=False):
     if reversed:
         nphi = data.shape[-1]*ms+1
         size = [nphi]
-        size.insert(0,data.shape[-2])
+        size.insert(0, data.shape[-2])
         if len(data.shape) == 3:
-            size.insert(0,data.shape[-3])
+            size.insert(0, data.shape[-3])
         out = np.zeros(size, dtype=data.dtype)
         for i in range(ms):
             out[..., i*data.shape[-1]:(i+1)*data.shape[-1]] = data
         out[..., -1] = out[..., 0]
     else:
-        nphi = data.shape[0]*ms +1
+        nphi = data.shape[0]*ms + 1
         size = [nphi]
         if len(data.shape) >= 2:
             size.append(data.shape[1])
@@ -240,6 +259,7 @@ def symmetrize(data, ms, reversed=False):
         for i in range(ms):
             out[i*data.shape[0]:(i+1)*data.shape[0], ...] = data
         out[-1, ...] = out[0, ...]
+
     return out
 
 
@@ -255,7 +275,8 @@ def fast_read(file, skiplines=0, binary=False, precision='Float64'):
     :type file: str
     :param skiplines: number of header lines to be skept during reading
     :type skiplines: int
-    :param binary: when set to True, try to read an unformatted binray Fortran file
+    :param binary: when set to True, try to read an unformatted binary
+                   Fortran file
                    (default is False)
     :type binary: bool
     :param precision: single ('Float32') or double precision ('Float64')
@@ -273,7 +294,7 @@ def fast_read(file, skiplines=0, binary=False, precision='Float64'):
         X = np.array(X, dtype=precision)
         f.close()
     else:
-        f = npfile(file, endian='B')
+        f = npfile.npfile(file, endian='B')
         X = []
         while 1:
             try:
@@ -282,5 +303,5 @@ def fast_read(file, skiplines=0, binary=False, precision='Float64'):
                 break
         X = np.array(X, dtype=precision)
         f.close()
-    return X
 
+    return X
