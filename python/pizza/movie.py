@@ -48,6 +48,10 @@ class PizzaMovie:
                 files = files[-nvar:]
 
         for k, file in enumerate(files):
+            if png:
+                filename = 'movie/img%05d.png' % k
+                if os.path.exists(filename) and k != 0:
+                    continue
             f = Frame(file, endian=endian)
             dat = spec_spat(f.field_m, f.n_phi_max)
             if deminc:
@@ -114,6 +118,21 @@ class PizzaMovie:
                     ax.plot(x, y, 'k-', lw=1.5)
                     ax.plot(self.radius, np.zeros_like(self.radius), 'k-', lw=1.5)
                 ax.axis('off')
+
+                if xx.min() < 0:
+                    ax.set_xlim(1.01*xx.min(), 1.01*xx.max())
+                elif xx.min() == 0.:
+                    ax.set_xlim(xx.min()-0.01, 1.01*xx.max())
+                else:
+                    ax.set_xlim(0.99*xx.min(), 1.01*xx.max())
+                if yy.min() < 0:
+                    ax.set_ylim(1.01*yy.min(), 1.01*yy.max())
+                elif yy.min() == 0.:
+                    ax.set_ylim(yy.min()-0.01, 1.01*yy.max())
+                else:
+                    ax.set_ylim(0.99*yy.min(), 1.01*yy.max())
+
+
                 man.canvas.draw()
 
             if png:
