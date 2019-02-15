@@ -4,6 +4,7 @@ import numpy as np
 from scipy.fftpack import dct
 import glob
 import os
+import re
 
 
 def cc2real(f):
@@ -305,3 +306,53 @@ def fast_read(file, skiplines=0, binary=False, precision='Float64'):
         f.close()
 
     return X
+
+def getCpuTime(file):
+    """
+    This function calculates the CPU time from one given log file
+
+    :param file: the log file you want to analyze
+    :type file: file
+    :returns: the total CPU time
+    :rtype: float
+    """
+    threads = re.compile(r'[\s]*\![\s]*nThreads\:[\s]*(.*)')
+    ranks = re.compile(r'[\s\w]*n_procs[\s\w]*=[\s]*(.*)')
+    runTime = re.compile(r'[\s\!\w]*run time:[\s]*([0-9]*)\sh[\s]*([0-9]*)\sm[\s]*([0-9]*)\ss[\s]*([0-9]*).*')
+    f = open(file, 'r')
+    tab = f.readlines()
+    nThreads = 1  # In case a pure MPI version is used
+    nRanks = 1  # In case the old OpenMP version is used
+    realTime = 0.
+    for line in tab:
+        if threads.match(line):
+            nThreads = int(threads.search(line).groups()[0])
+        elif ranks.match(line):
+            nRanks = int(ranks.search(line).groups()[0])
+        elif runTime.match(line):
+            hours = int(runTime.search(line).groups()[0])
+            min = int(runTime.search(line).groups()[1])
+            sec = int(runTime.search(line).groups()[2])
+            ms = int(runTime.search(line).groups()[3])
+            realTime = hours+1./60*min+1./3600*sec+1./3.6e6*ms
+    f.close()
+    cpuTime = nThreads*nRanks*realTime
+
+    return cpuTime
+
+
+def getTotalRunTime(datadir='.'):
+    """
+    This function calculates the total CPU time of one run directory
+
+    :param datadir: name of the directory
+    :type datadir: str
+    :returns: the total RUN time
+    :rtype: float
+    """
+    logFiles = glob.glob(os.path.join(datadir, 'log.*'))
+    totCpuTime = 0
+    for file in logFiles:
+        totCpuTime += getCpuTime(file)
+
+    return totCpuTime
