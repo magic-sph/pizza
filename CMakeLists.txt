@@ -16,6 +16,8 @@ set(ARCH          "64"   CACHE STRING "Architecture of the platform: 32/64")
 set(OUT_PREC      "sngl" CACHE STRING "Precision of the binary outputs")
 set(USE_LAPACKLIB "MKL"  CACHE STRING "Use the Math Kernel Library for lapack calls")
 set(USE_MPI       "yes"  CACHE STRING "Use MPI parallelization")
+set(USE_OMP       "no"   CACHE STRING "Use OpenMP")
+set(USE_SHTNS     "no"   CACHE STRING "Use libshtns for SH projection")
 set(USE_PRECOND   "yes"  CACHE STRING "Use matrix preconditioning")
 find_package(SSE)
 
@@ -191,6 +193,24 @@ include_directories(${FFTW_INCLUDES})
 		    #$ENV{FFTW_ROOT}/include)
 
 message(STATUS "FFTW3: '${FFTW3}'")
+
+# Detect SHTNS
+if(USE_SHTNS MATCHES yes)
+   if(USE_OMP)
+      find_library(SHTNS shtns_omp HINTS ${CMAKE_CURRENT_SOURCE_DIR}/shtns/lib)
+   else()
+      find_library(SHTNS shtns HINTS ${CMAKE_CURRENT_SOURCE_DIR}/shtns/lib)
+   endif(USE_OMP)
+   if(NOT SHTNS MATCHES SHTNS-NOTFOUND)
+      add_definitions(-DWITH_SHTNS)
+      include_directories(${CMAKE_CURRENT_SOURCE_DIR}/shtns/include)
+      message(STATUS "SHTNS: ${SHTNS}")
+   else()
+      message(STATUS "Failed to find SHTNS")
+   endif()
+else()
+   message(STATUS "Use SHTNS: no")
+endif()
 
 # Final Fortran flags (after OpenMP/MPI to avoid the conflict
 set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${FFLAG_ARCH} ${FFLAG_STD} -g ${FFLAG_TRACEBACK} ${FFLAG_PREPROCESSOR}")
