@@ -7,6 +7,7 @@ module namelists
 
    use iso_c_binding
    use truncation, only: n_r_max, m_max, n_cheb_max, minc
+   use truncation_3D, only: n_r_max_3D, n_cheb_max_3D, minc_3D, n_phi_tot_3D
    use parallel_mod, only: rank
    use useful, only: abortRun
    use char_manip, only: length_to_blank, capitalize
@@ -32,7 +33,7 @@ module namelists
    real(cp), public :: xicond_fac    ! Rescaling of the conducting composition
    real(cp), public :: beta_shift    ! Shift the upper bound of \beta
    logical,  public :: l_non_rot     ! Switch to do a non-rotatig annulus
-   logical,  public :: l_temp_3D     ! 2D or 3D temperature background
+   logical,  public :: l_tcond_3D    ! 2D or 3D temperature background
    logical,  public :: l_xi_3D       ! 2D or 3D composition background
    logical,  public :: l_ek_pump     ! With or without Ekman pumping
    logical,  public :: l_temp_advz   ! With or without vertical advection of temp
@@ -96,6 +97,8 @@ module namelists
    logical,  public :: l_2D_SD           ! Also store the standard deviation
    logical,  public :: l_corr            ! Calculte the correlation
    real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
+   logical,  public :: l_3D            ! Require 3-D functions
+   logical,  public :: l_heat_3D       ! 3-D treatment of temperature
    logical,  public :: l_heat
    logical,  public :: l_chem
    logical,  public :: l_AB1
@@ -128,6 +131,7 @@ contains
       !-- Namelists:
 
       namelist/grid/n_r_max,n_cheb_max,m_max,minc
+      namelist/grid_3D/n_r_max_3D,n_cheb_max_3D,n_phi_tot_3D,minc_3D
       namelist/control/tag,n_time_steps,alpha,l_newmap,map_function,&
       &                alph1,alph2,dtMax,courfac,tEND,runHours,     &
       &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
@@ -137,9 +141,9 @@ contains
       namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,      &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
-      &                   l_temp_3D,tcond_fac,l_temp_advz,         &
+      &                   l_tcond_3D,tcond_fac,l_temp_advz,        &
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
-      &                   xi_bot,xi_top, l_xi_3D, xicond_fac
+      &                   xi_bot,xi_top, l_xi_3D, xicond_fac, l_heat_3D
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi
@@ -167,11 +171,18 @@ contains
          end if
 
          open(newunit=input_handle,file=trim(input_filename))
-
          if ( rank == 0 ) write(*,*) '!  Reading grid parameters!'
          read(input_handle,nml=grid,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
             write(*,*) '!  No grid namelist found!'
+         end if
+         close(input_handle)
+
+         open(newunit=input_handle,file=trim(input_filename))
+         if ( rank == 0 ) write(*,*) '!  Reading grid_3D parameters!'
+         read(input_handle,nml=grid_3D,iostat=res)
+         if ( res /= 0 .and. rank == 0 ) then
+            write(*,*) '!  No grid_3D namelist found!'
          end if
          close(input_handle)
 
@@ -222,6 +233,8 @@ contains
 
       end if
 
+      !-- Default is 2-D
+      l_3D = .false.
 
       !--- Stuff for the radial non-linear mapping
       call capitalize(map_function)
@@ -250,10 +263,15 @@ contains
          ek=-one ! used as a flag, not used for the calculation
       end if
 
-      if ( ra == 0.0_cp ) then
-         l_heat=.false.
+      if ( ra /= 0.0_cp .and. l_heat_3D ) then
+         l_heat = .false.
+         l_3D = .true.
       else
-         l_heat=.true.
+         if ( ra == 0.0_cp ) then
+            l_heat=.false.
+         else
+            l_heat=.true.
+         end if
       end if
 
       if ( raxi == 0.0_cp ) then
@@ -442,6 +460,12 @@ contains
       m_max            =32
       minc             =1
 
+      !-- &grid_3D namelist
+      n_r_max_3D      =17
+      n_cheb_max_3D   =15
+      n_phi_tot_3D    =96
+      minc_3D         =1
+
       !-- Control namelist
       n_time_steps     =100
       tag              ='test'
@@ -482,7 +506,7 @@ contains
       l_non_rot        =.false.
       l_ek_pump        =.false.
       l_temp_advz      =.false.
-      l_temp_3D        =.false.
+      l_tcond_3D       =.false.
       l_xi_3D          =.false.
       ra               =1.0e5_cp
       pr               =one
@@ -511,6 +535,9 @@ contains
          xi_bot(n)=0.0_cp
          xi_top(n)=0.0_cp
       end do
+
+      !-- 3D treatment of temperature
+      l_heat_3D = .false.
 
       !----- Namelist start_field:
       l_reset_t        =.false.
@@ -557,6 +584,14 @@ contains
       write(n_out,'(''  n_cheb_max      ='',i5,'','')') n_cheb_max
       write(n_out,'(''  m_max           ='',i5,'','')') m_max
       write(n_out,'(''  minc            ='',i5,'','')') minc
+      write(n_out,*) "/"
+
+      write(n_out,*) " "
+      write(n_out,*) "&grid_3D"
+      write(n_out,'(''  n_r_max_3D      ='',i5,'','')') n_r_max_3D
+      write(n_out,'(''  n_cheb_max_3D   ='',i5,'','')') n_cheb_max_3D
+      write(n_out,'(''  n_phi_tot_3D    ='',i5,'','')') n_phi_tot_3D
+      write(n_out,'(''  minc_3D         ='',i5,'','')') minc_3D
       write(n_out,*) "/"
 
       write(n_out,*) "&control"
@@ -619,8 +654,9 @@ contains
       write(n_out,'(''  g2              ='',ES14.6,'','')') g2
       write(n_out,'(''  l_ek_pump       ='',l3,'','')') l_ek_pump
       write(n_out,'(''  l_temp_advz     ='',l3,'','')') l_temp_advz
-      write(n_out,'(''  l_temp_3D       ='',l3,'','')') l_temp_3D
+      write(n_out,'(''  l_tcond_3D      ='',l3,'','')') l_tcond_3D
       write(n_out,'(''  l_xi_3D         ='',l3,'','')') l_xi_3D
+      write(n_out,'(''  l_heat_3D       ='',l3,'','')') l_heat_3D
       !--- Heat boundary condition:
       write(n_out,'(''  ktopt           ='',i3,'','')') ktopt
       write(n_out,'(''  kbott           ='',i3,'','')') kbott

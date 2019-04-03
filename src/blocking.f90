@@ -3,6 +3,7 @@ module blocking
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, n_m_max, m2idx
+   use truncation_3D, only: n_r_max_3D, n_m_max_3D
    use parallel_mod, only: n_procs, rank
 
    implicit none
@@ -17,22 +18,28 @@ module blocking
    end type load
 
    type(load), public, allocatable :: radial_balance(:)
+   type(load), public, allocatable :: radial_balance_3D(:)
    type(load), public, allocatable :: m_balance(:)
 
    integer, public :: nRstart, nRstop, nR_per_rank
    integer, public :: nMstart, nMstop, nm_per_rank
+   integer, public :: nRstart3D, nRstop3D, nR_per_rank_3D
+   integer, public :: nMstart3D, nMstop3D, nm_per_rank_3D
    logical, public :: l_rank_has_m0
 
    public :: set_mpi_domains, destroy_mpi_domains
 
 contains
 
-   subroutine set_mpi_domains
+   subroutine set_mpi_domains(l_3D)
+      
+      logical, intent(in) :: l_3D
 
       integer :: idx
 
       allocate ( radial_balance(0:n_procs-1) )
       allocate ( m_balance(0:n_procs-1) )
+      if ( l_3D ) allocate ( radial_balance_3D(0:n_procs-1) )
 
       call getBlocks(radial_balance, n_r_max, n_procs)
       nRstart = radial_balance(rank)%nStart
@@ -45,6 +52,14 @@ contains
 
       bytes_allocated = bytes_allocated+8*n_procs*SIZEOF_INTEGER
 
+      if ( l_3D ) then
+         !-- 3D blocking
+         call getBlocks(radial_balance_3D, n_r_max_3D, n_procs)
+         nRstart3D = radial_balance_3D(rank)%nStart
+         nRstop3D = radial_balance_3D(rank)%nStop
+         nR_per_rank_3D = radial_balance_3D(rank)%n_per_rank
+      end if
+
       idx = m2idx(0)
 
       if ( idx>=nMstart .and. idx<=nMstop ) then
@@ -55,9 +70,12 @@ contains
 
    end subroutine set_mpi_domains
 !------------------------------------------------------------------------------
-   subroutine destroy_mpi_domains
+   subroutine destroy_mpi_domains(l_3D)
+
+      logical, intent(in) :: l_3D
 
       deallocate( m_balance, radial_balance )
+      if (l_3D ) deallocate(radial_balance_3D)
 
    end subroutine destroy_mpi_domains
 !------------------------------------------------------------------------------

@@ -5,10 +5,13 @@ module fields
    !
    use precision_mod
    use constants, only: zero
-   use namelists, only: l_cheb_coll, l_heat, l_chem
+   use namelists, only: l_cheb_coll, l_heat, l_chem, l_heat_3D
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
-   use blocking, only: nMstart, nMstop, nRstart, nRstop
+   use truncation_3D, only: lm_max, n_r_max_3D
+   use blocking, only: nMstart, nMstop, nRstart, nRstop, nRstart3D, nRstop3D
+   use blocking_lm, only: llm, ulm
+
  
    implicit none
 
@@ -28,6 +31,11 @@ module fields
    complex(cp), allocatable, public :: psi_hat_Mloc(:,:)
    complex(cp), allocatable, public :: temp_hat_Mloc(:,:)
    complex(cp), allocatable, public :: xi_hat_Mloc(:,:)
+
+   !-- 3-D Temperature:
+   complex(cp), allocatable, public :: temp_3D_LMloc(:,:)
+   complex(cp), allocatable, public :: temp_3D_Rloc(:,:)
+
  
    public :: initialize_fields, finalize_fields
 
@@ -130,9 +138,23 @@ contains
       up_Rloc(:,:)=zero
       om_Rloc(:,:)=zero
 
+      !-- 3-D temperature:
+      if ( l_heat_3D ) then
+         allocate( temp_3D_LMloc(llm:ulm,n_r_max_3D) )
+         allocate( temp_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
+         bytes_allocated = bytes_allocated + &
+         &                 (ulm-llm+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
+         bytes_allocated = bytes_allocated + &
+         &                 lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
+         temp_3D_LMloc(:,:)=zero
+         temp_3D_Rloc(:,:) =zero
+      end if
+
    end subroutine initialize_fields
 !----------------------------------------------------------------------------
    subroutine finalize_fields
+
+      if ( l_heat_3D ) deallocate( temp_3D_LMloc, temp_3D_Rloc )
 
       if ( l_heat ) then
          deallocate( temp_Mloc, dtemp_Mloc, temp_Rloc )

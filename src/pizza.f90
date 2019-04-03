@@ -8,13 +8,15 @@ program pizza
    use radial_der, only: initialize_der_arrays, finalize_der_arrays
    use init_fields, only: get_start_fields
    use fields, only: initialize_fields, finalize_fields
-   use fieldsLast, only: initialize_fieldsLast, finalize_fieldsLast
+   use fieldsLast, only: initialize_fieldsLast, finalize_fieldsLast, &
+       &                 initialize_fieldsLast_3D
    use communications, only: initialize_communications, finalize_communications
    use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains, &
-       &               nRstart, nRstop
+       &               nRstart, nRstop, nRstart3D, nRstop3D
+   use blocking_lm, only: initialize_blocking, finalize_blocking, llm, ulm
    use namelists, only: read_namelists, write_namelists, tag, time_scheme,    &  
        &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve,&
-       &                courfac, l_heat, l_chem
+       &                courfac, l_heat, l_chem, l_3D
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use horizontal, only: initialize_mfunctions, finalize_mfunctions
@@ -22,6 +24,7 @@ program pizza
        &                       finalize_radial_functions
    use truncation, only: initialize_truncation, n_r_max, n_phi_max, & 
        &                 finalize_truncation, n_m_max
+   use truncation_3D, only: initialize_truncation_3D, n_r_max_3D, lm_max
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop
    use update_temp_coll, only: initialize_temp_coll, finalize_temp_coll
@@ -38,6 +41,9 @@ program pizza
    use time_schemes, only: type_tscheme
    use useful, only: formatTime
    use tests, only: solve_laplacian, test_radial_der, solve_biharmo, test_i4
+#ifdef WITH_SHTNS
+   use shtns, only: init_shtns
+#endif
 
    implicit none
 
@@ -77,8 +83,11 @@ program pizza
    !-- Initialize truncation
    call initialize_truncation()
 
+   !-- Initialize 3D truncation
+   if ( l_3D ) call initialize_truncation_3D()
+
    !-- Set the domain decomposition
-   call set_mpi_domains()
+   call set_mpi_domains(l_3D)
 
    !-- Test radial derivatives
    !call test_i4()
@@ -93,6 +102,9 @@ program pizza
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('I/O', local_bytes_used)
 
+   !-- Initialize 3D blocking
+   if ( l_3D ) call initialize_blocking(n_log_file)
+
    !-- Initialize time scheme
    call tscheme%initialize(time_scheme, courfac)
 
@@ -101,9 +113,14 @@ program pizza
 
    local_bytes_used = bytes_allocated
    call initialize_fields()
-   call initialize_fieldsLast(nMstart, nMstop, n_m_max, nRstart, nRstop, n_r_max, &
-        &                     tscheme%norder_imp, tscheme%norder_exp,             &
+   call initialize_fieldsLast(nMstart, nMstop, n_m_max, nRstart, nRstop,       &
+        &                     n_r_max, tscheme%norder_imp, tscheme%norder_exp, &
         &                     tscheme%norder_imp_lin)
+   if ( l_3D ) then
+      call initialize_fieldsLast_3D(llm, ulm, lm_max, nRstart3D, nRstop3D,    &
+           &                        n_r_max_3D, tscheme%norder_imp,           &
+           &                        tscheme%norder_exp, tscheme%norder_imp_lin)
+   end if
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('Fields', local_bytes_used)
    local_bytes_used = bytes_allocated
@@ -118,6 +135,9 @@ program pizza
    call memWrite('R loop', local_bytes_used)
    call initialize_mfunctions()
 
+#ifdef WITH_SHTNS
+   call init_shtns()
+#endif
 
    if ( rank == 0 ) then
       call write_namelists(6)
@@ -220,8 +240,9 @@ program pizza
    call finalize_radial_functions()
    call finalize_fieldsLast()
    call finalize_fields()
+   if ( l_3D ) call finalize_blocking()
    call finalize_communications()
-   call destroy_mpi_domains()
+   call destroy_mpi_domains(l_3D)
    call finalize_courant()
    call finalize_outputs()
    call tscheme%finalize()

@@ -3,7 +3,6 @@ module chebyshev
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: half, one, two, three, four, pi, third
-   use blocking, only: nMstart,nMstop
    use radial_scheme, only: type_rscheme
    use dct_fftw, only: costf_t
    use namelists, only: map_function
@@ -33,8 +32,8 @@ module chebyshev
 
 contains
 
-   subroutine initialize(this, n_r_max, order, order_boundary, l_cheb_coll, &
-              &          no_work_array)
+   subroutine initialize(this, nMstart, nMstop, n_r_max, order, order_boundary, &
+              &          l_cheb_coll, no_work_array)
       !
       !  Purpose of this subroutine is to calculate and store several     
       !  values that will be needed for a fast cosine transform of the    
@@ -45,6 +44,7 @@ contains
       class(type_cheb) :: this
       
       !-- Input variables
+      integer, intent(in) :: nMstart, nMstop
       integer, intent(in) :: n_r_max
       integer, intent(in) :: order ! This is going to be n_cheb_max
       integer, intent(in) :: order_boundary ! this is used to determine whether mappings are used

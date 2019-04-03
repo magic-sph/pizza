@@ -17,7 +17,7 @@ module truncation
    integer, allocatable, public :: idx2m(:)
    integer, allocatable, public :: m2idx(:)
 
-   public :: initialize_truncation, finalize_truncation
+   public :: initialize_truncation, finalize_truncation, write_truncation_info
 
 contains
 
@@ -54,5 +54,22 @@ contains
       deallocate( m2idx, idx2m)
 
    end subroutine finalize_truncation
-!------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
+   subroutine write_truncation_info(n_out)
+
+      integer, intent(in) :: n_out
+
+      write(n_out,*) ''
+      write(n_out,*) '! Grid parameters:'
+      write(n_out,'(''  n_r_max      ='',i6, &
+           &   '' = number of radial grid points'')') n_r_max
+      write(n_out,'(''  n_cheb_max   ='',i6)') n_cheb_max
+      write(n_out,'(''  n_phi_max    ='',i6, &
+           &   '' = no of azimuthal grid points'')') n_phi_max
+      write(n_out,'(''  m_max        ='',i6, '' = max oder'')') m_max
+      write(n_out,'(''  n_m_max      ='',i6, '' = number of m s'')') n_m_max
+      write(n_out,'(''  minc         ='',i6, '' = longitude symmetry wave no'')') minc
+
+   end subroutine write_truncation_info
+! ------------------------------------------------------------------------------
 end module truncation

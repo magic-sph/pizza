@@ -70,11 +70,12 @@ module radial_scheme
 
       end subroutine get_grid_if
       !------------------------------------------------------------------------
-      subroutine initialize_if(this,n_r_max,order,order_boundary,l_cheb_coll, &
-                 &             no_work_array)
+      subroutine initialize_if(this,nMstart,nMstop,n_r_max,order, &
+                 &             order_boundary,l_cheb_coll,no_work_array)
 
          import
          class(type_rscheme) :: this
+         integer, intent(in) :: nMstart,nMstop
          integer, intent(in) :: n_r_max
          integer, intent(in) :: order
          integer, intent(in) :: order_boundary

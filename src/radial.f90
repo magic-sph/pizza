@@ -4,14 +4,17 @@ module radial_functions
    ! only. This is called only once at the initialisation of the code.
    !
 
+   use blocking, only: nMstart, nMstop
+   use blocking_lm, only: llm, ulm
    use truncation, only: n_r_max, n_cheb_max, m_max
+   use truncation_3D, only: n_r_max_3D, n_cheb_max_3D
    use radial_der, only: get_dr
    use constants, only: one, two, three, pi, half, third
    use namelists, only: tag, alph1, alph2, l_newmap, radratio, g0, g1, g2, &
-       &                l_non_rot, ek, l_ek_pump, l_temp_3D, tcond_fac,    &
+       &                l_non_rot, ek, l_ek_pump, l_tcond_3D, tcond_fac,   &
        &                r_cmb, r_icb, l_cheb_coll, beta_shift, xicond_fac, &
        &                ktopt, kbott, t_bot, t_top, l_heat, l_chem, xi_bot,&
-       &                xi_top, l_xi_3D, ktopxi, kbotxi
+       &                xi_top, l_xi_3D, ktopxi, kbotxi, l_3D
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -47,10 +50,17 @@ module radial_functions
    !-- arrays for buoyancy, depend on Ra and Pr:
    real(cp), public, allocatable :: rgrav(:)     ! Buoyancy term `dtemp0/Di`
 
+   !-- arrays depending on spherical r:
+   real(cp), public, allocatable :: r_3D(:)         ! spherical radii
+   real(cp), public, allocatable :: or1_3D(:)       ! :math:`1/r_3D`
+   real(cp), public, allocatable :: or2_3D(:)       ! :math:`1/r_3D^2`
+   real(cp), public, allocatable :: rgrav_3D(:)  
+
    !-- Radial scheme
-   class(type_rscheme), public, pointer :: rscheme
+   class(type_rscheme), public, pointer :: rscheme, rscheme_3D
  
-   public :: initialize_radial_functions, radial, finalize_radial_functions
+   public :: initialize_radial_functions, radial, finalize_radial_functions, &
+   &         radial_3D
 
 contains
 
@@ -79,7 +89,16 @@ contains
          n_in_2 = 0
       end if
 
-      call rscheme%initialize(n_r_max,n_in,n_in_2,l_cheb_coll)
+      call rscheme%initialize(nMstart,nMstop,n_r_max,n_in,n_in_2,l_cheb_coll)
+
+      if ( l_3D ) then
+         allocate( r_3D(n_r_max_3D), or1_3D(n_r_max_3D), or2_3D(n_r_max_3D) )
+         allocate( rgrav_3D(n_r_max_3D) )
+         bytes_allocated = bytes_allocated+4*n_r_max_3D*SIZEOF_DEF_REAL
+
+         allocate ( type_cheb :: rscheme_3D )
+         call rscheme_3D%initialize(llm,ulm,n_r_max_3D,n_cheb_max_3D,0,.true.)
+      end if
 
    end subroutine initialize_radial_functions
 !------------------------------------------------------------------------------
@@ -91,6 +110,11 @@ contains
       deallocate( delxr2, delxh2, rgrav )
       deallocate( beta, dbeta, height, ekpump, oheight )
       deallocate( r, or1, or2 )
+
+      if ( l_3D ) then
+         deallocate( r_3D, or1_3D, or2_3D, rgrav_3D )
+         call rscheme_3D%finalize()
+      end if
 
    end subroutine finalize_radial_functions
 !------------------------------------------------------------------------------
@@ -143,7 +167,7 @@ contains
       end do
 
       !-- Calculate conducting temperature
-      if ( l_heat ) call get_conducting_state(tcond,dtcond,l_temp_3D,tcond_fac,&
+      if ( l_heat ) call get_conducting_state(tcond,dtcond,l_tcond_3D,tcond_fac,&
                          &                    ktopt,kbott,t_top,t_bot)
 
       !-- Calculate chemical composition
@@ -187,14 +211,46 @@ contains
 
    end subroutine radial
 !------------------------------------------------------------------------------
-   subroutine get_conducting_state(tcond, dtcond, l_3D, cond_fac, ktop, kbot, &
-              &                    t_top, t_bot)
+   subroutine radial_3D
+      !
+      !  Calculates everything needed for 3D radial functions, transforms etc.
+      !
+
+      integer :: n_r, file_handle
+      character(len=100) :: file_name
+      real(cp) :: ratio1, ratio2
+
+      ratio1=alph1 ! To be changed to alph1_3D at some point
+      ratio2=alph2
+
+      call rscheme_3D%get_grid(n_r_max_3D, r_icb, r_cmb, ratio1, ratio2, r_3D)
+      call rscheme_3D%get_der_mat(n_r_max_3D, .true.)
+
+      if ( rank == 0 ) then
+         file_name = 'radius_3D.'//tag
+         open(newunit=file_handle, file=file_name, status='unknown')
+         do n_r=1,n_r_max_3D
+            write(file_handle,'(I4, ES16.8)') n_r, r_3D(n_r)
+         end do
+         close(file_handle)
+      end if
+
+
+      rgrav_3D(:)=g0+g1*r_3D(:)/r_cmb+g2*(r_cmb/r_3D)**2
+
+      or1_3D(:)=one/r_3D(:)      ! 1/r_3D
+      or2_3D(:)=or1_3D*or1_3D(:) ! 1/r_3D**2
+
+   end subroutine radial_3D
+!------------------------------------------------------------------------------
+   subroutine get_conducting_state(tcond, dtcond, l_tcond_3D, cond_fac, ktop, &
+              &                    kbot, t_top, t_bot)
       !
       !  Calculates the conducting state of the temperature equation
       !
 
       !-- Input variables
-      logical,  intent(in) :: l_3D
+      logical,  intent(in) :: l_tcond_3D
       integer,  intent(in) :: ktop
       integer,  intent(in) :: kbot
       real(cp), intent(in) :: cond_fac
@@ -230,14 +286,14 @@ contains
       if ( rank == 0 ) write(6,*) '! Bot Flux', f_bot
 
       !-- Conductive Temperature profile 2D and 3D projected onto QG
-      if ( l_3D ) then
+      if ( l_tcond_3D ) then
          !3D-tcond profiles -- Warning! In 3D, tcond(r_cmb) induces division by 0 (in h)
          tcond(1) = f_top!0.0_cp
          h = half*height(:)!sqrt(r_cmb**2-r(:)**2)
          !-- 3D heat sources to compensate for top/bottom fluxes
          epsc0 = three*(r_icb**2*f_bot - r_cmb**2*f_top)/ &
          &             (r_cmb**3 - r_icb**3)
-         if ( epsc0<10.0_cp*epsilon(one) ) epsc0=0.0_cp
+         if ( abs(epsc0)<10.0_cp*epsilon(one) ) epsc0=0.0_cp
          if ( ktop==1 .and. kbot==1 ) then
             do n_r=2,n_r_max
                tcond(n_r) = (r_icb/(r_icb-r_cmb))*(one-r_cmb*asinh(h(n_r)/r(n_r))/h(n_r))
@@ -267,7 +323,7 @@ contains
          !-- 2D heat sources to compensate for top/bottom fluxes
          epsc0 = two*(r_icb*f_bot - r_cmb*f_top)/ &
          &           (r_cmb**2 - r_icb**2)
-         if ( epsc0<10.0_cp*epsilon(one) ) epsc0=0.0_cp
+         if ( abs(epsc0)<10.0_cp*epsilon(one) ) epsc0=0.0_cp
          if ( ktop==1 .and. kbot==1 ) then
             tcond(:) = cond_fac*(log(r(:)/r_cmb)/log(radratio))
             dtcond(:)= cond_fac*(or1(:)/log(radratio))

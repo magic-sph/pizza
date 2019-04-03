@@ -4,7 +4,6 @@ module dct_fftw
    use precision_mod
    use namelists, only: fftw_plan_flag
    use mem_alloc, only: bytes_allocated
-   use blocking, only: nm_per_rank
    use constants, only: half
 
    implicit none
@@ -13,13 +12,15 @@ module dct_fftw
 
    private
 
-   complex(cp), target, allocatable :: work(:,:)
-   real(cp), pointer :: work_r(:,:)
+   !complex(cp), target, allocatable :: work(:,:)
+   !real(cp), pointer :: work_r(:,:)
 
    type, public :: costf_t
       real(cp) :: cheb_fac
       type(c_ptr) :: plan
       type(c_ptr) :: plan_1d
+      complex(cp), pointer :: work(:,:)
+      real(cp), pointer :: work_r(:,:)
    contains
       procedure :: initialize
       procedure :: finalize
@@ -41,7 +42,7 @@ contains
 
       !--Local variables
       integer :: inembed(1), istride, idist, plan_size(1)
-      integer :: onembed(1), ostride, odist
+      integer :: onembed(1), ostride, odist, isize
       integer(C_INT) :: plan_type(1)
       real(cp) :: array_in(1:2*(nMstop-nMstart+1), n_r_max)
       real(cp) :: array_out(1:2*(nMstop-nMstart+1), n_r_max)
@@ -55,10 +56,11 @@ contains
       plan_type(1) = FFTW_REDFT00
       istride = 2*(nMstop-nMstart+1)
       ostride = 2*(nMstop-nMstart+1)
+      isize   = 2*(nMstop-nMstart+1)
       idist   = 1
       odist   = 1
 
-      this%plan = fftw_plan_many_r2r(1, plan_size, 2*nM_per_rank, array_in, &
+      this%plan = fftw_plan_many_r2r(1, plan_size, isize, array_in,         &
                   &                  inembed, istride, idist, array_out,    &
                   &                  onembed, ostride, odist,               &
                   &                  plan_type, fftw_plan_flag)
@@ -75,8 +77,8 @@ contains
       end if
 
       if ( l_work_array ) then
-         allocate( work(nMstart:nMstop,n_r_max) )
-         call c_f_pointer(c_loc(work), work_r, [2*nm_per_rank, n_r_max])
+         allocate( this%work(nMstart:nMstop,n_r_max) )
+         call c_f_pointer(c_loc(this%work), this%work_r, [isize, n_r_max])
 
          bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*n_r_max* &
          &                 SIZEOF_DEF_COMPLEX
@@ -101,7 +103,7 @@ contains
       end if
 
       if ( l_work_array ) then
-         deallocate( work )
+         deallocate( this%work )
       end if
 
       call fftw_destroy_plan(this%plan_1d)
@@ -123,14 +125,16 @@ contains
 
       !-- Local variables
       real(cp), pointer :: r_input(:,:)
-      integer :: n_r, n_m
+      integer :: n_r, n_m, isize
 
-      call c_f_pointer(c_loc(array_in), r_input, [2*nm_per_rank, n_r_max])
-      call fftw_execute_r2r(this%plan, r_input, work_r)
+      isize = 2*(nMstop-nMstart+1)
+
+      call c_f_pointer(c_loc(array_in), r_input, [isize, n_r_max])
+      call fftw_execute_r2r(this%plan, r_input, this%work_r)
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
-            array_in(n_m,n_r)=this%cheb_fac*work(n_m,n_r)
+            array_in(n_m,n_r)=this%cheb_fac*this%work(n_m,n_r)
          end do
       end do
 

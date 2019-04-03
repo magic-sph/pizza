@@ -5,6 +5,7 @@ module tests
    use precision_mod
    use parallel_mod
    use galerkin
+   use blocking, only: nMstart, nMstop
    use constants, only: one, half, two, pi
    use namelists, only: l_newmap, radratio, l_rerror_fix, rerror_fac
    use chebyshev, only: type_cheb
@@ -76,8 +77,8 @@ contains
             allocate( sol_theo(n_r_max_loc) )
             ! allocate( df_num(n_r_max_loc), d2f_num(n_r_max_loc) )
             ! allocate( df_theo(n_r_max_loc), d2f_theo(n_r_max_loc) )
-            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in, &
-                 &                  l_cheb_coll=.true.)
+            call rscheme%initialize(nMstart,nMstop,n_r_max_loc,n_r_max_loc, &
+                 &                  n_in,l_cheb_coll=.true.)
             if ( l_newmap ) then
                alph1=1.0_cp/cosh(abs(log(eps))/(n_r_max_loc-1))
                alph2=0.0_cp
@@ -176,8 +177,8 @@ contains
             allocate( r_loc(n_r_max_loc), rhs1(n_r_max_loc), rhs2(n_r_max_loc) )
             allocate( or2(n_r_max_loc), rhs3(n_r_max_loc) )
 
-            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in, &
-                 &                  l_cheb_coll=.true.)
+            call rscheme%initialize(nMstart, nMstop, n_r_max_loc,n_r_max_loc, &
+                 &                  n_in, l_cheb_coll=.true.)
             alph1=0.0_cp
             alph2=0.0_cp
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
@@ -274,8 +275,8 @@ contains
             allocate( sol_theo(n_r_max_loc) )
             ! allocate( df_num(n_r_max_loc), d2f_num(n_r_max_loc) )
             ! allocate( df_theo(n_r_max_loc), d2f_theo(n_r_max_loc) )
-            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in, &
-                 &                  l_cheb_coll=.true.)
+            call rscheme%initialize(nMstart, nMstop, n_r_max_loc, n_r_max_loc, &
+                 &                  n_in, l_cheb_coll=.true.)
             if ( l_newmap ) then
                alph1=1.0_cp/cosh(abs(log(eps))/(n_r_max_loc-1))
                alph2=0.0_cp
@@ -1123,8 +1124,8 @@ contains
             allocate( r_loc(n_r_max_loc), rhs1(n_r_max_loc), rhs2(n_r_max_loc) )
             allocate( or2(n_r_max_loc), rhs3(n_r_max_loc) )
 
-            call rscheme%initialize(n_r_max_loc,n_r_max_loc, n_in, &
-                 &                  l_cheb_coll=.true.)
+            call rscheme%initialize(nMstart, nMstop, n_r_max_loc,n_r_max_loc, &
+                 &                  n_in, l_cheb_coll=.true.)
             alph1=0.0_cp
             alph2=0.0_cp
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
@@ -1339,8 +1340,8 @@ contains
             allocate( d2cheb(n_r_max_loc,n_r_max_loc) )
             allocate( df_num_matmul(n_r_max_loc) )
             allocate( df_theo(n_r_max_loc), d2f_theo(n_r_max_loc) )
-            call rscheme%initialize(n_r_max_loc, n_r_max_loc, n_in, &
-                 &                  l_cheb_coll=.true.)
+            call rscheme%initialize(nMstart, nMstop, n_r_max_loc, n_r_max_loc, &
+                 &                  n_in, l_cheb_coll=.true.)
             if ( l_newmap ) then
                alph1=one/cosh(abs(log(eps))/(n_r_max_loc-1))
                alph2=0.0_cp
