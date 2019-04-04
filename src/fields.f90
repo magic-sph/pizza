@@ -34,6 +34,7 @@ module fields
 
    !-- 3-D Temperature:
    complex(cp), allocatable, public :: temp_3D_LMloc(:,:)
+   complex(cp), allocatable, public :: dtemp_3D_LMloc(:,:)
    complex(cp), allocatable, public :: work_LMloc(:,:)
    complex(cp), allocatable, public :: temp_3D_Rloc(:,:)
 
@@ -142,23 +143,26 @@ contains
       !-- 3-D temperature:
       if ( l_heat_3D ) then
          allocate( temp_3D_LMloc(llm:ulm,n_r_max_3D) )
+         allocate( dtemp_3D_LMloc(llm:ulm,n_r_max_3D) )
          allocate( work_LMloc(llm:ulm,n_r_max_3D) )
          allocate( temp_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
          bytes_allocated = bytes_allocated + &
          &                 2*(ulm-llm+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
          bytes_allocated = bytes_allocated + &
          &                 lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
-         temp_3D_LMloc(:,:)=zero
-         work_LMloc(:,:)   =zero
-         temp_3D_Rloc(:,:) =zero
+         temp_3D_LMloc(:,:) =zero
+         dtemp_3D_LMloc(:,:)=zero
+         work_LMloc(:,:)    =zero
+         temp_3D_Rloc(:,:)  =zero
       end if
 
    end subroutine initialize_fields
 !----------------------------------------------------------------------------
    subroutine finalize_fields
 
-      if ( l_heat_3D ) deallocate( work_LMloc, temp_3D_LMloc, temp_3D_Rloc )
-
+      if ( l_heat_3D ) then
+         deallocate( work_LMloc, temp_3D_LMloc, dtemp_3D_LMloc, temp_3D_Rloc )
+      end if
       if ( l_heat ) then
          deallocate( temp_Mloc, dtemp_Mloc, temp_Rloc )
          if ( .not. l_cheb_coll ) deallocate( temp_hat_Mloc )

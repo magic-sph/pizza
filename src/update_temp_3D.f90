@@ -274,11 +274,11 @@ contains
 
    end subroutine update_temp_3D
 !-------------------------------------------------------------------------------
-   subroutine finish_exp_temp_3D(temp_3D, dVTr_LMloc, dtemp_exp_last)
+   subroutine finish_exp_temp_3D(temp_3D, dVrT_LMloc, dtemp_exp_last)
 
       !-- Input variables
       complex(cp), intent(in) :: temp_3D(llm:ulm,n_r_max_3D)
-      complex(cp), intent(inout) :: dVTr_LMloc(llm:ulm,n_r_max_3D)
+      complex(cp), intent(inout) :: dVrT_LMloc(llm:ulm,n_r_max_3D)
 
       !-- Output variables
       complex(cp), intent(inout) :: dtemp_exp_last(llm:ulm,n_r_max_3D)
@@ -286,7 +286,7 @@ contains
       !-- Local variables
       integer :: n_r, lm
 
-      call get_dr( dVTr_LMloc,work_LMloc, llm, ulm, &
+      call get_dr( dVrT_LMloc,work_LMloc, llm, ulm, &
            &       n_r_max_3D, rscheme_3D, nocopy=.true. )
 
       do n_r=1,n_r_max_3D

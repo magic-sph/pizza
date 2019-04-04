@@ -43,19 +43,19 @@ contains
 
    end subroutine LMLoop
 !--------------------------------------------------------------------------------
-   subroutine finish_explicit_assembly_3D(temp_3D_LMloc, dVTr_LMloc, dTdt_3D, &
+   subroutine finish_explicit_assembly_3D(temp_3D_LMloc, dVrT_LMloc, dTdt_3D, &
               &                           tscheme)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       complex(cp),         intent(in) :: temp_3D_LMloc(llm:ulm,n_r_max_3D)
-      complex(cp),         intent(inout) :: dVTr_LMloc(llm:ulm,n_r_max_3D)
+      complex(cp),         intent(inout) :: dVrT_LMloc(llm:ulm,n_r_max_3D)
 
       !-- Output variables
       type(type_tarray),   intent(inout) :: dTdt_3D
 
       if ( l_heat_3D ) then
-         call finish_exp_temp_3D(temp_3D_LMloc, dVTr_LMloc, &
+         call finish_exp_temp_3D(temp_3D_LMloc, dVrT_LMloc, &
               &                  dTdt_3D%expl(:,:,tscheme%istage))
       end if
 

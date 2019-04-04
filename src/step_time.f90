@@ -9,10 +9,12 @@ module step_time
    use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
        &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,    &
-       &             xi_Rloc, dxi_Mloc, xi_hat_Mloc
+       &             xi_Rloc, dxi_Mloc, xi_hat_Mloc, temp_3D_LMloc,     &
+       &             dtemp_3D_LMloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
        &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,  &
-       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc
+       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,       &
+       &                 dTdt_3D, dVrT_3D_LMloc
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
@@ -25,13 +27,14 @@ module step_time
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
    use update_psi_coll_smat, only: get_psi_rhs_imp_coll_smat
    use mloop_mod, only: mloop, finish_explicit_assembly
+   use LMloop_mod, only: LMloop, finish_explicit_assembly_3D
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance,      &
-       &                l_heat, l_chem
+       &                l_heat, l_chem, l_3D
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
@@ -259,6 +262,16 @@ contains
                if (runStop>runStart) then
                   timers%m_loop=timers%m_loop+(runStop-runStart)
                end if
+
+               if ( l_3D ) then
+                  runStart = MPI_Wtime()
+                  call finish_explicit_assembly_3D(temp_3D_LMloc, dVrT_3D_LMloc, &
+                       &                           dTdt_3D, tscheme)
+                  runStop = MPI_Wtime()
+                  if (runStop>runStart) then
+                     timers%lm_loop=timers%lm_loop+(runStop-runStart)
+                  end if
+               end if
             end if
 
             if ( tscheme%istage == 1 ) then
@@ -315,6 +328,26 @@ contains
                if (runStop>runStart) then
                   timers%n_m_loops_mat=timers%n_m_loops_mat+1
                   timers%m_loop_mat   =timers%m_loop_mat+(runStop-runStart)
+               end if
+            end if
+
+            if ( l_3D ) then
+               !--------------------
+               !-- LM-loop (update routines)
+               !--------------------
+               runStart = MPI_Wtime()
+               call LMloop(temp_3D_LMloc, dtemp_3D_LMloc, dTdt_3D, tscheme, lMat)
+               runStop = MPI_Wtime()
+               if ( .not. lMat ) then
+                  if (runStop>runStart) then
+                     timers%n_lm_loops=timers%n_lm_loops+1
+                     timers%lm_loop   =timers%lm_loop+(runStop-runStart)
+                  end if
+               else
+                  if (runStop>runStart) then
+                     timers%n_lm_loops_mat=timers%n_lm_loops_mat+1
+                     timers%lm_loop_mat   =timers%lm_loop_mat+(runStop-runStart)
+                  end if
                end if
             end if
 
