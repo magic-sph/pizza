@@ -3,8 +3,10 @@ module communications
    use mpimod
    use precision_mod
    use blocking
+   use blocking_lm, only: llm, ulm
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, n_m_max
+   use truncation_3D, only: n_r_max_3D, lm_max
    use parallel_mod, only: n_procs, rank, ierr
 
    implicit none
@@ -23,24 +25,33 @@ module communications
 
    type(help_transp), public :: r2m_fields
    type(help_transp), public :: m2r_fields
+   type(help_transp), public :: lm2r_fields
    type(help_transp), public :: r2all_fields
 
    public :: initialize_communications, transp_r2m, transp_m2r,     &
    &         gather_from_mloc_to_rank0, scatter_from_rank0_to_mloc, &
    &         finalize_communications, reduce_radial_on_rank,        &
-   &         my_transp_r2all, my_reduce_mean, my_allreduce_maxloc
+   &         my_reduce_mean, my_allreduce_maxloc, transp_lm2r
 
 contains
 
-   subroutine initialize_communications()
+   subroutine initialize_communications(l_3D)
+
+      logical, intent(in) :: l_3D
 
       call create_r2m_type(r2m_fields)
       call create_m2r_type(m2r_fields)
       call create_r2all_type(r2all_fields)
 
+      if ( l_3D ) call create_lm2r_type(lm2r_fields)
+
    end subroutine initialize_communications
 !------------------------------------------------------------------------------
-   subroutine finalize_communications
+   subroutine finalize_communications(l_3D)
+
+      logical, intent(in) :: l_3D
+
+      if ( l_3D ) call destroy_communicator(lm2r_fields)
 
       call destroy_communicator(m2r_fields)
       call destroy_communicator(r2m_fields)
@@ -90,6 +101,36 @@ contains
       deallocate( self%scounts, self%rcounts )
 
    end subroutine destroy_communicator
+!------------------------------------------------------------------------------
+   subroutine create_lm2r_type(self)
+
+      type(help_transp) :: self
+      integer :: p
+
+      allocate ( self%rcounts(0:n_procs-1), self%scounts(0:n_procs-1) )
+      allocate ( self%rdisp(0:n_procs-1), self%sdisp(0:n_procs-1) )
+
+      do p=0,n_procs-1
+         self%scounts(p)=radial_balance_3D(p)%n_per_rank*nlm_per_rank
+         self%rcounts(p)=nR_per_rank_3D*lm_balance(p)%n_per_rank
+      end do
+
+      self%rdisp(0)=0
+      self%sdisp(0)=0
+      do p=1,n_procs-1
+         self%sdisp(p)=self%sdisp(p-1)+self%scounts(p-1)
+         self%rdisp(p)=self%rdisp(p-1)+self%rcounts(p-1)
+      end do
+
+      self%max_send = sum(self%scounts)
+      self%max_recv = sum(self%rcounts)
+
+      bytes_allocated = bytes_allocated+4*n_procs*SIZEOF_INTEGER
+
+      allocate( self%sbuff(1:self%max_send) )
+      allocate( self%rbuff(1:self%max_recv) )
+
+   end subroutine create_lm2r_type
 !------------------------------------------------------------------------------
    subroutine create_m2r_type(self)
 
@@ -153,6 +194,44 @@ contains
       &                 SIZEOF_DEF_COMPLEX
 
    end subroutine create_r2all_type
+!------------------------------------------------------------------------------
+   subroutine transp_lm2r(self, arr_LMloc, arr_Rloc)
+
+      !-- Input variables
+      type(help_transp), intent(inout) :: self
+      complex(cp),       intent(in) :: arr_LMloc(llm:ulm, n_r_max_3D)
+
+      !-- Output variables
+      complex(cp), intent(out) :: arr_Rloc(lm_max, nRstart3D:nRstop3D)
+
+      !-- Local variables
+      integer :: p, ii, n_r, lm
+
+      do p = 0, n_procs-1
+         ii = self%sdisp(p)+1
+         do n_r=radial_balance_3D(p)%nStart,radial_balance_3D(p)%nStop
+            do lm=llm,ulm
+               self%sbuff(ii)=arr_LMloc(lm,n_r)
+               ii = ii+1
+            end do
+         end do
+      end do
+
+      call MPI_Alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
+           &             self%rbuff, self%rcounts, self%rdisp, MPI_DEF_COMPLEX, &
+           &             MPI_COMM_WORLD, ierr) 
+
+      do p = 0, n_procs-1
+         ii = self%rdisp(p)+1
+         do n_r=nRstart3D,nRstop3D
+            do lm=lm_balance(p)%nStart,lm_balance(p)%nStop
+               arr_Rloc(lm,n_r)=self%rbuff(ii)
+               ii=ii+1
+            end do
+         end do
+      end do
+
+   end subroutine transp_lm2r
 !------------------------------------------------------------------------------
    subroutine transp_r2m(self, arr_Rloc, arr_Mloc)
 
@@ -358,46 +437,6 @@ contains
       end if
 
    end subroutine reduce_radial_on_rank
-!------------------------------------------------------------------------------
-   subroutine my_transp_r2all(self, arr_Rloc, arr_full)
-
-      !-- Input variable:
-      type(help_transp), intent(inout) :: self
-      real(cp), intent(in) :: arr_Rloc(n_m_max, nRstart:nRstop)
-
-      !-- Output variable:
-      real(cp), intent(out) :: arr_full(n_m_max, n_r_max)
-
-      !-- Local variables:
-      integer :: p, ii, n_r, n_m
-
-      do p = 0, n_procs-1
-         ii = self%sdisp(p)+1
-         do n_r=nRstart,nRstop
-            do n_m=1,n_m_max
-               self%sbuff(ii)=arr_Rloc(n_m,n_r)
-               ii = ii+1
-            end do
-         end do
-      end do
-
-      call MPI_Allgatherv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
-           &              self%rbuff, self%rcounts, self%rdisp, MPI_DEF_COMPLEX, &
-           &              0, MPI_COMM_WORLD, ierr)
-
-      if ( rank == 0 ) then
-         do p = 0, n_procs-1
-            ii = self%rdisp(p)+1
-            do n_r=nRStart,nRstop
-               do n_m=1,n_m_max
-                  arr_full(n_m,n_r)=self%rbuff(ii)
-                  ii=ii+1
-               end do
-            end do
-         end do
-      end if
-
-   end subroutine my_transp_r2all
 !------------------------------------------------------------------------------
    subroutine my_reduce_mean(scalar, irank)
 

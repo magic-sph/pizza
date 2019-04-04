@@ -110,7 +110,7 @@ program pizza
    call tscheme%initialize(time_scheme, courfac)
 
    !-- Initialize MPI communicators
-   call initialize_communications()
+   call initialize_communications(l_3D)
 
    local_bytes_used = bytes_allocated
    call initialize_fields()
@@ -243,7 +243,7 @@ program pizza
    call finalize_fieldsLast()
    call finalize_fields()
    if ( l_3D ) call finalize_blocking()
-   call finalize_communications()
+   call finalize_communications(l_3D)
    call destroy_mpi_domains(l_3D)
    call finalize_courant()
    call finalize_outputs()
