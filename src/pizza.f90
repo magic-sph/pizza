@@ -5,7 +5,7 @@ program pizza
    use mem_alloc
    use step_time, only: time_loop
    use courant_mod, only: initialize_courant, finalize_courant
-   use radial_der, only: initialize_der_arrays, finalize_der_arrays
+   use radial_der, only: initialize_der_arrays
    use init_fields, only: get_start_fields
    use fields, only: initialize_fields, finalize_fields
    use fieldsLast, only: initialize_fieldsLast, finalize_fieldsLast, &
@@ -125,7 +125,7 @@ program pizza
    call memWrite('Fields', local_bytes_used)
    local_bytes_used = bytes_allocated
    call initialize_radial_functions()
-   call initialize_der_arrays(n_r_max, nMstart, nMstop, l_rerror_fix, rerror_fac)
+   call initialize_der_arrays(l_rerror_fix, rerror_fac)
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('Radial functions', local_bytes_used)
    local_bytes_used = bytes_allocated
@@ -236,7 +236,6 @@ program pizza
    call finalize_mfunctions()
    call finalize_radial_loop()
    call finalize_fourier()
-   call finalize_der_arrays()
    call finalize_radial_functions()
    call finalize_fieldsLast()
    call finalize_fields()

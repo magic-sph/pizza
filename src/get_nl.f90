@@ -63,7 +63,6 @@ contains
 
    end subroutine finalize
 !----------------------------------------------------------------------------
-#ifdef WITH_SHTNS
    subroutine get_nl(this, vr, vt, vp, n_r)
       !
       !  calculates non-linear products in grid-space for radial
@@ -105,6 +104,5 @@ contains
       !$OMP END PARALLEL DO
 
    end subroutine get_nl
-#endif
 !----------------------------------------------------------------------------
 end module grid_space_arrays_mod

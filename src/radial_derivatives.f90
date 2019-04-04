@@ -32,24 +32,15 @@ module radial_der
       module procedure get_ddr_complex_2d
    end interface get_ddr
 
-   public :: get_ddr, get_dcheb, get_dr, initialize_der_arrays, &
-   &         finalize_der_arrays
+   public :: get_ddr, get_dcheb, get_dr, initialize_der_arrays
 
-   complex(cp), allocatable :: work(:,:)
-   real(cp), allocatable :: work_1d_real(:)
    real(cp) :: thr
 
 contains
 
 !------------------------------------------------------------------------------
-   subroutine initialize_der_arrays(n_r_max, nMstart, nMstop, l_rerror, rerror_fac)
-      !
-      ! Allocate work arrays to compute derivatives
-      !
+   subroutine initialize_der_arrays(l_rerror, rerror_fac)
 
-      integer,  intent(in) :: n_r_max
-      integer,  intent(in) :: nMstart
-      integer,  intent(in) :: nMstop
       logical,  intent(in) :: l_rerror
       real(cp), intent(in) :: rerror_fac
 
@@ -59,20 +50,7 @@ contains
          thr = 0.0_cp
       end if
 
-      allocate( work_1d_real(n_r_max) )
-      allocate( work(nMstart:nMstop,n_r_max) )
-      bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_REAL+&
-      &                 n_r_max*(nMstop-nMstart+1)*SIZEOF_DEF_COMPLEX
-
    end subroutine initialize_der_arrays
-!------------------------------------------------------------------------------
-   subroutine finalize_der_arrays
-      !
-      ! Deallocate work arrays
-      !
-      deallocate( work_1d_real, work )
-
-   end subroutine finalize_der_arrays
 !------------------------------------------------------------------------------
    subroutine get_dcheb_complex_2d(f,df,nMstart,nMstop,n_r_max,n_cheb_max)
       !
@@ -328,6 +306,7 @@ contains
       complex(cp), intent(out) :: df(nMstart:nMstop,n_r_max) ! first derivative of f
     
       !-- Local:
+      complex(cp) :: work(nMstart:nMstop,n_r_max) ! work array
       integer :: n_r,n_f,od
       logical :: copy_array, l_dct_in_loc, l_dct_out_loc
 
@@ -439,6 +418,7 @@ contains
       real(cp), intent(out) :: df(n_r_max) ! first derivative of f
     
       !-- Local:
+      real(cp) :: work_1d_real(n_r_max)
       integer :: n_r,od
       logical :: l_dct_loc
 
@@ -521,6 +501,7 @@ contains
       complex(cp), intent(out) :: ddf(nMstart:nMstop,n_r_max)! second derivative of f
     
       !-- Local variables:
+      complex(cp) :: work(nMstart:nMstop,n_r_max)
       logical :: l_dct_loc
       integer :: n_r,n_f,od
 
@@ -625,6 +606,7 @@ contains
       real(cp), intent(out) :: ddf(n_r_max)! second derivative of f
     
       !-- Local variables:
+      real(cp) :: work_1d_real(n_r_max)
       integer :: n_r,od
 
       if ( r_scheme%version == 'cheb' ) then

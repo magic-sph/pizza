@@ -10,7 +10,7 @@ module tests
    use namelists, only: l_newmap, radratio, l_rerror_fix, rerror_fac
    use chebyshev, only: type_cheb
    use radial_functions, only: rscheme
-   use radial_der, only: initialize_der_arrays, finalize_der_arrays, get_ddr
+   use radial_der, only: initialize_der_arrays, get_ddr
    use radial_scheme, only: type_rscheme
    use algebra, only: prepare_full_mat, solve_full_mat
    use useful, only: abortRun
@@ -87,8 +87,7 @@ contains
                alph2=0.0_cp
             end if
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
-            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop, l_rerror_fix, &
-                 &                     rerror_fac)
+            call initialize_der_arrays(l_rerror_fix, rerror_fac)
             call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             c1 = (btop-bbot-0.25_cp*epsh*(r_cmb**2-r_icb**2))/log(r_cmb/r_icb)
@@ -129,7 +128,6 @@ contains
             &                        errInteg, tInteg, errGal, tGal
 
 
-            call finalize_der_arrays()
             call rscheme%finalize()
             deallocate( r_loc, sol, sol_theo )
          end do
@@ -183,8 +181,7 @@ contains
             alph2=0.0_cp
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
             or2(:)=one/r_loc(:)/r_loc(:)
-            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop, l_rerror_fix, &
-                 &                     rerror_fac)
+            call initialize_der_arrays(l_rerror_fix, rerror_fac)
             call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             call A_mat%initialize(12, 12, 4, n_r_max_loc)
@@ -221,7 +218,6 @@ contains
 
             call A_mat%finalize()
             call B_mat%finalize()
-            call finalize_der_arrays()
 
             call rscheme%finalize()
             deallocate( r_loc, rhs1, rhs2, rhs3, or2 )
@@ -285,8 +281,7 @@ contains
                alph2=0.0_cp
             end if
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
-            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop, l_rerror_fix, &
-                 &                     rerror_fac)
+            call initialize_der_arrays(l_rerror_fix, rerror_fac)
             call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             sol_theo(:)=one/8.0_cp*(two*(r_loc(:)-pi)*sin(r_loc)+ &
@@ -324,7 +319,6 @@ contains
             &                        errInteg, tInteg, errGal, tGal
 
 
-            call finalize_der_arrays()
             call rscheme%finalize()
             deallocate( r_loc, sol, sol_theo )
             ! deallocate( r_loc, f, df_theo, d2f_theo, df_num, d2f_num )
@@ -1350,8 +1344,7 @@ contains
                alph2=0.0_cp
             end if
             call rscheme%get_grid(n_r_max_loc, r_icb, r_cmb, alph1, alph2, r_loc)
-            call initialize_der_arrays(n_r_max_loc, nMstart, nMstop, l_rerror_fix, &
-                 &                     rerror_fac)
+            call initialize_der_arrays(l_rerror_fix, rerror_fac)
             call rscheme%get_der_mat(n_r_max_loc, l_cheb_coll=.true.)
 
             !-- Define a function and its analytical derivatives
@@ -1398,7 +1391,6 @@ contains
             write(6, '(i5,4es20.12)') n_r_max_loc, err_d1, err_d1_matmul, err_d2, &
             &                         err_d2_matmul
 
-            call finalize_der_arrays()
             call rscheme%finalize()
             deallocate( r_loc, f, df_theo, d2f_theo, df_num, d2f_num )
             deallocate( df_num_matmul, dcheb, d2cheb )
