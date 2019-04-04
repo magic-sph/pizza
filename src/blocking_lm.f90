@@ -67,7 +67,7 @@ module blocking_lm
    integer, parameter, public :: chunksize=16
    integer, public :: lm_per_rank, lm_on_last_rank
  
-   public :: initialize_blocking, finalize_blocking, get_lm_blocks
+   public :: initialize_blocking, finalize_blocking
 
 contains
 
@@ -186,6 +186,8 @@ contains
 
       local_bytes_used = bytes_allocated-local_bytes_used
       call memWrite('blocking_lm.f90', local_bytes_used)
+
+      call get_lm_blocks()
 
    end subroutine initialize_blocking
 !------------------------------------------------------------------------

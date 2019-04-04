@@ -31,8 +31,6 @@ contains
 
       !--- Local counter
       integer :: nLMB
-      integer :: lmStart,lmStop
-      integer :: l,nR,ierr
 
       nLMB=1+rank
 

@@ -32,7 +32,7 @@ module update_temp_3D_mod
    real(cp), allocatable :: TMat_fac(:,:)
    real(cp), allocatable :: T0Mat_fac(:)
 #endif
-   logical, public, allocatable :: lSmat(:)
+   logical, allocatable :: lTmat(:)
 
    integer :: maxThreads
 
@@ -56,7 +56,8 @@ contains
       bytes_allocated = bytes_allocated+n_r_max_3D*SIZEOF_DEF_REAL
       bytes_allocated = bytes_allocated+n_r_max_3D*l_max*SIZEOF_DEF_REAL
 #endif
-      allocate( lSmat(0:l_max) )
+      allocate( lTmat(0:l_max) )
+      lTmat(:)=.false.
       bytes_allocated = bytes_allocated+(l_max+1)*SIZEOF_LOGICAL
 
 #ifdef WITHOMP
@@ -72,7 +73,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine finalize_update_temp_3D
 
-      deallocate( T0Mat, TMat, T0Pivot, TPivot, lSmat )
+      deallocate( T0Mat, TMat, T0Pivot, TPivot, lTmat )
 #ifdef WITH_PRECOND_S
       deallocate( TMat_fac )
       deallocate( T0Mat_fac )
@@ -114,7 +115,7 @@ contains
       integer :: threadid,nThreads,iThread,all_lms,per_thread,start_lm,stop_lm
       integer :: iChunk,nChunks,size_of_last_chunk,lmB0
 
-      if ( lMat ) lSmat(:)=.false.
+      if ( lMat ) lTmat(:)=.false.
 
       nLMBs2(1:nLMBs) => lo_sub_map%nLMBs2
       sizeLMB2(1:,1:) => lo_sub_map%sizeLMB2
@@ -156,22 +157,22 @@ contains
          !write(*,"(3(A,I3),A)") "Launching task for nLMB2=",nLMB2," (l=",l1,") and scheduling ",nChunks," subtasks."
 
          if ( l1 == 0 ) then
-            if ( .not. lSmat(l1) ) then
+            if ( .not. lTmat(l1) ) then
 #ifdef WITH_PRECOND_S
                call get_T0Mat(tscheme,T0Mat,T0Pivot,T0Mat_fac)
 #else
                call get_T0Mat(tscheme,T0Mat,T0Pivot)
 #endif
-               lSmat(l1)=.true.
+               lTmat(l1)=.true.
             end if
          else
-            if ( .not. lSmat(l1) ) then
+            if ( .not. lTmat(l1) ) then
 #ifdef WITH_PRECOND_S
                call get_TMat(tscheme,l1, TMat(:,:,l1),TPivot(:,l1),TMat_fac(:,l1))
 #else
                call get_TMat(tscheme,l1, TMat(:,:,l1),TPivot(:,l1))
 #endif
-               lSmat(l1)=.true.
+               lTmat(l1)=.true.
             end if
           end if
 

@@ -18,6 +18,7 @@ module radial_functions
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
+   use useful, only: abortRun
    use parallel_mod
    use precision_mod
 
@@ -55,6 +56,7 @@ module radial_functions
    real(cp), public, allocatable :: or1_3D(:)       ! :math:`1/r_3D`
    real(cp), public, allocatable :: or2_3D(:)       ! :math:`1/r_3D^2`
    real(cp), public, allocatable :: rgrav_3D(:)  
+   real(cp), public, allocatable :: tcond_3D(:)  
 
    !-- Radial scheme
    class(type_rscheme), public, pointer :: rscheme, rscheme_3D
@@ -93,8 +95,8 @@ contains
 
       if ( l_3D ) then
          allocate( r_3D(n_r_max_3D), or1_3D(n_r_max_3D), or2_3D(n_r_max_3D) )
-         allocate( rgrav_3D(n_r_max_3D) )
-         bytes_allocated = bytes_allocated+4*n_r_max_3D*SIZEOF_DEF_REAL
+         allocate( rgrav_3D(n_r_max_3D), tcond_3D(n_r_max_3D) )
+         bytes_allocated = bytes_allocated+5*n_r_max_3D*SIZEOF_DEF_REAL
 
          allocate ( type_cheb :: rscheme_3D )
          call rscheme_3D%initialize(llm,ulm,n_r_max_3D,n_cheb_max_3D,0,.true.)
@@ -112,7 +114,7 @@ contains
       deallocate( r, or1, or2 )
 
       if ( l_3D ) then
-         deallocate( r_3D, or1_3D, or2_3D, rgrav_3D )
+         deallocate( r_3D, or1_3D, or2_3D, rgrav_3D, tcond_3D )
          call rscheme_3D%finalize()
       end if
 
@@ -240,6 +242,13 @@ contains
 
       or1_3D(:)=one/r_3D(:)      ! 1/r_3D
       or2_3D(:)=or1_3D*or1_3D(:) ! 1/r_3D**2
+
+      !-- Conducting state
+      if ( kbott == 1 .and. ktopt == 1 ) then
+         tcond_3D(:) = r_icb*r_cmb*or1_3D(:)-r_icb
+      else
+         call abortRun('tcond 3D with other BCs not done yet')
+      end if
 
    end subroutine radial_3D
 !------------------------------------------------------------------------------
