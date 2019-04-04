@@ -1,30 +1,62 @@
-module rloop
+module rloop_3D
 
    use precision_mod
    use parallel_mod
-   use constants, only: ci, one, half
    use mem_alloc, only: bytes_allocated
-   use namelists, only: ek, tadvz_fac, CorFac
-   use radial_functions, only: or1, r, beta, oheight, dtcond, ekpump
-   use nonlinear_lm_mod, only: get_td
-   use general_arrays_mod, only: get_nl_shtns
-   use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
-   use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
-   use truncation_3D, only: n_m_max, n_phi_max, idx2m, m2idx
-   use courant_mod, only: courant
-   use fourier, only: fft, ifft
-   use useful, only: cc22real
-   use time_schemes, only: type_tscheme
-   use timers_mod, only: timers_type
+   use nonlinear_lm_mod, only: nonlinear_lm_t
+   use grid_space_arrays_mod, only: grid_space_arrays_t
+   use blocking, only: nRstart3D, nRstop3D
+   use truncation_3D, only: lm_max, lmP_max
+   use fields_3D, only: ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc
 
    implicit none
 
    private
 
-   public :: radial_loop, initialize_radial_loop, finalize_radial_loop
+   type, abstract, public :: rloop_3D_type
+      integer :: n_r
+      type(grid_space_arrays_t) :: gsa
+      type(nonlinear_lm_t) :: nl_lm
+   contains
+      procedure(empty_if), deferred :: initialize
+      procedure :: initialize => initialize_radial_loop_3D
+      procedure :: finalize => finalize_radial_loop_3D
+      procedure :: radial_loop_3D => radial_loop_3D
+      procedure :: transform_to_grid_space_shtns => transform_to_grid_space_shtns
+      procedure :: transform_to_lm_space_shtns => transform_to_lm_space_shtns
+   end type rloop_3D_type
+
+   public :: radial_loop_3D, initialize_radial_loop_3D, finalize_radial_loop_3D
+
+   interface
+
+      subroutine empty_if(this)
+         import
+         class(rloop_3D_type) :: this
+      end subroutine empty_if
+   end interface
 
 contains
+!------------------------------------------------------------------------------
+   subroutine initialize_radial_loop_3D
 
+      allocate( rloop_3D_type :: this )
+      !call this%initialize()
+
+      call this%gsa%initialize()
+      call this%nl_lm%initialize(lmP_max)
+
+   end subroutine initialize_radial_loop_3D
+!------------------------------------------------------------------------------
+   subroutine finalize_radial_loop_3D(this)
+
+      call this%gsa%finalize()
+      call this%nl_lm%finalize()
+
+      !call this%finalize()
+      deallocate( this )
+
+   end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
    subroutine radial_loop_3D( temp_Rloc, dtempdt_Rloc, dVrT_Rloc)
 
@@ -36,9 +68,8 @@ contains
       complex(cp), intent(out) :: dVrT_Rloc(lm_max, nRstart3D:nRstop3D)
 
       !-- Local variables
-      real(cp) :: usom, runStart, runStop
       complex(cp) :: us_fluct
-      integer :: n_r, n_phi, n_m, m, idx_m0
+      integer :: n_r
 
       do n_r=nRstart3D,nRstop3D
 
@@ -62,6 +93,7 @@ contains
 !-------------------------------------------------------------------------------
    subroutine transform_to_grid_space_shtns(this, temp, gsa)
 
+      class(rloop_3D_type) :: this
       complex(cp), intent(in) :: temp(lm_max)
       type(grid_space_arrays_t) :: gsa
 
@@ -71,7 +103,7 @@ contains
 !-------------------------------------------------------------------------------
    subroutine transform_to_lm_space_shtns(this, gsa, nl_lm)
 
-      class(rIterThetaBlocking_shtns_t) :: this
+      class(rloop_3D_type) :: this
       type(grid_space_arrays_t) :: gsa
       type(nonlinear_lm_t) :: nl_lm
 
@@ -85,4 +117,4 @@ contains
 
    end subroutine transform_to_lm_space_shtns
 !------------------------------------------------------------------------------
-end module rloop
+end module rloop_3D
