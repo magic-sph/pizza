@@ -5,12 +5,13 @@ module step_time
 
    use communications, only: transp_m2r, m2r_fields, transp_r2m, r2m_fields, &
        &                     gather_from_mloc_to_rank0, my_reduce_mean,      &
-       &                     scatter_from_rank0_to_mloc
+       &                     scatter_from_rank0_to_mloc, transp_lm2r,        &
+       &                     lm2r_fields
    use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
        &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,    &
        &             xi_Rloc, dxi_Mloc, xi_hat_Mloc, temp_3D_LMloc,     &
-       &             dtemp_3D_LMloc
+       &             dtemp_3D_LMloc, temp_3D_Rloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
        &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,  &
        &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,       &
@@ -34,7 +35,7 @@ module step_time
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance,      &
-       &                l_heat, l_chem, l_3D
+       &                l_heat, l_chem, l_3D, l_heat_3D
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
@@ -207,6 +208,9 @@ contains
                call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
                if ( l_heat ) call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
                if ( l_chem ) call transp_m2r(m2r_fields, xi_Mloc, xi_Rloc)
+
+               if ( l_heat_3D ) call transp_lm2r(lm2r_fields, temp_3D_LMloc, &
+                                     &           temp_3D_Rloc)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%n_mpi_comms=timers%n_mpi_comms+1

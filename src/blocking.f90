@@ -25,7 +25,7 @@ module blocking
    integer, public :: nRstart, nRstop, nR_per_rank
    integer, public :: nMstart, nMstop, nm_per_rank
    integer, public :: nRstart3D, nRstop3D, nR_per_rank_3D
-   integer, public :: nlm_per_rank
+   integer, public :: nlm_per_rank, lmStart, lmStop
    logical, public :: l_rank_has_m0
 
    public :: set_mpi_domains, destroy_mpi_domains
@@ -36,7 +36,7 @@ contains
       
       logical, intent(in) :: l_3D
 
-      integer :: idx, llm, ulm
+      integer :: idx
 
       allocate ( radial_balance(0:n_procs-1) )
       allocate ( m_balance(0:n_procs-1) )
@@ -64,9 +64,9 @@ contains
          nR_per_rank_3D = radial_balance_3D(rank)%n_per_rank
 
          call getBlocks(lm_balance, lm_max, n_procs)
-         llm = lm_balance(rank)%nStart
-         ulm = lm_balance(rank)%nStop
-         print*, 'r, llm, ulm', rank, llm, ulm
+         lmStart = lm_balance(rank)%nStart
+         lmStop = lm_balance(rank)%nStop
+         nlm_per_rank = lm_balance(rank)%n_per_rank
       end if
 
       idx = m2idx(0)

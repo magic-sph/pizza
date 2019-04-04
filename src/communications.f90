@@ -3,7 +3,7 @@ module communications
    use mpimod
    use precision_mod
    use blocking
-   use blocking_lm, only: llm, ulm
+   use blocking_lm, only: st_map, lo_map
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, n_m_max
    use truncation_3D, only: n_r_max_3D, lm_max
@@ -199,18 +199,18 @@ contains
 
       !-- Input variables
       type(help_transp), intent(inout) :: self
-      complex(cp),       intent(in) :: arr_LMloc(llm:ulm, n_r_max_3D)
+      complex(cp),       intent(in) :: arr_LMloc(lmStart:lmStop, n_r_max_3D)
 
       !-- Output variables
       complex(cp), intent(out) :: arr_Rloc(lm_max, nRstart3D:nRstop3D)
 
       !-- Local variables
-      integer :: p, ii, n_r, lm
+      integer :: p, ii, n_r, lm, l, m, lm_st
 
       do p = 0, n_procs-1
          ii = self%sdisp(p)+1
          do n_r=radial_balance_3D(p)%nStart,radial_balance_3D(p)%nStop
-            do lm=llm,ulm
+            do lm=lmStart,lmStop
                self%sbuff(ii)=arr_LMloc(lm,n_r)
                ii = ii+1
             end do
@@ -225,7 +225,11 @@ contains
          ii = self%rdisp(p)+1
          do n_r=nRstart3D,nRstop3D
             do lm=lm_balance(p)%nStart,lm_balance(p)%nStop
-               arr_Rloc(lm,n_r)=self%rbuff(ii)
+               !arr_Rloc(lm,n_r)=self%rbuff(ii)
+               l = lo_map%lm2l(lm)
+               m = lo_map%lm2m(lm)
+               lm_st = st_map%lm2(l,m)
+               arr_Rloc(lm_st,n_r)=self%rbuff(ii)
                ii=ii+1
             end do
          end do
