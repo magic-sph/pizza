@@ -95,14 +95,13 @@ contains
 
       !-- Input/output of scalar fields:
       complex(cp),       intent(inout) :: temp_3D(llm:ulm,n_r_max_3D)
-      complex(cp),       intent(out) :: dtemp_3D(llm:ulm,n_r_max_3D)
+      complex(cp),       intent(inout) :: dtemp_3D(llm:ulm,n_r_max_3D)
       type(type_tarray), intent(inout) :: dTdt_3D
 
 
       !-- Local variables:
       integer :: l1,m1              ! degree and order
       integer :: lm1,lmB,lm         ! position of (l,m) in array
-      integer :: lmStart,lmStop
       integer :: nLMB2
       integer :: nR                 ! counts radial grid points
       integer :: n_r_out             ! counts cheb modes
@@ -112,7 +111,7 @@ contains
       integer, pointer :: sizeLMB2(:,:),lm2(:,:)
       integer, pointer :: lm22lm(:,:,:),lm22l(:,:,:),lm22m(:,:,:)
 
-      integer :: threadid,nThreads,iThread,all_lms,per_thread,start_lm,stop_lm
+      integer :: threadid
       integer :: iChunk,nChunks,size_of_last_chunk,lmB0
 
       if ( lMat ) lTmat(:)=.false.
@@ -126,9 +125,6 @@ contains
       lm2l(1:lm_max) => lo_map%lm2l
       lm2m(1:lm_max) => lo_map%lm2m
 
-      lmStart     =lmStartB(nLMB)
-      lmStop      =lmStopB(nLMB)
-
       !-- Calculation of the implicit part
       call get_temp_3D_rhs_imp(temp_3D, dtemp_3D,                 &
            &                   dTdt_3D%old(:,:,tscheme%istage),   &
@@ -137,7 +133,6 @@ contains
 
       !-- Now assemble the right hand side and store it in work_LMloc
       call tscheme%set_imex_rhs(work_LMloc, dTdt_3D, llm, ulm, n_r_max_3D)
-
 
       ! one subblock is linked to one l value and needs therefore once the matrix
       !$OMP PARALLEL default(shared)
@@ -197,7 +192,7 @@ contains
 
                if ( l1 == 0 ) then
                   rhs(1)         =0.0_cp
-                  rhs(n_r_max_3D)=0.0_cp
+                  rhs(n_r_max_3D)=1.0_cp ! To be fixed later
                   do nR=2,n_r_max_3D-1
                      rhs(nR)=real(work_LMloc(lm1,nR))
                   end do
@@ -214,7 +209,7 @@ contains
                   rhs1(1,lmB,threadid)         =zero
                   rhs1(n_r_max_3D,lmB,threadid)=zero
 #ifdef WITH_PRECOND_S
-                  rhs1(1,lmB,threadid)=      TMat_fac(1,l1)*rhs1(1,lmB,threadid)
+                  rhs1(1,lmB,threadid)         =TMat_fac(1,l1)*rhs1(1,lmB,threadid)
                   rhs1(n_r_max_3D,lmB,threadid)=TMat_fac(1,l1)*rhs1(n_r_max_3D,lmB,threadid)
 #endif
                   do nR=2,n_r_max_3D-1
@@ -228,8 +223,9 @@ contains
             !PERFOFF
 
             if ( lmB  >  lmB0 ) then
-               call solve_full_mat(TMat(:,:,l1),n_r_max_3D,n_r_max_3D, &
-                    &              TPivot(:,l1),rhs1(:,lmB0+1:lmB,threadid),lmB-lmB0)
+               call solve_full_mat(TMat(:,:,l1),n_r_max_3D,n_r_max_3D,      &
+                    &              TPivot(:,l1),rhs1(:,lmB0+1:lmB,threadid),&
+                    &              lmB-lmB0)
             end if
 
             lmB=lmB0
@@ -263,11 +259,12 @@ contains
       !$OMP END PARALLEL
 
       do n_r_out=rscheme_3D%n_max+1,n_r_max_3D
-         do lm1=lmStart,lmStop
+         do lm1=llm,ulm
             temp_3D(lm1,n_r_out)=zero
          end do
       end do
 
+      !-- Bring temperature back to physical space
       call rscheme_3D%costf1(temp_3D, llm, ulm, n_r_max_3D)
 
       !-- Roll the arrays before filling again the first block
@@ -325,7 +322,6 @@ contains
       end do
 
       if ( l_calc_lin_rhs ) then
-
          call get_ddr(temp_3D, dtemp_3D, work_LMloc, llm, ulm, &
               &       n_r_max_3D, rscheme_3D)
 

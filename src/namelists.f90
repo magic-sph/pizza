@@ -390,7 +390,7 @@ contains
       call capitalize(time_scale) 
       if ( l_non_rot ) then
          CorFac = 0.0_cp
-         if ( l_heat ) then
+         if ( l_heat .or. l_heat_3D ) then
             BuoFac = ra/pr
             TdiffFac = one/pr
          else
@@ -408,7 +408,7 @@ contains
       else
          if ( index(time_scale, 'ROT') /= 0 ) then
             CorFac = two
-            if ( l_heat ) then
+            if ( l_heat .or. l_heat_3D ) then
                BuoFac = ra*ek*ek/pr
                TdiffFac = ek/pr
             else
@@ -425,7 +425,7 @@ contains
             ViscFac = ek
          else
             CorFac = two/ek
-            if ( l_heat ) then
+            if ( l_heat .or. l_heat_3D ) then
                BuoFac = ra/pr
                TdiffFac = one/pr
             else
