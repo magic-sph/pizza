@@ -13,7 +13,7 @@ module update_temp_3D_mod
    use algebra, only: prepare_full_mat, solve_full_mat
    use radial_der, only: get_ddr, get_dr
    use fields, only:  work_LMloc
-   use constants, only: zero, one, two
+   use constants, only: zero, one, two, sq4pi
    use useful, only: abortRun
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
@@ -191,8 +191,8 @@ contains
                m1 =lm22m(lm,nLMB2,nLMB)
 
                if ( l1 == 0 ) then
-                  rhs(1)         =0.0_cp
-                  rhs(n_r_max_3D)=1.0_cp ! To be fixed later
+                  rhs(1)         =0.0_cp*sq4pi
+                  rhs(n_r_max_3D)=1.0_cp*sq4pi ! To be fixed later
                   do nR=2,n_r_max_3D-1
                      rhs(nR)=real(work_LMloc(lm1,nR))
                   end do

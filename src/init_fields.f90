@@ -5,7 +5,7 @@ module init_fields
    ! in the input namelist
    !
 
-   use constants, only: zero, one, two, three, ci, pi, half
+   use constants, only: zero, one, two, three, ci, pi, half, sq4pi
    use blocking, only: nRstart, nRstop
    use communications, only: transp_r2m, r2m_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta, rscheme_3D, &
@@ -362,7 +362,7 @@ contains
       if ( (.not. l_start_file) .and. ( rank_has_l0m0) ) then
          !-- Conducting state on the spherically-symmetric part
          do n_r=1,n_r_max_3D
-            temp_LMloc(lm00,n_r)=tcond_3D(n_r)
+            temp_LMloc(lm00,n_r)=tcond_3D(n_r)*sq4pi
          end do
       end if
 
