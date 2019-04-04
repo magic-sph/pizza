@@ -10,6 +10,7 @@ module truncation_3D
    integer, public :: minc_3D
    integer, public :: n_r_max_3D
    integer, public :: n_cheb_max_3D
+   integer, public :: n_z_max
    integer, public :: l_max         ! max degree of Plms
    integer, public :: n_theta_max
    integer, public :: m_max_3D
@@ -18,12 +19,20 @@ module truncation_3D
    integer, public :: n_phi_max_3D
    integer, public :: lm_max        ! number of l/m combinations
    integer, public :: lmP_max       ! number of l/m combination if l runs to l_max+1
+   integer, allocatable, public :: idx2m3D(:)
+   integer, allocatable, public :: m3D_2idx(:)
 
-   public :: initialize_truncation_3D, write_truncation_3D_info
+   public :: initialize_truncation_3D, finalize_truncation_3D, write_truncation_3D_info
 
 contains
 
    subroutine initialize_truncation_3D
+
+      !-- Local variables
+      integer :: n_m, m
+
+      ! number of points for z-grid in the 3D interpolation
+      n_z_max = 2*n_r_max_3D
 
       ! number of theta grid-points & phi 3D grid
       n_phi_max_3D=n_phi_tot_3D/minc_3D
@@ -41,7 +50,30 @@ contains
       ! number of l/m combination if l runs to l_max+1
       lmP_max=lm_max+n_m_max_3D
 
+      !-- retrieve indices from m and vice-versa functions
+      allocate( idx2m3D(n_m_max_3D) )
+      allocate( m3D_2idx(0:m_max_3D) )
+
+      bytes_allocated = bytes_allocated+(n_m_max_3D+m_max_3D+1)*SIZEOF_INTEGER
+
+      do n_m=1,n_m_max_3D
+         idx2m3D(n_m)=(n_m-1)*minc_3D
+      end do
+
+      m3D_2idx(:)=-1
+      n_m = 1
+      do m=0,m_max_3D,minc_3D
+         m3D_2idx(m)=n_m
+         n_m = n_m+1
+      end do
+
    end subroutine initialize_truncation_3D
+!------------------------------------------------------------------------------
+   subroutine finalize_truncation_3D
+
+      deallocate( m3D_2idx, idx2m3D)
+
+   end subroutine finalize_truncation_3D
 !------------------------------------------------------------------------------
    subroutine write_truncation_3D_info(n_out)
 
