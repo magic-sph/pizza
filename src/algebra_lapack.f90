@@ -36,6 +36,7 @@ module algebra
       module procedure solve_full_mat_real_rhs_real
       module procedure solve_full_mat_real_rhs_complex
       module procedure solve_full_mat_complex_rhs_complex
+      module procedure solve_full_mat_complex_rhs_multi
    end interface solve_full_mat
 
    public :: prepare_full_mat, prepare_bordered_mat, solve_full_mat, &
@@ -76,6 +77,49 @@ contains
 #endif
 
    end subroutine solve_full_mat_real_rhs_complex
+!-----------------------------------------------------------------------------
+   subroutine solve_full_mat_complex_rhs_multi(a,len_a,n,pivot,rhs,nRHSs)
+      !
+      !  This routine does the backward substitution into a lu-decomposed real
+      !  matrix a (to solve a * x = bc ) simultaneously for nRHSs complex 
+      !  vectors bc. On return the results are stored in the bc.                  
+      !
+
+      !-- Input variables:
+      integer,  intent(in) :: n           ! dimension of problem
+      integer,  intent(in) :: len_a       ! leading dimension of a
+      integer,  intent(in) :: pivot(n)       ! pivot pointer of length n
+      real(cp), intent(in) :: a(len_a,n)  ! real n X n matrix
+      integer,  intent(in) :: nRHSs       ! number of right-hand sides
+
+      complex(cp), intent(inout) :: rhs(:,:) ! on input RHS of problem
+
+      !-- Local variables:
+      real(cp) :: tmpr(n,nRHSs), tmpi(n,nRHSs)
+      integer :: info, i, j
+
+      do j=1,nRHSs
+         do i=1,n
+            tmpr(i,j) = real(rhs(i,j))
+            tmpi(i,j) = aimag(rhs(i,j))
+         end do
+      end do
+
+#if (DEFAULT_PRECISION==sngl)
+      call sgetrs('N',n,nRHSs,a(1:n,1:n),n,pivot(1:n),tmpr(1:n,:),n,info)
+      call sgetrs('N',n,nRHSs,a(1:n,1:n),n,pivot(1:n),tmpi(1:n,:),n,info)
+#elif (DEFAULT_PRECISION==dble)
+      call dgetrs('N',n,nRHSs,a(1:n,1:n),n,pivot(1:n),tmpr(1:n,:),n,info)
+      call dgetrs('N',n,nRHSs,a(1:n,1:n),n,pivot(1:n),tmpi(1:n,:),n,info)
+#endif
+
+      do j=1,nRHSs
+         do i=1,n
+            rhs(i,j)=cmplx(tmpr(i,j),tmpi(i,j),kind=cp)
+         end do
+      end do
+
+   end subroutine solve_full_mat_complex_rhs_multi
 !-----------------------------------------------------------------------------
    subroutine solve_full_mat_real_rhs_real(a,len_a,n,pivot,rhs)
       !

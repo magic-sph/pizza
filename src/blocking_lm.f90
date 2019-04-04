@@ -63,8 +63,9 @@ module blocking_lm
    !
  
    integer, public :: n_theta_blocks
-   integer, public :: llm,ulm
-   integer, public :: lm_per_rank,lm_on_last_rank
+   integer, public :: llm, ulm
+   integer, parameter, public :: chunksize=16
+   integer, public :: lm_per_rank, lm_on_last_rank
  
    public :: initialize_blocking, finalize_blocking, get_lm_blocks
 
