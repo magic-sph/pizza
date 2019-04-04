@@ -6,7 +6,7 @@ module step_time
    use communications, only: transp_m2r, m2r_fields, transp_r2m, r2m_fields, &
        &                     gather_from_mloc_to_rank0, my_reduce_mean,      &
        &                     scatter_from_rank0_to_mloc, transp_lm2r,        &
-       &                     lm2r_fields
+       &                     lm2r_fields, transp_r2lm, r2lm_fields
    use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
        &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,    &
@@ -15,7 +15,8 @@ module step_time
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
        &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,  &
        &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,       &
-       &                 dTdt_3D, dVrT_3D_LMloc
+       &                 dTdt_3D, dVrT_3D_LMloc, dVrT_3D_Rloc,            &
+       &                 dtempdt_3D_Rloc
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
@@ -248,6 +249,11 @@ contains
                call transp_r2m(r2m_fields, dpsidt_Rloc, &
                     &          dpsidt%expl(:,:,tscheme%istage))
                call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
+               if ( l_heat_3D ) then
+                  call transp_r2lm(r2lm_fields, dtempdt_3D_Rloc, &
+                       &           dTdt_3D%expl(:,:,tscheme%istage))
+                  call transp_r2lm(r2lm_fields, dVrT_3D_Rloc, dVrT_3D_LMloc)
+               end if
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%mpi_comms=timers%mpi_comms+(runStop-runStart)
