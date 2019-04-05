@@ -197,8 +197,8 @@ contains
                      rhs(nR)=real(work_LMloc(lm1,nR))
                   end do
 
-#ifdef WITH_PRECOND
-                  rhs(:) = s0Mat_fac(:)*rhs(:)
+#ifdef WITH_PRECOND_S
+                  rhs(:) = T0Mat_fac(:)*rhs(:)
 #endif
 
                   call solve_full_mat(T0Mat,n_r_max_3D,n_r_max_3D,T0Pivot,rhs)
