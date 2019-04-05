@@ -8,7 +8,7 @@ module fields
    use namelists, only: l_cheb_coll, l_heat, l_chem, l_heat_3D
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
-   use truncation_3D, only: lm_max, n_r_max_3D
+   use truncation_3D, only: lm_max, n_r_max_3D, n_theta_max, n_phi_max_3D
    use blocking, only: nMstart, nMstop, nRstart, nRstop, nRstart3D, nRstop3D
    use blocking_lm, only: llm, ulm
 
@@ -37,6 +37,11 @@ module fields
    complex(cp), allocatable, public :: dtemp_3D_LMloc(:,:)
    complex(cp), allocatable, public :: work_LMloc(:,:)
    complex(cp), allocatable, public :: temp_3D_Rloc(:,:)
+
+   !-- 3-D velocity in the physical space
+   real(cp), allocatable, public :: ur_3D_Rloc(:,:,:)
+   real(cp), allocatable, public :: ut_3D_Rloc(:,:,:)
+   real(cp), allocatable, public :: up_3D_Rloc(:,:,:)
 
  
    public :: initialize_fields, finalize_fields
@@ -154,6 +159,15 @@ contains
          dtemp_3D_LMloc(:,:)=zero
          work_LMloc(:,:)    =zero
          temp_3D_Rloc(:,:)  =zero
+
+         allocate( ur_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
+         allocate( ut_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
+         allocate( up_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
+         bytes_allocated = bytes_allocated + 3*n_phi_max_3D*n_theta_max*&
+         &                 (nRstop3D-nRstart3D+1)*SIZEOF_DEF_REAL
+         ur_3D_Rloc(:,:,:)=0.0_cp
+         ut_3D_Rloc(:,:,:)=0.0_cp
+         up_3D_Rloc(:,:,:)=0.0_cp
       end if
 
    end subroutine initialize_fields
@@ -161,6 +175,7 @@ contains
    subroutine finalize_fields
 
       if ( l_heat_3D ) then
+         deallocate( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc )
          deallocate( work_LMloc, temp_3D_LMloc, dtemp_3D_LMloc, temp_3D_Rloc )
       end if
       if ( l_heat ) then

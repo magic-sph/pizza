@@ -25,9 +25,10 @@ program pizza
    use truncation, only: initialize_truncation, n_r_max, n_phi_max, & 
        &                 finalize_truncation, n_m_max
    use truncation_3D, only: initialize_truncation_3D, n_r_max_3D, lm_max, &
-       &                    n_phi_max_3D
+       &                    n_phi_max_3D, lmP_max
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop
+   use rloop_3D, only: initialize_radial_loop_3D, finalize_radial_loop_3D
    use update_temp_coll, only: initialize_temp_coll, finalize_temp_coll
    use update_xi_coll, only: initialize_xi_coll, finalize_xi_coll
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
@@ -133,6 +134,7 @@ program pizza
    local_bytes_used = bytes_allocated
    call initialize_fourier(n_phi_max, n_phi_max_3D, l_3D)
    call initialize_radial_loop(n_phi_max)
+   if ( l_3D ) call initialize_radial_loop_3D(lmP_max)
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('R loop', local_bytes_used)
    call initialize_mfunctions()
@@ -238,6 +240,7 @@ program pizza
       end if
    end if
    call finalize_mfunctions()
+   if ( l_3D ) call finalize_radial_loop_3D()
    call finalize_radial_loop()
    call finalize_fourier(l_3D)
    call finalize_radial_functions()

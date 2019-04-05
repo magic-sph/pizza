@@ -18,7 +18,9 @@ module rloop_3D
 
 contains
 
-   subroutine initialize_radial_loop_3D
+   subroutine initialize_radial_loop_3D(lmP_max)
+
+      integer, intent(in) :: lmP_max
 
       call gsa%initialize()
       call nl_lm%initialize(lmP_max)

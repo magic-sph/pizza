@@ -7,11 +7,12 @@ module step_time
        &                     gather_from_mloc_to_rank0, my_reduce_mean,      &
        &                     scatter_from_rank0_to_mloc, transp_lm2r,        &
        &                     lm2r_fields, transp_r2lm, r2lm_fields
-   use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
-       &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
-       &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,    &
-       &             xi_Rloc, dxi_Mloc, xi_hat_Mloc, temp_3D_LMloc,     &
-       &             dtemp_3D_LMloc, temp_3D_Rloc
+   use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,        &
+       &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc,    &
+       &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,       &
+       &             xi_Rloc, dxi_Mloc, xi_hat_Mloc, temp_3D_LMloc,        &
+       &             dtemp_3D_LMloc, temp_3D_Rloc, ur_3D_Rloc, ut_3D_Rloc, &
+       &             up_3D_Rloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
        &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,  &
        &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,       &
@@ -31,6 +32,7 @@ module step_time
    use mloop_mod, only: mloop, finish_explicit_assembly
    use LMloop_mod, only: LMloop, finish_explicit_assembly_3D
    use rLoop, only: radial_loop
+   use rLoop_3D, only: radial_loop_3D
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
@@ -230,6 +232,21 @@ contains
                if (runStop>runStart) then
                   timers%n_r_loops=timers%n_r_loops+1
                   timers%r_loop   =timers%r_loop+(runStop-runStart)
+               end if
+
+               !-------------------
+               !-- Radial loop 3-D
+               !-------------------
+               if ( l_3D ) then
+                  runStart = MPI_Wtime()
+                  call radial_loop_3D( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc, &
+                       &               temp_3D_Rloc, dtempdt_3D_Rloc,      &
+                       &               dVrT_3D_Rloc)
+                  runStop = MPI_Wtime()
+                  if (runStop>runStart) then
+                     timers%n_r_loops_3D=timers%n_r_loops_3D+1
+                     timers%r_loop_3D   =timers%r_loop_3D+(runStop-runStart)
+                  end if
                end if
 
                !------------------

@@ -15,6 +15,7 @@ module timers_mod
 
    type, public :: timers_type
       integer :: n_r_loops
+      integer :: n_r_loops_3D
       integer :: n_m_loops
       integer :: n_lm_loops
       integer :: n_m_loops_mat
@@ -26,6 +27,7 @@ module timers_mod
       integer :: n_dct_calls
       integer :: n_lu_calls
       real(cp) :: r_loop      ! Timer of the radial loop (nonlinear terms)
+      real(cp) :: r_loop_3D   ! Timer of the 3-D radial loop (nonlinear terms)
       real(cp) :: m_loop      ! Timer of the m loop (linear solve/time advance)
       real(cp) :: lm_loop     ! Timer of the LM loop (linear solve/time advance)
       real(cp) :: io          ! Timer for I/O
@@ -53,6 +55,7 @@ contains
       class(timers_type) :: this
 
       this%n_r_loops      = 0
+      this%n_r_loops_3D   = 0
       this%n_m_loops      = 0
       this%n_lm_loops     = 0
       this%n_m_loops_mat  = 0
@@ -64,6 +67,7 @@ contains
       this%n_dct_calls    = 0
       this%n_lu_calls     = 0
       this%r_loop      = 0.0_cp
+      this%r_loop_3D   = 0.0_cp
       this%m_loop      = 0.0_cp
       this%lm_loop     = 0.0_cp
       this%io          = 0.0_cp
@@ -92,6 +96,10 @@ contains
       call my_reduce_mean(this%io, 0)
       this%r_loop    = this%r_loop/this%n_r_loops
       call my_reduce_mean(this%r_loop, 0)
+      if ( this%n_r_loops_3D /= 0 ) then
+         this%r_loop_3D = this%r_loop_3D/this%n_r_loops_3D
+         call my_reduce_mean(this%r_loop_3D, 0)
+      end if
       if ( this%n_m_loops /= 0 ) then
          this%m_loop    = this%m_loop/this%n_m_loops
          call my_reduce_mean(this%m_loop, 0)
