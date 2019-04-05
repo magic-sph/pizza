@@ -259,10 +259,12 @@ contains
          !n_r_r = n_r_max_3D-1
          n_r_r = 2
          n_t_t = 2
-         do n_z=n_z_max,4,-1
+         do n_z=n_z_max,1,-1
             z_r = h*n_z/n_z_max
             r_r = sqrt(r(n_r)**2 + z_r**2)
             c_t = z_r/r_r
+            !n_r_r=minloc(abs(r_3D(:)-r_r),dim=1)
+            !if (n_r_r==1) n_r_r=2
             do while ( r_3D(n_r_r) > r_r  )
                n_r_r = n_r_r+1
             end do

@@ -74,6 +74,7 @@ contains
       !-- Compute z-averaging of buoyancy
       call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
 
+#ifdef DEBUG
       block
 
          use truncation, only: n_r_max
@@ -93,6 +94,7 @@ contains
          close(file_handle)
 
       end block
+#endif
 
       !-- Finish assembling buoyancy and sum it with dpsidt
       do n_m=1,n_m_max

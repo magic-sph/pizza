@@ -213,7 +213,6 @@ contains
                call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
                if ( l_heat ) call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
                if ( l_chem ) call transp_m2r(m2r_fields, xi_Mloc, xi_Rloc)
-
                if ( l_heat_3D ) call transp_lm2r(lm2r_fields, temp_3D_LMloc, &
                                      &           temp_3D_Rloc)
                runStop = MPI_Wtime()
