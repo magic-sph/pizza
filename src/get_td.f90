@@ -60,7 +60,7 @@ contains
       complex(cp), intent(out) :: dTdt(:)
     
       !-- Local variables:
-      integer :: l,m,lm,lmS,lmA,lmP,lmPS,lmPA
+      integer :: l,m,lm,lmP,lmPS,lmPA
       complex(cp) :: dTdt_loc
     
       dVTrLM(1)=this%VTrLM(1)

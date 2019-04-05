@@ -8,6 +8,7 @@ module pre_calculations
    use namelists, only: l_newmap, tag, dtMax, dtMin, pr, l_non_rot, ek, &
        &                r_cmb, r_icb, l_3D
    use horizontal, only: mfunctions, spherical_functions
+   use z_functions
    use precision_mod
    use parallel_mod
 
@@ -19,7 +20,10 @@ module pre_calculations
 
 contains
 
-   subroutine preCalc
+   subroutine preCalc(zinterp)
+
+      !-- Input variable
+      type(zfunc_type), intent(inout) :: zinterp
 
       !-- Local variables
       integer :: file_handle, n_r
@@ -48,7 +52,10 @@ contains
       call mfunctions()
 
       !-- theta and l functions
-      if ( l_3D ) call spherical_functions()
+      if ( l_3D ) then
+         call spherical_functions()
+         call zinterp%fill_mat()
+      end if
 
       !-- Compute some constants
       vol_oc =four*third*pi*(r_cmb**3-r_icb**3)

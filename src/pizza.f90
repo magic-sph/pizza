@@ -26,6 +26,7 @@ program pizza
        &                 finalize_truncation, n_m_max
    use truncation_3D, only: initialize_truncation_3D, n_r_max_3D, lm_max, &
        &                    n_phi_max_3D, lmP_max
+   !use z_functions, only: initialize_zfunctions, finalize_zfunctions
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop
    use rloop_3D, only: initialize_radial_loop_3D, finalize_radial_loop_3D
@@ -42,6 +43,7 @@ program pizza
        &                            finalize_psi_integ_dmat
    use select_time_scheme
    use time_schemes, only: type_tscheme
+   use z_functions, only: zfunc_type
    use useful, only: formatTime
    use tests, only: solve_laplacian, test_radial_der, solve_biharmo, test_i4
 #ifdef WITH_SHTNS
@@ -52,6 +54,7 @@ program pizza
 
    real(cp) :: time
    class(type_tscheme), pointer :: tscheme
+   type(zfunc_type) :: zinterp
    real(cp) :: run_stop, run_start, run_init
    integer(lip) :: local_bytes_used
    integer :: values(8)
@@ -91,6 +94,8 @@ program pizza
 
    !-- Set the domain decomposition
    call set_mpi_domains(l_3D)
+
+   if ( l_3D ) call zinterp%initialize()
 
    !-- Test radial derivatives
    !call test_i4()
@@ -150,7 +155,7 @@ program pizza
    end if
 
    !-- Pre calculations has to be done before matrix initialisation
-   call preCalc()
+   call preCalc(zinterp)
 
    local_bytes_used = bytes_allocated
    if ( l_cheb_coll ) then
@@ -197,7 +202,7 @@ program pizza
         &             MPI_COMM_WORLD, ierr)
 
    !-- Time integration
-   call time_loop(time, tscheme, run_init)
+   call time_loop(time, tscheme, run_init, zinterp)
 
    run_stop = MPI_Wtime()
 
@@ -252,6 +257,7 @@ program pizza
    call finalize_courant()
    call finalize_outputs()
    call tscheme%finalize()
+   if ( l_3D ) call zinterp%finalize()
    call finalize_truncation()
 
    !-- Initialize MPI

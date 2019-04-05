@@ -7,15 +7,14 @@ module z_functions
    use precision_mod
    use parallel_mod
    use mem_alloc
-   use fourier, only: ifft
-   use parallel_mod, only: n_procs
+   use fourier, only: ifft, fft
    use communications, only: allgather_from_rloc
-   use constants, only: zero, half, one, two, pi
+   use constants, only: zero, half, one, two
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
    use truncation, only: n_r_max, n_m_max, minc, idx2m, m2idx
    use truncation_3D, only: n_r_max_3D, n_z_max, n_m_max_3D, n_theta_max, &
        &                    minc_3D, idx2m3D, n_phi_max_3D
-   use namelists, only: r_cmb, tadvz_fac, l_ek_pump
+   use namelists, only: r_cmb, l_ek_pump
    use horizontal, only: cost, sint
    use radial_functions, only: r, r_3D, beta, height
 
@@ -23,73 +22,69 @@ module z_functions
 
    private
 
-   integer, public, allocatable :: interp_zr_mat(:,:)
-   integer, public, allocatable :: interp_zt_mat(:,:)
-   real(cp), public, allocatable :: interp_wt_mat(:,:)
-   real(cp), public, allocatable :: usr_Rloc(:,:)
-   real(cp), public, allocatable :: upp_Rloc(:,:)
-   real(cp), public, allocatable :: dVzT_Rloc(:,:)
-   real(cp), public, allocatable :: urr_Rloc(:,:,:)
-   real(cp), public, allocatable :: uth_Rloc(:,:,:)
-   real(cp), public, allocatable :: uph_Rloc(:,:,:)
+   type, public :: zfunc_type
 
-   public :: initialize_zfunctions, finalize_zfunctions, compute_z_avg, &
-   &         get_zavg_mat, extrapolate_z_fields
+      integer, allocatable :: interp_zr_mat(:,:)
+      integer, allocatable :: interp_zt_mat(:,:)
+      real(cp), allocatable :: interp_wt_mat(:,:)
+      real(cp), allocatable :: us_phys_Rloc(:,:)
+      real(cp), allocatable :: up_phys_Rloc(:,:)
+      real(cp), allocatable :: dVzT_Rloc(:,:)
+   contains
+      procedure :: initialize
+      procedure :: finalize
+      procedure :: compute_avg
+      procedure :: prepare_extension
+      procedure :: extrapolate
+      procedure :: fill_mat
+   end type zfunc_type
 
 contains
 
-   subroutine initialize_zfunctions
+   subroutine initialize(this)
 
-      allocate( interp_zr_mat(4*n_z_max,n_r_max) )
-      allocate( interp_zt_mat(4*n_z_max,n_r_max) )
-      allocate( interp_wt_mat(4*n_z_max,n_r_max) )
+      class(zfunc_type) :: this
 
-      interp_zr_mat(:,:)=1
-      interp_zt_mat(:,:)=1
-      interp_wt_mat(:,:)=0.0_cp
+      allocate( this%interp_zr_mat(4*n_z_max,n_r_max) )
+      allocate( this%interp_zt_mat(4*n_z_max,n_r_max) )
+      allocate( this%interp_wt_mat(4*n_z_max,n_r_max) )
+
+      this%interp_zr_mat(:,:)=1
+      this%interp_zt_mat(:,:)=1
+      this%interp_wt_mat(:,:)=0.0_cp
 
       bytes_allocated = bytes_allocated+8*(n_z_max*n_r_max)*SIZEOF_INTEGER
       bytes_allocated = bytes_allocated+4*(n_z_max*n_r_max)*SIZEOF_DEF_REAL
 
-      allocate( usr_Rloc(n_m_max_3D,nRstart:nRstop) )
-      allocate( upp_Rloc(n_m_max_3D,nRstart:nRstop) )
-      allocate( dVzT_Rloc(n_m_max_3D,nRstart:nRstop) )
-      allocate( urr_Rloc(n_m_max_3D,n_theta_max,nRstart3D:nRstop3D) )
-      allocate( uth_Rloc(n_m_max_3D,n_theta_max,nRstart3D:nRstop3D) )
-      allocate( uph_Rloc(n_m_max_3D,n_theta_max,nRstart3D:nRstop3D) )
+      allocate( this%us_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )
+      allocate( this%up_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )
+      allocate( this%dVzT_Rloc(n_phi_max_3D,nRstart:nRstop) )
 
-      usr_Rloc(:,:)=0.0_cp
-      upp_Rloc(:,:)=0.0_cp
-      dVzT_Rloc(:,:)=0.0_cp
-      urr_Rloc(:,:,:)=0.0_cp
-      uth_Rloc(:,:,:)=0.0_cp
-      uph_Rloc(:,:,:)=0.0_cp
+      this%us_phys_Rloc(:,:)=0.0_cp
+      this%up_phys_Rloc(:,:)=0.0_cp
+      this%dVzT_Rloc(:,:)   =0.0_cp
 
-      bytes_allocated = bytes_allocated+3*(n_m_max_3D*      &
+      bytes_allocated = bytes_allocated+3*(n_phi_max_3D*      &
       &                 (nRstop-nRstart+1))*SIZEOF_DEF_REAL
-      bytes_allocated = bytes_allocated+3*(n_m_max_3D*n_theta_max* &
-      &                 (nRstop3D-nRstart3D+1))*SIZEOF_DEF_REAL
 
-   end subroutine initialize_zfunctions
+   end subroutine initialize
 !--------------------------------------------------------------------------------
-   subroutine finalize_zfunctions
+   subroutine finalize(this)
 
-      deallocate( interp_zr_mat, interp_zt_mat, interp_wt_mat )
+      class(zfunc_type) :: this
 
-      deallocate( urr_Rloc, uth_Rloc, uph_Rloc )
+      deallocate( this%interp_zr_mat, this%interp_zt_mat, this%interp_wt_mat )
+      deallocate( this%us_phys_Rloc, this%up_phys_Rloc, this%dVzT_Rloc )
 
-   end subroutine finalize_zfunctions
+   end subroutine finalize
 !--------------------------------------------------------------------------------
-   subroutine prepare_z_extension(us_Rloc,up_Rloc,usr_Rloc,upp_Rloc,dVzT_Rloc)
+   subroutine prepare_extension(this, us_Rloc,up_Rloc)
+
+      class(zfunc_type) :: this
 
       !-- Input variables
       complex(cp), intent(in) :: us_Rloc(n_m_max,nRstart:nRstop)
       complex(cp), intent(in) :: up_Rloc(n_m_max,nRstart:nRstop)
-
-      !-- Output variables
-      real(cp), intent(out) :: usr_Rloc(n_m_max_3D,nRstart:nRstop)
-      real(cp), intent(out) :: upp_Rloc(n_m_max_3D,nRstart:nRstop)
-      real(cp), intent(out) :: dVzT_Rloc(n_m_max_3D,nRstart:nRstop)
 
       !-- Local variables
       complex(cp) :: usm3D_Rloc(n_m_max_3D,nRstart:nRstop)
@@ -99,10 +94,14 @@ contains
 
       do n_m_3D=1,n_m_max_3D
          m3D = idx2m3D(n_m_3D)
-         n_m = m2idx(m3D)
+         if ( m3D < size(m2idx) ) then ! a little bit weird
+            n_m = m2idx(m3D)
+         else
+            n_m = -1
+         end if
          if( n_m /= -1 ) then
             usm3D_Rloc(n_m_3D,nRstart:nRstop) = us_Rloc(n_m,nRstart:nRstop)
-            upm3D_Rloc(n_m_3D,nRstart:nRstop) = us_Rloc(n_m,nRstart:nRstop)
+            upm3D_Rloc(n_m_3D,nRstart:nRstop) = up_Rloc(n_m,nRstart:nRstop)
          else
             usm3D_Rloc(n_m_3D,nRstart:nRstop) = zero
             upm3D_Rloc(n_m_3D,nRstart:nRstop) = zero
@@ -110,28 +109,24 @@ contains
       end do
 
       do n_r=nRstart,nRstop
-         call ifft(usm3D_Rloc(:,n_r), usr_Rloc(:,n_r))
-         call ifft(upm3D_Rloc(:,n_r), upp_Rloc(:,n_r))
+         call ifft(usm3D_Rloc(:,n_r), this%us_phys_Rloc(:,n_r), l_3D=.true.)
+         call ifft(upm3D_Rloc(:,n_r), this%up_phys_Rloc(:,n_r), l_3D=.true.)
          !---- Get resolution in s and z for z-integral:
          dsZ  =r_cmb/real(n_r_max,cp)  ! Step in s controlled by n_r_max
          z = (n_r-half)*dsZ
-         dVzT_Rloc(:,n_r) = beta(n_r)*z*usr_Rloc(:,n_r)
+         this%dVzT_Rloc(:,n_r) = beta(n_r)*z*this%us_phys_Rloc(:,n_r)
       end do
 
-   end subroutine prepare_z_extension
+   end subroutine prepare_extension
 !--------------------------------------------------------------------------------
-   subroutine extrapolate_z_fields(usr_Rloc,upp_Rloc,dVzT_Rloc,urr_Rloc, &
-              &                    uth_Rloc,uph_Rloc)
+   subroutine extrapolate(this, ur_Rloc, ut_Rloc, up_Rloc)
 
-      !-- Input variables
-      real(cp), intent(in) :: usr_Rloc(n_phi_max_3D,nRstart:nRstop)
-      real(cp), intent(in) :: upp_Rloc(n_phi_max_3D,nRstart:nRstop)
-      real(cp), intent(in) :: dVzT_Rloc(n_phi_max_3D,nRstart:nRstop)
+      class(zfunc_type) :: this
 
       !-- Output variables
-      real(cp), intent(out) :: urr_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp), intent(out) :: uth_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp), intent(out) :: uph_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp), intent(out) :: ur_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp), intent(out) :: ut_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp), intent(out) :: up_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
 
       !-- Local arrays
       real(cp) :: usr(n_phi_max_3D,n_r_max)
@@ -142,13 +137,10 @@ contains
       real(cp) :: s_r, z_r, z_eta
       real(cp) :: vs, vz, vrr, vth, vph
       real(cp) :: alpha_r1, alpha_r2
-      logical :: l_non_lin
 
-      l_non_lin=.true.
-
-      call allgather_from_rloc(usr_Rloc,usr,n_phi_max_3D)
-      call allgather_from_rloc(upp_Rloc,upp,n_phi_max_3D)
-      call allgather_from_rloc(dVzT_Rloc,dVzT,n_phi_max_3D)
+      call allgather_from_rloc(this%us_phys_Rloc,usr,n_phi_max_3D)
+      call allgather_from_rloc(this%up_phys_Rloc,upp,n_phi_max_3D)
+      call allgather_from_rloc(this%dVzT_Rloc,dVzT,n_phi_max_3D)
 
       !-- Compute thermal wind by a linear interpolation
       do n_r_r=nRstart3D,nRstop3D
@@ -156,115 +148,105 @@ contains
             n_t_ct=n_theta_max+1-n_t_t
             s_r = r_3D(n_r_r)*sint(n_t_t)
             z_r = r_3D(n_r_r)*cost(n_t_t)
-            n_r = 0
-            do while ( r(n_r+1) < s_r  )
-               n_r = n_r+1
+            n_r = n_r_max_3D+1
+            do while ( r(n_r-1) < s_r  )
+               n_r = n_r-1
             end do
-            alpha_r2 = (s_r-r(n_r))/(r(n_r+1)-r(n_r))
+            alpha_r2 = (s_r-r(n_r))/(r(n_r-1)-r(n_r))
             alpha_r1 = one - alpha_r2
             z_eta = -s_r/(one-s_r**2)*z_r
             do n_phi=1,n_phi_max_3D
-               vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r+1)
+               vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r-1)
                vz = z_eta*vs
                if ( l_ek_pump ) then
                   vz = vz + z_r*(alpha_r1*dVzT(n_phi,n_r) +  & 
-                  &              alpha_r2*dVzT(n_phi,n_r+1))
+                  &              alpha_r2*dVzT(n_phi,n_r-1))
                end if
                vrr= vz*cost(n_t_t) + vz*sint(n_t_t)
-               urr_Rloc(n_phi,n_t_t,n_r_r) = vrr
-               urr_Rloc(n_phi,n_t_ct,n_r_r)= vrr
-               if ( l_non_lin ) then
-                  vth= vz*cost(n_t_t) - vz*sint(n_t_t)
-                  vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r+1)
-                  uth_Rloc(n_phi,n_t_t,n_r_r) = vth
-                  uth_Rloc(n_phi,n_t_ct,n_r_r)=-vth
-                  uph_Rloc(n_phi,n_t_t,n_r_r) = vph
-                  uph_Rloc(n_phi,n_t_ct,n_r_r)= vph
-               end if
+               ur_Rloc(n_phi,n_t_t,n_r_r) = vrr
+               ur_Rloc(n_phi,n_t_ct,n_r_r)= vrr
+               vth= vz*cost(n_t_t) - vz*sint(n_t_t)
+               vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r-1)
+               ut_Rloc(n_phi,n_t_t,n_r_r) = vth
+               ut_Rloc(n_phi,n_t_ct,n_r_r)=-vth
+               up_Rloc(n_phi,n_t_t,n_r_r) = vph
+               up_Rloc(n_phi,n_t_ct,n_r_r)= vph
             end do
          end do
       end do
 
       !-- No slip on the spherical surface
       if ( nRstart3D == 1 ) then
-         urr_Rloc(:,:,1) = 0.0_cp
-         if ( l_non_lin ) then
-            uth_Rloc(:,:,1) = 0.0_cp
-            uph_Rloc(:,:,1) = 0.0_cp
-         end if
+         ur_Rloc(:,:,1) = 0.0_cp
+         ut_Rloc(:,:,1) = 0.0_cp
+         up_Rloc(:,:,1) = 0.0_cp
       end if
 
-   end subroutine extrapolate_z_fields
+   end subroutine extrapolate
 !--------------------------------------------------------------------------------
-   subroutine compute_z_avg(work_Rloc,zavg_Rloc,adam_Rloc)
+   subroutine compute_avg(this,work_Rloc,zavg_Rloc)
+
+      class(zfunc_type) :: this
 
       !-- Input variables
-      complex(cp), intent(in) :: work_Rloc(n_m_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp), intent(in) :: work_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
 
       !-- Output variables
-      complex(cp), intent(out) :: zavg_Rloc(n_m_max_3D,nRstart:nRstop)
-      complex(cp), intent(out) :: adam_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp), intent(out) :: zavg_Rloc(n_m_max,nRstart:nRstop)
 
       !-- Local variables
-      integer :: m, n_r, n_m, n_z
-      integer :: n_z_m, n_r_r, n_t_t, n_t_ct
+      integer :: n_r, n_phi, n_z, n_m_QG, n_m, m3D
+      integer :: n_r_r, n_t_t, n_t_ct
+      complex(cp) :: tmp_hat(n_m_max_3D)
       real(cp) :: czavg
-      complex(cp) :: tmp(n_m_max,nRstart:nRstop)
+      real(cp) :: tmp(n_phi_max_3D,n_r_max)
 
-      !!-- Transforms to grid for computing the z-avg
-      !!-- ==> better to give directly on grid as input, I think!
-      !do n_r=nRstart,nRstop
-      !    call Spec_Spat_Lorentz_shell(Lorentzp(:,ir),Lorentzt(:,ir),   &
-      !                                 Lorentzs(:,ir),Lorentz(:,:,ir))
-      !   work_Rloc(:,:,n_r) = Lorentz(:,:,n_r)
-      !   call fft_thetab(work_Rloc,+1)
-      !enddo
+      tmp(:,:)=0.0_cp
 
-      !!-- need an exchange of points at the boundary domain of each proc 
-      !call exch1_2dr3(work_Rloc,n_m_max_3D,n_theta_max,n_r_max_3D,nRStart,nRstop)
-
-      !-- z-average in spacial space
-      do n_r=nRstart,nRstop
+      !-- z-average in spatial space
+      do n_r=1,n_r_max
          do n_z=1,4*n_z_max
-            n_t_t = interp_zt_mat(n_z,n_r)
+            n_t_t = this%interp_zt_mat(n_z,n_r)
             n_t_ct= n_theta_max+1-n_t_t
-            n_r_r = interp_zr_mat(n_z,n_r)
-            czavg = interp_wt_mat(n_z,n_r)
-            do n_m=1,n_m_max_3D,minc_3D
-               !if ( n_r == 1 .or. n_r == n_r_max ) then
-               !   zavg_Rloc(n_m,n_r) = 0.0_cp
-               !else
-                  zavg_Rloc(n_m,n_r) = zavg_Rloc(n_m,n_r) + czavg*  &
-                  &                   (work_Rloc(n_m,n_t_t ,n_r_r)  &
-                  &                  + work_Rloc(n_m,n_t_ct,n_r_r))
-               !endif
-            end do
-         end do
-      end do
-
-      !-- Transforms back to spectral for computing an 'adam' for the velocity field
-      do n_r=nRstart,nRstop
-         tmp(:,n_r) = zavg_Rloc(:,n_r)
-         !call fft_thetab(tmp,-1)
-      end do
-
-      !-- Finally get the z-average back in spectral space
-      do n_r=nRstart,nRstop
-         do n_m=1,n_m_max,minc
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-                n_z_m = 2*m+1
-                adam_Rloc(n_z_m,n_r) = adam_Rloc(n_z_m,n_r) + tmp(n_z_m,n_r)
-                adam_Rloc(n_z_m+1,n_r)=adam_Rloc(n_z_m+1,n_r)+tmp(n_z_m+1,n_r)
-            else
-                adam_Rloc(n_m,n_r) = adam_Rloc(n_m,n_r) + tmp(n_m,n_r)
+            n_r_r = this%interp_zr_mat(n_z,n_r)
+            czavg = this%interp_wt_mat(n_z,n_r)
+            if ( n_r_r >= nRstart3D .and. n_r_r <= nRstop3D ) then
+               do n_phi=1,n_phi_max_3D
+                  tmp(n_phi,n_r) = tmp(n_phi,n_r) + czavg*             &
+                  &                   (work_Rloc(n_phi,n_t_t ,n_r_r)   &
+                  &                  + work_Rloc(n_phi,n_t_ct,n_r_r))
+               end do
             end if
          end do
       end do
 
-   end subroutine compute_z_avg
+      call MPI_Allreduce(MPI_IN_PLACE, tmp, n_phi_max_3D, MPI_DEF_REAL, &
+           &             MPI_SUM, MPI_COMM_WORLD, ierr)
+
+
+      !-- Transforms back to spectral space
+      do n_r=nRstart,nRstop
+         call fft(tmp(:,n_r), tmp_hat(:), l_3D=.true.)
+         do n_m=1,n_m_max_3D
+            m3D = idx2m3D(n_m)
+            if ( m3D < size(m2idx) ) then ! a little bit weird
+               n_m_QG = m2idx(m3D)
+            else
+               n_m_QG = -1
+            end if
+            if ( n_m_QG > 0 ) then
+               zavg_Rloc(n_m_QG,n_r)=tmp_hat(n_m)
+            else
+               zavg_Rloc(n_m_QG,n_r)=zero
+            end if
+         end do
+      end do
+
+   end subroutine compute_avg
 !--------------------------------------------------------------------------------
-   subroutine get_zavg_mat
+   subroutine fill_mat(this)
+
+      class(zfunc_type) :: this
 
       !-- Local variables
       integer :: n_r, n_z, n_r_r, n_t_t
@@ -275,14 +257,15 @@ contains
       !-- for interpolation: n_r_max points on z-axis
       do n_r=1,n_r_max-1
          h = half*height(n_r)
-         n_r_r = n_r_max_3D-1
+         !n_r_r = n_r_max_3D-1
+         n_r_r = 2
          n_t_t = 2
-         do n_z=n_z_max,0,-1
+         do n_z=n_z_max,4,-1
             z_r = h*n_z/n_z_max
             r_r = sqrt(r(n_r)**2 + z_r**2)
             c_t = z_r/r_r
             do while ( r_3D(n_r_r) > r_r  )
-               n_r_r = n_r_r-1
+               n_r_r = n_r_r+1
             end do
             do while ( cost(n_t_t) > c_t  )
                n_t_t = n_t_t+1
@@ -294,27 +277,27 @@ contains
             !else
                norm = one/(two*n_z_max+1)
             !endif
-            alpha_r = (r_r-r_3D(n_r_r))/(r_3D(n_r_r+1)-r_3D(n_r_r))
+            alpha_r = (r_r-r_3D(n_r_r))/(r_3D(n_r_r-1)-r_3D(n_r_r))
             alpha_t = (c_t-cost(n_t_t))/(cost(n_t_t-1)-cost(n_t_t))
             !-- Coordinates neighbourg 1: n_r_r, n_t_t
-            interp_zr_mat(4*n_z-3,n_r)=n_r_r
-            interp_zt_mat(4*n_z-3,n_r)=n_t_t
-            interp_wt_mat(4*n_z-3,n_r)=norm*(one-alpha_r)*(one-alpha_t)
+            this%interp_zr_mat(4*n_z-3,n_r)=n_r_r
+            this%interp_zt_mat(4*n_z-3,n_r)=n_t_t
+            this%interp_wt_mat(4*n_z-3,n_r)=norm*(one-alpha_r)*(one-alpha_t)
             !-- Coordinates neighbourg 2: n_r_r, n_t_t-1
-            interp_zr_mat(4*n_z-2,n_r)=n_r_r
-            interp_zt_mat(4*n_z-2,n_r)=n_t_t-1
-            interp_wt_mat(4*n_z-2,n_r)=norm*(one-alpha_r)*alpha_t
+            this%interp_zr_mat(4*n_z-2,n_r)=n_r_r
+            this%interp_zt_mat(4*n_z-2,n_r)=n_t_t-1
+            this%interp_wt_mat(4*n_z-2,n_r)=norm*(one-alpha_r)*alpha_t
             !-- Coordinates neighbourg 3: n_r_r+1, n_t_t
-            interp_zr_mat(4*n_z-1,n_r)=n_r_r+1
-            interp_zt_mat(4*n_z-1,n_r)=n_t_t
-            interp_wt_mat(4*n_z-1,n_r)=norm*alpha_r*(one-alpha_t)
+            this%interp_zr_mat(4*n_z-1,n_r)=n_r_r+1
+            this%interp_zt_mat(4*n_z-1,n_r)=n_t_t
+            this%interp_wt_mat(4*n_z-1,n_r)=norm*alpha_r*(one-alpha_t)
             !-- Coordinates neighbourg 4: n_r_r+1, n_t_t-1
-            interp_zr_mat(4*n_z,n_r)  =n_r_r+1
-            interp_zt_mat(4*n_z,n_r)  =n_t_t-1
-            interp_wt_mat(4*n_z,n_r)  =norm*alpha_r*alpha_t
+            this%interp_zr_mat(4*n_z,n_r)  =n_r_r+1
+            this%interp_zt_mat(4*n_z,n_r)  =n_t_t-1
+            this%interp_wt_mat(4*n_z,n_r)  =norm*alpha_r*alpha_t
          end do
       end do
 
-   end subroutine get_zavg_mat
+   end subroutine fill_mat
 !--------------------------------------------------------------------------------
 end module z_functions

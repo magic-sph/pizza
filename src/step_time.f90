@@ -46,6 +46,7 @@ module step_time
    use parallel_mod
    use precision_mod
    use timers_mod, only: timers_type
+   use z_functions, only: zfunc_type
 
    implicit none
 
@@ -57,7 +58,7 @@ module step_time
 
 contains
 
-   subroutine time_loop(time, tscheme, run_time_init)
+   subroutine time_loop(time, tscheme, run_time_init, zinterp)
 
       !-- Input variable
       real(cp),            intent(in) :: run_time_init
@@ -65,6 +66,7 @@ contains
       !-- Output variables
       real(cp),            intent(inout) :: time
       class(type_tscheme), intent(inout) :: tscheme
+      type(zfunc_type),    intent(inout) :: zinterp
 
       !-- Local variables
       integer :: n_time_step, n_time_steps_go, n_time_steps_run
@@ -239,6 +241,8 @@ contains
                !-------------------
                if ( l_3D ) then
                   runStart = MPI_Wtime()
+                  call zinterp%prepare_extension(us_Rloc, up_Rloc)
+                  call zinterp%extrapolate(ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc)
                   call radial_loop_3D( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc, &
                        &               temp_3D_Rloc, dtempdt_3D_Rloc,      &
                        &               dVrT_3D_Rloc)
