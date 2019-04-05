@@ -1,99 +1,73 @@
 module rloop_3D
 
    use precision_mod
-   use parallel_mod
-   use mem_alloc, only: bytes_allocated
    use nonlinear_lm_mod, only: nonlinear_lm_t
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D
-   use truncation_3D, only: lm_max, lmP_max
-   use fields_3D, only: ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc
+   use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max
+   use shtns, only: spat_to_SH, scal_to_spat
 
    implicit none
 
    private
 
-   type, abstract, public :: rloop_3D_type
-      integer :: n_r
-      type(grid_space_arrays_t) :: gsa
-      type(nonlinear_lm_t) :: nl_lm
-   contains
-      procedure(empty_if), deferred :: initialize
-      procedure :: initialize => initialize_radial_loop_3D
-      procedure :: finalize => finalize_radial_loop_3D
-      procedure :: radial_loop_3D => radial_loop_3D
-      procedure :: transform_to_grid_space_shtns => transform_to_grid_space_shtns
-      procedure :: transform_to_lm_space_shtns => transform_to_lm_space_shtns
-   end type rloop_3D_type
+   type(grid_space_arrays_t) :: gsa
+   type(nonlinear_lm_t) :: nl_lm
 
    public :: radial_loop_3D, initialize_radial_loop_3D, finalize_radial_loop_3D
 
-   interface
-
-      subroutine empty_if(this)
-         import
-         class(rloop_3D_type) :: this
-      end subroutine empty_if
-   end interface
-
 contains
-!------------------------------------------------------------------------------
+
    subroutine initialize_radial_loop_3D
 
-      allocate( rloop_3D_type :: this )
-      !call this%initialize()
-
-      call this%gsa%initialize()
-      call this%nl_lm%initialize(lmP_max)
+      call gsa%initialize()
+      call nl_lm%initialize(lmP_max)
 
    end subroutine initialize_radial_loop_3D
 !------------------------------------------------------------------------------
-   subroutine finalize_radial_loop_3D(this)
+   subroutine finalize_radial_loop_3D
 
-      call this%gsa%finalize()
-      call this%nl_lm%finalize()
-
-      !call this%finalize()
-      deallocate( this )
+      call nl_lm%finalize()
+      call gsa%finalize()
 
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
-   subroutine radial_loop_3D( temp_Rloc, dtempdt_Rloc, dVrT_Rloc)
+   subroutine radial_loop_3D( ur, ut, up, temp, dtempdt, dVrTLM)
 
       !-- Input variables
-      complex(cp), intent(in) :: temp_Rloc(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(in) :: temp(lm_max, nRstart3D:nRstop3D)
+      real(cp),    intent(in) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp),    intent(in) :: ut(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp),    intent(in) :: up(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
 
       !-- Output variables
-      complex(cp), intent(out) :: dtempdt_Rloc(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(out) :: dVrT_Rloc(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(out) :: dtempdt(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(out) :: dVrTLM(lm_max, nRstart3D:nRstop3D)
 
       !-- Local variables
-      complex(cp) :: us_fluct
       integer :: n_r
 
       do n_r=nRstart3D,nRstop3D
 
-         call transform_to_grid_space_shtns(this%gsa, time)
+         call transform_to_grid_space_shtns(temp(:,n_r), gsa)
 
-         call gsa%get_nl(ur_3D_Rloc(:,:,n_r), ut_3D_Rloc(:,:,n_r), &
-              &          up_3D_Rloc(:,:,n_r), this%n_r)
+         call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r)
 
-         call transform_to_lm_space_shtns(this%gsa, this%nl_lm)
+         call transform_to_lm_space_shtns(gsa, nl_lm)
 
          !-- Partial calculation of time derivatives (horizontal parts):
          !   input flm...  is in (l,m) space at radial grid points n_r !
          !   get_td finally calculates the d*dt terms needed for the
          !   time step performed in 's_LMLoop.f' . This should be distributed
          !   over the different models that 's_LMLoop.f' parallelizes over.
-         call get_td(this%n_r, dVTrLM, dtempdt_Rloc)
+         call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r))
 
       end do
 
    end subroutine radial_loop_3D
 !-------------------------------------------------------------------------------
-   subroutine transform_to_grid_space_shtns(this, temp, gsa)
+   subroutine transform_to_grid_space_shtns(temp, gsa)
 
-      class(rloop_3D_type) :: this
       complex(cp), intent(in) :: temp(lm_max)
       type(grid_space_arrays_t) :: gsa
 
@@ -101,9 +75,8 @@ contains
 
    end subroutine transform_to_grid_space_shtns
 !-------------------------------------------------------------------------------
-   subroutine transform_to_lm_space_shtns(this, gsa, nl_lm)
+   subroutine transform_to_lm_space_shtns(gsa, nl_lm)
 
-      class(rloop_3D_type) :: this
       type(grid_space_arrays_t) :: gsa
       type(nonlinear_lm_t) :: nl_lm
 

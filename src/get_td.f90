@@ -45,7 +45,7 @@ contains
 
    end subroutine finalize
 !----------------------------------------------------------------------------
-   subroutine get_td(this,n_r,dVTrLM,dTdt)
+   subroutine get_td(this,dVTrLM,dTdt)
       !
       !  Purpose of this to calculate time derivatives dTdt
       !  and auxiliary arrays dVTrLM from non-linear terms
@@ -55,8 +55,6 @@ contains
       !-- Input of variables:
       class(nonlinear_lm_t) :: this
 
-      integer, intent(in) :: n_r
-    
       !-- Output of variables:
       complex(cp), intent(out) :: dVTrLM(:)
       complex(cp), intent(out) :: dTdt(:)

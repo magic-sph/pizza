@@ -7,13 +7,14 @@ module z_functions
    use precision_mod
    use parallel_mod
    use mem_alloc
+   use fourier, only: ifft
    use parallel_mod, only: n_procs
-   use communications, only: help_transp,my_transp_r2all
+   use communications, only: allgather_from_rloc
    use constants, only: zero, half, one, two, pi
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
-   use blocking_lm, only: llm, ulm
    use truncation, only: n_r_max, n_m_max, minc, idx2m, m2idx
-   use truncation_3D, only: n_r_max_3D, n_z_max, n_m_max_3D, n_theta_max, minc_3D, idx2m3D
+   use truncation_3D, only: n_r_max_3D, n_z_max, n_m_max_3D, n_theta_max, &
+       &                    minc_3D, idx2m3D, n_phi_max_3D
    use namelists, only: r_cmb, tadvz_fac, l_ek_pump
    use horizontal, only: cost, sint
    use radial_functions, only: r, r_3D, beta, height
@@ -119,25 +120,25 @@ contains
 
    end subroutine prepare_z_extension
 !--------------------------------------------------------------------------------
-   subroutine extrapolate_z_fields(usr_Rloc,upp_Rloc,dVzT_Rloc,urr_Rloc,uth_Rloc,uph_Rloc)
+   subroutine extrapolate_z_fields(usr_Rloc,upp_Rloc,dVzT_Rloc,urr_Rloc, &
+              &                    uth_Rloc,uph_Rloc)
 
       !-- Input variables
-      real(cp), intent(in) :: usr_Rloc(n_m_max_3D,nRstart:nRstop)
-      real(cp), intent(in) :: upp_Rloc(n_m_max_3D,nRstart:nRstop)
-      real(cp), intent(in) :: dVzT_Rloc(n_m_max_3D,nRstart:nRstop)
+      real(cp), intent(in) :: usr_Rloc(n_phi_max_3D,nRstart:nRstop)
+      real(cp), intent(in) :: upp_Rloc(n_phi_max_3D,nRstart:nRstop)
+      real(cp), intent(in) :: dVzT_Rloc(n_phi_max_3D,nRstart:nRstop)
 
       !-- Output variables
-      real(cp), intent(out) :: urr_Rloc(n_m_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp), intent(out) :: uth_Rloc(n_m_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp), intent(out) :: uph_Rloc(n_m_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp), intent(out) :: urr_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp), intent(out) :: uth_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp), intent(out) :: uph_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
 
       !-- Local arrays
-      real(cp) :: usr(n_m_max_3D,n_r_max)
-      real(cp) :: upp(n_m_max_3D,n_r_max)
-      real(cp) :: dVzT(n_m_max_3D,n_r_max)
+      real(cp) :: usr(n_phi_max_3D,n_r_max)
+      real(cp) :: upp(n_phi_max_3D,n_r_max)
+      real(cp) :: dVzT(n_phi_max_3D,n_r_max)
       !-- Local variables
-      type(help_transp) :: r2all_fields
-      integer :: n_r, n_r_r, n_m, n_t_t, n_t_ct
+      integer :: n_r, n_r_r, n_phi, n_t_t, n_t_ct
       real(cp) :: s_r, z_r, z_eta
       real(cp) :: vs, vz, vrr, vth, vph
       real(cp) :: alpha_r1, alpha_r2
@@ -145,9 +146,9 @@ contains
 
       l_non_lin=.true.
 
-      call my_transp_r2all(r2all_fields,usr_Rloc,usr)
-      call my_transp_r2all(r2all_fields,upp_Rloc,upp)
-      call my_transp_r2all(r2all_fields,dVzT_Rloc,dVzT)
+      call allgather_from_rloc(usr_Rloc,usr,n_phi_max_3D)
+      call allgather_from_rloc(upp_Rloc,upp,n_phi_max_3D)
+      call allgather_from_rloc(dVzT_Rloc,dVzT,n_phi_max_3D)
 
       !-- Compute thermal wind by a linear interpolation
       do n_r_r=nRstart3D,nRstop3D
@@ -162,34 +163,34 @@ contains
             alpha_r2 = (s_r-r(n_r))/(r(n_r+1)-r(n_r))
             alpha_r1 = one - alpha_r2
             z_eta = -s_r/(one-s_r**2)*z_r
-            do n_m=1,n_m_max_3D
-               vs = alpha_r1*usr(n_m,n_r) + alpha_r2*usr(n_m,n_r+1)
+            do n_phi=1,n_phi_max_3D
+               vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r+1)
                vz = z_eta*vs
                if ( l_ek_pump ) then
-                  vz = vz + z_r*(alpha_r1*dVzT(n_m,n_r) +  & 
-                  &              alpha_r2*dVzT(n_m,n_r+1))
+                  vz = vz + z_r*(alpha_r1*dVzT(n_phi,n_r) +  & 
+                  &              alpha_r2*dVzT(n_phi,n_r+1))
                end if
                vrr= vz*cost(n_t_t) + vz*sint(n_t_t)
-               urr_Rloc(n_m,n_t_t,n_r_r) = vrr
-               urr_Rloc(n_m,n_t_ct,n_r_r)= vrr
+               urr_Rloc(n_phi,n_t_t,n_r_r) = vrr
+               urr_Rloc(n_phi,n_t_ct,n_r_r)= vrr
                if ( l_non_lin ) then
                   vth= vz*cost(n_t_t) - vz*sint(n_t_t)
-                  vph= alpha_r1*upp(n_m,n_r) + alpha_r2*upp(n_m,n_r+1)
-                  uth_Rloc(n_m,n_t_t,n_r_r) = vth
-                  uth_Rloc(n_m,n_t_ct,n_r_r)=-vth
-                  uph_Rloc(n_m,n_t_t,n_r_r) = vph
-                  uph_Rloc(n_m,n_t_ct,n_r_r)= vph
+                  vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r+1)
+                  uth_Rloc(n_phi,n_t_t,n_r_r) = vth
+                  uth_Rloc(n_phi,n_t_ct,n_r_r)=-vth
+                  uph_Rloc(n_phi,n_t_t,n_r_r) = vph
+                  uph_Rloc(n_phi,n_t_ct,n_r_r)= vph
                end if
             end do
          end do
       end do
 
-      !-- No slip on the sphere surface
-      if ( rank==n_procs-1 ) then
-         urr_Rloc(:,:,n_r_max_3D) = 0.0_cp
+      !-- No slip on the spherical surface
+      if ( nRstart3D == 1 ) then
+         urr_Rloc(:,:,1) = 0.0_cp
          if ( l_non_lin ) then
-            uth_Rloc(:,:,n_r_max_3D) = 0.0_cp
-            uph_Rloc(:,:,n_r_max_3D) = 0.0_cp
+            uth_Rloc(:,:,1) = 0.0_cp
+            uph_Rloc(:,:,1) = 0.0_cp
          end if
       end if
 

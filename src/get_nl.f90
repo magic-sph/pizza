@@ -29,13 +29,10 @@ module grid_space_arrays_mod
 
       !----- Fields calculated from these help arrays by legtf:
       real(cp), pointer :: Tc(:,:)
-
    contains
-
       procedure :: initialize
       procedure :: finalize
       procedure :: get_nl
-
    end type grid_space_arrays_t
 
 contains
@@ -75,9 +72,9 @@ contains
       class(grid_space_arrays_t) :: this
 
       !-- Input of variables:
-      real(cp), intent(in) :: vr(n_phi_max_3D, n_theta_max)
-      real(cp), intent(in) :: vt(n_phi_max_3D, n_theta_max)
-      real(cp), intent(in) :: vp(n_phi_max_3D, n_theta_max)
+      real(cp), intent(in) :: vr(n_phi_max_3D,n_theta_max)
+      real(cp), intent(in) :: vt(n_phi_max_3D,n_theta_max)
+      real(cp), intent(in) :: vp(n_phi_max_3D,n_theta_max)
       integer,  intent(in) :: n_r
 
       !-- Local variables:
@@ -94,11 +91,11 @@ contains
          or1sn1=or1_3D(n_r)*osint1(n_theta)
          do n_phi=1,n_phi_max_3D     ! calculate u*T components
             this%VTr(n_phi,n_theta) = &
-            &    r2*Vr(n_phi,n_theta)*this%Tc(n_phi,n_theta)
+            &    r2*vr(n_phi,n_theta)*this%Tc(n_phi,n_theta)
             this%VTt(n_phi,n_theta) = &
-            &    or1sn1*Vt(n_phi,n_theta)*this%Tc(n_phi,n_theta)
+            &    or1sn1*vt(n_phi,n_theta)*this%Tc(n_phi,n_theta)
             this%VTp(n_phi,n_theta) = &
-            &    or1sn1*Vp(n_phi,n_theta)*this%Tc(n_phi,n_theta)
+            &    or1sn1*vp(n_phi,n_theta)*this%Tc(n_phi,n_theta)
          end do
       end do  ! theta loop
       !$OMP END PARALLEL DO

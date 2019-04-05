@@ -449,28 +449,29 @@ contains
 
    end subroutine gather_from_mloc_to_rank0
 !------------------------------------------------------------------------------
-   subroutine allgather_from_rloc(arr_Rloc, arr_full)
+   subroutine allgather_from_rloc(arr_Rloc, arr_full, len_arr)
       !
       ! This routine allgather the R-distributed array to a global array
       !
 
       !-- Input variable:
-      complex(cp), intent(in) :: arr_Rloc(n_m_max, nRstart:nRstop)
+      integer,     intent(in) :: len_arr
+      real(cp), intent(in) :: arr_Rloc(len_arr, nRstart:nRstop)
 
       !-- Output variable:
-      complex(cp), intent(out) :: arr_full(n_m_max, n_r_max)
+      real(cp), intent(out) :: arr_full(len_arr, n_r_max)
 
       !-- Local variables:
-      complex(cp), allocatable :: rbuff(:), sbuff(:)
+      real(cp), allocatable :: rbuff(:), sbuff(:)
       integer, allocatable :: rcounts(:)
       integer, allocatable :: rdisp(:)
       integer ::p, ii, n_r, n_m
 
-      allocate( rbuff(n_m_max*n_r_max), sbuff(n_m_max*nR_per_rank) )
+      allocate( rbuff(len_arr*n_r_max), sbuff(len_arr*nR_per_rank) )
       allocate ( rcounts(0:n_procs-1), rdisp(0:n_procs-1) )
 
       do p=0,n_procs-1
-         rcounts(p)=n_m_max*radial_balance(p)%n_per_rank
+         rcounts(p)=len_arr*radial_balance(p)%n_per_rank
       end do
 
       rdisp(0)=0
@@ -480,21 +481,21 @@ contains
 
       ii = 1
       do n_r=nRstart,nRstop
-         do n_m=1,n_m_max
+         do n_m=1,len_arr
             sbuff(ii)=arr_Rloc(n_m,n_r)
             ii = ii +1
          end do
       end do
 
-      call MPI_Allgatherv(sbuff, nR_per_rank*n_m_max, MPI_DEF_COMPLEX, &
-           &              rbuff, rcounts, rdisp, MPI_DEF_COMPLEX,      &
+      call MPI_Allgatherv(sbuff, nR_per_rank*len_arr, MPI_DEF_REAL, &
+           &              rbuff, rcounts, rdisp, MPI_DEF_REAL,      &
            &              MPI_COMM_WORLD, ierr)
 
       if ( rank == 0 ) then
          do p = 0, n_procs-1
             ii = rdisp(p)+1
             do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
-               do n_m=1,n_m_max
+               do n_m=1,len_arr
                   arr_full(n_m,n_r)=rbuff(ii)
                   ii=ii+1
                end do
