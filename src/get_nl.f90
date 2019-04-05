@@ -16,7 +16,7 @@ module grid_space_arrays_mod
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use truncation_3D, only: n_theta_max, n_phi_max_3D
-   use radial_functions, only: or1_3D, r_3D
+   use radial_functions, only: or1_3D, r_3D, rgrav_3D
    use horizontal, only: osint1
 
    implicit none
@@ -60,7 +60,7 @@ contains
 
    end subroutine finalize
 !----------------------------------------------------------------------------
-   subroutine get_nl(this, vr, vt, vp, n_r)
+   subroutine get_nl(this, vr, vt, vp, n_r, buo)
       !
       !  calculates non-linear products in grid-space for radial
       !  level n_r and returns them in arrays wnlr1-3, snlr1-3, bnlr1-3
@@ -76,6 +76,9 @@ contains
       real(cp), intent(in) :: vt(n_phi_max_3D,n_theta_max)
       real(cp), intent(in) :: vp(n_phi_max_3D,n_theta_max)
       integer,  intent(in) :: n_r
+
+      !-- Output of variable:
+      real(cp), intent(out) :: buo(n_phi_max_3D,n_theta_max)
 
       !-- Local variables:
       integer :: n_theta
@@ -99,6 +102,18 @@ contains
          end do
       end do  ! theta loop
       !$OMP END PARALLEL DO
+
+      !$OMP PARALLEL DO default(shared) &
+      !$OMP& private(n_theta, n_phi)
+      !-- Assemble g/r * T on the spherical grid
+      do n_theta=1,n_theta_max
+         do n_phi=1,n_phi_max_3D
+            buo(n_phi,n_theta)=this%Tc(n_phi,n_theta)*rgrav_3D(n_r)* &
+            &                  or1_3D(n_r)
+         end do
+      end do
+      !$OMP END PARALLEL DO
+
 
    end subroutine get_nl
 !----------------------------------------------------------------------------

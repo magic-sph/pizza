@@ -202,6 +202,7 @@ contains
       real(cp) :: tmp(n_phi_max_3D,n_r_max)
 
       tmp(:,:)=0.0_cp
+      zavg_Rloc(:,:)=zero
 
       !-- z-average in spatial space
       do n_r=1,n_r_max
@@ -236,8 +237,6 @@ contains
             end if
             if ( n_m_QG > 0 ) then
                zavg_Rloc(n_m_QG,n_r)=tmp_hat(n_m)
-            else
-               zavg_Rloc(n_m_QG,n_r)=zero
             end if
          end do
       end do

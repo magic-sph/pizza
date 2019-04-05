@@ -245,7 +245,7 @@ contains
                   call zinterp%extrapolate(ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc)
                   call radial_loop_3D( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc, &
                        &               temp_3D_Rloc, dtempdt_3D_Rloc,      &
-                       &               dVrT_3D_Rloc)
+                       &               dVrT_3D_Rloc, dpsidt_Rloc, zinterp)
                   runStop = MPI_Wtime()
                   if (runStop>runStart) then
                      timers%n_r_loops_3D=timers%n_r_loops_3D+1
