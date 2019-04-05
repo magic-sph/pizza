@@ -33,7 +33,7 @@ module communications
    &         gather_from_mloc_to_rank0, scatter_from_rank0_to_mloc, &
    &         finalize_communications, reduce_radial_on_rank,        &
    &         my_reduce_mean, my_allreduce_maxloc, transp_lm2r,      &
-   &         transp_r2lm
+   &         transp_r2lm, allgather_from_Rloc
 
 contains
 
@@ -448,6 +448,63 @@ contains
       deallocate( rbuff, sbuff, rcounts, rdisp)
 
    end subroutine gather_from_mloc_to_rank0
+!------------------------------------------------------------------------------
+   subroutine allgather_from_rloc(arr_Rloc, arr_full)
+      !
+      ! This routine allgather the R-distributed array to a global array
+      !
+
+      !-- Input variable:
+      complex(cp), intent(in) :: arr_Rloc(n_m_max, nRstart:nRstop)
+
+      !-- Output variable:
+      complex(cp), intent(out) :: arr_full(n_m_max, n_r_max)
+
+      !-- Local variables:
+      complex(cp), allocatable :: rbuff(:), sbuff(:)
+      integer, allocatable :: rcounts(:)
+      integer, allocatable :: rdisp(:)
+      integer ::p, ii, n_r, n_m
+
+      allocate( rbuff(n_m_max*n_r_max), sbuff(n_m_max*nR_per_rank) )
+      allocate ( rcounts(0:n_procs-1), rdisp(0:n_procs-1) )
+
+      do p=0,n_procs-1
+         rcounts(p)=n_m_max*radial_balance(p)%n_per_rank
+      end do
+
+      rdisp(0)=0
+      do p=1,n_procs-1
+         rdisp(p)=rdisp(p-1)+rcounts(p-1)
+      end do
+
+      ii = 1
+      do n_r=nRstart,nRstop
+         do n_m=1,n_m_max
+            sbuff(ii)=arr_Rloc(n_m,n_r)
+            ii = ii +1
+         end do
+      end do
+
+      call MPI_Allgatherv(sbuff, nR_per_rank*n_m_max, MPI_DEF_COMPLEX, &
+           &              rbuff, rcounts, rdisp, MPI_DEF_COMPLEX,      &
+           &              MPI_COMM_WORLD, ierr)
+
+      if ( rank == 0 ) then
+         do p = 0, n_procs-1
+            ii = rdisp(p)+1
+            do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
+               do n_m=1,n_m_max
+                  arr_full(n_m,n_r)=rbuff(ii)
+                  ii=ii+1
+               end do
+            end do
+         end do
+      end if
+
+      deallocate( rbuff, sbuff, rcounts, rdisp)
+
+   end subroutine allgather_from_Rloc
 !------------------------------------------------------------------------------
    subroutine scatter_from_rank0_to_mloc(arr_full, arr_Mloc)
 

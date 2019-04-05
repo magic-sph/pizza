@@ -137,7 +137,7 @@ program pizza
    call initialize_mfunctions()
 
 #ifdef WITH_SHTNS
-   call init_shtns()
+   if ( l_3D ) call init_shtns()
 #endif
 
    if ( rank == 0 ) then
