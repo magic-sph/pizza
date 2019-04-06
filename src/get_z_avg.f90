@@ -288,12 +288,12 @@ contains
             this%interp_zr_mat(4*n_z-2,n_r)=n_r_r
             this%interp_zt_mat(4*n_z-2,n_r)=n_t_t-1
             this%interp_wt_mat(4*n_z-2,n_r)=norm*(one-alpha_r)*alpha_t
-            !-- Coordinates neighbourg 3: n_r_r+1, n_t_t
-            this%interp_zr_mat(4*n_z-1,n_r)=n_r_r+1
+            !-- Coordinates neighbourg 3: n_r_r-1, n_t_t
+            this%interp_zr_mat(4*n_z-1,n_r)=n_r_r-1
             this%interp_zt_mat(4*n_z-1,n_r)=n_t_t
             this%interp_wt_mat(4*n_z-1,n_r)=norm*alpha_r*(one-alpha_t)
-            !-- Coordinates neighbourg 4: n_r_r+1, n_t_t-1
-            this%interp_zr_mat(4*n_z,n_r)  =n_r_r+1
+            !-- Coordinates neighbourg 4: n_r_r-1, n_t_t-1
+            this%interp_zr_mat(4*n_z,n_r)  =n_r_r-1
             this%interp_zt_mat(4*n_z,n_r)  =n_t_t-1
             this%interp_wt_mat(4*n_z,n_r)  =norm*alpha_r*alpha_t
          end do
