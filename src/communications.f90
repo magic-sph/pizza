@@ -449,13 +449,13 @@ contains
 
    end subroutine gather_from_mloc_to_rank0
 !------------------------------------------------------------------------------
-   subroutine allgather_from_rloc(arr_Rloc, arr_full, len_arr)
+   subroutine allgather_from_Rloc(arr_Rloc, arr_full, len_arr)
       !
       ! This routine allgather the R-distributed array to a global array
       !
 
       !-- Input variable:
-      integer,     intent(in) :: len_arr
+      integer,  intent(in) :: len_arr
       real(cp), intent(in) :: arr_Rloc(len_arr, nRstart:nRstop)
 
       !-- Output variable:
@@ -491,17 +491,15 @@ contains
            &              rbuff, rcounts, rdisp, MPI_DEF_REAL,      &
            &              MPI_COMM_WORLD, ierr)
 
-      if ( rank == 0 ) then
-         do p = 0, n_procs-1
-            ii = rdisp(p)+1
-            do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
-               do n_m=1,len_arr
-                  arr_full(n_m,n_r)=rbuff(ii)
-                  ii=ii+1
-               end do
+      do p = 0, n_procs-1
+         ii = rdisp(p)+1
+         do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
+            do n_m=1,len_arr
+               arr_full(n_m,n_r)=rbuff(ii)
+               ii=ii+1
             end do
          end do
-      end if
+      end do
 
       deallocate( rbuff, sbuff, rcounts, rdisp)
 

@@ -14,7 +14,7 @@ module z_functions
    use truncation, only: n_r_max, n_m_max, minc, idx2m, m2idx
    use truncation_3D, only: n_r_max_3D, n_z_max, n_m_max_3D, n_theta_max, &
        &                    minc_3D, idx2m3D, n_phi_max_3D
-   use namelists, only: r_cmb, l_ek_pump
+   use namelists, only: r_cmb, l_ek_pump, ktopv
    use horizontal, only: cost, sint
    use radial_functions, only: r, r_3D, beta, height
 
@@ -142,6 +142,31 @@ contains
       call allgather_from_rloc(this%up_phys_Rloc,upp,n_phi_max_3D)
       call allgather_from_rloc(this%dVzT_Rloc,dVzT,n_phi_max_3D)
 
+
+#ifdef DEBUG
+      block
+
+         integer p
+
+         do p=0,n_procs-1
+            if (rank == p) then
+               do n_r=nRstart,nRstop
+                  print*, 'before', n_r, this%us_phys_Rloc(10,n_r)
+               end do
+            end if
+         end do
+
+         if ( rank == 1 ) then
+            do n_r=1,n_r_max
+               print*, 'after', n_r, usr(10,n_r)
+            end do
+         end if
+
+         if (rank==1)stop
+
+      end block
+#endif
+
       !-- Compute thermal wind by a linear interpolation
       do n_r_r=nRstart3D,nRstop3D
          do n_t_t=1,n_theta_max/2
@@ -154,18 +179,24 @@ contains
             end do
             alpha_r2 = (s_r-r(n_r))/(r(n_r-1)-r(n_r))
             alpha_r1 = one - alpha_r2
-            z_eta = -s_r/(one-s_r**2)*z_r
+            z_eta = -s_r/(r_cmb*r_cmb-s_r*s_r)*z_r ! \beta * z
             do n_phi=1,n_phi_max_3D
                vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r-1)
                vz = z_eta*vs
-               if ( l_ek_pump ) then
-                  vz = vz + z_r*(alpha_r1*dVzT(n_phi,n_r) +  & 
-                  &              alpha_r2*dVzT(n_phi,n_r-1))
-               end if
-               vrr= vz*cost(n_t_t) + vz*sint(n_t_t)
+               !-- TG: dVzT does not correspond to the Ekman pumping contribution 
+               !-- right now: it should be 
+               !-- uz = beta*z*us + sqrt(E)*f(us,uphi,s)*z
+               !-- Maybe dVzT should corrrespond to f(us,phi,s)?
+               !if ( l_ek_pump ) then
+                  !vz = vz + z_r*(alpha_r1*dVzT(n_phi,n_r) +  & 
+                  !&              alpha_r2*dVzT(n_phi,n_r-1))
+               !end if
+               !-- TG: fixed??
+               vrr= vz*cost(n_t_t) + vs*sint(n_t_t)
                ur_Rloc(n_phi,n_t_t,n_r_r) = vrr
                ur_Rloc(n_phi,n_t_ct,n_r_r)= vrr
-               vth= vz*cost(n_t_t) - vz*sint(n_t_t)
+               !-- TG: fixed??
+               vth= vs*cost(n_t_t) - vz*sint(n_t_t)
                vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r-1)
                ut_Rloc(n_phi,n_t_t,n_r_r) = vth
                ut_Rloc(n_phi,n_t_ct,n_r_r)=-vth
@@ -178,8 +209,10 @@ contains
       !-- No slip on the spherical surface
       if ( nRstart3D == 1 ) then
          ur_Rloc(:,:,1) = 0.0_cp
-         ut_Rloc(:,:,1) = 0.0_cp
-         up_Rloc(:,:,1) = 0.0_cp
+         if ( ktopv == 2 ) then !-- Rigid boundaries
+            ut_Rloc(:,:,1) = 0.0_cp
+            up_Rloc(:,:,1) = 0.0_cp
+         end if
       end if
 
    end subroutine extrapolate
@@ -221,9 +254,41 @@ contains
          end do
       end do
 
-      call MPI_Allreduce(MPI_IN_PLACE, tmp, n_phi_max_3D, MPI_DEF_REAL, &
-           &             MPI_SUM, MPI_COMM_WORLD, ierr)
+#ifdef DEBUG
+      block
+      integer :: p
 
+      do p=0,n_procs-1
+      if ( rank == p ) then
+      do n_r=1,n_r_max
+         print*, 'before', n_r, tmp(10, n_r)
+      end do
+      end if
+      end do
+      end block
+#endif
+
+      !-- TG: dirty fix: needs to be improved
+      do n_r=1,n_r_max
+         call MPI_Allreduce(MPI_IN_PLACE, tmp(:,n_r), n_phi_max_3D, MPI_DEF_REAL, &
+              &             MPI_SUM, MPI_COMM_WORLD, ierr)
+      !call MPI_reduce(MPI_IN_PLACE, tmp(:,n_r), n_phi_max_3D, MPI_DEF_REAL, &
+      !     &             MPI_SUM, MPI_COMM_WORLD, ierr)
+      end do
+
+#ifdef DEBUG
+      block
+      integer :: p
+
+      do p=0,n_procs-1
+      if ( rank == p ) then
+      do n_r=1,n_r_max
+         print*, 'after', n_r, tmp(10, n_r)
+      end do
+      end if
+      end do
+      end block
+#endif
 
       !-- Transforms back to spectral space
       do n_r=nRstart,nRstop
