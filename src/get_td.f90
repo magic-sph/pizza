@@ -67,11 +67,8 @@ contains
       dTdt(1)  =zero
 
       !PERFON('td_heat')
-      !$OMP PARALLEL DEFAULT(none) &
-      !$OMP private(lm,l,m,lmP,lmPS,lmPA,dTdt_loc) &
-      !$OMP shared(lm2l,lm2m,lm2lmP,lmP2lmPS,lmP2lmPA) &
-      !$OMP shared(lm_max,dTdt,dVTrLM,dTheta1S,dTheta1A,dPhi) &
-      !$OMP shared(this)
+      !$OMP PARALLEL DEFAULT(shared) &
+      !$OMP private(lm,l,m,lmP,lmPS,lmPA,dTdt_loc)
       !LIKWID_ON('td_heat')
       !$OMP DO
       do lm=2,lm_max
@@ -81,7 +78,6 @@ contains
          lmPS=lmP2lmPS(lmP)
          lmPA=lmP2lmPA(lmP)
          !------ This is horizontal heat advection:
-         !PERFON('td_h1')
          if ( l > m ) then
             dTdt_loc= -dTheta1S(lm)*this%VTtLM(lmPS) &
             &         +dTheta1A(lm)*this%VTtLM(lmPA) &
@@ -90,13 +86,8 @@ contains
             dTdt_loc=  dTheta1A(lm)*this%VTtLM(lmPA) &
             &          -dPhi(lm)*this%VTpLM(lmP)
          end if
-            !PERFOFF
-            !-----   simplified form for linear onset !
-            !        not ds not saved in the current program form!
-            !                 dTdt(lm)=
-            !                    -dLh(lm)*w(lm,nR)*or2(nR)*dsR(1)
-            dVTrLM(lm)=this%VTrLM(lmP)
-            dTdt(lm) = dTdt_loc
+         dVTrLM(lm)=this%VTrLM(lmP)
+         dTdt(lm) = dTdt_loc
          end do
       !$OMP end do
       !LIKWID_OFF('td_heat')
