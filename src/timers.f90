@@ -149,6 +149,12 @@ contains
          &    '! Mean wall time for pure m loop            :',this%m_loop)
          call formatTime(n, &
          &    '! Mean wall time for m loop with matrix calc:',this%m_loop_mat)
+         if ( this%n_r_loops_3D > 0 ) then
+            call formatTime(n, &
+            &    '! Mean wall time for 3D radial loop         :',this%r_loop_3D)
+            call formatTime(n, &
+            &    '! Mean wall time for pure LM loop           :',this%lm_loop)
+         end if
          call formatTime(n, &
          &    '! Mean wall time for MPI communications     :',this%mpi_comms)
          call formatTime(n, &
