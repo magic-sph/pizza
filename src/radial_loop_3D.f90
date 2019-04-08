@@ -8,7 +8,9 @@ module rloop_3D
    use namelists, only: BuoFac
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max
    use truncation, only: idx2m, n_m_max
+#ifdef WITH_SHTNS
    use shtns, only: spat_to_SH, scal_to_spat
+#endif
    use z_functions, only: zfunc_type
 
    implicit none
@@ -112,7 +114,9 @@ contains
       complex(cp), intent(in) :: temp(lm_max)
       type(grid_space_arrays_t) :: gsa
 
+#ifdef WITH_SHTNS
       call scal_to_spat(temp, gsa%Tc)
+#endif
 
    end subroutine transform_to_grid_space_shtns
 !-------------------------------------------------------------------------------
@@ -121,6 +125,7 @@ contains
       type(grid_space_arrays_t) :: gsa
       type(nonlinear_lm_t) :: nl_lm
 
+#ifdef WITH_SHTNS
       call shtns_load_cfg(1)
 
       call spat_to_SH(gsa%VTr, nl_lm%VTrLM)
@@ -128,6 +133,7 @@ contains
       call spat_to_SH(gsa%VTp, nl_lm%VTpLM)
 
       call shtns_load_cfg(0)
+#endif
 
    end subroutine transform_to_lm_space_shtns
 !------------------------------------------------------------------------------

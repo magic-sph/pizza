@@ -142,7 +142,7 @@ contains
 !------------------------------------------------------------------------------
    subroutine finalize_outputs
 
-      if ( rank == 0 ) then
+      if ( l_rank_has_m0 ) then
          call enstrophyR%finalize()
          call up2R%finalize()
          call us2R%finalize()

@@ -257,7 +257,7 @@ program pizza
    call finalize_communications(l_3D)
    call destroy_mpi_domains(l_3D)
    call finalize_courant()
-   if ( l_3D ) call finalize_outputs()
+   if ( l_3D ) call finalize_outputs_3D()
    call finalize_outputs()
    call tscheme%finalize()
    if ( l_3D ) call zinterp%finalize()
