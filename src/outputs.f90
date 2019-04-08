@@ -165,7 +165,7 @@ contains
             close(n_power_file_3D)
             close(n_kin_file_3D)
          end if
-         if ( l_heat ) close(n_chem_file)
+         if ( l_chem ) close(n_chem_file)
          if ( l_heat ) close(n_heat_file)
          close(n_lscale_file)
          close(n_rey_file_2D)
@@ -381,7 +381,7 @@ contains
                &     round_off(uphiR%mean(n_r)), round_off(uphiR%SD(n_r)), &
                &     round_off(tempR%mean(n_r)+tcond(n_r)),                &
                &     round_off(tempR%SD(n_r)),                             &
-               &     round_off(xiR%mean(n_r)+tcond(n_r)),                  &
+               &     round_off(xiR%mean(n_r)+xicond(n_r)),                 &
                &     round_off(xiR%SD(n_r)), round_off(fluxR%mean(n_r)),   &
                &     round_off(fluxR%SD(n_r))
             end do
