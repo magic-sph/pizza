@@ -18,6 +18,7 @@ program pizza
        &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve,&
        &                courfac, l_heat, l_chem, l_3D, l_heat_3D
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
+   use outputs_3D, only: initialize_outputs_3D, finalize_outputs_3D
    use pre_calculations, only: preCalc
    use horizontal, only: initialize_mfunctions, finalize_mfunctions
    use radial_functions, only: initialize_radial_functions, &
@@ -107,6 +108,7 @@ program pizza
    !-- Open output files
    local_bytes_used = bytes_allocated
    call initialize_outputs()
+   if ( l_3D ) call initialize_outputs_3D()
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('I/O', local_bytes_used)
 
@@ -255,6 +257,7 @@ program pizza
    call finalize_communications(l_3D)
    call destroy_mpi_domains(l_3D)
    call finalize_courant()
+   if ( l_3D ) call finalize_outputs()
    call finalize_outputs()
    call tscheme%finalize()
    if ( l_3D ) call zinterp%finalize()

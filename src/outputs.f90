@@ -347,13 +347,13 @@ contains
             if ( l_heat ) then
                call getMSD2(tempR%mean(n_r), tempR%SD(n_r), &
                     &       real(temp_Mloc(idx,n_r)), n_calls, dtAvg, timeAvg_rad)
+               call getMSD2(fluxR%mean(n_r), fluxR%SD(n_r), flux_r(n_r), n_calls, &
+                    &       dtAvg, timeAvg_rad)
             end if
             if ( l_chem ) then
                call getMSD2(xiR%mean(n_r), xiR%SD(n_r), &
                     &       real(xi_Mloc(idx,n_r)), n_calls, dtAvg, timeAvg_rad)
             end if
-            call getMSD2(fluxR%mean(n_r), fluxR%SD(n_r), flux_r(n_r), n_calls, &
-                 &       dtAvg, timeAvg_rad)
             call getMSD2(us2R%mean(n_r), us2R%SD(n_r), pi*us2_r(n_r), &
                  &       n_calls, dtAvg, timeAvg_rad)
             call getMSD2(up2R%mean(n_r), up2R%SD(n_r), pi*up2_r(n_r), &
@@ -367,11 +367,13 @@ contains
             open(newunit=file_handle, file='radial_profiles.'//tag)
             do n_r=1,n_r_max
                uphiR%SD(n_r)     =sqrt(uphiR%SD(n_r)/timeAvg_rad)
-               fluxR%SD(n_r)     =sqrt(fluxR%SD(n_r)/timeAvg_rad)
                us2R%SD(n_r)      =sqrt(us2R%SD(n_r)/timeAvg_rad)
                up2R%SD(n_r)      =sqrt(up2R%SD(n_r)/timeAvg_rad)
                enstrophyR%SD(n_r)=sqrt(enstrophyR%SD(n_r)/timeAvg_rad)
-               if ( l_heat ) tempR%SD(n_r)=sqrt(tempR%SD(n_r)/timeAvg_rad)
+               if ( l_heat ) then
+                  tempR%SD(n_r)=sqrt(tempR%SD(n_r)/timeAvg_rad)
+                  fluxR%SD(n_r)=sqrt(fluxR%SD(n_r)/timeAvg_rad)
+               end if
                if ( l_chem ) xiR%SD(n_r)=sqrt(xiR%SD(n_r)/timeAvg_rad)
                write(file_handle, '(es20.12, 14es16.8)') r(n_r),           &
                &     round_off(us2R%mean(n_r)), round_off(us2R%SD(n_r)),   &
@@ -381,7 +383,7 @@ contains
                &     round_off(uphiR%mean(n_r)), round_off(uphiR%SD(n_r)), &
                &     round_off(tempR%mean(n_r)+tcond(n_r)),                &
                &     round_off(tempR%SD(n_r)),                             &
-               &     round_off(xiR%mean(n_r)+tcond(n_r)),                  &
+               &     round_off(xiR%mean(n_r)+xicond(n_r)),                 &
                &     round_off(xiR%SD(n_r)), round_off(fluxR%mean(n_r)),   &
                &     round_off(fluxR%SD(n_r))
             end do

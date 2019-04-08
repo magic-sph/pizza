@@ -41,6 +41,7 @@ module step_time
        &                l_heat, l_chem, l_3D, l_heat_3D
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
+   use outputs_3D, only: write_outputs_3D
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
    use time_schemes, only: type_tscheme
    use parallel_mod
@@ -190,6 +191,10 @@ contains
               &             l_vphi_bal_write, l_stop_time, us_Mloc,  up_Mloc,  &
               &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
               &             dpsidt, dTdt, dxidt)
+         if ( l_3D ) then
+            call write_outputs_3D(time, tscheme, n_time_step, l_log, &
+                 &                temp_3D_LMloc)
+         end if
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             timers%n_io_calls=timers%n_io_calls+1

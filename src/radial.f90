@@ -14,7 +14,7 @@ module radial_functions
        &                l_non_rot, ek, l_ek_pump, l_tcond_3D, tcond_fac,   &
        &                r_cmb, r_icb, l_cheb_coll, beta_shift, xicond_fac, &
        &                ktopt, kbott, t_bot, t_top, l_heat, l_chem, xi_bot,&
-       &                xi_top, l_xi_3D, ktopxi, kbotxi, l_3D
+       &                xi_top, l_xi_3D, ktopxi, kbotxi, l_3D, l_heat_3D
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -55,8 +55,9 @@ module radial_functions
    real(cp), public, allocatable :: r_3D(:)         ! spherical radii
    real(cp), public, allocatable :: or1_3D(:)       ! :math:`1/r_3D`
    real(cp), public, allocatable :: or2_3D(:)       ! :math:`1/r_3D^2`
-   real(cp), public, allocatable :: rgrav_3D(:)  
-   real(cp), public, allocatable :: tcond_3D(:)  
+   real(cp), public, allocatable :: rgrav_3D(:)
+   real(cp), public, allocatable :: tcond_3D(:)
+   real(cp), public, allocatable :: dtcond_3D(:)
 
    !-- Radial scheme
    class(type_rscheme), public, pointer :: rscheme, rscheme_3D
@@ -80,6 +81,7 @@ contains
       allocate( delxr2(n_r_max), delxh2(n_r_max) )
       allocate( tcond(n_r_max), dtcond(n_r_max))
       allocate( xicond(n_r_max), dxicond(n_r_max))
+      tcond(:)=0.0_cp ; dtcond(:)=0.0_cp; xicond(:)=0.0_cp; dxicond(:)=0.0_cp
       bytes_allocated = bytes_allocated+15*n_r_max*SIZEOF_DEF_REAL
 
       allocate ( type_cheb :: rscheme )
@@ -95,8 +97,12 @@ contains
 
       if ( l_3D ) then
          allocate( r_3D(n_r_max_3D), or1_3D(n_r_max_3D), or2_3D(n_r_max_3D) )
-         allocate( rgrav_3D(n_r_max_3D), tcond_3D(n_r_max_3D) )
-         bytes_allocated = bytes_allocated+5*n_r_max_3D*SIZEOF_DEF_REAL
+         allocate( rgrav_3D(n_r_max_3D) )
+         bytes_allocated = bytes_allocated+4*n_r_max_3D*SIZEOF_DEF_REAL
+         if ( l_heat_3D ) then
+            allocate( tcond_3D(n_r_max_3D),dtcond_3D(n_r_max_3D) )
+            bytes_allocated = bytes_allocated+2*n_r_max_3D*SIZEOF_DEF_REAL
+         end if
 
          allocate ( type_cheb :: rscheme_3D )
          call rscheme_3D%initialize(llm,ulm,n_r_max_3D,n_cheb_max_3D,0,.true.)
@@ -114,7 +120,8 @@ contains
       deallocate( r, or1, or2 )
 
       if ( l_3D ) then
-         deallocate( r_3D, or1_3D, or2_3D, rgrav_3D, tcond_3D )
+         if ( l_heat_3D ) deallocate( tcond_3D, dtcond_3D )
+         deallocate( r_3D, or1_3D, or2_3D, rgrav_3D )
          call rscheme_3D%finalize()
       end if
 
@@ -246,6 +253,7 @@ contains
       !-- Conducting state
       if ( kbott == 1 .and. ktopt == 1 ) then
          tcond_3D(:) = r_icb*r_cmb*or1_3D(:)-r_icb
+         dtcond_3D(:)= -r_icb*r_cmb*or2_3D(:)
       else
          call abortRun('tcond 3D with other BCs not done yet')
       end if

@@ -8,6 +8,7 @@ module constants
 
    real(cp), parameter :: pi=4.0_cp*atan(1.0_cp) ! pi=3.1415..
    real(cp), parameter :: sq4pi=sqrt(4.0_cp*pi)  ! :math:`\sqrt{4\pi}`
+   real(cp), parameter :: osq4pi=1.0_cp/sqrt(4.0_cp*pi)  ! :math:`1/\sqrt{4\pi}`
    real(cp), parameter :: one  =1.0_cp ! 1
    real(cp), parameter :: two  =2.0_cp ! 2
    real(cp), parameter :: three=3.0_cp ! 3

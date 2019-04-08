@@ -173,10 +173,12 @@ contains
             n_t_ct=n_theta_max+1-n_t_t
             s_r = r_3D(n_r_r)*sint(n_t_t)
             z_r = r_3D(n_r_r)*cost(n_t_t)
-            n_r = n_r_max_3D+1
+            n_r = n_r_max_3D!+1
+            !print*, s_r, n_r, r(n_r-1)
             do while ( r(n_r-1) < s_r  )
                n_r = n_r-1
             end do
+            !print*, n_r
             alpha_r2 = (s_r-r(n_r))/(r(n_r-1)-r(n_r))
             alpha_r1 = one - alpha_r2
             z_eta = -s_r/(r_cmb*r_cmb-s_r*s_r)*z_r ! \beta * z
