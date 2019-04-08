@@ -2,17 +2,25 @@ module checkpoints
 
    use parallel_mod
    use precision_mod
+   use communications, only: lm2r_fields, transp_lm2r
    use constants, only: zero, two
    use char_manip, only: dble2str
-   use blocking, only: nMstart,nMstop,nm_per_rank
-   use communications, only: gather_from_mloc_to_rank0, &
-       &                     scatter_from_rank0_to_mloc
+   use fields, only: work_3D_Rloc
+   use blocking, only: nMstart, nMstop, nm_per_rank, nRstart3D, nRstop3D, &
+       &               nR_per_rank_3D, lmStart, lmStop
+   use blocking_lm, only: st_map
+   use communications, only: gather_from_mloc_to_rank0, lm2r_fields,  &
+       &                     scatter_from_rank0_to_mloc, transp_lm2r, &
+       &                     scatter_from_rank0_to_lmloc
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
+   use truncation_3D, only: lm_max, l_max, m_max_3D, n_phi_tot_3D, n_theta_max, &
+       &                    n_r_max_3D, minc_3D
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &
-       &                l_bridge_step, l_cheb_coll, scale_xi
+       &                l_bridge_step, l_cheb_coll, scale_xi, l_3D,       &
+       &                l_heat_3D, l_mag
    use radial_scheme, only: type_rscheme
-   use radial_functions, only: rscheme, r
+   use radial_functions, only: rscheme, r, rscheme_3D, r_3D
    use chebyshev, only: type_cheb
    use useful, only: abortRun, polynomial_interpolation
    use time_schemes, only: type_tscheme
@@ -22,15 +30,14 @@ module checkpoints
 
    private
 
-   public :: read_checkpoint, write_checkpoint_mloc
-
-   class(type_rscheme), pointer :: rscheme_old
+   public :: read_checkpoint, write_checkpoint
 
 contains
 
-   subroutine write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
-              &                     l_stop_time, t_Mloc, xi_Mloc, us_Mloc,    &
-              &                     up_Mloc, dTdt, dxidt, dpsidt)
+   subroutine write_checkpoint(time, tscheme, n_time_step, n_log_file,     &
+              &                l_stop_time, t_Mloc, xi_Mloc, us_Mloc,      &
+              &                up_Mloc, dTdt, dxidt, dpsidt, temp_3D_Rloc, &
+              &                dTdt_3D)
       !
       ! This subroutine writes the checkpoint files using MPI-IO. For the sake
       ! of simplicity we do not include the record marker. Classical Fortran can
@@ -44,17 +51,19 @@ contains
       integer,             intent(in) :: n_time_step
       integer,             intent(in) :: n_log_file
       logical,             intent(in) :: l_stop_time
-      complex(cp),        intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      type(type_tarray),  intent(in) :: dTdt
-      type(type_tarray),  intent(in) :: dxidt
-      type(type_tarray),  intent(in) :: dpsidt
+      complex(cp),         intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: temp_3D_Rloc(lm_max,nRstart3D:nRstop3D)
+      type(type_tarray),   intent(in) :: dTdt
+      type(type_tarray),   intent(in) :: dxidt
+      type(type_tarray),   intent(in) :: dpsidt
+      type(type_tarray),   intent(in) :: dTdt_3D
 
       !-- Local variables
       integer :: info, fh, filetype, n_o
-      integer :: version, header_size
+      integer :: version, header_size, n_fields
       integer :: istat(MPI_STATUS_SIZE)
       integer :: arr_size(2), arr_loc_size(2), arr_start(2)
       integer(kind=MPI_OFFSET_KIND) :: disp
@@ -67,7 +76,7 @@ contains
          rst_file='checkpoint_t='//trim(string)//'.'//tag
       end if
 
-      version = 5
+      version = 6
 
       header_size = SIZEOF_INTEGER+SIZEOF_DEF_REAL+SIZEOF_LOGICAL+       &
       &             len(tscheme%family)+                                 &
@@ -75,7 +84,13 @@ contains
       &             SIZEOF_DEF_REAL+6*SIZEOF_DEF_REAL+3*SIZEOF_INTEGER   &
       &             +2*SIZEOF_INTEGER+2*SIZEOF_DEF_REAL+                 &
       &             len(rscheme%version)+n_r_max*SIZEOF_DEF_REAL+        &
-      &             2*SIZEOF_LOGICAL
+      &             3*SIZEOF_LOGICAL
+
+      if ( l_3D ) then
+         header_size = header_size + 7*SIZEOF_INTEGER+len(rscheme_3D%version) &
+         &             +2*SIZEOF_INTEGER+2*SIZEOF_DEF_REAL+n_r_max_3D*        &
+         &             SIZEOF_DEF_REAL+2*SIZEOF_LOGICAL
+      end if
 
       call MPI_Info_create(info, ierr)
 
@@ -102,8 +117,8 @@ contains
          call MPI_File_Write(fh, version, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, time, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, l_cheb_coll, 1, MPI_LOGICAL, istat, ierr)
-         call MPI_File_Write(fh, tscheme%family, len(tscheme%family), MPI_CHARACTER, &
-              &              istat, ierr)
+         call MPI_File_Write(fh, tscheme%family, len(tscheme%family),  &
+              &              MPI_CHARACTER, istat, ierr)
          call MPI_File_Write(fh, tscheme%norder_exp, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, tscheme%norder_imp_lin, 1, MPI_INTEGER, istat, ierr)
          call MPI_File_Write(fh, tscheme%norder_imp, 1, MPI_INTEGER, istat, ierr)
@@ -132,6 +147,31 @@ contains
 
          call MPI_File_Write(fh, l_heat, 1, MPI_LOGICAL, istat, ierr)
          call MPI_File_Write(fh, l_chem, 1, MPI_LOGICAL, istat, ierr)
+
+         call MPI_File_Write(fh, l_3D, 1, MPI_LOGICAL, istat, ierr)
+
+         if ( l_3D ) then
+            call MPI_File_Write(fh, n_r_max_3D, 1, MPI_INTEGER, istat, ierr)
+            call MPI_File_Write(fh, n_theta_max, 1, MPI_INTEGER, istat, ierr)
+            call MPI_File_Write(fh, n_phi_tot_3D, 1, MPI_INTEGER, istat, ierr)
+            call MPI_File_Write(fh, l_max, 1, MPI_INTEGER, istat, ierr)
+            call MPI_File_Write(fh, m_max_3D, 1, MPI_INTEGER, istat, ierr)
+            call MPI_File_Write(fh, minc_3D, 1, MPI_INTEGER, istat, ierr)
+            call MPI_File_Write(fh, lm_max, 1, MPI_INTEGER, istat, ierr)
+
+            call MPI_File_Write(fh, rscheme_3D%version, len(rscheme_3D%version), &
+                 &              MPI_CHARACTER, istat, ierr)
+            call MPI_File_Write(fh, rscheme_3D%n_max, 1, MPI_INTEGER, istat, ierr)
+            call MPI_File_Write(fh, rscheme_3D%order_boundary, 1, MPI_INTEGER, &
+                 &              istat, ierr)
+            !-- Mapping for the 3-D grid: disabled for now -- !
+            call MPI_File_Write(fh, 1.0_cp, 1, MPI_DEF_REAL, istat, ierr)
+            call MPI_File_Write(fh, 0.0_cp, 1, MPI_DEF_REAL, istat, ierr)
+            call MPI_File_Write(fh, r_3D, n_r_max_3D, MPI_DEF_REAL, istat, ierr)
+            call MPI_File_Write(fh, l_heat_3D, 1, MPI_LOGICAL, istat, ierr)
+            call MPI_File_Write(fh, l_mag, 1, MPI_LOGICAL, istat, ierr)
+         end if
+
       end if
 
       arr_size(1) = n_m_max
@@ -155,19 +195,23 @@ contains
            &                  istat, ierr)
       call MPI_File_Write_all(fh, up_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
            &                  istat, ierr)
+      n_fields=2
 
       if ( tscheme%family == 'MULTISTEP' ) then
          do n_o=2,tscheme%norder_exp
             call MPI_File_Write_all(fh, dpsidt%expl(:,:,n_o), nm_per_rank*n_r_max, &
                  &                  MPI_DEF_COMPLEX, istat, ierr)
+            n_fields = n_fields+1
          end do
          do n_o=2,tscheme%norder_imp_lin-1
             call MPI_File_Write_all(fh, dpsidt%impl(:,:,n_o), nm_per_rank*n_r_max, &
                  &                  MPI_DEF_COMPLEX, istat, ierr)
+            n_fields = n_fields+1
          end do
          do n_o=2,tscheme%norder_imp-1
             call MPI_File_Write_all(fh, dpsidt%old(:,:,n_o), nm_per_rank*n_r_max, &
                  &                  MPI_DEF_COMPLEX, istat, ierr)
+            n_fields = n_fields+1
          end do
       end if
 
@@ -175,19 +219,23 @@ contains
       if ( l_heat ) then
          call MPI_File_Write_all(fh, t_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
               &                  istat, ierr)
+         n_fields = n_fields+1
 
          if ( tscheme%family == 'MULTISTEP' ) then
             do n_o=2,tscheme%norder_exp
                call MPI_File_Write_all(fh, dTdt%expl(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+               n_fields = n_fields+1
             end do
             do n_o=2,tscheme%norder_imp_lin-1
                call MPI_File_Write_all(fh, dTdt%impl(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+               n_fields = n_fields+1
             end do
             do n_o=2,tscheme%norder_imp-1
                call MPI_File_Write_all(fh, dTdt%old(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+               n_fields = n_fields+1
             end do
          end if
 
@@ -197,24 +245,72 @@ contains
       if ( l_chem ) then
          call MPI_File_Write_all(fh, xi_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
               &                  istat, ierr)
+         n_fields = n_fields+1
 
          if ( tscheme%family == 'MULTISTEP' ) then
             do n_o=2,tscheme%norder_exp
                call MPI_File_Write_all(fh, dxidt%expl(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+               n_fields = n_fields+1
             end do
             do n_o=2,tscheme%norder_imp_lin-1
                call MPI_File_Write_all(fh, dxidt%impl(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+               n_fields = n_fields+1
             end do
             do n_o=2,tscheme%norder_imp-1
                call MPI_File_Write_all(fh, dxidt%old(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+               n_fields = n_fields+1
             end do
          end if
 
       end if
 
+      if ( l_heat_3D ) then
+         call MPI_Type_Free(filetype, ierr)
+         arr_size(1) = lm_max
+         arr_size(2) = n_r_max_3D
+         arr_loc_size(1) = lm_max
+         arr_loc_size(2) = nR_per_rank_3D
+         arr_start(1) = 0
+         arr_start(2) = nRStart3D-1
+         call MPI_Type_Create_Subarray(2,arr_size, arr_loc_size, arr_start, &
+              &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,  &
+              &                        filetype, ierr)
+         call MPI_Type_Commit(filetype, ierr)
+
+         !-- Set the view after the fields
+         disp = disp+n_fields*(n_m_max*n_r_max)*SIZEOF_DEF_COMPLEX
+         call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, &
+              &                 filetype, "native", info, ierr)
+
+         call MPI_File_Write_all(fh, temp_3D_Rloc, lm_max*nR_per_rank_3D,  &
+              &                  MPI_DEF_COMPLEX, istat, ierr)
+
+         if ( tscheme%family == 'MULTISTEP' ) then
+            do n_o=2,tscheme%norder_exp
+               call transp_lm2r(lm2r_fields, dTdt_3D%expl(:,:,n_o), &
+                    &           work_3D_Rloc)
+               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end do
+            do n_o=2,tscheme%norder_imp_lin-1
+               call transp_lm2r(lm2r_fields, dTdt_3D%impl(:,:,n_o), &
+                    &           work_3D_Rloc)
+               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end do
+            do n_o=2,tscheme%norder_imp-1
+               call transp_lm2r(lm2r_fields, dTdt_3D%old(:,:,n_o), &
+                    &           work_3D_Rloc)
+               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end do
+         end if
+      end if
+
+      call MPI_Type_Free(filetype, ierr)
       call MPI_Info_free(info, ierr)
       call MPI_File_close(fh, ierr)
 
@@ -235,10 +331,10 @@ contains
 
       end if
 
-   end subroutine write_checkpoint_mloc
+   end subroutine write_checkpoint
 !------------------------------------------------------------------------------
    subroutine read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, dpsidt, &
-              &               dTdt, dxidt, time, tscheme)
+              &               dTdt, dxidt, temp_3D_LMloc, dTdt_3D, time, tscheme)
 
       !-- Output variables
       class(type_tscheme), intent(inout) :: tscheme
@@ -246,16 +342,20 @@ contains
       complex(cp),         intent(out) :: up_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),         intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),         intent(out) :: xi_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),         intent(out) :: temp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
       type(type_tarray),   intent(inout) :: dpsidt
       type(type_tarray),   intent(inout) :: dTdt
       type(type_tarray),   intent(inout) :: dxidt
+      type(type_tarray),   intent(inout) :: dTdt_3D
       real(cp),            intent(out) :: time
 
       !-- Local variables
+      class(type_rscheme), pointer :: rscheme_old
+      class(type_rscheme), pointer :: rscheme_3D_old
       logical :: startfile_does_exist, l_heat_old, l_chem_old
       integer :: n_start_file, version
       integer,     allocatable :: m2idx_old(:)
-      real(cp),    allocatable :: r_old(:)
+      real(cp),    allocatable :: r_old(:), r_3D_old(:)
       complex(cp), allocatable :: work(:,:), work_old(:,:)
       real(cp) :: ra_old, raxi_old, sc_old, pr_old, radratio_old, ek_old
       integer :: n_r_max_old, m_max_old, minc_old, n_m_max_old
@@ -264,8 +364,12 @@ contains
       real(cp) :: ratio1, ratio2
       integer :: n_in, n_in_2, m, n_m, n_r_max_max, m_max_max
       integer :: norder_imp_lin_old, norder_exp_old, n_o, norder_imp_old
-      logical :: l_coll_old
+      logical :: l_coll_old, l_3D_old, l_heat_3D_old, l_mag_old
       real(cp), allocatable :: dt_array_old(:)
+      integer, allocatable :: lm2lmo(:)
+      integer :: n_r_max_3D_old, n_theta_max_old, n_phi_tot_old
+      integer :: n_r_max_3D_max
+      integer :: l_max_old, m_max_3D_old, minc_3D_old, lm_max_old
 
       if ( rank == 0 ) then
          inquire(file=start_file, exist=startfile_does_exist)
@@ -313,7 +417,7 @@ contains
             dt_array_old(:)=0.0_cp
             read(n_start_file) dt_array_old(1:norder_exp_old)
             tscheme_family_old = 'MULTISTEP'
-         else if ( version == 5 ) then
+         else if ( version == 5 .or. version == 6 ) then
             read(n_start_file) time
             read(n_start_file) l_coll_old
             read(n_start_file) tscheme_family_old
@@ -396,8 +500,46 @@ contains
          allocate( work_old(n_m_max_old, n_r_max_old) )
          allocate(     work(n_m_max, n_r_max) )
 
+         l_heat_3D_old = .false.
+         l_mag_old = .false.
+         if ( version == 6 ) then
+            read(n_start_file) l_3D_old
+         else
+            l_3D_old = .false.
+         end if
+
+         if ( l_3D_old ) then
+            read(n_start_file) n_r_max_3D_old, n_theta_max_old, n_phi_tot_old
+            n_r_max_3D_max = max(n_r_max_3D_old, n_r_max_3D)
+            read(n_start_file) l_max_old, m_max_3D_old, minc_3D_old, lm_max_old
+            read(n_start_file) rscheme_version_old, n_in, n_in_2, ratio1, ratio2
+            if ( rscheme_version_old == 'cheb' ) then
+               allocate ( type_cheb :: rscheme_3D_old )
+            end if
+
+            call rscheme_3D_old%initialize(lmStart, lmStop, n_r_max_3D_old, n_in, &
+                 &                         n_in_2,l_cheb_coll=.true.,             &
+                 &                         no_work_array=.true.)
+
+            if ( rscheme_3D%version /= rscheme_3D_old%version ) &
+               & write(*,'(/,'' ! New (3D) radial scheme (old/new):'',2A4)') &
+               & rscheme_3D_old%version, rscheme_3D%version
+
+            allocate( r_3D_old(n_r_max_3D_old) )
+            read(n_start_file) r_3D_old
+            read(n_start_file) l_heat_3D_old, l_mag_old
+         end if
+
+         if ( l_3D_old .and. l_3D ) then
+            allocate( lm2lmo(lm_max) )
+            call get_lm2lmo(lm2lmo, lm_max, l_max_old, minc_3D_old)
+         else
+            allocate( lm2lmo(1) )
+         end if
+
       else
          allocate( r_old(1), work_old(1,1), work(1,1), m2idx_old(1) )
+         allocate( r_3D_old(1), lm2lmo(1) )
       end if
 
       call MPI_Barrier(MPI_COMM_WORLD, ierr)
@@ -418,6 +560,10 @@ contains
       call MPI_Bcast(l_heat_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_chem_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_coll_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(l_heat_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(l_3D_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(l_heat_3D_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(l_mag_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
 
       !-- Fill the time step array
       do n_o=1,size(tscheme%dt)
@@ -472,18 +618,18 @@ contains
       !-- us
       if ( rank == 0 ) then
          read( n_start_file ) work_old
-         call map_field(work_old, work, r_old, m2idx_old, scale_u,  &
-              &         n_m_max_old, n_r_max_old, n_r_max_max,      &
-              &         lBc=.false.,l_phys_space=.true.)
+         call map_field(work_old, work, rscheme_old, r_old, m2idx_old, scale_u, &
+              &         n_m_max_old, n_r_max_old, n_r_max_max, lBc=.false.,     &
+              &         l_phys_space=.true.)
       end if
       call scatter_from_rank0_to_mloc(work, us_Mloc)
 
       !-- uphi
       if ( rank == 0 ) then
          read( n_start_file ) work_old
-         call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-              &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-              &         lBc=.false.,l_phys_space=.true.)
+         call map_field(work_old, work, rscheme_old, r_old, m2idx_old, scale_u, &
+              &         n_m_max_old, n_r_max_old, n_r_max_max, lBc=.false.,     &
+              &         l_phys_space=.true.)
       end if
       call scatter_from_rank0_to_mloc(work, up_Mloc)
 
@@ -492,9 +638,9 @@ contains
          do n_o=2,norder_exp_old
             if ( rank == 0 ) then
                read( n_start_file ) work_old
-               call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-                    &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                    &         lBc=.true.,l_phys_space=l_coll_old)
+               call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
+                    &         scale_u, n_m_max_old, n_r_max_old, n_r_max_max, &
+                    &         lBc=.true., l_phys_space=l_coll_old)
             end if
             if ( n_o <= tscheme%norder_exp ) then
                call scatter_from_rank0_to_mloc(work, dpsidt%expl(:,:,n_o))
@@ -505,9 +651,9 @@ contains
          do n_o=2,norder_imp_lin_old-1
             if ( rank == 0 ) then
                read( n_start_file ) work_old
-               call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-                    &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                    &         lBc=.true.,l_phys_space=l_coll_old)
+               call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
+                    &         scale_u, n_m_max_old, n_r_max_old, n_r_max_max, &
+                    &         lBc=.true., l_phys_space=l_coll_old)
             end if
             if ( n_o <= tscheme%norder_imp_lin-1 ) then
                call scatter_from_rank0_to_mloc(work, dpsidt%impl(:,:,n_o))
@@ -517,9 +663,9 @@ contains
             do n_o=2,norder_imp_old-1
                if ( rank == 0 ) then
                   read( n_start_file ) work_old
-                  call map_field(work_old, work, r_old, m2idx_old, scale_u, &
-                       &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                       &         lBc=.false.,l_phys_space=l_coll_old)
+                  call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
+                       &         scale_u, n_m_max_old, n_r_max_old, n_r_max_max, &
+                       &         lBc=.false., l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%norder_imp-1 ) then
                   call scatter_from_rank0_to_mloc(work, dpsidt%old(:,:,n_o))
@@ -532,9 +678,9 @@ contains
          !-- Temperature
          if ( rank == 0 ) then
             read( n_start_file ) work_old
-            call map_field(work_old, work, r_old, m2idx_old, scale_t, &
-                 &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                 &         lBc=.false.,l_phys_space=.true.)
+            call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
+                 &         scale_t, n_m_max_old, n_r_max_old, n_r_max_max, &
+                 &         lBc=.false., l_phys_space=.true.)
          end if
          call scatter_from_rank0_to_mloc(work, temp_Mloc)
 
@@ -543,9 +689,9 @@ contains
             do n_o=2,norder_exp_old
                if ( rank == 0 ) then
                   read( n_start_file ) work_old
-                  call map_field(work_old, work, r_old, m2idx_old, scale_t, &
-                       &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                       &         lBc=.true.,l_phys_space=l_coll_old)
+                  call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
+                       &         scale_t, n_m_max_old, n_r_max_old, n_r_max_max, &
+                       &         lBc=.true., l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%norder_exp ) then
                   call scatter_from_rank0_to_mloc(work, dTdt%expl(:,:,n_o))
@@ -556,9 +702,9 @@ contains
             do n_o=2,norder_imp_lin_old-1
                if ( rank == 0 ) then
                   read( n_start_file ) work_old
-                  call map_field(work_old, work, r_old, m2idx_old, scale_t, &
-                       &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                       &         lBc=.true.,l_phys_space=l_coll_old)
+                  call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
+                       &         scale_t, n_m_max_old, n_r_max_old, n_r_max_max, &
+                       &         lBc=.true., l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%norder_imp_lin-1 ) then
                   call scatter_from_rank0_to_mloc(work, dTdt%impl(:,:,n_o))
@@ -568,9 +714,10 @@ contains
                do n_o=2,norder_imp_old-1
                   if ( rank == 0 ) then
                      read( n_start_file ) work_old
-                     call map_field(work_old, work, r_old, m2idx_old, scale_t, &
-                          &         n_m_max_old, n_r_max_old, n_r_max_max,     &
-                          &         lBc=.false.,l_phys_space=l_coll_old)
+                     call map_field(work_old, work, rscheme_old, r_old, m2idx_old,&
+                          &         scale_t, n_m_max_old, n_r_max_old,            &
+                          &         n_r_max_max, lBc=.true.,                      &
+                          &         l_phys_space=l_coll_old)
                   end if
                   if ( n_o <= tscheme%norder_imp-1 ) then
                      call scatter_from_rank0_to_mloc(work, dTdt%old(:,:,n_o))
@@ -585,9 +732,9 @@ contains
          !-- Chemical composition
          if ( rank == 0 ) then
             read( n_start_file ) work_old
-            call map_field(work_old, work, r_old, m2idx_old, scale_xi, &
-                 &         n_m_max_old, n_r_max_old, n_r_max_max,      &
-                 &         lBc=.false.,l_phys_space=.true.)
+            call map_field(work_old, work, rscheme_old, r_old, m2idx_old,   &
+                 &         scale_xi, n_m_max_old, n_r_max_old, n_r_max_max, &
+                 &         lBc=.false., l_phys_space=.true.)
          end if
          call scatter_from_rank0_to_mloc(work, xi_Mloc)
 
@@ -596,9 +743,9 @@ contains
             do n_o=2,norder_exp_old
                if ( rank == 0 ) then
                   read( n_start_file ) work_old
-                  call map_field(work_old, work, r_old, m2idx_old, scale_xi, &
-                       &         n_m_max_old, n_r_max_old, n_r_max_max,      &
-                       &         lBc=.true.,l_phys_space=l_coll_old)
+                  call map_field(work_old, work, rscheme_old, r_old, m2idx_old,   &
+                       &         scale_xi, n_m_max_old, n_r_max_old, n_r_max_max, &
+                       &         lBc=.true., l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%norder_exp ) then
                   call scatter_from_rank0_to_mloc(work, dxidt%expl(:,:,n_o))
@@ -609,9 +756,9 @@ contains
             do n_o=2,norder_imp_lin_old-1
                if ( rank == 0 ) then
                   read( n_start_file ) work_old
-                  call map_field(work_old, work, r_old, m2idx_old, scale_xi, &
-                       &         n_m_max_old, n_r_max_old, n_r_max_max,      &
-                       &         lBc=.true.,l_phys_space=l_coll_old)
+                  call map_field(work_old, work, rscheme_old, r_old, m2idx_old,   &
+                       &         scale_xi, n_m_max_old, n_r_max_old, n_r_max_max, &
+                       &         lBc=.true., l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%norder_imp_lin-1 ) then
                   call scatter_from_rank0_to_mloc(work, dxidt%impl(:,:,n_o))
@@ -621,9 +768,10 @@ contains
                do n_o=2,norder_imp_old-1
                   if ( rank == 0 ) then
                      read( n_start_file ) work_old
-                     call map_field(work_old, work, r_old, m2idx_old, scale_xi, &
-                          &         n_m_max_old, n_r_max_old, n_r_max_max,      &
-                          &         lBc=.false.,l_phys_space=l_coll_old)
+                     call map_field(work_old, work, rscheme_old, r_old, m2idx_old,&
+                          &         scale_xi, n_m_max_old, n_r_max_old,           &
+                          &         n_r_max_max, lBc=.false.,                     &
+                          &         l_phys_space=l_coll_old)
                   end if
                   if ( n_o <= tscheme%norder_imp-1 ) then
                      call scatter_from_rank0_to_mloc(work, dxidt%old(:,:,n_o))
@@ -634,26 +782,177 @@ contains
 
       end if
 
+      if ( l_3D ) then
+         if ( l_heat_3D_old ) then
+            deallocate( work_old, work )
+            allocate( work_old(lm_max_old,n_r_max_3D_old) )
+            allocate( work(lm_max,n_r_max_3D) )
+            if ( rank == 0 ) then
+               read( n_start_file ) work_old
+               call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
+                    &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
+                    &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
+            end if
+            call scatter_from_rank0_to_lmloc(work, temp_3D_LMloc)
+
+!#ifdef TOTO
+            if ( tscheme_family_old == 'MULTISTEP' ) then
+               !-- Explicit time step
+               do n_o=2,norder_exp_old
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,  &
+                          &            lm2lmo,  scale_t, lm_max_old,              &
+                          &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
+                          &            l_phys_space=.true.)
+                  end if
+                  if ( n_o <= tscheme%norder_exp ) then
+                     call scatter_from_rank0_to_lmloc(work, dTdt_3D%expl(:,:,n_o))
+                  end if
+               end do
+
+               !-- Implicit time step
+               do n_o=2,norder_imp_lin_old-1
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,  &
+                          &            lm2lmo,  scale_t, lm_max_old,              &
+                          &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
+                          &            l_phys_space=.true.)
+                  end if
+                  if ( n_o <= tscheme%norder_imp_lin-1 ) then
+                     call scatter_from_rank0_to_lmloc(work, dTdt_3D%impl(:,:,n_o))
+                  end if
+               end do
+
+               do n_o=2,norder_imp_old-1
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old, &
+                          &            lm2lmo,  scale_t, lm_max_old,             &
+                          &            n_r_max_3D_old, n_r_max_3D_max,           &
+                          &            lBc=.false., l_phys_space=.true.)
+                  end if
+                  if ( n_o <= tscheme%norder_imp-1 ) then
+                     call scatter_from_rank0_to_lmloc(work, dTdt_3D%old(:,:,n_o))
+                  end if
+               end do
+            end if
+!#endif TOTO
+         else
+            call abortRun('2-D to 3-D Not implemented yet')
+         end if
+      end if
+
       if ( rank == 0 ) then
          call rscheme_old%finalize(no_work_array=.true.)
+         if ( l_3D ) call rscheme_3D_old%finalize(no_work_array=.true.)
       end if
-      deallocate( r_old, work_old, work, m2idx_old )
+      deallocate( r_old, work_old, work, m2idx_old, lm2lmo )
+
 
    end subroutine read_checkpoint
 !------------------------------------------------------------------------------
-   subroutine map_field(field_old, field_new, r_old, m2idx_old, scale_field, &
-              &         n_m_max_old, n_r_max_old, n_r_max_max, lBc, l_phys_space)
+   subroutine get_lm2lmo(lm2lmo, lm_max, l_max_old, minc_old)
+
+      integer, intent(in) :: lm_max
+      integer, intent(in) :: l_max_old
+      integer, intent(in) :: minc_old
+
+      !-- Output variable
+      integer, intent(out) :: lm2lmo(lm_max)
+
+      integer :: lm, l, m, lo, mo, lmo
+
+      do lm=1,lm_max
+         l = st_map%lm2l(lm)
+         m = st_map%lm2m(lm)
+         lm2lmo(lm) = -1 ! -1 means there's no data
+         lmo = 0
+         do mo=0,l_max_old,minc_old
+            do lo=mo,l_max_old
+               lmo=lmo+1
+               if ( lo==l .and. mo==m ) then
+                  lm2lmo(lm)=lmo ! data found in checkpoint
+                  cycle
+               end if
+            end do
+         end do
+      end do
+
+   end subroutine get_lm2lmo
+!------------------------------------------------------------------------------
+   subroutine map_field_3D(field_old, field_new, rscheme_old, r_3D_old,     &
+              &            lm2lmo, scale_field, lm_max_old, n_r_max_3D_old, &
+              &            n_r_max_3D_max, lBc, l_phys_space)
 
       !-- Input variables:
-      integer,     intent(in) :: n_r_max_old
-      integer,     intent(in) :: n_m_max_old
-      integer,     intent(in) :: n_r_max_max
-      complex(cp), intent(in) :: field_old(n_m_max_old, n_r_max_old)
-      real(cp),    intent(in) :: r_old(n_r_max_old)
-      integer,     intent(in) :: m2idx_old(0:)
-      real(cp),    intent(in) :: scale_field
-      logical,     intent(in) :: lBc
-      logical,     intent(in) :: l_phys_space
+      class(type_rscheme), intent(in) :: rscheme_old
+      integer,             intent(in) :: n_r_max_3D_old
+      integer,             intent(in) :: lm_max_old
+      complex(cp),         intent(in) :: field_old(lm_max_old,n_r_max_3D_old)
+      real(cp),            intent(in) :: scale_field
+      real(cp),            intent(in) :: r_3D_old(n_r_max_3D_old)
+      integer,             intent(in) :: lm2lmo(lm_max)
+      integer,             intent(in) :: n_r_max_3D_max
+      logical,             intent(in) :: lBc
+      logical,             intent(in) :: l_phys_space
+
+      !-- Output variable:
+      complex(cp), intent(out) :: field_new(lm_max, n_r_max_3D)
+
+      !-- Local variables:
+      integer :: lm, lmo, n_r
+      complex(cp) :: radial_data(n_r_max_3D_max)
+
+      do lm=1,lm_max
+
+         lmo = lm2lmo(lm)
+
+         if ( lmo > 0 ) then
+            if ( n_r_max_3D /= n_r_max_3D_old .or.         &
+            &    rscheme_3D%order_boundary /= rscheme_old%order_boundary&
+            &    .or. rscheme_3D%version /= rscheme_old%version ) then
+
+               do n_r=1,n_r_max_3D_old  ! copy on help arrays
+                  radial_data(n_r)=field_old(lm,n_r)
+               end do
+               call map_field_r(radial_data, rscheme_old, r_3D_old,  &
+                    &           n_r_max_3D_old, n_r_max_3D_max, lBc, &
+                    &           l_phys_space)
+               do n_r=1,n_r_max_3D
+                  field_new(lm,n_r)=scale_field*radial_data(n_r)
+               end do
+            else
+               do n_r=1,n_r_max_3D
+                  field_new(lm,n_r)=scale_field*field_old(lm,n_r)
+               end do
+            end if
+         else
+            do n_r=1,n_r_max_3D
+               field_new(lm,n_r)=zero
+            end do
+         end if
+
+      end do
+
+   end subroutine map_field_3D
+!------------------------------------------------------------------------------
+   subroutine map_field(field_old, field_new, rscheme_old, r_old, m2idx_old, &
+              &         scale_field, n_m_max_old, n_r_max_old, n_r_max_max,  &
+              &         lBc, l_phys_space)
+
+      !-- Input variables:
+      class(type_rscheme), intent(in) :: rscheme_old
+      integer,             intent(in) :: n_r_max_old
+      integer,             intent(in) :: n_m_max_old
+      integer,             intent(in) :: n_r_max_max
+      complex(cp),         intent(in) :: field_old(n_m_max_old, n_r_max_old)
+      real(cp),            intent(in) :: r_old(n_r_max_old)
+      integer,             intent(in) :: m2idx_old(0:)
+      real(cp),            intent(in) :: scale_field
+      logical,             intent(in) :: lBc
+      logical,             intent(in) :: l_phys_space
 
       !-- Output variable:
       complex(cp), intent(out) :: field_new(n_m_max, n_r_max)
@@ -675,8 +974,8 @@ contains
                do n_r=1,n_r_max_old
                   radial_data(n_r)=field_old(n_m_old,n_r)
                end do
-               call map_field_r(radial_data, r_old, n_r_max_old,n_r_max_max, &
-                    &           lBc,l_phys_space)
+               call map_field_r(radial_data, rscheme_old, r_old, n_r_max_old,  &
+                    &           n_r_max_max, lBc,l_phys_space)
                do n_r=1,n_r_max
                   field_new(n_m, n_r) = scale_field*radial_data(n_r)
                end do
@@ -695,12 +994,13 @@ contains
 
    end subroutine map_field
 !------------------------------------------------------------------------------
-   subroutine map_field_r(radial_data,r_old,n_r_max_old,n_r_max_max,lBc, &
-              &           l_phys_space)
+   subroutine map_field_r(radial_data, rscheme_old, r_old, n_r_max_old, &
+              &           n_r_max_max,lBc, l_phys_space)
 
       !-- Input variables
-      integer,  intent(in) :: n_r_max_old
-      integer,  intent(in) :: n_r_max_max
+      class(type_rscheme), intent(in) :: rscheme_old
+      integer,             intent(in) :: n_r_max_old
+      integer,             intent(in) :: n_r_max_max
       real(cp), intent(in) :: r_old(n_r_max_old)
       logical,  intent(in) :: lBc
       logical,  intent(in) :: l_phys_space

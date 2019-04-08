@@ -99,6 +99,7 @@ module namelists
    real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
    logical,  public :: l_3D            ! Require 3-D functions
    logical,  public :: l_heat_3D       ! 3-D treatment of temperature
+   logical,  public :: l_mag
    logical,  public :: l_heat
    logical,  public :: l_chem
    logical,  public :: l_AB1
@@ -151,6 +152,9 @@ contains
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
       &                       l_vphi_balance,l_vort_balance,bl_cut,        &
       &                       l_2D_spectra, l_2D_SD, l_corr
+
+
+      l_mag = .false. ! To be removed when the magnetic field will be there
 
    !namelist/control/tag,n_times
 

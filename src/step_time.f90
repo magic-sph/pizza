@@ -190,7 +190,7 @@ contains
          call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame, &
               &             l_vphi_bal_write, l_stop_time, us_Mloc,  up_Mloc,  &
               &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
-              &             dpsidt, dTdt, dxidt)
+              &             dpsidt, dTdt, dxidt, temp_3D_Rloc, dTdt_3D)
          if ( l_3D ) then
             call write_outputs_3D(time, tscheme, l_log, l_stop_time, temp_3D_LMloc)
          end if
@@ -299,8 +299,7 @@ contains
 
                if ( l_3D ) then
                   runStart = MPI_Wtime()
-                  call finish_explicit_assembly_3D(temp_3D_LMloc, dVrT_3D_LMloc, &
-                       &                           dTdt_3D, tscheme)
+                  call finish_explicit_assembly_3D(dVrT_3D_LMloc, dTdt_3D, tscheme)
                   runStop = MPI_Wtime()
                   if (runStop>runStart) then
                      timers%lm_loop=timers%lm_loop+(runStop-runStart)

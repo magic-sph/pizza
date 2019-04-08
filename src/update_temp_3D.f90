@@ -272,10 +272,9 @@ contains
 
    end subroutine update_temp_3D
 !-------------------------------------------------------------------------------
-   subroutine finish_exp_temp_3D(temp_3D, dVrT_LMloc, dtemp_exp_last)
+   subroutine finish_exp_temp_3D(dVrT_LMloc, dtemp_exp_last)
 
       !-- Input variables
-      complex(cp), intent(in) :: temp_3D(llm:ulm,n_r_max_3D)
       complex(cp), intent(inout) :: dVrT_LMloc(llm:ulm,n_r_max_3D)
 
       !-- Output variables

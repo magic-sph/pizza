@@ -33,7 +33,8 @@ module communications
    &         gather_from_mloc_to_rank0, scatter_from_rank0_to_mloc, &
    &         finalize_communications, reduce_radial_on_rank,        &
    &         my_reduce_mean, my_allreduce_maxloc, transp_lm2r,      &
-   &         transp_r2lm, allgather_from_Rloc
+   &         transp_r2lm, allgather_from_Rloc,                      &
+   &         scatter_from_rank0_to_lmloc
 
 contains
 
@@ -556,6 +557,61 @@ contains
       end do
 
    end subroutine scatter_from_rank0_to_mloc
+!------------------------------------------------------------------------------
+   subroutine scatter_from_rank0_to_lmloc(arr_full, arr_LMloc)
+
+      !-- Input variable:
+      complex(cp), intent(in) :: arr_full(lm_max, n_r_max_3D)
+
+      !-- Output variable:
+      complex(cp), intent(out) :: arr_LMloc(lmStart:lmStop, n_r_max_3D)
+
+      !-- Local variables:
+      complex(cp), allocatable :: rbuff(:), sbuff(:)
+      integer, allocatable :: scounts(:)
+      integer, allocatable :: sdisp(:)
+      integer :: p, ii, n_r, lm, l, m, lm_st
+
+      allocate( rbuff(nlm_per_rank*n_r_max_3D), sbuff(lm_max*n_r_max_3D) )
+      allocate ( scounts(0:n_procs-1), sdisp(0:n_procs-1) )
+
+      do p=0,n_procs-1
+         scounts(p)=n_r_max_3D*lm_balance(p)%n_per_rank
+      end do
+
+      sdisp(0)=0
+      do p=1,n_procs-1
+         sdisp(p)=sdisp(p-1)+scounts(p-1)
+      end do
+
+      if ( rank == 0 ) then
+         do p = 0, n_procs-1
+            ii = sdisp(p)+1
+            do n_r=1,n_r_max_3D
+               do lm=lm_balance(p)%nStart,lm_balance(p)%nStop
+                  l = lo_map%lm2l(lm)
+                  m = lo_map%lm2m(lm)
+                  lm_st = st_map%lm2(l,m)
+                  sbuff(ii) = arr_full(lm_st,n_r)
+                  ii=ii+1
+               end do
+            end do
+         end do
+      end if
+
+      call MPI_Scatterv(sbuff, scounts, sdisp, MPI_DEF_COMPLEX,             &
+           &            rbuff, nlm_per_rank*n_r_max_3D, MPI_DEF_COMPLEX, 0, &
+           &            MPI_COMM_WORLD, ierr)
+
+      ii = 1
+      do n_r=1,n_r_max_3D
+         do lm=lmStart,lmStop
+            arr_LMloc(lm,n_r)=rbuff(ii)
+            ii = ii +1
+         end do
+      end do
+
+   end subroutine scatter_from_rank0_to_lmloc
 !------------------------------------------------------------------------------
    subroutine reduce_radial_on_rank(arr_dist, irank)
 

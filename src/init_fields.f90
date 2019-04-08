@@ -52,7 +52,7 @@ contains
 
       if ( l_start_file ) then
          call read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, dpsidt, &
-              &               dTdt, dxidt, time, tscheme)
+              &               dTdt, dxidt, temp_3D_LMloc, dTdt_3D, time, tscheme)
 
          if ( l_reset_t ) time = 0.0_cp
 

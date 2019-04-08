@@ -37,6 +37,7 @@ module fields
    complex(cp), allocatable, public :: dtemp_3D_LMloc(:,:)
    complex(cp), allocatable, public :: work_LMloc(:,:)
    complex(cp), allocatable, public :: temp_3D_Rloc(:,:)
+   complex(cp), allocatable, public :: work_3D_Rloc(:,:)
 
    !-- 3-D velocity in the physical space
    real(cp), allocatable, public :: ur_3D_Rloc(:,:,:)
@@ -151,14 +152,16 @@ contains
          allocate( dtemp_3D_LMloc(llm:ulm,n_r_max_3D) )
          allocate( work_LMloc(llm:ulm,n_r_max_3D) )
          allocate( temp_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
+         allocate( work_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
          bytes_allocated = bytes_allocated + &
          &                 2*(ulm-llm+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
          bytes_allocated = bytes_allocated + &
-         &                 lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
+         &                 2*lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
          temp_3D_LMloc(:,:) =zero
          dtemp_3D_LMloc(:,:)=zero
          work_LMloc(:,:)    =zero
          temp_3D_Rloc(:,:)  =zero
+         work_3D_Rloc(:,:)  =zero
 
          allocate( ur_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
          allocate( ut_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
@@ -168,6 +171,8 @@ contains
          ur_3D_Rloc(:,:,:)=0.0_cp
          ut_3D_Rloc(:,:,:)=0.0_cp
          up_3D_Rloc(:,:,:)=0.0_cp
+      else
+         allocate( temp_3D_Rloc(1,1), temp_3D_LMloc(1,1) )
       end if
 
    end subroutine initialize_fields
@@ -176,7 +181,8 @@ contains
 
       if ( l_heat_3D ) then
          deallocate( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc )
-         deallocate( work_LMloc, temp_3D_LMloc, dtemp_3D_LMloc, temp_3D_Rloc )
+         deallocate( work_LMloc, temp_3D_LMloc, dtemp_3D_LMloc )
+         deallocate( work_3D_Rloc, temp_3D_Rloc )
       end if
       if ( l_heat ) then
          deallocate( temp_Mloc, dtemp_Mloc, temp_Rloc )

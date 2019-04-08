@@ -15,15 +15,16 @@ module outputs
        &                l_vort_balance, l_corr, l_heat, l_chem, ChemFac
    use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
+   use truncation_3D, only: lm_max
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
        &                       beta, ekpump, or1, oheight, or2, xicond,  &
        &                       dxicond
    use blocking, only: nMstart, nMstop, nRstart, nRstop, l_rank_has_m0, &
-       &               nm_per_rank, m_balance
+       &               nm_per_rank, m_balance, nRstart3D, nRstop3D
    use integration, only: rInt_R, simps
    use useful, only: round_off, cc2real, cc22real, getMSD2, abortRun
    use constants, only: pi, two, four, surf, vol_otc, one
-   use checkpoints, only: write_checkpoint_mloc
+   use checkpoints, only: write_checkpoint
    use output_frames, only: write_snapshot_mloc
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
@@ -226,7 +227,7 @@ contains
    subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame, &
               &             l_vphi_bal_write, l_stop_time,  us_Mloc, up_Mloc,  &
               &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
-              &             dpsidt, dTdt, dxidt)
+              &             dpsidt, dTdt, dxidt, temp_3D_Rloc, dTdt_3D)
 
       !-- Input variables
       real(cp),            intent(in) :: time
@@ -241,11 +242,13 @@ contains
       complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: temp_3D_Rloc(lm_max,nRstart3D:nRstop3D)
       complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: dxi_Mloc(nMstart:nMstop,n_r_max)
       type(type_tarray),   intent(in) :: dpsidt
       type(type_tarray),   intent(in) :: dTdt
+      type(type_tarray),   intent(in) :: dTdt_3D
       type(type_tarray),   intent(in) :: dxidt
 
       !-- Local variable
@@ -260,9 +263,10 @@ contains
 
       !-- Write checkpoints
       if ( l_rst ) then
-         call write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
-              &                     l_stop_time, temp_Mloc, xi_Mloc, us_Mloc, &
-              &                     up_Mloc, dTdt, dxidt, dpsidt)
+         call write_checkpoint(time, tscheme, n_time_step, n_log_file,     &
+              &                l_stop_time, temp_Mloc, xi_Mloc, us_Mloc,   &
+              &                up_Mloc, dTdt, dxidt, dpsidt, temp_3D_Rloc, &
+              &                dTdt_3D)
       end if
 
       !-- Calculate spectra
