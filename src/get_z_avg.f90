@@ -142,7 +142,6 @@ contains
       call allgather_from_rloc(this%up_phys_Rloc,upp,n_phi_max_3D)
       call allgather_from_rloc(this%dVzT_Rloc,dVzT,n_phi_max_3D)
 
-
 #ifdef DEBUG
       block
 
@@ -173,10 +172,12 @@ contains
             n_t_ct=n_theta_max+1-n_t_t
             s_r = r_3D(n_r_r)*sint(n_t_t)
             z_r = r_3D(n_r_r)*cost(n_t_t)
-            n_r = n_r_max_3D!+1
+            n_r = 1!n_r_max_3D!+1
             !print*, s_r, n_r, r(n_r-1)
-            do while ( r(n_r-1) < s_r  )
-               n_r = n_r-1
+            do while ( r(n_r) > s_r .and. n_r < n_r_max  )!-- OB: normally fixed and consistent with fill_mat
+               n_r = n_r+1
+            !do while ( r(n_r-1) < s_r  )
+            !   n_r = n_r-1
             end do
             !print*, n_r
             alpha_r2 = (s_r-r(n_r))/(r(n_r-1)-r(n_r))
@@ -193,11 +194,10 @@ contains
                   !vz = vz + z_r*(alpha_r1*dVzT(n_phi,n_r) +  & 
                   !&              alpha_r2*dVzT(n_phi,n_r-1))
                !end if
-               !-- TG: fixed??
+               !-- TG: fixed??!-- OB: yes, expressions for vrr and vph fixed
                vrr= vz*cost(n_t_t) + vs*sint(n_t_t)
                ur_Rloc(n_phi,n_t_t,n_r_r) = vrr
                ur_Rloc(n_phi,n_t_ct,n_r_r)= vrr
-               !-- TG: fixed??
                vth= vs*cost(n_t_t) - vz*sint(n_t_t)
                vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r-1)
                ut_Rloc(n_phi,n_t_t,n_r_r) = vth
@@ -208,14 +208,14 @@ contains
          end do
       end do
 
-      !-- No slip on the spherical surface
-      if ( nRstart3D == 1 ) then
-         ur_Rloc(:,:,1) = 0.0_cp
-         if ( ktopv == 2 ) then !-- Rigid boundaries
-            ut_Rloc(:,:,1) = 0.0_cp
-            up_Rloc(:,:,1) = 0.0_cp
-         end if
-      end if
+      !!-- No slip on the spherical surface !-- OB: maybe because of the irregular grid but
+      !if ( nRstart3D == 1 ) then           !       too much problems at the cmb otherwise
+      !   ur_Rloc(:,:,1) = 0.0_cp           !       during the z-avg
+      !   if ( ktopv == 2 ) then !-- Rigid boundaries
+      !      ut_Rloc(:,:,1) = 0.0_cp
+      !      up_Rloc(:,:,1) = 0.0_cp
+      !   end if
+      !end if
 
    end subroutine extrapolate
 !--------------------------------------------------------------------------------
@@ -321,7 +321,7 @@ contains
 
       !-- Get z grid
       !-- for interpolation: n_r_max points on z-axis
-      do n_r=1,n_r_max-1
+      do n_r=1,n_r_max!-1 loop on all s
          h = half*height(n_r)
          !n_r_r = n_r_max_3D-1
          n_r_r = 2
