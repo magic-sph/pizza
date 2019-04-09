@@ -166,7 +166,6 @@ contains
       arr_loc_size(2) = n_r_max
       arr_start(1) = nMstart-1
       arr_start(2) = 0
-      print*, rank, arr_size
       call MPI_Type_Create_Subarray(2, arr_size, arr_loc_size, arr_start, &
            &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,   &
            &                        filetype, ierr)
@@ -944,17 +943,17 @@ contains
             &    .or. rscheme_3D%version /= rscheme_old%version ) then
 
                do n_r=1,n_r_max_3D_old  ! copy on help arrays
-                  radial_data(n_r)=field_old(lm,n_r)
+                  radial_data(n_r)=field_old(lmo,n_r)
                end do
-               call map_field_r(radial_data, rscheme_old, r_3D_old,  &
-                    &           n_r_max_3D_old, n_r_max_3D_max, lBc, &
+               call map_field_r(radial_data, rscheme_3D, rscheme_old, r_3D_old,  &
+                    &           n_r_max_3D, n_r_max_3D_old, n_r_max_3D_max, lBc, &
                     &           l_phys_space)
                do n_r=1,n_r_max_3D
                   field_new(lm,n_r)=scale_field*radial_data(n_r)
                end do
             else
                do n_r=1,n_r_max_3D
-                  field_new(lm,n_r)=scale_field*field_old(lm,n_r)
+                  field_new(lm,n_r)=scale_field*field_old(lmo,n_r)
                end do
             end if
          else
@@ -1003,8 +1002,9 @@ contains
                do n_r=1,n_r_max_old
                   radial_data(n_r)=field_old(n_m_old,n_r)
                end do
-               call map_field_r(radial_data, rscheme_old, r_old, n_r_max_old,  &
-                    &           n_r_max_max, lBc,l_phys_space)
+               call map_field_r(radial_data, rscheme, rscheme_old, r_old, &
+                    &           n_r_max, n_r_max_old, n_r_max_max, lBc,   &
+                    &           l_phys_space)
                do n_r=1,n_r_max
                   field_new(n_m, n_r) = scale_field*radial_data(n_r)
                end do
@@ -1023,11 +1023,13 @@ contains
 
    end subroutine map_field
 !------------------------------------------------------------------------------
-   subroutine map_field_r(radial_data, rscheme_old, r_old, n_r_max_old, &
-              &           n_r_max_max,lBc, l_phys_space)
+   subroutine map_field_r(radial_data, rscheme_new, rscheme_old, r_old, &
+              &           n_r_max_new, n_r_max_old, n_r_max_max,lBc, l_phys_space)
 
       !-- Input variables
+      class(type_rscheme), intent(in) :: rscheme_new
       class(type_rscheme), intent(in) :: rscheme_old
+      integer,             intent(in) :: n_r_max_new
       integer,             intent(in) :: n_r_max_old
       integer,             intent(in) :: n_r_max_max
       real(cp), intent(in) :: r_old(n_r_max_old)
@@ -1070,9 +1072,9 @@ contains
          end if
 
          !----- Fill up cheb polynomial with zeros:
-         if ( n_r_max>n_r_max_old ) then
+         if ( n_r_max_new>n_r_max_old ) then
             n_r_index_start=n_r_max_old+1
-            do n_r=n_r_index_start,n_r_max
+            do n_r=n_r_index_start,n_r_max_new
                radial_data_real(n_r)=0.0_cp
                radial_data_imag(n_r)=0.0_cp
             end do
@@ -1080,13 +1082,13 @@ contains
 
          !----- Now transform to new radial grid points:
          if ( l_phys_space ) then
-            call rscheme%costf1(radial_data_real,n_r_max)
-            call rscheme%costf1(radial_data_imag,n_r_max)
+            call rscheme_new%costf1(radial_data_real,n_r_max_new)
+            call rscheme_new%costf1(radial_data_imag,n_r_max_new)
          end if
          !----- Rescale :
          cheb_norm_old=sqrt(two/real(n_r_max_old-1,kind=cp))
-         cheb_fac=cheb_norm_old/rscheme%rnorm
-         do n_r=1,n_r_max
+         cheb_fac=cheb_norm_old/rscheme_new%rnorm
+         do n_r=1,n_r_max_new
             radial_data(n_r)=cheb_fac*cmplx(radial_data_real(n_r), &
             &                               radial_data_imag(n_r),cp)
          end do
@@ -1095,10 +1097,10 @@ contains
       !-- polynomial interpolation
       else
 
-         allocate( work(n_r_max) )
+         allocate( work(n_r_max_new) )
 
          !-- Interpolate data and store into a work array
-         do n_r=1,n_r_max
+         do n_r=1,n_r_max_new
 
             n_r_old=minloc(abs(r_old-r(n_r)),1)
             if ( n_r_old < 3 ) n_r_old=3
@@ -1119,7 +1121,7 @@ contains
          end do
 
          !-- Copy interpolated data
-         do n_r=1,n_r_max
+         do n_r=1,n_r_max_new
             radial_data(n_r)=work(n_r)
          end do
 
