@@ -62,11 +62,12 @@ contains
       type(type_tarray),   intent(in) :: dTdt_3D
 
       !-- Local variables
-      integer :: info, fh, filetype, n_o
-      integer :: version, header_size, n_fields
+      integer :: info, fh, filetype, n_o, etype, lmtype
+      character(len=20) :: data_rep
+      integer :: version, n_fields
       integer :: istat(MPI_STATUS_SIZE)
       integer :: arr_size(2), arr_loc_size(2), arr_start(2)
-      integer(kind=MPI_OFFSET_KIND) :: disp
+      integer(kind=MPI_OFFSET_KIND) :: disp, offset
       character(len=100) :: rst_file, string
 
       if ( l_stop_time ) then
@@ -77,20 +78,6 @@ contains
       end if
 
       version = 6
-
-      header_size = SIZEOF_INTEGER+SIZEOF_DEF_REAL+SIZEOF_LOGICAL+       &
-      &             len(tscheme%family)+                                 &
-      &             3*SIZEOF_INTEGER+SIZEOF_DEF_REAL+size(tscheme%dt)*   &
-      &             SIZEOF_DEF_REAL+6*SIZEOF_DEF_REAL+3*SIZEOF_INTEGER   &
-      &             +2*SIZEOF_INTEGER+2*SIZEOF_DEF_REAL+                 &
-      &             len(rscheme%version)+n_r_max*SIZEOF_DEF_REAL+        &
-      &             3*SIZEOF_LOGICAL
-
-      if ( l_3D ) then
-         header_size = header_size + 7*SIZEOF_INTEGER+len(rscheme_3D%version) &
-         &             +2*SIZEOF_INTEGER+2*SIZEOF_DEF_REAL+n_r_max_3D*        &
-         &             SIZEOF_DEF_REAL+2*SIZEOF_LOGICAL
-      end if
 
       call MPI_Info_create(info, ierr)
 
@@ -180,37 +167,60 @@ contains
       arr_loc_size(2) = n_r_max
       arr_start(1) = nMstart-1
       arr_start(2) = 0
-      call MPI_Type_Create_Subarray(2,arr_size, arr_loc_size, arr_start, &
-           &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,  &
+      print*, rank, arr_size
+      call MPI_Type_Create_Subarray(2, arr_size, arr_loc_size, arr_start, &
+           &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,   &
            &                        filetype, ierr)
       call MPI_Type_Commit(filetype, ierr)
 
+      if ( rank == 0 ) then
+         !-- Rank 0 gets the displacement
+         call MPI_File_get_position(fh, offset, ierr)
+         call MPI_File_get_byte_offset(fh, offset, disp, ierr)
+      end if
+      !-- Broadcast the displacement
+      call MPI_Bcast(disp, 1, MPI_OFFSET, 0, MPI_COMM_WORLD, ierr)
+      print*, 'rank, nm', rank, disp, nm_per_rank, nmStop-nmstart+1
+
       !-- Set the view after the header
-      disp = header_size-8 ! I'm not sure why there's a -8 factor here...
       call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
            &                 info, ierr)
 
       !-- Now finally write the fields
-      call MPI_File_Write_all(fh, us_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-           &                  istat, ierr)
-      call MPI_File_Write_all(fh, up_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-           &                  istat, ierr)
-      n_fields=2
+      call MPI_File_Write_all(fh, us_Mloc, nm_per_rank*n_r_max, &
+           &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
+      call MPI_File_Write_all(fh, up_Mloc, nm_per_rank*n_r_max, &
+           &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
 
       if ( tscheme%family == 'MULTISTEP' ) then
          do n_o=2,tscheme%norder_exp
             call MPI_File_Write_all(fh, dpsidt%expl(:,:,n_o), nm_per_rank*n_r_max, &
                  &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
             n_fields = n_fields+1
          end do
          do n_o=2,tscheme%norder_imp_lin-1
             call MPI_File_Write_all(fh, dpsidt%impl(:,:,n_o), nm_per_rank*n_r_max, &
                  &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
             n_fields = n_fields+1
          end do
          do n_o=2,tscheme%norder_imp-1
             call MPI_File_Write_all(fh, dpsidt%old(:,:,n_o), nm_per_rank*n_r_max, &
                  &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
             n_fields = n_fields+1
          end do
       end if
@@ -219,22 +229,34 @@ contains
       if ( l_heat ) then
          call MPI_File_Write_all(fh, t_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
               &                  istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
          n_fields = n_fields+1
 
          if ( tscheme%family == 'MULTISTEP' ) then
             do n_o=2,tscheme%norder_exp
                call MPI_File_Write_all(fh, dTdt%expl(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
                n_fields = n_fields+1
             end do
             do n_o=2,tscheme%norder_imp_lin-1
                call MPI_File_Write_all(fh, dTdt%impl(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
                n_fields = n_fields+1
             end do
             do n_o=2,tscheme%norder_imp-1
                call MPI_File_Write_all(fh, dTdt%old(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
                n_fields = n_fields+1
             end do
          end if
@@ -245,30 +267,62 @@ contains
       if ( l_chem ) then
          call MPI_File_Write_all(fh, xi_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
               &                  istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
          n_fields = n_fields+1
 
          if ( tscheme%family == 'MULTISTEP' ) then
             do n_o=2,tscheme%norder_exp
                call MPI_File_Write_all(fh, dxidt%expl(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
                n_fields = n_fields+1
             end do
             do n_o=2,tscheme%norder_imp_lin-1
                call MPI_File_Write_all(fh, dxidt%impl(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
                n_fields = n_fields+1
             end do
             do n_o=2,tscheme%norder_imp-1
                call MPI_File_Write_all(fh, dxidt%old(:,:,n_o), nm_per_rank*n_r_max, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
+      disp = disp+n_r_max*n_m_max*SIZEOF_DEF_COMPLEX
+      call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
+           &                 info, ierr)
                n_fields = n_fields+1
             end do
          end if
 
       end if
 
+
       if ( l_heat_3D ) then
-         call MPI_Type_Free(filetype, ierr)
+         call MPI_Barrier(MPI_COMM_WORLD, ierr)
+
+         !-- Set the view after the last chunk written by the last proc
+         !if ( rank == 0) then
+         !   call MPI_File_get_position(fh, offset, ierr)
+         !   call MPI_File_get_byte_offset(fh, offset, disp, ierr)
+         !end if
+         !call MPI_Bcast(disp, 1, MPI_OFFSET, 0, MPI_COMM_WORLD, ierr)
+         print*, "before 3D", rank, disp
+
+#ifdef VECT
+         call MPI_Type_Vector(1,lm_max*nR_per_rank_3D, lm_max*n_r_max_3D,  &
+              &               MPI_DEF_COMPLEX, lmtype, ierr)
+         call MPI_Type_Commit(lmtype, ierr)
+         disp = disp+rank*nR_per_rank_3D*lm_max*SIZEOF_DEF_COMPLEX
+         print*, 'before writing 3D', rank, disp
+         call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+              &                  MPI_INFO_NULL, ierr)
+#endif
+
          arr_size(1) = lm_max
          arr_size(2) = n_r_max_3D
          arr_loc_size(1) = lm_max
@@ -277,13 +331,13 @@ contains
          arr_start(2) = nRStart3D-1
          call MPI_Type_Create_Subarray(2,arr_size, arr_loc_size, arr_start, &
               &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,  &
-              &                        filetype, ierr)
-         call MPI_Type_Commit(filetype, ierr)
+              &                        lmtype, ierr)
+         call MPI_Type_Commit(lmtype, ierr)
 
-         !-- Set the view after the fields
-         disp = disp+n_fields*(n_m_max*n_r_max)*SIZEOF_DEF_COMPLEX
+
+         !-- Set the view after the QG fields
          call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, &
-              &                 filetype, "native", info, ierr)
+              &                 lmtype, "native", MPI_INFO_NULL, ierr)
 
          call MPI_File_Write_all(fh, temp_3D_Rloc, lm_max*nR_per_rank_3D,  &
               &                  MPI_DEF_COMPLEX, istat, ierr)
@@ -292,20 +346,33 @@ contains
             do n_o=2,tscheme%norder_exp
                call transp_lm2r(lm2r_fields, dTdt_3D%expl(:,:,n_o), &
                     &           work_3D_Rloc)
-               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
-                    &                  MPI_DEF_COMPLEX, istat, ierr)
+               disp = disp+rank*n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+               call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+                 &                  MPI_INFO_NULL, ierr)
+               !call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+               !     &              MPI_DEF_COMPLEX, istat, ierr)
+         call MPI_File_get_position(fh, offset, ierr)
+         call MPI_File_get_byte_offset(fh, offset, disp, ierr)
+         print*, 'after exp', rank, disp
             end do
             do n_o=2,tscheme%norder_imp_lin-1
                call transp_lm2r(lm2r_fields, dTdt_3D%impl(:,:,n_o), &
                     &           work_3D_Rloc)
-               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
-                    &                  MPI_DEF_COMPLEX, istat, ierr)
+         disp = disp+rank*n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+         call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+              &                  MPI_INFO_NULL, ierr)
+               !call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+               !     &                  MPI_DEF_COMPLEX, istat, ierr)
             end do
             do n_o=2,tscheme%norder_imp-1
                call transp_lm2r(lm2r_fields, dTdt_3D%old(:,:,n_o), &
                     &           work_3D_Rloc)
-               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
-                    &                  MPI_DEF_COMPLEX, istat, ierr)
+         disp = disp+rank*nR_per_rank_3D*lm_max*SIZEOF_DEF_COMPLEX
+         disp = disp+rank*n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+         call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+              &                  MPI_INFO_NULL, ierr)
+               !call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+               !     &              MPI_DEF_COMPLEX, istat, ierr)
             end do
          end if
       end if
@@ -782,6 +849,7 @@ contains
 
       end if
 
+      !-- Reading 3-D fields
       if ( l_3D ) then
          if ( l_heat_3D_old ) then
             deallocate( work_old, work )
@@ -789,6 +857,8 @@ contains
             allocate( work(lm_max,n_r_max_3D) )
             if ( rank == 0 ) then
                read( n_start_file ) work_old
+               print*, real(work_old(1, :))
+               stop
                call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
                     &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
                     &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
