@@ -124,13 +124,13 @@ contains
 
    end subroutine initialize_fieldsLast
 !-------------------------------------------------------------------------------
-   subroutine initialize_fieldsLast_3D(llm,ulm,lm_max,nRstart,nRstop,   &
+   subroutine initialize_fieldsLast_3D(lmStart,lmStop,lm_max,nRstart,nRstop,   &
               &                        n_r_max,norder_imp, norder_exp,  &
               &                        norder_imp_lin)
 
       !-- Input variables
-      integer, intent(in) :: llm
-      integer, intent(in) :: ulm
+      integer, intent(in) :: lmStart
+      integer, intent(in) :: lmStop
       integer, intent(in) :: lm_max
       integer, intent(in) :: nRstart
       integer, intent(in) :: nRstop
@@ -140,10 +140,10 @@ contains
       integer, intent(in) :: norder_imp_lin
 
       if ( l_heat_3D ) then
-         call dTdt_3D%initialize(llm, ulm, n_r_max, norder_imp, norder_exp, &
+         call dTdt_3D%initialize(lmStart, lmStop, n_r_max, norder_imp, norder_exp, &
               &                 norder_imp_lin)
-         allocate( dVrT_3D_LMloc(llm:ulm,n_r_max) )
-         bytes_allocated = bytes_allocated + 1*(ulm-llm+1)* &
+         allocate( dVrT_3D_LMloc(lmStart:lmStop,n_r_max) )
+         bytes_allocated = bytes_allocated + 1*(lmStop-lmStart+1)* &
          &                 n_r_max*SIZEOF_DEF_COMPLEX
          dVrT_3D_LMloc(:,:)=zero
       else

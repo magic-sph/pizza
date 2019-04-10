@@ -12,8 +12,8 @@ program pizza
        &                 initialize_fieldsLast_3D
    use communications, only: initialize_communications, finalize_communications
    use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains, &
-       &               nRstart, nRstop, nRstart3D, nRstop3D
-   use blocking_lm, only: initialize_blocking, finalize_blocking, llm, ulm
+       &               nRstart, nRstop, nRstart3D, nRstop3D, lmStart, lmStop
+   use blocking_lm, only: initialize_blocking, finalize_blocking
    use namelists, only: read_namelists, write_namelists, tag, time_scheme,    &  
        &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve,&
        &                courfac, l_heat, l_chem, l_3D, l_heat_3D
@@ -127,8 +127,8 @@ program pizza
         &                     n_r_max, tscheme%norder_imp, tscheme%norder_exp, &
         &                     tscheme%norder_imp_lin)
    if ( l_3D ) then
-      call initialize_fieldsLast_3D(llm, ulm, lm_max, nRstart3D, nRstop3D,    &
-           &                        n_r_max_3D, tscheme%norder_imp,           &
+      call initialize_fieldsLast_3D(lmStart, lmStop, lm_max, nRstart3D, nRstop3D, &
+           &                        n_r_max_3D, tscheme%norder_imp,               &
            &                        tscheme%norder_exp, tscheme%norder_imp_lin)
    end if
    local_bytes_used = bytes_allocated-local_bytes_used

@@ -9,8 +9,8 @@ module fields
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
    use truncation_3D, only: lm_max, n_r_max_3D, n_theta_max, n_phi_max_3D
-   use blocking, only: nMstart, nMstop, nRstart, nRstop, nRstart3D, nRstop3D
-   use blocking_lm, only: llm, ulm
+   use blocking, only: nMstart, nMstop, nRstart, nRstop, nRstart3D, &
+       &               nRstop3D, lmStart, lmStop
 
  
    implicit none
@@ -148,13 +148,13 @@ contains
 
       !-- 3-D temperature:
       if ( l_heat_3D ) then
-         allocate( temp_3D_LMloc(llm:ulm,n_r_max_3D) )
-         allocate( dtemp_3D_LMloc(llm:ulm,n_r_max_3D) )
-         allocate( work_LMloc(llm:ulm,n_r_max_3D) )
+         allocate( temp_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
+         allocate( dtemp_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
+         allocate( work_LMloc(lmStart:lmStop,n_r_max_3D) )
          allocate( temp_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
          allocate( work_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
          bytes_allocated = bytes_allocated + &
-         &                 2*(ulm-llm+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
+         &                 2*(lmStop-lmStart+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
          bytes_allocated = bytes_allocated + &
          &                 2*lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
          temp_3D_LMloc(:,:) =zero
