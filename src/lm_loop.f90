@@ -4,7 +4,7 @@ module LMLoop_mod
    use parallel_mod, only: rank
    use truncation_3D, only: n_r_max_3D
    use namelists, only: l_heat_3D
-   use blocking_lm, only: llm, ulm
+   use blocking, only: lmStart, lmStop
    use update_temp_3D_mod, only: update_temp_3D, finish_exp_temp_3D
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
@@ -25,8 +25,8 @@ contains
       logical,             intent(in) :: lMat
 
       !-- Output variables
-      complex(cp),         intent(out) :: temp_3D_LMloc(llm:ulm,n_r_max_3D)
-      complex(cp),         intent(out) :: dtemp_3D_LMloc(llm:ulm,n_r_max_3D)
+      complex(cp),         intent(out) :: temp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),         intent(out) :: dtemp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
       type(type_tarray),   intent(inout) :: dTdt_3D
 
       !--- Local counter
@@ -45,7 +45,7 @@ contains
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
-      complex(cp),         intent(inout) :: dVrT_LMloc(llm:ulm,n_r_max_3D)
+      complex(cp),         intent(inout) :: dVrT_LMloc(lmStart:lmStop,n_r_max_3D)
 
       !-- Output variables
       type(type_tarray),   intent(inout) :: dTdt_3D

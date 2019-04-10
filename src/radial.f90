@@ -4,8 +4,7 @@ module radial_functions
    ! only. This is called only once at the initialisation of the code.
    !
 
-   use blocking, only: nMstart, nMstop
-   use blocking_lm, only: llm, ulm
+   use blocking, only: nMstart, nMstop, lmStart, lmStop
    use truncation, only: n_r_max, n_cheb_max, m_max
    use truncation_3D, only: n_r_max_3D, n_cheb_max_3D
    use radial_der, only: get_dr
@@ -105,7 +104,7 @@ contains
          end if
 
          allocate ( type_cheb :: rscheme_3D )
-         call rscheme_3D%initialize(llm,ulm,n_r_max_3D,n_cheb_max_3D,0,.true.)
+         call rscheme_3D%initialize(lmStart,lmStop,n_r_max_3D,n_cheb_max_3D,0,.true.)
       end if
 
    end subroutine initialize_radial_functions
