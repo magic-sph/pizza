@@ -22,7 +22,8 @@ module truncation_3D
    integer, allocatable, public :: idx2m3D(:)
    integer, allocatable, public :: m3D_2idx(:)
 
-   public :: initialize_truncation_3D, finalize_truncation_3D, write_truncation_3D_info
+   public :: initialize_truncation_3D, finalize_truncation_3D, &
+   &         write_truncation_3D_info
 
 contains
 

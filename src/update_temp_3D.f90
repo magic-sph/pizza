@@ -7,7 +7,8 @@ module update_temp_3D_mod
    use radial_functions, only: or1_3D, or2_3D, rscheme_3D
    use namelists, only: kbott, ktopt, TdiffFac
    use blocking_lm, only: nLMBs, st_map, lo_map, lo_sub_map, lmStartB, lmStopB, &
-       &                  llm, ulm, chunksize
+       &                  chunksize
+   use blocking, only: lmStart, lmStop
    use horizontal, only: dLh
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
@@ -94,8 +95,8 @@ contains
       integer,             intent(in) :: nLMB
 
       !-- Input/output of scalar fields:
-      complex(cp),       intent(inout) :: temp_3D(llm:ulm,n_r_max_3D)
-      complex(cp),       intent(inout) :: dtemp_3D(llm:ulm,n_r_max_3D)
+      complex(cp),       intent(inout) :: temp_3D(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(inout) :: dtemp_3D(lmStart:lmStop,n_r_max_3D)
       type(type_tarray), intent(inout) :: dTdt_3D
 
 
@@ -132,7 +133,7 @@ contains
            &                   tscheme%l_imp_calc_rhs(tscheme%istage))
 
       !-- Now assemble the right hand side and store it in work_LMloc
-      call tscheme%set_imex_rhs(work_LMloc, dTdt_3D, llm, ulm, n_r_max_3D)
+      call tscheme%set_imex_rhs(work_LMloc, dTdt_3D, lmStart, lmStop, n_r_max_3D)
 
       ! one subblock is linked to one l value and needs therefore once the matrix
       !$OMP PARALLEL default(shared)
@@ -259,35 +260,35 @@ contains
       !$OMP END PARALLEL
 
       do n_r_out=rscheme_3D%n_max+1,n_r_max_3D
-         do lm1=llm,ulm
+         do lm1=lmStart,lmStop
             temp_3D(lm1,n_r_out)=zero
          end do
       end do
 
       !-- Bring temperature back to physical space
-      call rscheme_3D%costf1(temp_3D, llm, ulm, n_r_max_3D)
+      call rscheme_3D%costf1(temp_3D, lmStart, lmStop, n_r_max_3D)
 
       !-- Roll the arrays before filling again the first block
-      call tscheme%rotate_imex(dTdt_3D, llm, ulm, n_r_max_3D)
+      call tscheme%rotate_imex(dTdt_3D, lmStart, lmStop, n_r_max_3D)
 
    end subroutine update_temp_3D
 !-------------------------------------------------------------------------------
    subroutine finish_exp_temp_3D(dVrT_LMloc, dtemp_exp_last)
 
       !-- Input variables
-      complex(cp), intent(inout) :: dVrT_LMloc(llm:ulm,n_r_max_3D)
+      complex(cp), intent(inout) :: dVrT_LMloc(lmStart:lmStop,n_r_max_3D)
 
       !-- Output variables
-      complex(cp), intent(inout) :: dtemp_exp_last(llm:ulm,n_r_max_3D)
+      complex(cp), intent(inout) :: dtemp_exp_last(lmStart:lmStop,n_r_max_3D)
 
       !-- Local variables
       integer :: n_r, lm
 
-      call get_dr( dVrT_LMloc,work_LMloc, llm, ulm, &
+      call get_dr( dVrT_LMloc,work_LMloc, lmStart, lmStop, &
            &       n_r_max_3D, rscheme_3D, nocopy=.true. )
 
       do n_r=1,n_r_max_3D
-         do lm=llm,ulm
+         do lm=lmStart,lmStop
             dtemp_exp_last(lm,n_r)=         dtemp_exp_last(lm,n_r) &
             &                      -or2_3D(n_r)*work_LMloc(lm,n_r)
          end do
@@ -299,13 +300,13 @@ contains
               &                   dtemp_imp_last, l_calc_lin_rhs)
 
       !-- Input variables
-      complex(cp), intent(in) :: temp_3D(llm:ulm,n_r_max_3D)
+      complex(cp), intent(in) :: temp_3D(lmStart:lmStop,n_r_max_3D)
       logical,     intent(in) :: l_calc_lin_rhs
 
       !-- Output variable
-      complex(cp), intent(out) :: dtemp_3D(llm:ulm,n_r_max_3D)
-      complex(cp), intent(out) :: temp_last(llm:ulm,n_r_max_3D)
-      complex(cp), intent(out) :: dtemp_imp_last(llm:ulm,n_r_max_3D)
+      complex(cp), intent(out) :: dtemp_3D(lmStart:lmStop,n_r_max_3D)
+      complex(cp), intent(out) :: temp_last(lmStart:lmStop,n_r_max_3D)
+      complex(cp), intent(out) :: dtemp_imp_last(lmStart:lmStop,n_r_max_3D)
 
       !-- Local variables
       integer :: n_r, lm
@@ -315,18 +316,18 @@ contains
       lm2m(1:lm_max) => lo_map%lm2m
 
       do n_r=1,n_r_max_3D
-         do lm=llm,ulm
+         do lm=lmStart,lmStop
             temp_last(lm,n_r)=temp_3D(lm,n_r)
          end do
       end do
 
       if ( l_calc_lin_rhs ) then
-         call get_ddr(temp_3D, dtemp_3D, work_LMloc, llm, ulm, &
+         call get_ddr(temp_3D, dtemp_3D, work_LMloc, lmStart, lmStop, &
               &       n_r_max_3D, rscheme_3D)
 
          !-- Calculate explicit time step part:
          do n_r=1,n_r_max_3D
-            do lm=llm,ulm
+            do lm=lmStart,lmStop
                dtemp_imp_last(lm,n_r)=TdiffFac* (                           & 
                &                                         work_LMloc(lm,n_r) &
                &        + two*or1_3D(n_r)                * dtemp_3D(lm,n_r) &

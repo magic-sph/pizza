@@ -16,8 +16,8 @@ module init_fields
        &                l_heat_3D
    use outputs, only: n_log_file
    use parallel_mod, only: rank
-   use blocking, only: nMstart, nMstop, nM_per_rank
-   use blocking_lm, only: llm, ulm, lmStartB, lmStopB, lo_map
+   use blocking, only: nMstart, nMstop, nM_per_rank, lmStart, lmStop
+   use blocking_lm, only: lmStartB, lmStopB, lo_map
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max
    use truncation_3D, only: n_r_max_3D, minc_3D, l_max
    use useful, only: logWrite, abortRun, gausslike_compact_center, &
@@ -117,7 +117,7 @@ contains
                          &      n_r_max, rscheme)
       if ( l_chem ) call get_dr(xi_Mloc, dxi_Mloc, nMstart, nMstop, &
                          &      n_r_max, rscheme)
-      if ( l_heat_3D ) call get_dr(temp_3D_LMloc, dtemp_3D_LMloc, llm, ulm, &
+      if ( l_heat_3D ) call get_dr(temp_3D_LMloc, dtemp_3D_LMloc, lmStart, lmStop,&
                             &      n_r_max_3D, rscheme_3D)
       call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
       do n_r=1,n_r_max
@@ -344,7 +344,7 @@ contains
       integer,     intent(in) :: init_t
 
       !-- Output variable
-      complex(cp), intent(inout) :: temp_LMloc(llm:ulm, n_r_max_3D)
+      complex(cp), intent(inout) :: temp_LMloc(lmStart:lmStop, n_r_max_3D)
 
       !-- Local variables
       real(cp) :: tpert(n_r_max_3D)
@@ -375,7 +375,7 @@ contains
       if ( init_t < 100 .and. init_t > 0 ) then
          !-- Random noise
 
-         do lm=max(llm,2),ulm
+         do lm=max(lmStart,2),lmStop
             call random_number(rdm)
             m = lo_map%lm2m(lm)
             l = lo_map%lm2l(lm)
