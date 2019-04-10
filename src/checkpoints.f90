@@ -814,10 +814,10 @@ contains
       !-- Reading 3-D fields
       if ( l_3D ) then
          if ( l_heat_3D_old ) then
-            deallocate( work_old, work )
-            allocate( work_old(lm_max_old,n_r_max_3D_old) )
-            allocate( work(lm_max,n_r_max_3D) )
             if ( rank == 0 ) then
+               deallocate( work_old, work )
+               allocate( work_old(lm_max_old,n_r_max_3D_old) )
+               allocate( work(lm_max,n_r_max_3D) )
                read( n_start_file ) work_old
                call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
                     &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &

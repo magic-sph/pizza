@@ -39,7 +39,6 @@ module horizontal
    !-- Arrays depending on l and m:
    complex(cp), public, allocatable :: dPhi(:)
    complex(cp), public, allocatable :: dPhi0(:)
-   complex(cp), public, allocatable :: dPhi02(:)
    real(cp), public, allocatable :: dLh(:)
    real(cp), public, allocatable :: dTheta1S(:),dTheta1A(:)
    real(cp), public, allocatable :: dTheta2S(:),dTheta2A(:)
@@ -82,14 +81,13 @@ contains
          !-- Arrays depending on l and m:
          allocate( dPhi(lm_max) )
          allocate( dPhi0(lm_max) )
-         allocate( dPhi02(lm_max) )
          allocate( dLh(lm_max) )
          allocate( dTheta1S(lm_max),dTheta1A(lm_max) )
          allocate( dTheta2S(lm_max),dTheta2A(lm_max) )
          allocate( dTheta3S(lm_max),dTheta3A(lm_max) )
          allocate( dTheta4S(lm_max),dTheta4A(lm_max) )
          allocate( D_m(lm_max),D_l(lm_max),D_lP1(lm_max) )
-         bytes_allocated = bytes_allocated+15*lm_max*SIZEOF_DEF_REAL
+         bytes_allocated = bytes_allocated+14*lm_max*SIZEOF_DEF_REAL
 
       end if
 
@@ -105,7 +103,7 @@ contains
          !-- theta functions
          deallocate( sint, cost, osint1, osint2 )
          !-- lm functions
-         deallocate( dPhi, dPhi0, dPhi02, dLh, dTheta1S, dTheta1A )
+         deallocate( dPhi, dPhi0, dLh, dTheta1S, dTheta1A )
          deallocate( dTheta2S, dTheta2A, dTheta3S, dTheta3A, dTheta4S, dTheta4A )
          deallocate( D_m, D_l, D_lP1 )
       end if
@@ -284,10 +282,8 @@ contains
          dPhi(lm)=cmplx(0.0_cp,real(m,cp),cp)
          if ( l < l_max ) then
             dPhi0(lm)    =cmplx(0.0_cp,real(m,cp),cp)
-            dPhi02(lm)   =dPhi0(lm)*dPhi0(lm)
          else
             dPhi0(lm)    =zero
-            dPhi02(lm)   =zero
          end if
          !-- Negative horizontal Laplacian *r^2
          dLh(lm)     =real(l*(l+1),cp)                 ! = qll1
