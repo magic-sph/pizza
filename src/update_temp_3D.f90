@@ -6,8 +6,7 @@ module update_temp_3D_mod
    use truncation_3D, only: n_r_max_3D, lm_max, l_max
    use radial_functions, only: or1_3D, or2_3D, rscheme_3D
    use namelists, only: kbott, ktopt, TdiffFac
-   use blocking_lm, only: nLMBs, st_map, lo_map, lo_sub_map, lmStartB, lmStopB, &
-       &                  chunksize
+   use blocking_lm, only: st_map, lo_map, lo_sub_map, chunksize
    use blocking, only: lmStart, lmStop
    use horizontal, only: dLh
    use parallel_mod, only: rank
@@ -117,7 +116,7 @@ contains
 
       if ( lMat ) lTmat(:)=.false.
 
-      nLMBs2(1:nLMBs) => lo_sub_map%nLMBs2
+      nLMBs2(1:) => lo_sub_map%nLMBs2
       sizeLMB2(1:,1:) => lo_sub_map%sizeLMB2
       lm22lm(1:,1:,1:) => lo_sub_map%lm22lm
       lm22l(1:,1:,1:) => lo_sub_map%lm22l

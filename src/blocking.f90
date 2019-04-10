@@ -10,7 +10,7 @@ module blocking
 
    private
 
-   type :: load
+   type, public :: load
       integer :: nStart
       integer :: nStop
       integer :: n_per_rank

@@ -17,7 +17,7 @@ module init_fields
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank, lmStart, lmStop
-   use blocking_lm, only: lmStartB, lmStopB, lo_map
+   use blocking_lm, only: lo_map
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max
    use truncation_3D, only: n_r_max_3D, minc_3D, l_max
    use useful, only: logWrite, abortRun, gausslike_compact_center, &
@@ -355,7 +355,7 @@ contains
       lm00 = lo_map%lm2(0,0)
       rank_has_l0m0=.false.
 
-      if ( lm00 >= lmStartB(rank+1) .and. lm00 <= lmStopB(rank+1) ) then
+      if ( lm00 >= lmStart .and. lm00 <= lmStop ) then
          rank_has_l0m0=.true.
       end if
 
@@ -411,7 +411,7 @@ contains
          end if
 
          lm=lo_map%lm2(l,m)
-         if( (lm>=lmStartB(rank+1)) .and. (lm<=lmStopB(rank+1)) ) then
+         if( (lm>=lmStart) .and. (lm<=lmStop) ) then
             do n_r=1,n_r_max_3D
                c_r=tpert(n_r)*amp_t
                temp_LMloc(lm,n_r)=temp_LMloc(lm,n_r)+cmplx(c_r,0.0_cp,kind=cp)

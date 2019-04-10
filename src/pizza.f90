@@ -96,6 +96,9 @@ program pizza
    !-- Set the domain decomposition
    call set_mpi_domains(l_3D)
 
+   !-- Initialize 3D blocking
+   if ( l_3D ) call initialize_blocking()
+
    if ( l_3D ) call zinterp%initialize()
 
    !-- Test radial derivatives
@@ -112,8 +115,6 @@ program pizza
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('I/O', local_bytes_used)
 
-   !-- Initialize 3D blocking
-   if ( l_3D ) call initialize_blocking(n_log_file)
 
    !-- Initialize time scheme
    call tscheme%initialize(time_scheme, courfac)

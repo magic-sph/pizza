@@ -2,6 +2,7 @@ module lm_mapping
 
    use precision_mod
    use mem_alloc, only: bytes_allocated
+   use blocking, only: load
 
    implicit none
  
@@ -21,7 +22,7 @@ module lm_mapping
    end type mappings
  
    type, public :: subblocks_mappings
-      integer :: nLMBs,l_max,m_max,sizeLMB2max
+      integer :: l_max,m_max,sizeLMB2max
       integer, allocatable :: nLMBs2(:)
       integer, allocatable :: sizeLMB2(:,:)
       integer, allocatable :: lm22lm(:,:,:)
@@ -48,14 +49,14 @@ contains
       allocate( self%lm2mc(lm_max),self%l2lmAS(0:l_max) )
       allocate( self%lm2lmS(lm_max),self%lm2lmA(lm_max) )
       bytes_allocated = bytes_allocated + &
-                        ((l_max+1)*(l_max+1)+5*lm_max+l_max+1)*SIZEOF_INTEGER
+      &                 ((l_max+1)*(l_max+1)+5*lm_max+l_max+1)*SIZEOF_INTEGER
 
       allocate( self%lmP2(0:l_max+1,0:l_max+1),self%lmP2l(lmP_max) )
       allocate( self%lmP2m(lmP_max) )
       allocate( self%lmP2lmPS(lmP_max),self%lmP2lmPA(lmP_max) )
       allocate( self%lm2lmP(lm_max),self%lmP2lm(lmP_max) )
       bytes_allocated = bytes_allocated + &
-                        ((l_max+2)*(l_max+2)+5*lmP_max+lm_max)*SIZEOF_INTEGER
+      &                 ((l_max+2)*(l_max+2)+5*lmP_max+lm_max)*SIZEOF_INTEGER
 
    end subroutine allocate_mappings
 !-------------------------------------------------------------------------------
@@ -70,29 +71,29 @@ contains
 
    end subroutine deallocate_mappings
 !-------------------------------------------------------------------------------
-   subroutine allocate_subblocks_mappings(self,map,nLMBs,l_max,lmStartB,lmStopB)
+   subroutine allocate_subblocks_mappings(self,map,l_max,lm_balance)
 
       !-- Input variables
       type(subblocks_mappings) :: self
       type(mappings), intent(in) :: map
-      integer,        intent(in) :: nLMBs, l_max
-      integer,        intent(in) :: lmStartB(nLMBs), lmStopB(nLMBs)
+      integer,        intent(in) :: l_max
+      type(load),     intent(in) :: lm_balance(0:)
 
       !-- Local variables
-      integer :: nLMB,lm1,l1,max_size_of_subblock,lmStart,lmStop
+      integer :: p,lm1,l1,max_size_of_subblock,lmStart,lmStop
       integer :: counter(0:l_max)
+      integer :: n_procs
 
-      self%nLMBs = nLMBs
+      n_procs = size(lm_balance)
       self%l_max = l_max
-
       self%m_max = l_max
 
       ! now determine the maximal size of a subblock (was sizeLMB2max parameter
       ! in former versions).
       max_size_of_subblock=0
-      do nLMB=1,nLMBs
-         lmStart=lmStartB(nLMB)
-         lmStop =lmStopB(nLMB)
+      do p=0,n_procs-1
+         lmStart=lm_balance(p)%nStart
+         lmStop =lm_balance(p)%nStop
          counter=0
          do lm1=lmStart,lmStop
             l1=map%lm2l(lm1)
@@ -105,13 +106,13 @@ contains
       self%sizeLMB2max = max_size_of_subblock
       !write(*,"(A,I5)") "Using sizeLMB2max = ",self%sizeLMB2max
 
-      allocate( self%nLMBs2(nLMBs),self%sizeLMB2(l_max+1,nLMBs) )
-      allocate( self%lm22lm(self%sizeLMB2max,l_max+1,nLMBs) )
-      allocate( self%lm22l(self%sizeLMB2max,l_max+1,nLMBs) )
-      allocate( self%lm22m(self%sizeLMB2max,l_max+1,nLMBs) )
+      allocate( self%nLMBs2(n_procs),self%sizeLMB2(l_max+1,n_procs) )
+      allocate( self%lm22lm(self%sizeLMB2max,l_max+1,n_procs) )
+      allocate( self%lm22l(self%sizeLMB2max,l_max+1,n_procs) )
+      allocate( self%lm22m(self%sizeLMB2max,l_max+1,n_procs) )
       bytes_allocated = bytes_allocated + &
-                        (nLMBs+(l_max+1)*nLMBs+ &
-                        3*(l_max+1)*nLMBS*self%sizeLMB2max)*SIZEOF_INTEGER
+      &                 (n_procs+(l_max+1)*n_procs+ &
+      &                 3*(l_max+1)*n_procs*self%sizeLMB2max)*SIZEOF_INTEGER
 
    end subroutine allocate_subblocks_mappings
 !-------------------------------------------------------------------------------

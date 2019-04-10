@@ -4,6 +4,7 @@ module blocking_lm
    !
 
    use precision_mod
+   use blocking, only: lm_balance, lmStart, lmStop, nlm_per_rank
    use mem_alloc, only: memWrite, bytes_allocated
    use parallel_mod, only: rank, n_procs
    use truncation_3D, only: m_max_3D, lmP_max, lm_max, l_max, n_m_max_3D, &
@@ -37,15 +38,9 @@ module blocking_lm
  
    integer, public, pointer :: lm2lmP(:),lmP2lm(:)
    
-   integer :: nLMBs_per_rank, rank_with_l1m0
- 
    
    type(mappings), public, target :: st_map
    type(mappings), public, target :: lo_map
- 
-   integer, public :: nLMBs,sizeLMB
- 
-   integer, public, allocatable :: lmStartB(:),lmStopB(:)
  
    integer, public, pointer :: nLMBs2(:),sizeLMB2(:,:)
    integer, public, pointer :: lm22lm(:,:,:)
@@ -54,16 +49,7 @@ module blocking_lm
  
    type(subblocks_mappings), public, target :: st_sub_map, lo_sub_map
 
-   !------------------------------------------------------------------------
-   !  Following divides loops over points in theta-direction (index ic) into
-   !  blocks. Enhances performance by trying to decrease memory access
-   !  but is not relevant for SMP parallel processing.
-   !  It is tried to divide the theta loop into parts whose data
-   !  fit into cache.
-   !
- 
    integer, public :: n_theta_blocks
-   integer, public :: llm, ulm
    integer, parameter, public :: chunksize=16
    integer, public :: lm_per_rank, lm_on_last_rank
  
@@ -71,68 +57,18 @@ module blocking_lm
 
 contains
 
-   subroutine initialize_blocking(n_log_file)
-
-      !-- Input variables:
-      integer,            intent(in) :: n_log_file
+   subroutine initialize_blocking()
 
       !-- Local variables:
-      real(cp) :: load
-      integer :: iLoad
-      integer :: n
       integer(lip) :: local_bytes_used
-      integer :: LMB_with_l1m0,l1m0,irank
-      integer :: n_out
 
       local_bytes_used = bytes_allocated
       call allocate_mappings(st_map,l_max,lm_max,lmP_max)
       call allocate_mappings(lo_map,l_max,lm_max,lmP_max)
 
-      nLMBs = n_procs
-      nLMBs_per_rank = nLMBs/n_procs
-      sizeLMB=(lm_max-1)/nLMBs+1
-
-      if ( nLMBs*sizeLMB > lm_max ) then
-         load=real(lm_max-(nLMBs-1)*sizeLMB,cp)/sizeLMB
-         iLoad=int(load)
-         if ( iLoad >= 1 ) then
-            nLMBs=nLMBs-iLoad
-         end if
-      end if
-      allocate( lmStartB(nLMBs),lmStopB(nLMBs) )
-      bytes_allocated = bytes_allocated+2*nLMBS*SIZEOF_INTEGER
-
-      !--- Calculate lm and ml blocking:
-      do n=1,nLMBs
-         lmStartB(n)=(n-1)*sizeLMB+1
-         lmStopB(n) =min(n*sizeLMB,lm_max)
-         if ( lmStopB(n) == lm_max ) exit
-      end do
-
       call get_standard_lm_blocking(st_map,minc_3D)
       call get_snake_lm_blocking(lo_map,minc_3D)
 
-      do n=1,nLMBs
-         if ( lmStopB(n) == lm_max ) exit
-      end do
-
-      !--- Get the block (rank+1) with the l1m0 mode
-      l1m0 = lo_map%lm2(1,0)
-      do n=1,nLMBs
-         if ( (l1m0 >= lmStartB(n)) .and. (l1m0 <= lmStopB(n)) ) then
-            LMB_with_l1m0=n
-            exit
-         end if
-      end do
-
-      ! which rank does have the LMB with LMB_with_l1m0?
-      do irank=0,n_procs-1
-         if ((LMB_with_l1m0-1 >= irank*nLMBs_per_rank).and.&
-              &(LMB_with_l1m0-1 <= (irank+1)*nLMBs_per_rank-1)) then
-            rank_with_l1m0 = irank
-         end if
-      end do
-      
       ! set the standard ordering as default
       lm2(0:,0:) => st_map%lm2
       lm2l(1:lm_max) => st_map%lm2l
@@ -148,46 +84,22 @@ contains
       lm2lmP(1:lm_max) => st_map%lm2lmP
       lmP2lm(1:lmP_max) => st_map%lmP2lm
 
-      call allocate_subblocks_mappings(st_sub_map,st_map,nLMBs,l_max,&
-           &                           lmStartB,lmStopB)
-      call allocate_subblocks_mappings(lo_sub_map,lo_map,nLMBs,l_max,&
-           &                           lmStartB,lmStopB)
+      call allocate_subblocks_mappings(st_sub_map,st_map,l_max,lm_balance)
+      call allocate_subblocks_mappings(lo_sub_map,lo_map,l_max,lm_balance)
 
       !--- Getting lm sub-blocks:
-      !PRINT*," ---------------- Making the standard subblocks -------------- "
-      call get_subblocks(st_map, st_sub_map) !nLMBs,lm2l,lm2m, nLMBs2,sizeLMB2,lm22lm,lm22l,lm22m)
-      !PRINT*," ---------------- Making the lorder subblocks ---------------- "
+      call get_subblocks(st_map, st_sub_map) 
       call get_subblocks(lo_map, lo_sub_map)
-      !PRINT*," ---------------- Making the snake order subblocks ----------- "
 
       ! default mapping
-      nLMBs2(1:nLMBs) => st_sub_map%nLMBs2
+      nLMBs2(1:n_procs) => st_sub_map%nLMBs2
       sizeLMB2(1:,1:) => st_sub_map%sizeLMB2
       lm22lm(1:,1:,1:) => st_sub_map%lm22lm
       lm22l(1:,1:,1:) => st_sub_map%lm22l
       lm22m(1:,1:,1:) => st_sub_map%lm22m
 
-      !-- Calculate blocking parameters for blocking loops over theta:
-      n_theta_blocks = 1
-      if ( rank == 0 ) then
-         do n=1,2
-            if ( n==1 ) n_out=6
-            if ( n==2 ) n_out=n_log_file
-            
-            write(n_out,*) '!-- Blocking information:'
-            write(n_out,*)
-            write(n_out,*) '!    Number of LM-blocks:',nLMBs
-            write(n_out,*) '!    Size   of LM-blocks:',sizeLMB
-            write(n_out,*)
-            write(n_out,*) '! Number of theta blocks:',n_theta_blocks
-            write(n_out,*) '!   size of theta blocks:',n_theta_max
-         end do
-      end if
-
       local_bytes_used = bytes_allocated-local_bytes_used
       call memWrite('blocking_lm.f90', local_bytes_used)
-
-      call get_lm_blocks()
 
    end subroutine initialize_blocking
 !------------------------------------------------------------------------
@@ -196,32 +108,11 @@ contains
       call deallocate_mappings(st_map)
       call deallocate_mappings(lo_map)
 
-      deallocate( lmStartB,lmStopB )
-
       call deallocate_subblocks_mappings(st_sub_map)
       call deallocate_subblocks_mappings(lo_sub_map)
 
    end subroutine finalize_blocking
 !------------------------------------------------------------------------
-   subroutine get_lm_blocks
-    
-      !-- Local variables:
-      integer :: nLMB_start,nLMB_end
-
-      ! set the local lower and upper index for lm
-      ! we have nLMBs LM blocks which are distributed over the ranks
-      ! with nLMBs_per_rank blocks per rank (computed in m_blocking.F90)
-      
-      nLMB_start = 1+rank*nLMBs_per_rank
-      nLMB_end   = min((rank+1)*nLMBs_per_rank,nLMBs)
-      llm = lmStartB(nLMB_start)
-      ulm = lmStopB(nLMB_end)
-      lm_per_rank=nLMBs_per_rank*sizeLMB
-      lm_on_last_rank=lmStopB (min(n_procs*nLMBs_per_rank,nLMBs))- &
-                      lmStartB(1+(n_procs-1)*nLMBs_per_rank)+1
-
-   end subroutine get_lm_blocks
-!---------------------------------------------------------------------------
    subroutine get_subblocks(map,sub_map) 
 
       !-- Input variables:
@@ -229,7 +120,6 @@ contains
       type(subblocks_mappings), intent(inout) :: sub_map
       
       !-- Local variables:
-      integer :: number_of_blocks
       logical :: lAfter,lStop
       integer :: size
       integer :: nB2,n,n2,n3
@@ -237,21 +127,19 @@ contains
       integer :: lm,l,m
       integer :: check(0:l_max,0:l_max)
 
-      number_of_blocks=sub_map%nLMBs
-      
       check = 0
       lStop=.false.
       size=0
       nB2=0
-      do n=1,nLMBs
+      do n=1,n_procs
          sub_map%nLMBs2(n)=1
-         lm=lmStartB(n)
+         lm=lm_balance(n-1)%nStart
          !------ Start first sub-block:
          sub_map%sizeLMB2(1,n) =1
          sub_map%lm22lm(1,1,n) =lm
          sub_map%lm22l(1,1,n)  =map%lm2l(lm)
          sub_map%lm22m(1,1,n)  =map%lm2m(lm)
-         do lm=lmStartB(n)+1,lmStopB(n)
+         do lm=lm_balance(n-1)%nStart+1,lm_balance(n-1)%nStop
             do n2=1,sub_map%nLMBs2(n)
                if ( sub_map%lm22l(1,n2,n) == map%lm2l(lm) ) then
                   !------ Add to old block
@@ -504,7 +392,7 @@ contains
       lm=1
       lmP=1
       do proc=0,n_procs-1
-         lmStartB(proc+1)=lm
+         lm_balance(proc)%nStart=lm
          do i_l=1,l_counter(proc)-1
             l=l_list(proc,i_l)
             mc = 0
@@ -525,8 +413,15 @@ contains
                lmP = lmP+1
             end do
          end do
-         lmStopB(proc+1)=lm-1
+         lm_balance(proc)%nStop=lm-1
       end do
+
+      do proc=0,n_procs-1
+         lm_balance(proc)%n_per_rank=lm_balance(proc)%nStop-lm_balance(proc)%nStart+1
+      end do
+      lmStart = lm_balance(rank)%nStart
+      lmStop = lm_balance(rank)%nStop
+      nlm_per_rank = lm_balance(rank)%n_per_rank
       
       if ( lm-1 /= map%lm_max ) then
          write(*,"(2(A,I6))") 'get_snake_lm_blocking: Wrong lm-1 = ',lm-1,&
