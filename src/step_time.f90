@@ -21,6 +21,7 @@ module step_time
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
+   use update_temp_3D_mod, only:  get_temp_3D_rhs_imp
    use update_temp_coll, only: get_temp_rhs_imp_coll
    use update_xi_coll, only: get_xi_rhs_imp_coll
    use update_temp_integ, only: get_temp_rhs_imp_int
@@ -480,6 +481,12 @@ contains
                call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,dpsidt%old(:,:,1), &
                     &                        dpsidt%impl(:,:,1), vp_bal, .true.)
             end if
+         end if
+
+         if ( l_heat_3D ) then
+            call get_temp_3D_rhs_imp(temp_3D_LMloc, dtemp_3D_LMloc,           &
+                 &                   dTdt_3D%old(:,:,1), dTdt_3D%impl(:,:,1), &
+                 &                   .true.)
          end if
 
          call tscheme%bridge_with_cnab2()
