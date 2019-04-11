@@ -63,6 +63,7 @@ contains
       integer :: l,m,lm,lmP,lmPS,lmPA
       complex(cp) :: dTdt_loc
     
+      !-- Spherically-symmetric contribution:
       dVTrLM(1)=this%VTrLM(1)
       dTdt(1)  =zero
 
@@ -79,15 +80,15 @@ contains
          lmPA=lmP2lmPA(lmP)
          !------ This is horizontal heat advection:
          if ( l > m ) then
-            dTdt_loc= -dTheta1S(lm)*this%VTtLM(lmPS) &
-            &         +dTheta1A(lm)*this%VTtLM(lmPA) &
-            &         -dPhi(lm)*this%VTpLM(lmP)
+            dTdt_loc=-dTheta1S(lm)*this%VTtLM(lmPS) &
+            &        +dTheta1A(lm)*this%VTtLM(lmPA) &
+            &            -dPhi(lm)*this%VTpLM(lmP)
          else if ( l == m ) then
-            dTdt_loc=  dTheta1A(lm)*this%VTtLM(lmPA) &
-            &          -dPhi(lm)*this%VTpLM(lmP)
+            dTdt_loc= dTheta1A(lm)*this%VTtLM(lmPA) &
+            &         -dPhi(lm)*this%VTpLM(lmP)
          end if
          dVTrLM(lm)=this%VTrLM(lmP)
-         dTdt(lm) = dTdt_loc
+         dTdt(lm)  =dTdt_loc
          end do
       !$OMP end do
       !LIKWID_OFF('td_heat')
