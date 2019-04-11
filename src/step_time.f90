@@ -247,14 +247,15 @@ contains
                   runStart = MPI_Wtime()
                   call zinterp%prepare_extension(us_Rloc, up_Rloc)
                   call zinterp%extrapolate(ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc)
+                  runStop = MPI_Wtime()
+                  if ( runStop>runStart ) then
+                     timers%n_interp=timers%n_interp+1
+                     timers%interp  =timers%interp+(runStop-runStart)
+                  end if
                   call radial_loop_3D( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc, &
                        &               temp_3D_Rloc, dtempdt_3D_Rloc,      &
-                       &               dVrT_3D_Rloc, dpsidt_Rloc, zinterp)
-                  runStop = MPI_Wtime()
-                  if (runStop>runStart) then
-                     timers%n_r_loops_3D=timers%n_r_loops_3D+1
-                     timers%r_loop_3D   =timers%r_loop_3D+(runStop-runStart)
-                  end if
+                       &               dVrT_3D_Rloc, dpsidt_Rloc, zinterp, &
+                       &               timers)
                end if
 
                !------------------

@@ -1,6 +1,7 @@
 module rloop_3D
 
    use precision_mod
+   use parallel_mod
    use constants, only: ci
    use nonlinear_lm_mod, only: nonlinear_lm_t
    use grid_space_arrays_mod, only: grid_space_arrays_t
@@ -12,6 +13,7 @@ module rloop_3D
    use shtns, only: spat_to_SH, scal_to_spat
 #endif
    use z_functions, only: zfunc_type
+   use timers_mod, only: timers_type
 
    implicit none
 
@@ -41,7 +43,7 @@ contains
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
    subroutine radial_loop_3D( ur, ut, up, temp, dtempdt, dVrTLM, dpsidt_Rloc, &
-              &               zinterp)
+              &               zinterp, timers)
 
       !-- Input variables
       complex(cp), intent(in) :: temp(lm_max, nRstart3D:nRstop3D)
@@ -54,49 +56,45 @@ contains
       complex(cp), intent(out) :: dtempdt(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(out) :: dVrTLM(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
+      type(timers_type), intent(inout) :: timers
+
 
       !-- Local variables
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: runStart, runStop
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       integer :: n_r, n_m, m
 
+      runStart = MPI_Wtime()
       do n_r=nRstart3D,nRstop3D
 
+         !-- Transform temperature from (l,m) to (theta,phi)
          call transform_to_grid_space_shtns(temp(:,n_r), gsa)
 
+         !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
               &          buo_tmp(:,:,n_r))
 
+         !-- Transform back the non-linear terms to (l,m) space
          call transform_to_lm_space_shtns(gsa, nl_lm)
 
+         !-- Get theta and phi derivatives using recurrence relations
          call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r))
 
       end do
+      runStop = MPI_Wtime()
+      if (runStop>runStart) then
+         timers%n_r_loops_3D=timers%n_r_loops_3D+1
+         timers%r_loop_3D   =timers%r_loop_3D+(runStop-runStart)
+      end if
 
       !-- Compute z-averaging of buoyancy
+      runStart = MPI_Wtime()
       call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
-
-#ifdef DEBUG
-      block
-
-         use truncation, only: n_r_max
-         use radial_functions, only: r
-
-         integer :: n_r, file_handle
-
-         open(newunit=file_handle, file='buo', status='new')
-         do n_r=1,n_r_max
-            write(file_handle, '(3ES20.12)') r(n_r), real(buo_tmp_Rloc(6,n_r)), real(buo_tmp_Rloc(1,n_r))
-         end do
-         close(file_handle)
-
-         open(newunit=file_handle, file='buo_3D', status='new', form='unformatted',&
-         &    access='stream')
-         write(file_handle) buo_tmp
-         close(file_handle)
-
-      end block
-#endif
+      runStop = MPI_Wtime()
+      if (runStop>runStart) then
+         timers%interp = timers%interp+(runStop-runStart)
+      end if
 
       !-- Finish assembling buoyancy and sum it with dpsidt
       do n_m=1,n_m_max

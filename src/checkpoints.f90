@@ -488,11 +488,11 @@ contains
             radratio_old,radratio
 
          if ( m_max_old /= m_max ) &
-            write(*,*) '! New m_max (old,new)    :',m_max_old,m_max
+         &  write(*,*) '! New m_max (old,new)       :',m_max_old,m_max
          if ( minc_old /= minc ) &
-            write(*,*) '! New minc (old,new)     :',minc_old,minc
+         &  write(*,*) '! New minc (old,new)        :',minc_old,minc
          if ( n_r_max_old /= n_r_max ) &
-            write(*,*) '! New n_r_max (old,new)  :',n_r_max_old,n_r_max
+         &  write(*,*) '! New n_r_max (old,new)     :',n_r_max_old,n_r_max
 
          read(n_start_file) rscheme_version_old, n_in, n_in_2, ratio1, ratio2
          if ( rscheme_version_old == 'cheb' ) then
@@ -508,9 +508,9 @@ contains
          ! call rscheme_old%get_grid(n_r_max_old, r_icb_old, r_cmb_old, ratio1, &
               ! &                       ratio2, r_old)
 
-         if ( rscheme%version /= rscheme_old%version ) &
-            & write(*,'(/,'' ! New radial scheme (old/new):'',2A4)') &
-            & rscheme_old%version, rscheme%version
+         if ( rscheme%version /= rscheme_old%version )               &
+         &   write(*,'(/,'' ! New radial scheme (old/new):'',2A4)')  &
+         &   rscheme_old%version, rscheme%version
 
          allocate( r_old(n_r_max_old) )
          read(n_start_file) r_old
@@ -550,9 +550,18 @@ contains
                  &                         n_in_2,l_cheb_coll=.true.,             &
                  &                         no_work_array=.true.)
 
-            if ( rscheme_3D%version /= rscheme_3D_old%version ) &
-               & write(*,'(/,'' ! New (3D) radial scheme (old/new):'',2A4)') &
-               & rscheme_3D_old%version, rscheme_3D%version
+            if ( l_3D ) then
+               if ( l_max_old /= l_max ) &
+               &  write(*,*) '! New l_max (old,new)       :',l_max_old,l_max
+               if ( minc_3D_old /= minc_3D ) &
+               &  write(*,*) '! New minc_3D (old,new)     :',minc_3D_old,minc_3D
+               if ( n_r_max_3D_old /= n_r_max_3D ) &
+               &  write(*,*) '! New n_r_max_3D (old,new)  :',n_r_max_3D_old,n_r_max_3D
+
+               if ( rscheme_3D%version /= rscheme_3D_old%version )            &
+               &  write(*,'(/,'' ! New (3D) radial scheme (old/new):'',2A4)') &
+               &  rscheme_3D_old%version, rscheme_3D%version
+            end if
 
             allocate( r_3D_old(n_r_max_3D_old) )
             read(n_start_file) r_3D_old
