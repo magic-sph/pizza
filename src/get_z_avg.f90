@@ -14,7 +14,7 @@ module z_functions
    use truncation, only: n_r_max, n_m_max, minc, idx2m, m2idx
    use truncation_3D, only: n_r_max_3D, n_z_max, n_m_max_3D, n_theta_max, &
        &                    minc_3D, idx2m3D, n_phi_max_3D
-   use namelists, only: r_cmb, l_ek_pump, ktopv
+   use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv
    use horizontal, only: cost, sint
    use radial_functions, only: r, r_3D, beta, height
 
@@ -172,50 +172,61 @@ contains
             n_t_ct=n_theta_max+1-n_t_t
             s_r = r_3D(n_r_r)*sint(n_t_t)
             z_r = r_3D(n_r_r)*cost(n_t_t)
-            n_r = 1!n_r_max_3D!+1
-            !print*, s_r, n_r, r(n_r-1)
-            do while ( r(n_r) > s_r .and. n_r < n_r_max  )!-- OB: normally fixed and consistent with fill_mat
-               n_r = n_r+1
-            !do while ( r(n_r-1) < s_r  )
-            !   n_r = n_r-1
-            end do
-            !print*, n_r
-            alpha_r2 = (s_r-r(n_r))/(r(n_r-1)-r(n_r))
-            alpha_r1 = one - alpha_r2
-            z_eta = -s_r/(r_cmb*r_cmb-s_r*s_r)*z_r ! \beta * z
-            do n_phi=1,n_phi_max_3D
-               vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r-1)
-               vz = z_eta*vs
-               !-- TG: dVzT does not correspond to the Ekman pumping contribution 
-               !-- right now: it should be 
-               !-- uz = beta*z*us + sqrt(E)*f(us,uphi,s)*z
-               !-- Maybe dVzT should corrrespond to f(us,phi,s)?
-               !if ( l_ek_pump ) then
-                  !vz = vz + z_r*(alpha_r1*dVzT(n_phi,n_r) +  & 
-                  !&              alpha_r2*dVzT(n_phi,n_r-1))
-               !end if
-               !-- TG: fixed??!-- OB: yes, expressions for vrr and vph fixed
-               vrr= vz*cost(n_t_t) + vs*sint(n_t_t)
-               ur_Rloc(n_phi,n_t_t,n_r_r) = vrr
-               ur_Rloc(n_phi,n_t_ct,n_r_r)= vrr
-               vth= vs*cost(n_t_t) - vz*sint(n_t_t)
-               vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r-1)
-               ut_Rloc(n_phi,n_t_t,n_r_r) = vth
-               ut_Rloc(n_phi,n_t_ct,n_r_r)=-vth
-               up_Rloc(n_phi,n_t_t,n_r_r) = vph
-               up_Rloc(n_phi,n_t_ct,n_r_r)= vph
-            end do
+
+            if ( s_r >= r_icb ) then
+               n_r = 1
+               do while ( r(n_r) > s_r .and. n_r < n_r_max )
+                  n_r = n_r+1
+               end do
+               alpha_r2 = (s_r-r(n_r))/(r(n_r-1)-r(n_r))
+               alpha_r1 = one - alpha_r2
+               z_eta = -s_r/(r_cmb*r_cmb-s_r*s_r)*z_r ! \beta * z
+               do n_phi=1,n_phi_max_3D
+                  vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r-1)
+                  vz = z_eta*vs
+                  !-- TG: dVzT does not correspond to the Ekman pumping contribution 
+                  !-- right now: it should be 
+                  !-- uz = beta*z*us + sqrt(E)*f(us,uphi,s)*z
+                  !-- Maybe dVzT should corrrespond to f(us,phi,s)?
+                  !if ( l_ek_pump ) then
+                     !vz = vz + z_r*(alpha_r1*dVzT(n_phi,n_r) +  & 
+                     !&              alpha_r2*dVzT(n_phi,n_r-1))
+                  !end if
+                  !-- TG: fixed??!-- OB: yes, expressions for vrr and vph fixed
+                  vrr= vz*cost(n_t_t) + vs*sint(n_t_t)
+                  ur_Rloc(n_phi,n_t_t,n_r_r) = vrr
+                  ur_Rloc(n_phi,n_t_ct,n_r_r)= vrr
+                  vth= vs*cost(n_t_t) - vz*sint(n_t_t)
+                  vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r-1)
+                  ut_Rloc(n_phi,n_t_t,n_r_r) = vth
+                  ut_Rloc(n_phi,n_t_ct,n_r_r)=-vth
+                  up_Rloc(n_phi,n_t_t,n_r_r) = vph
+                  up_Rloc(n_phi,n_t_ct,n_r_r)= vph
+               end do
+
+            else !-- Inside the tangent cylinder
+
+               do n_phi=1,n_phi_max_3D
+                  ur_Rloc(n_phi,n_t_t,n_r_r) =0.0_cp
+                  ur_Rloc(n_phi,n_t_ct,n_r_r)=0.0_cp
+                  ut_Rloc(n_phi,n_t_t,n_r_r) =0.0_cp
+                  ut_Rloc(n_phi,n_t_ct,n_r_r)=0.0_cp
+                  up_Rloc(n_phi,n_t_t,n_r_r) =0.0_cp
+                  up_Rloc(n_phi,n_t_ct,n_r_r)=0.0_cp
+               end do
+
+            end if ! Inside/outside TC
          end do
       end do
 
-      !!-- No slip on the spherical surface !-- OB: maybe because of the irregular grid but
-      !if ( nRstart3D == 1 ) then           !       too much problems at the cmb otherwise
-      !   ur_Rloc(:,:,1) = 0.0_cp           !       during the z-avg
-      !   if ( ktopv == 2 ) then !-- Rigid boundaries
-      !      ut_Rloc(:,:,1) = 0.0_cp
-      !      up_Rloc(:,:,1) = 0.0_cp
-      !   end if
-      !end if
+      !-- CMB values
+      if ( nRstart3D == 1 ) then
+         ur_Rloc(:,:,1) = 0.0_cp
+         if ( ktopv == 2 ) then !-- Rigid boundaries
+            ut_Rloc(:,:,1) = 0.0_cp
+            up_Rloc(:,:,1) = 0.0_cp
+         end if
+      end if
 
    end subroutine extrapolate
 !--------------------------------------------------------------------------------
