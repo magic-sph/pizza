@@ -15,6 +15,7 @@ class PizzaTs(PizzaSetup):
 
        * Kinetic energy: e_kin.TAG
        * Heat transfer: heat.TAG
+       * 3-D heat transfer: heat_3D.TAG
        * Chemical composition: composition.TAG
        * Power budget: power.TAG
        * Length scales: length_scales.TAG
@@ -139,6 +140,13 @@ class PizzaTs(PizzaSetup):
         elif self.field == 'timestep':
             self.time = data[:, 0]
             self.dt = data[:, 1]
+        elif self.field == 'heat_3D':
+            self.time = data[:, 0]
+            self.topnuss = data[:, 1]
+            self.botnuss = data[:, 2]
+            self.delnuss = data[:, 3]
+            self.toptemp = data[:, 4]
+            self.bottemp = data[:, 5]
         elif self.field == 'heat':
             self.time = data[:, 0]
             self.topnuss = data[:, 1]
@@ -244,6 +252,15 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Reynolds (3D)')
+            fig.tight_layout()
+        elif self.field == 'heat_3D':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(self.time, self.topnuss, label='Top Nusselt')
+            ax.plot(self.time, self.botnuss, label='Bottom Nusselt')
+            ax.legend(loc='lower right', frameon=False)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Nusselt number')
             fig.tight_layout()
         elif self.field == 'heat':
             fig = plt.figure()
