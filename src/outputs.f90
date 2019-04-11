@@ -25,7 +25,7 @@ module outputs
    use useful, only: round_off, cc2real, cc22real, getMSD2, abortRun
    use constants, only: pi, two, four, surf, vol_otc, one
    use checkpoints, only: write_checkpoint
-   use output_frames, only: write_snapshot_mloc
+   use output_frames, only: write_snapshot
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
    use char_manip, only: capitalize
@@ -284,18 +284,18 @@ contains
       if ( l_frame ) then
          if ( l_heat ) then
             write(frame_name, '(A,I0,A,A)') 'frame_temp_',frame_counter,'.',tag
-            call write_snapshot_mloc(frame_name, time, temp_Mloc)
+            call write_snapshot(frame_name, time, temp_Mloc)
          end if
          if ( l_chem ) then
             write(frame_name, '(A,I0,A,A)') 'frame_xi_',frame_counter,'.',tag
-            call write_snapshot_mloc(frame_name, time, xi_Mloc)
+            call write_snapshot(frame_name, time, xi_Mloc)
          end if
          write(frame_name, '(A,I0,A,A)') 'frame_us_',frame_counter,'.',tag
-         call write_snapshot_mloc(frame_name, time, us_Mloc)
+         call write_snapshot(frame_name, time, us_Mloc)
          write(frame_name, '(A,I0,A,A)') 'frame_up_',frame_counter,'.',tag
-         call write_snapshot_mloc(frame_name, time, up_Mloc)
+         call write_snapshot(frame_name, time, up_Mloc)
          write(frame_name, '(A,I0,A,A)') 'frame_om_',frame_counter,'.',tag
-         call write_snapshot_mloc(frame_name, time, om_Mloc)
+         call write_snapshot(frame_name, time, om_Mloc)
          frame_counter = frame_counter+1
       end if
 

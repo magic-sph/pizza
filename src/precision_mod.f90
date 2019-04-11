@@ -16,6 +16,8 @@ module precision_mod
    integer, public, parameter :: MPI_DEF_COMPLEX=MPI_COMPLEX16
 #endif
 
+   integer, public, parameter :: outp=selected_real_kind(6)
+
    !-- SIZEOFs
    integer, public, parameter :: SIZEOF_DEF_COMPLEX=2*cp
    integer, public, parameter :: SIZEOF_DEF_REAL=cp

@@ -12,8 +12,10 @@ module rloop_3D
 #ifdef WITH_SHTNS
    use shtns, only: spat_to_SH, scal_to_spat
 #endif
+   use outputs_3D, only: write_snaps
    use z_functions, only: zfunc_type
    use timers_mod, only: timers_type
+   use time_schemes, only: type_tscheme
 
    implicit none
 
@@ -42,15 +44,18 @@ contains
 
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
-   subroutine radial_loop_3D( ur, ut, up, temp, dtempdt, dVrTLM, dpsidt_Rloc, &
-              &               zinterp, timers)
+   subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM, dpsidt_Rloc, &
+              &               l_frame, zinterp, timers, tscheme)
 
       !-- Input variables
       complex(cp), intent(in) :: temp(lm_max, nRstart3D:nRstop3D)
       real(cp),    intent(in) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(in) :: ut(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(in) :: up(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      type(zfunc_type), intent(in) :: zinterp
+      logical,     intent(in) :: l_frame
+      real(cp),    intent(in) :: time
+      type(zfunc_type),    intent(in) :: zinterp
+      class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
       complex(cp), intent(out) :: dtempdt(lm_max, nRstart3D:nRstop3D)
@@ -86,6 +91,11 @@ contains
       if (runStop>runStart) then
          timers%n_r_loops_3D=timers%n_r_loops_3D+1
          timers%r_loop_3D   =timers%r_loop_3D+(runStop-runStart)
+      end if
+
+      !-- Write the 3-D snapshots in physical space
+      if ( tscheme%istage ==1 .and. l_frame ) then
+         call write_snaps(time, ur, ut, up)
       end if
 
       !-- Compute z-averaging of buoyancy

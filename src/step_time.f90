@@ -252,10 +252,10 @@ contains
                      timers%n_interp=timers%n_interp+1
                      timers%interp  =timers%interp+(runStop-runStart)
                   end if
-                  call radial_loop_3D( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc, &
-                       &               temp_3D_Rloc, dtempdt_3D_Rloc,      &
-                       &               dVrT_3D_Rloc, dpsidt_Rloc, zinterp, &
-                       &               timers)
+                  call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc, &
+                       &              temp_3D_Rloc, dtempdt_3D_Rloc,            &
+                       &              dVrT_3D_Rloc, dpsidt_Rloc, l_frame,       &
+                       &              zinterp, timers, tscheme)
                end if
 
                !------------------
