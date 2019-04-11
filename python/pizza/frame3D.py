@@ -84,10 +84,12 @@ class Pizza3DFields(PizzaSetup):
 
         filename = self.get_filename('frame_ut_3D', ivar, datadir, tag,
                                      verbose)
+        f = Frame3D(filename, endian=endian)
         self.utheta = f.field
 
         filename = self.get_filename('frame_up_3D', ivar, datadir, tag,
                                      verbose)
+        f = Frame3D(filename, endian=endian)
         self.uphi = f.field
 
     def get_filename(self, prefix, ivar, datadir, tag, verbose):
