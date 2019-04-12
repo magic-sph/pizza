@@ -21,11 +21,10 @@ module outputs_3D
    private
 
    type(mean_sd_type) :: tempR
-   integer :: n_heat_file, n_calls, frame_counter
+   integer :: n_heat_file, n_calls
    real(cp) :: timeLast_rad, timeAvg_rad
 
-   public :: initialize_outputs_3D, finalize_outputs_3D, write_outputs_3D, &
-   &         write_snaps
+   public :: initialize_outputs_3D, finalize_outputs_3D, write_outputs_3D
 
 contains
 
@@ -55,27 +54,6 @@ contains
       end if
 
    end subroutine finalize_outputs_3D
-!---------------------------------------------------------------------------------
-   subroutine write_snaps(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc)
-
-      !-- Input variables
-      real(cp), intent(in) :: time
-      real(cp),  intent(in) :: ur_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp),  intent(in) :: ut_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp),  intent(in) :: up_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-
-      !-- Local variables
-      character(len=144) :: frame_name
-
-      write(frame_name, '(A,I0,A,A)') 'frame_ur_3D_',frame_counter,'.',tag
-      call write_snapshot_3D(frame_name, time, ur_3D_Rloc)
-      write(frame_name, '(A,I0,A,A)') 'frame_ut_3D_',frame_counter,'.',tag
-      call write_snapshot_3D(frame_name, time, ut_3D_Rloc)
-      write(frame_name, '(A,I0,A,A)') 'frame_up_3D_',frame_counter,'.',tag
-      call write_snapshot_3D(frame_name, time, up_3D_Rloc)
-      frame_counter = frame_counter+1
-
-   end subroutine write_snaps
 !---------------------------------------------------------------------------------
    subroutine write_outputs_3D(time, tscheme, l_log, l_stop_time, temp_3D)
 

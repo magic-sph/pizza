@@ -6,16 +6,18 @@ module rloop_3D
    use nonlinear_lm_mod, only: nonlinear_lm_t
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
-   use namelists, only: BuoFac
+   use namelists, only: BuoFac, tag
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max
    use truncation, only: idx2m, n_m_max
 #ifdef WITH_SHTNS
    use shtns, only: spat_to_SH, scal_to_spat
 #endif
-   use outputs_3D, only: write_snaps
    use z_functions, only: zfunc_type
    use timers_mod, only: timers_type
    use time_schemes, only: type_tscheme
+   use output_frames, only: open_snapshot_3D, close_snapshot_3D, &
+       &                    write_bulk_snapshot_3D
+
 
    implicit none
 
@@ -23,6 +25,7 @@ module rloop_3D
 
    type(grid_space_arrays_t) :: gsa
    type(nonlinear_lm_t) :: nl_lm
+   integer :: frame_counter=1
 
    public :: radial_loop_3D, initialize_radial_loop_3D, finalize_radial_loop_3D
 
@@ -44,8 +47,8 @@ contains
 
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
-   subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM, dpsidt_Rloc, &
-              &               l_frame, zinterp, timers, tscheme)
+   subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM, &
+              &               dpsidt_Rloc, l_frame, zinterp, timers, tscheme)
 
       !-- Input variables
       complex(cp), intent(in) :: temp(lm_max, nRstart3D:nRstop3D)
@@ -68,13 +71,35 @@ contains
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
-      integer :: n_r, n_m, m
+      integer :: n_r, n_m, m, fh_temp, info_temp
+      integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
+      character(len=144) :: frame_name
+
+      !-- Open the 3-D snapshots in physical space
+      if ( l_frame .and. tscheme%istage==1 ) then
+         write(frame_name, '(A,I0,A,A)') 'frame_ur_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_ur, info_ur)
+         write(frame_name, '(A,I0,A,A)') 'frame_ut_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_ut, info_ut)
+         write(frame_name, '(A,I0,A,A)') 'frame_up_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_up, info_up)
+         write(frame_name, '(A,I0,A,A)') 'frame_temp_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_temp, info_temp)
+      end if
 
       runStart = MPI_Wtime()
       do n_r=nRstart3D,nRstop3D
 
          !-- Transform temperature from (l,m) to (theta,phi)
          call transform_to_grid_space_shtns(temp(:,n_r), gsa)
+
+         !-- Write the snapshot on the grid (easier to handle)
+         if ( l_frame .and. tscheme%istage==1 ) then
+            call write_bulk_snapshot_3D(fh_ur, ur(:,:,n_r))
+            call write_bulk_snapshot_3D(fh_ut, ut(:,:,n_r))
+            call write_bulk_snapshot_3D(fh_up, up(:,:,n_r))
+            call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))
+         end if
 
          !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
@@ -93,9 +118,13 @@ contains
          timers%r_loop_3D   =timers%r_loop_3D+(runStop-runStart)
       end if
 
-      !-- Write the 3-D snapshots in physical space
-      if ( tscheme%istage ==1 .and. l_frame ) then
-         call write_snaps(time, ur, ut, up)
+      !--Close the 3-D snapshots in physical space
+      if ( l_frame .and. tscheme%istage==1 ) then
+         call close_snapshot_3D(fh_ur, info_ur)
+         call close_snapshot_3D(fh_ut, info_ut)
+         call close_snapshot_3D(fh_up, info_up)
+         call close_snapshot_3D(fh_temp, info_temp)
+         frame_counter = frame_counter+1
       end if
 
       !-- Compute z-averaging of buoyancy

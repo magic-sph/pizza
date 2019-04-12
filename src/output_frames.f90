@@ -17,7 +17,8 @@ module output_frames
 
    private
 
-   public :: write_snapshot, write_snapshot_3D
+   public :: write_snapshot, write_snapshot_3D, open_snapshot_3D, &
+   &         close_snapshot_3D, write_bulk_snapshot_3D
 
 contains
 
@@ -110,6 +111,127 @@ contains
       call MPI_File_close(fh, ierr)
 
    end subroutine write_snapshot
+!------------------------------------------------------------------------------
+   subroutine open_snapshot_3D(filename, time, fh, info)
+
+      !-- Input variables
+      character(len=100), intent(in) :: filename
+      real(cp),           intent(in) :: time
+
+      !-- Output variables
+      integer, intent(out) :: fh   ! file handler
+      integer, intent(out) :: info ! file info handler
+
+      !-- Local variables
+      integer :: istat(MPI_STATUS_SIZE)
+      integer :: version
+      integer(kind=MPI_OFFSET_KIND) :: offset, disp
+
+      version = 1
+
+      call MPI_Info_create(info, ierr)
+
+      !-- Enable collective buffering
+      call MPI_Info_set(info, "romio_cb_write", "automatic", ierr)
+      call MPI_Info_set(info, "romio_cb_read", "automatic", ierr)
+
+      !-- Disable data sieving (let the filesystem handles it)
+      call MPI_Info_set(info, "romio_ds_write", "disable", ierr)
+      call MPI_Info_set(info, "romio_ds_read", "disable", ierr)
+
+      !-- Set the stripping unit to 4M
+      call MPI_Info_set(info, "stripping_unit", "4194304", ierr)
+
+      !-- Set the buffer size to 4M
+      call MPI_Info_set(info,"cb_buffer_size","4194304", ierr)
+
+      !-- Open file
+      call MPI_File_Open(MPI_COMM_WORLD, filename, ior(MPI_MODE_WRONLY, &
+           &             MPI_MODE_CREATE), info, fh, ierr)
+
+      !-- Only rank=0 writes the header of the graphic file
+      if ( rank == 0 ) then
+         call MPI_File_Write(fh, version, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, time, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, ra, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, ek, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, pr, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, radratio, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, sc, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, raxi, 1, MPI_DEF_REAL, istat, ierr)
+
+         call MPI_File_Write(fh, n_r_max_3D, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, l_max, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, m_max_3D, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, lm_max, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, minc_3D, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, n_theta_max, 1, MPI_INTEGER, istat, ierr)
+         call MPI_File_Write(fh, n_phi_max_3D, 1, MPI_INTEGER, istat, ierr)
+
+         call MPI_File_Write(fh, r_3D, n_r_max_3D, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, tcond_3D, n_r_max_3D, MPI_DEF_REAL, istat, ierr)
+      end if
+
+      if ( rank == 0 ) then
+         !-- Rank 0 gets the displacement
+         call MPI_File_get_position(fh, offset, ierr)
+         call MPI_File_get_byte_offset(fh, offset, disp, ierr)
+      end if
+      !-- Broadcast the displacement
+      call MPI_Bcast(disp, 1, MPI_OFFSET, 0, MPI_COMM_WORLD, ierr)
+
+      disp = disp+(nRstart3D-1)*n_phi_max_3D*n_theta_max*4
+
+      call MPI_File_Set_View(fh, disp, MPI_REAL4, MPI_REAL4, "native", &
+           &                 info, ierr)
+
+   end subroutine open_snapshot_3D
+!------------------------------------------------------------------------------
+   subroutine write_bulk_snapshot_3D(fh, arr)
+      !
+      ! This routine writes a 3-D file radius by radius (instead of dumping
+      ! everything as in write_snapshot_3D)
+      !
+
+      !-- Input variables
+      integer,  intent(in) :: fh   ! file handler
+      real(cp), intent(in) :: arr(n_phi_max_3D,n_theta_max)
+
+      !-- local variables
+      integer :: n_phi, n_th, counter
+      integer :: istat(MPI_STATUS_SIZE)
+      integer(kind=MPI_OFFSET_KIND) :: offset
+      real(outp) :: dummy(n_phi_max_3D, n_theta_max)
+
+      !-- Copy local array to a single precision file
+      do n_th=1,n_theta_max
+         do n_phi=1,n_phi_max_3D
+            dummy(n_phi, n_th)=real(arr(n_phi,n_th),outp)
+         end do
+      end do
+
+      !-- Make sure everything is written by looping and counting
+      counter = 0
+      do while ( n_phi_max_3D*n_theta_max /= counter ) 
+         offset =  -counter*4
+         if (counter /= 0 ) call MPI_File_seek(fh, offset, MPI_SEEK_CUR, ierr)
+         call MPI_File_Write(fh, dummy, n_phi_max_3D*n_theta_max, &
+              &              MPI_REAL4, istat, ierr)
+         call MPI_Get_count(istat, MPI_REAL4, counter, ierr)
+      end do
+
+   end subroutine write_bulk_snapshot_3D
+!------------------------------------------------------------------------------
+   subroutine close_snapshot_3D(fh, info)
+
+      !-- Input variables
+      integer, intent(inout) :: fh   ! file handler
+      integer, intent(inout) :: info ! file info
+
+      call MPI_Info_free(info, ierr)
+      call MPI_File_close(fh, ierr)
+
+   end subroutine close_snapshot_3D
 !------------------------------------------------------------------------------
    subroutine write_snapshot_3D(filename, time, arr)
 
