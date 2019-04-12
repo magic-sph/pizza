@@ -66,6 +66,7 @@ contains
       type(timers_type), intent(inout) :: timers
 
       !-- Local variables
+      real(cp) :: work(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop
@@ -89,7 +90,13 @@ contains
          !-- Take the gradient of the axisymmetric part
          call transform_axi_to_dth_grid_space(temp(1:l_max+1,n_r), dTdth(:,n_r))
       end do
+      !-- Compute thermal wind --> modify up_3D_Rloc
+      !--> work for debug
+      !if( rank==0 ) print*, '!! before thw::        up(4,8,nRstop)', up(4,8,nRstop3D)
+      !work(:,:,:) = up(:,:,:)
       !call zinterp%compute_thermal_wind(dTdth, up)
+      !up(:,:,:) = work(:,:,:)
+      !if( rank==0 ) print*, '!! after thw::        up(4,8,nRstop)', up(4,8,nRstop3D)
 
       !-- Open the 3-D snapshots in physical space
       if ( l_frame .and. tscheme%istage==1 ) then
@@ -118,16 +125,6 @@ contains
             call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))
          end if
 
-         !-- Get the temperature angular gradient for the thermal wind
-         !call transform_to_grad_grid_space_shtns(temp(:,n_r),  &
-         !     &                        grad_temp_thc(:,:,n_r), &
-         !     &                        grad_temp_phc(:,:,n_r))
-
-         !-- Compute thermal wind --> modify up_3D_Rloc
-         !--> work for debug
-         !work(:,:,n_r) = up(:,:,n_r)
-         !call zinterp%compute_thermal_wind(grad_temp_thc, work, n_r)
-
          !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
               &          buo_tmp(:,:,n_r))
@@ -139,8 +136,6 @@ contains
          call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r))
 
       end do
-      !if( rank==0 ) print*, '!! after thw::        up(4,1,nRstart), up(4,8,nRstart)', work(4,1,nRstart3D), &
-      !              &       work(4,8,nRstart3D)
 
       runStop = MPI_Wtime()
       if (runStop>runStart) then
