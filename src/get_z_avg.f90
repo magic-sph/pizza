@@ -16,7 +16,7 @@ module z_functions
        &                    minc_3D, idx2m3D, n_phi_max_3D
    use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv, CorFac, ek, ra, &
        &                BuoFac
-   use horizontal, only: cost, sint
+   use horizontal, only: cost, sint, theta
    use radial_functions, only: r, r_3D, beta, height, oheight, ekpump, or1_3D, &
        &                       rgrav_3D
 
@@ -332,6 +332,7 @@ contains
          end do
       end do
 
+      thw_Rloc(:,:)=0.0_cp
       !-- Compute thermal wind
       do n_r=nRstart,nRstop
          n_theta=1
@@ -346,12 +347,10 @@ contains
             do n_z=1,n_z_max/2
                n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
                n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
-               if ( n_z_t > 1 ) then
-                  thw_Rloc(n_theta,n_r)= thw_Rloc(n_theta,n_r) -                &
-                  &                     (this%interp_wt_thw(n_z,n_theta,n_r,1)* &
-                  & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(n_z,n_theta,n_r,2)* &
-                  & dTzdt(n_z_t-1,n_z_r))
-               end if
+               thw_Rloc(n_theta,n_r)= thw_Rloc(n_theta,n_r) -                &
+               &                     (this%interp_wt_thw(n_z,n_theta,n_r,1)* &
+               & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(n_z,n_theta,n_r,2)* &
+               & dTzdt(n_z_t-1,n_z_r))
             end do
          end do
 
@@ -434,13 +433,15 @@ contains
          do n_theta=1,n_theta_max/2
             s_r = r_3D(n_r_r)*sint(n_theta)
             n_z = 0
-            zz(0)=sqrt(r_3D(nRstart3D)*r_3D(nRstart3D)-s_r*s_r)
-            do n_r_rr=n_z_max/2,n_r_r,-1
+            !-- TG I flip the loop since our radii are decreasing. SAFE???
+            !do n_r_rr=n_z_max/2,n_r_r,-1
+            !do n_r_rr=n_r_r,n_z_max/2
+            do n_r_rr=n_r_r,min(nRstop3D,n_r_max_3D-1)
                n_z = n_z+1
-               th  = pi/two - acos(cost(n_theta)) !sin(s_r/r_3D(n_r_rr))
-               zz(n_z)= r_3D(n_r_rr)*cost(n_theta)
+               th = asin(s_r*or1_3D(n_r_rr))
+               zz(n_z) = sqrt(r_3D(n_r_rr)**2-s_r**2)
                dz  = zz(n_z-1)-zz(n_z)
-               if( th < acos(cost(1)) ) then
+               if( th < theta(1) ) then
                   n_t_tt = 1
                   this%interp_zp_thw(n_z,n_theta,n_r_r,1)=n_r_rr
                   this%interp_zp_thw(n_z,n_theta,n_r_r,2)=n_t_tt
@@ -448,8 +449,8 @@ contains
                   this%interp_wt_thw(n_z,n_theta,n_r_r,2)=0.0_cp
                else
                   n_t_tt = 2
-                  do while( th<acos(cost(n_t_tt-1)) .and. & 
-                  &         th<=acos(cost(n_t_tt))  )
+                  do while( th>=theta(n_t_tt-1) .and. & 
+                  &         th<=theta(n_t_tt)  )
                      n_t_tt=n_t_tt+1
                   end do
                   if ( n_r_rr==n_r_r ) then
@@ -460,15 +461,16 @@ contains
                   else
                      this%interp_zp_thw(n_z,n_theta,n_r_r,1)=n_r_rr
                      this%interp_zp_thw(n_z,n_theta,n_r_r,2)=n_t_tt
-                     this%interp_wt_thw(n_z,n_theta,n_r_r,1)=dz*     &
-                     &                 (th-acos(cost(n_t_tt-1)))/    &
-                     &      (acos(cost(n_t_tt))-acos(cost(n_t_tt-1)))
-                     this%interp_wt_thw(n_z,n_theta,n_r_r,2)=dz*     &
-                     &                  (acos(cost(n_t_tt))-th)/     &
-                     &    (acos(cost(n_t_tt))-acos(cost(n_t_tt-1)))
+                     this%interp_wt_thw(n_z,n_theta,n_r_r,1)=dz*  &
+                     &                 (th-theta(n_t_tt-1))/      &
+                     &      (theta(n_t_tt)-theta(n_t_tt-1))
+                     this%interp_wt_thw(n_z,n_theta,n_r_r,2)=dz*  &
+                     &                  (theta(n_t_tt)-th)/       &
+                     &    (theta(n_t_tt)-theta(n_t_tt-1))
                   end if
                end if
             end do
+
          end do
       end do
 
