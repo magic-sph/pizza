@@ -31,6 +31,7 @@ module z_functions
       integer, allocatable :: interp_zp_thw(:,:,:,:)
       real(cp), allocatable :: interp_wt_mat(:,:)
       real(cp), allocatable :: interp_wt_thw(:,:,:,:)
+      integer, allocatable :: Nzz(:,:)
       real(cp), allocatable :: us_phys_Rloc(:,:)
       real(cp), allocatable :: up_phys_Rloc(:,:)
       real(cp), allocatable :: ek_phys_Rloc(:,:)
@@ -63,9 +64,11 @@ contains
 
       allocate( this%interp_zp_thw(n_z_max/2,n_theta_max/2,nRstart3D:nRstop3D,2) )
       allocate( this%interp_wt_thw(n_z_max/2,n_theta_max/2,nRstart3D:nRstop3D,2) )
+      allocate( this%Nzz(n_theta_max/2,nRstart3D:nRstop3D) )
 
-      this%interp_zp_thw(:,:,:,:)=1
+      this%interp_zp_thw(:,:,:,:)=0.0_cp
       this%interp_wt_thw(:,:,:,:)=0.0_cp
+      this%Nzz(:,:)=0
 
       bytes_allocated = bytes_allocated+2*(n_z_max/2*n_theta_max/2* &
       &                 (nRstop3D-nRstart3D+1))*SIZEOF_INTEGER
@@ -90,7 +93,7 @@ contains
       class(zfunc_type) :: this
 
       deallocate( this%interp_zr_mat, this%interp_zt_mat, this%interp_wt_mat )
-      deallocate( this%interp_zp_thw, this%interp_wt_thw )
+      deallocate( this%interp_zp_thw, this%interp_wt_thw, this%Nzz )
       deallocate( this%us_phys_Rloc, this%up_phys_Rloc, this%ek_phys_Rloc )
 
    end subroutine finalize
@@ -336,7 +339,7 @@ contains
       !-- Compute thermal wind
       do n_r=nRstart,nRstop
          n_theta=1
-         do n_z=1,n_z_max/2
+         do n_z=1,this%Nzz(n_theta,n_r)
             n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
             n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
             thw_Rloc(n_theta,n_r)=thw_Rloc(n_theta,n_r) - &
@@ -344,7 +347,7 @@ contains
             &                     dTzdt(n_z_t,n_z_r)
          end do
          do n_theta=2,n_theta_max/2
-            do n_z=1,n_z_max/2
+            do n_z=1,this%Nzz(n_theta,n_r)
                n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
                n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
                thw_Rloc(n_theta,n_r)= thw_Rloc(n_theta,n_r) -                &
@@ -470,7 +473,7 @@ contains
                   end if
                end if
             end do
-
+            this%Nzz(n_theta,n_r_r)=n_z
          end do
       end do
 
