@@ -10,14 +10,13 @@ module rloop_3D
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max
    use truncation, only: idx2m, n_m_max
 #ifdef WITH_SHTNS
-   use shtns, only: spat_to_SH, scal_to_spat
+   use shtns, only: spat_to_SH, scal_to_spat, scal_to_grad_spat
 #endif
    use z_functions, only: zfunc_type
    use timers_mod, only: timers_type
    use time_schemes, only: type_tscheme
    use output_frames, only: open_snapshot_3D, close_snapshot_3D, &
        &                    write_bulk_snapshot_3D
-
 
    implicit none
 
@@ -54,7 +53,8 @@ contains
       complex(cp), intent(in) :: temp(lm_max, nRstart3D:nRstop3D)
       real(cp),    intent(in) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(in) :: ut(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp),    intent(in) :: up(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      !-- OB: up modified in compute_thermal_wind
+      real(cp),    intent(inout) :: up(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       logical,     intent(in) :: l_frame
       real(cp),    intent(in) :: time
       type(zfunc_type),    intent(in) :: zinterp
@@ -68,6 +68,9 @@ contains
 
 
       !-- Local variables
+      real(cp) :: work(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: grad_temp_thc(n_phi_max_3D,n_theta_max, nRstart3D:nRstop3D)
+      real(cp) :: grad_temp_phc(n_phi_max_3D,n_theta_max, nRstart3D:nRstop3D)
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
@@ -88,6 +91,8 @@ contains
       end if
 
       runStart = MPI_Wtime()
+      if( rank==0 ) print*, '!!before thw::        up(4,1,nRstart), up(4,8,nRstart)', up(4,1,nRstart3D), &
+                    &       up(4,8,nRstart3D)
       do n_r=nRstart3D,nRstop3D
 
          !-- Transform temperature from (l,m) to (theta,phi)
@@ -101,6 +106,16 @@ contains
             call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))
          end if
 
+         !-- Get the temperature angular gradient for the thermal wind
+         call transform_to_grad_grid_space_shtns(temp(:,n_r),  &
+              &                        grad_temp_thc(:,:,n_r), &
+              &                        grad_temp_phc(:,:,n_r))
+
+         !-- Compute thermal wind --> modify up_3D_Rloc
+         !--> work for debug
+         work(:,:,n_r) = up(:,:,n_r)
+         call zinterp%compute_thermal_wind(grad_temp_thc, work, n_r)
+
          !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
               &          buo_tmp(:,:,n_r))
@@ -112,6 +127,9 @@ contains
          call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r))
 
       end do
+      if( rank==0 ) print*, '!! after thw::        up(4,1,nRstart), up(4,8,nRstart)', work(4,1,nRstart3D), &
+                    &       work(4,8,nRstart3D)
+
       runStop = MPI_Wtime()
       if (runStop>runStart) then
          timers%n_r_loops_3D=timers%n_r_loops_3D+1
@@ -134,6 +152,42 @@ contains
       if (runStop>runStart) then
          timers%interp = timers%interp+(runStop-runStart)
       end if
+
+#ifdef DEBUG
+      block
+
+         use truncation, only: n_r_max
+         use truncation_3D, only: n_r_max_3D
+         use radial_functions, only: r, r_3D
+
+         integer :: n_r, file_handle
+
+         open(newunit=file_handle, file='thw', status='new')
+         do n_r=1,n_r_max_3D
+            write(file_handle, '(5ES20.12)') r_3D(n_r), work(5,1,n_r),work(5,4,n_r),work(5,8,n_r),work(5,16,n_r)
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='up', status='new')
+         do n_r=1,n_r_max_3D
+            write(file_handle, '(5ES20.12)') r_3D(n_r), up(5,1,n_r),up(5,4,n_r),up(5,8,n_r),up(5,16,n_r)
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='buo', status='new')
+         do n_r=1,n_r_max
+            write(file_handle, '(4ES20.12)') r(n_r),  real(buo_tmp_Rloc(5,n_r)), real(buo_tmp_Rloc(6,n_r)), &
+           &               real(buo_tmp_Rloc(1,n_r))
+         end do
+         close(file_handle)
+
+         !open(newunit=file_handle, file='buo_3D', status='new', form='unformatted',&
+         !&    access='stream')
+         !write(file_handle) buo_tmp
+         !close(file_handle)
+
+      end block
+#endif
 
       !-- Finish assembling buoyancy and sum it with dpsidt
       do n_m=1,n_m_max
@@ -173,5 +227,19 @@ contains
 #endif
 
    end subroutine transform_to_lm_space_shtns
+!------------------------------------------------------------------------------
+   subroutine transform_to_grad_grid_space_shtns(work_lm, grad_thc, grad_phc)
+
+      !-- Transform a scalar spherical harmonic field into it's
+      !-- gradient on the grid
+      complex(cp), intent(in) :: work_lm(lm_max)
+      real(cp), intent(out) :: grad_thc(n_phi_max_3D, n_theta_max)
+      real(cp), intent(out) :: grad_phc(n_phi_max_3D, n_theta_max)
+
+#ifdef WITH_SHTNS
+      call scal_to_grad_spat(work_lm, grad_thc, grad_phc)
+#endif
+
+   end subroutine transform_to_grad_grid_space_shtns
 !------------------------------------------------------------------------------
 end module rloop_3D

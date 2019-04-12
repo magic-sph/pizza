@@ -9,14 +9,14 @@ module z_functions
    use mem_alloc
    use fourier, only: ifft, fft
    use communications, only: allgather_from_rloc
-   use constants, only: zero, half, one, two
+   use constants, only: zero, half, one, two, ci, pi
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
    use truncation, only: n_r_max, n_m_max, minc, idx2m, m2idx
    use truncation_3D, only: n_r_max_3D, n_z_max, n_m_max_3D, n_theta_max, &
        &                    minc_3D, idx2m3D, n_phi_max_3D
-   use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv
+   use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv, CorFac, ek, ra
    use horizontal, only: cost, sint
-   use radial_functions, only: r, r_3D, beta, height
+   use radial_functions, only: r, r_3D, beta, height, oheight, ekpump
 
    implicit none
 
@@ -26,16 +26,19 @@ module z_functions
 
       integer, allocatable :: interp_zr_mat(:,:)
       integer, allocatable :: interp_zt_mat(:,:)
+      integer, allocatable :: interp_zp_thw(:,:,:,:)
       real(cp), allocatable :: interp_wt_mat(:,:)
+      real(cp), allocatable :: interp_wt_thw(:,:,:,:)
       real(cp), allocatable :: us_phys_Rloc(:,:)
       real(cp), allocatable :: up_phys_Rloc(:,:)
-      real(cp), allocatable :: dVzT_Rloc(:,:)
+      real(cp), allocatable :: ek_phys_Rloc(:,:)
    contains
       procedure :: initialize
       procedure :: finalize
       procedure :: compute_avg
       procedure :: prepare_extension
       procedure :: extrapolate
+      procedure :: compute_thermal_wind
       procedure :: fill_mat
    end type zfunc_type
 
@@ -56,13 +59,24 @@ contains
       bytes_allocated = bytes_allocated+8*(n_z_max*n_r_max)*SIZEOF_INTEGER
       bytes_allocated = bytes_allocated+4*(n_z_max*n_r_max)*SIZEOF_DEF_REAL
 
+      allocate( this%interp_zp_thw(n_z_max/2,n_theta_max/2,nRstart3D:nRstop3D,2) )
+      allocate( this%interp_wt_thw(n_z_max/2,n_theta_max/2,nRstart3D:nRstop3D,2) )
+
+      this%interp_zp_thw(:,:,:,:)=1
+      this%interp_wt_thw(:,:,:,:)=0.0_cp
+
+      bytes_allocated = bytes_allocated+2*(n_z_max/2*n_theta_max/2* &
+      &                 (nRstop3D-nRstart3D+1))*SIZEOF_INTEGER
+      bytes_allocated = bytes_allocated+2*(n_z_max/2*n_theta_max/2* &
+      &                 (nRstop3D-nRstart3D+1))*SIZEOF_DEF_REAL
+
       allocate( this%us_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )
       allocate( this%up_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )
-      allocate( this%dVzT_Rloc(n_phi_max_3D,nRstart:nRstop) )
+      allocate( this%ek_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )
 
       this%us_phys_Rloc(:,:)=0.0_cp
       this%up_phys_Rloc(:,:)=0.0_cp
-      this%dVzT_Rloc(:,:)   =0.0_cp
+      this%ek_phys_Rloc(:,:)=0.0_cp
 
       bytes_allocated = bytes_allocated+3*(n_phi_max_3D*      &
       &                 (nRstop-nRstart+1))*SIZEOF_DEF_REAL
@@ -74,23 +88,25 @@ contains
       class(zfunc_type) :: this
 
       deallocate( this%interp_zr_mat, this%interp_zt_mat, this%interp_wt_mat )
-      deallocate( this%us_phys_Rloc, this%up_phys_Rloc, this%dVzT_Rloc )
+      deallocate( this%interp_zp_thw, this%interp_wt_thw )
+      deallocate( this%us_phys_Rloc, this%up_phys_Rloc, this%ek_phys_Rloc )
 
    end subroutine finalize
 !--------------------------------------------------------------------------------
-   subroutine prepare_extension(this, us_Rloc,up_Rloc)
+   subroutine prepare_extension(this, us_Rloc,up_Rloc,om_Rloc)
 
       class(zfunc_type) :: this
 
       !-- Input variables
       complex(cp), intent(in) :: us_Rloc(n_m_max,nRstart:nRstop)
       complex(cp), intent(in) :: up_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp), intent(in) :: om_Rloc(n_m_max,nRstart:nRstop)
 
       !-- Local variables
       complex(cp) :: usm3D_Rloc(n_m_max_3D,nRstart:nRstop)
       complex(cp) :: upm3D_Rloc(n_m_max_3D,nRstart:nRstop)
+      complex(cp) :: ekpump_m3D(n_m_max_3D,nRstart:nRstop)
       integer :: n_m_3D, n_m, n_r, m3D
-      real(cp) :: z, dsZ
 
       do n_m_3D=1,n_m_max_3D
          m3D = idx2m3D(n_m_3D)
@@ -102,20 +118,39 @@ contains
          if( n_m /= -1 ) then
             usm3D_Rloc(n_m_3D,nRstart:nRstop) = us_Rloc(n_m,nRstart:nRstop)
             upm3D_Rloc(n_m_3D,nRstart:nRstop) = up_Rloc(n_m,nRstart:nRstop)
+            ekpump_m3D(n_m_3D,nRstart:nRstop) = zero
+            if( l_ek_pump ) then
+               if( m3D /= 0 ) then
+                  ekpump_m3D(n_m_3D,nRstart:nRstop)= CorFac*ekpump(nRstart:nRstop)*(         &
+                  &    -om_Rloc(n_m,nRstart:nRstop) +beta(nRstart:nRstop)*half*              &
+                  &     up_Rloc(n_m,nRstart:nRstop) +beta(nRstart:nRstop)*(-ci*real(m3D,cp)  &
+                  &    +5.0_cp*r_cmb*oheight(nRstart:nRstop))*us_Rloc(n_m,nRstart:nRstop)  )
+               else
+                  ekpump_m3D(n_m_3D,nRstart:nRstop)=-CorFac*ekpump(nRstart:nRstop)* &
+                  &  up_Rloc(n_m,nRstart:nRstop)
+               end if
+            end if
          else
             usm3D_Rloc(n_m_3D,nRstart:nRstop) = zero
             upm3D_Rloc(n_m_3D,nRstart:nRstop) = zero
+            ekpump_m3D(n_m_3D,nRstart:nRstop) = zero
          end if
       end do
+      if( rank==0 ) print*, 'us prep check:: m=1-nRstart, m=4, nRstop', usm3D_Rloc(1,nRstart), &
+                    &        usm3D_Rloc(4,nRstop)
+      if( rank==0 ) print*, 'ek prep check:: m=1-nRstart, m=4, nRstop', ekpump_m3D(1,nRstart), &
+                    &        ekpump_m3D(4,nRstop)
 
       do n_r=nRstart,nRstop
          call ifft(usm3D_Rloc(:,n_r), this%us_phys_Rloc(:,n_r), l_3D=.true.)
          call ifft(upm3D_Rloc(:,n_r), this%up_phys_Rloc(:,n_r), l_3D=.true.)
-         !---- Get resolution in s and z for z-integral:
-         dsZ  =r_cmb/real(n_r_max,cp)  ! Step in s controlled by n_r_max
-         z = (n_r-half)*dsZ
-         this%dVzT_Rloc(:,n_r) = beta(n_r)*z*this%us_phys_Rloc(:,n_r)
+         if( l_ek_pump ) call ifft(ekpump_m3D(:,n_r), this%ek_phys_Rloc(:,n_r), l_3D=.true.)
       end do
+      if( rank==0 ) print*, 'us phys check:: phi=1, nRstart, phi=4, nRstop', this%us_phys_Rloc(1,nRstart), &
+                    &        this%us_phys_Rloc(4,nRstop)
+      if( rank==0 ) print*, 'ek phys check:: phi=1, nRstart, phi=4, nRstop', this%ek_phys_Rloc(1,nRstart), &
+                    &        this%ek_phys_Rloc(4,nRstop)
+      this%ek_phys_Rloc(:,:)=0.0_cp
 
    end subroutine prepare_extension
 !--------------------------------------------------------------------------------
@@ -131,7 +166,7 @@ contains
       !-- Local arrays
       real(cp) :: usr(n_phi_max_3D,n_r_max)
       real(cp) :: upp(n_phi_max_3D,n_r_max)
-      real(cp) :: dVzT(n_phi_max_3D,n_r_max)
+      real(cp) :: ekp(n_phi_max_3D,n_r_max)
       !-- Local variables
       integer :: n_r, n_r_r, n_phi, n_t_t, n_t_ct
       real(cp) :: s_r, z_r, z_eta
@@ -140,7 +175,7 @@ contains
 
       call allgather_from_rloc(this%us_phys_Rloc,usr,n_phi_max_3D)
       call allgather_from_rloc(this%up_phys_Rloc,upp,n_phi_max_3D)
-      call allgather_from_rloc(this%dVzT_Rloc,dVzT,n_phi_max_3D)
+      if( l_ek_pump ) call allgather_from_rloc(this%ek_phys_Rloc,ekp,n_phi_max_3D)
 
 #ifdef DEBUG
       block
@@ -166,14 +201,14 @@ contains
       end block
 #endif
 
-      !-- Compute thermal wind by a linear interpolation
+      !-- Compute 3D velocity fields by a linear interpolation
       do n_r_r=nRstart3D,nRstop3D
          do n_t_t=1,n_theta_max/2
             n_t_ct=n_theta_max+1-n_t_t
             s_r = r_3D(n_r_r)*sint(n_t_t)
             z_r = r_3D(n_r_r)*cost(n_t_t)
+            if ( s_r >= r_icb ) then !-- Outside TC
 
-            if ( s_r >= r_icb ) then
                n_r = 1
                do while ( r(n_r) > s_r .and. n_r < n_r_max )
                   n_r = n_r+1
@@ -184,15 +219,10 @@ contains
                do n_phi=1,n_phi_max_3D
                   vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r-1)
                   vz = z_eta*vs
-                  !-- TG: dVzT does not correspond to the Ekman pumping contribution 
-                  !-- right now: it should be 
-                  !-- uz = beta*z*us + sqrt(E)*f(us,uphi,s)*z
-                  !-- Maybe dVzT should corrrespond to f(us,phi,s)?
-                  !if ( l_ek_pump ) then
-                     !vz = vz + z_r*(alpha_r1*dVzT(n_phi,n_r) +  & 
-                     !&              alpha_r2*dVzT(n_phi,n_r-1))
-                  !end if
-                  !-- TG: fixed??!-- OB: yes, expressions for vrr and vph fixed
+                  if ( l_ek_pump ) then
+                     vz = vz + z_r*(alpha_r1*ekp(n_phi,n_r) +  & 
+                     &              alpha_r2*ekp(n_phi,n_r-1))
+                  end if
                   vrr= vz*cost(n_t_t) + vs*sint(n_t_t)
                   ur_Rloc(n_phi,n_t_t,n_r_r) = vrr
                   ur_Rloc(n_phi,n_t_ct,n_r_r)= vrr
@@ -321,14 +351,78 @@ contains
 
    end subroutine compute_avg
 !--------------------------------------------------------------------------------
+   subroutine compute_thermal_wind(this, gradth_temp_Rloc, up_Rloc, n_r)
+
+      !-- Input variables
+      class(zfunc_type) :: this
+      real(cp), intent(in) :: gradth_temp_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      integer, intent(in)  :: n_r
+
+      !-- Output variables - modified (inout)
+      real(cp), intent(inout) :: up_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+
+      !-- Local arrays
+      real(cp) :: thw_Rloc(n_theta_max/2,nRstart3D:nRstop3D)
+      real(cp) :: dTzdt(n_theta_max/2,nRstart3D:nRstop3D)
+      !-- Local variables
+      integer :: n_theta, n_z, n_z_r, n_z_t, n_t_cth
+      integer :: n_phi
+      real :: dphi, thwFac
+
+      thwFac=ek*ra/two !-- factor for thw:: ek*ra/2 --> namelists?
+
+      !-- Remaining term for the temperature gradient
+      dTzdt(:,:)=0.0
+      dphi     =1./n_phi_max_3D
+      do n_theta=1,n_theta_max/2
+         do n_phi=1,n_phi_max_3D
+            dTzdt(n_theta,n_r)=dTzdt(n_theta,n_r) + r_3D(n_r)*          &
+            &                    gradth_temp_Rloc(n_phi,n_theta,n_r)*dphi
+         end do
+      end do
+
+      !-- Compute thermal wind
+      n_theta=1
+      do n_z=1,n_z_max/2
+         n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
+         n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
+         thw_Rloc(n_theta,n_r)=thw_Rloc(n_theta,n_r) - &
+         &                     this%interp_wt_thw(n_z,n_theta,n_r,1)* &
+         &                     dTzdt(n_z_t,n_z_r)*thwFac
+      end do
+      do n_theta=2,n_theta_max/2
+         do n_z=1,n_z_max/2
+            n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
+            n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
+            thw_Rloc(n_theta,n_r)= thw_Rloc(n_theta,n_r) -                &
+            &                     (this%interp_wt_thw(n_z,n_theta,n_r,1)* &
+            & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(n_z,n_theta,n_r,2)* &
+            & dTzdt(n_z_t-1,n_z_r))*thwFac
+         end do
+      end do
+
+      !-- Add thermal wind to u_phi
+      do n_theta=1,n_theta_max/2
+         n_t_cth=n_theta_max+1-n_theta
+         up_Rloc(:,n_theta,n_r)=up_Rloc(:,n_theta,n_r) + thw_Rloc(n_theta,n_r)
+         up_Rloc(:,n_t_cth,n_r)=up_Rloc(:,n_t_cth,n_r) + thw_Rloc(n_theta,n_r)
+      end do
+
+   end subroutine compute_thermal_wind
+!--------------------------------------------------------------------------------
    subroutine fill_mat(this)
 
       class(zfunc_type) :: this
 
+      !-- Local arrays
+      real(cp) :: zz(0:n_z_max/2)
+
       !-- Local variables
       integer :: n_r, n_z, n_r_r, n_t_t
+      integer :: n_theta, n_r_rr, n_t_tt
       real(cp) :: r_r, z_r, c_t, h
       real(cp) :: norm, alpha_r, alpha_t
+      real(cp) :: s_r, dz, th
 
       !-- Get z grid
       !-- for interpolation: n_r_max points on z-axis
@@ -376,6 +470,52 @@ contains
             this%interp_wt_mat(4*n_z,n_r)  =norm*alpha_r*alpha_t
          end do
       end do
+
+      !-- Get theta weights
+      !-- for thermal wind calculation: n_z_max/2 points on z-axis
+      zz(:) = 0.0_cp
+      do n_r_r=nRstart3D,nRstop3D
+         do n_theta=1,n_theta_max/2
+            s_r = r_3D(n_r_r)*sint(n_theta)
+            n_z = 0
+            zz(0)=sqrt(r_3D(nRstart3D)*r_3D(nRstart3D)-s_r*s_r)
+            do n_r_rr=n_z_max/2,n_r_r,-1
+               n_z = n_z+1
+               th  = pi/two - acos(cost(n_theta)) !sin(s_r/r_3D(n_r_rr))
+               zz(n_z)= r_3D(n_r_rr)*cost(n_theta)
+               dz  = zz(n_z-1)-zz(n_z)
+               if( th < acos(cost(1)) ) then
+                  n_t_tt = 1
+                  this%interp_zp_thw(n_z,n_theta,n_r_r,1)=n_r_rr
+                  this%interp_zp_thw(n_z,n_theta,n_r_r,2)=n_t_tt
+                  this%interp_wt_thw(n_z,n_theta,n_r_r,1)=one
+                  this%interp_wt_thw(n_z,n_theta,n_r_r,2)=0.0_cp
+               else
+                  n_t_tt = 2
+                  do while( th<acos(cost(n_t_tt-1)) .and. & 
+                  &         th<=acos(cost(n_t_tt))  )
+                     n_t_tt=n_t_tt+1
+                  end do
+                  if ( n_r_rr==n_r_r ) then
+                     this%interp_zp_thw(n_z,n_theta,n_r_r,1)=n_r_r
+                     this%interp_zp_thw(n_z,n_theta,n_r_r,2)=n_theta
+                     this%interp_wt_thw(n_z,n_theta,n_r_r,1)=one
+                     this%interp_wt_thw(n_z,n_theta,n_r_r,2)=0.0_cp
+                  else
+                     this%interp_zp_thw(n_z,n_theta,n_r_r,1)=n_r_rr
+                     this%interp_zp_thw(n_z,n_theta,n_r_r,2)=n_t_tt
+                     this%interp_wt_thw(n_z,n_theta,n_r_r,1)=dz*     &
+                     &                 (th-acos(cost(n_t_tt-1)))/    &
+                     &      (acos(cost(n_t_tt))-acos(cost(n_t_tt-1)))
+                     this%interp_wt_thw(n_z,n_theta,n_r_r,2)=dz*     &
+                     &                  (acos(cost(n_t_tt))-th)/     &
+                     &    (acos(cost(n_t_tt))-acos(cost(n_t_tt-1)))
+                  end if
+               end if
+            end do
+         end do
+      end do
+
 
    end subroutine fill_mat
 !--------------------------------------------------------------------------------
