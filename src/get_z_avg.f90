@@ -93,7 +93,7 @@ contains
 
    end subroutine finalize
 !--------------------------------------------------------------------------------
-   subroutine prepare_extension(this, us_Rloc,up_Rloc,om_Rloc)
+   subroutine prepare_extension(this, us_Rloc, up_Rloc, om_Rloc)
 
       class(zfunc_type) :: this
 
@@ -108,49 +108,48 @@ contains
       complex(cp) :: ekpump_m3D(n_m_max_3D,nRstart:nRstop)
       integer :: n_m_3D, n_m, n_r, m3D
 
-      do n_m_3D=1,n_m_max_3D
-         m3D = idx2m3D(n_m_3D)
-         if ( m3D < size(m2idx) ) then ! a little bit weird
-            n_m = m2idx(m3D)
-         else
-            n_m = -1
-         end if
-         if( n_m /= -1 ) then
-            usm3D_Rloc(n_m_3D,nRstart:nRstop) = us_Rloc(n_m,nRstart:nRstop)
-            upm3D_Rloc(n_m_3D,nRstart:nRstop) = up_Rloc(n_m,nRstart:nRstop)
-            ekpump_m3D(n_m_3D,nRstart:nRstop) = zero
-            if( l_ek_pump ) then
-               if( m3D /= 0 ) then
-                  ekpump_m3D(n_m_3D,nRstart:nRstop)= CorFac*ekpump(nRstart:nRstop)*(         &
-                  &    -om_Rloc(n_m,nRstart:nRstop) +beta(nRstart:nRstop)*half*              &
-                  &     up_Rloc(n_m,nRstart:nRstop) +beta(nRstart:nRstop)*(-ci*real(m3D,cp)  &
-                  &    +5.0_cp*r_cmb*oheight(nRstart:nRstop))*us_Rloc(n_m,nRstart:nRstop)  )
-               else
-                  ekpump_m3D(n_m_3D,nRstart:nRstop)=-CorFac*ekpump(nRstart:nRstop)* &
-                  &  up_Rloc(n_m,nRstart:nRstop)
-               end if
+      do n_r=nRstart,nRstop
+         do n_m_3D=1,n_m_max_3D
+            m3D = idx2m3D(n_m_3D)
+            if ( m3D < size(m2idx) ) then ! a little bit weird
+               n_m = m2idx(m3D)
+            else
+               n_m = -1
             end if
-         else
-            usm3D_Rloc(n_m_3D,nRstart:nRstop) = zero
-            upm3D_Rloc(n_m_3D,nRstart:nRstop) = zero
-            ekpump_m3D(n_m_3D,nRstart:nRstop) = zero
-         end if
+            if ( n_m /= -1 ) then
+               usm3D_Rloc(n_m_3D,n_r) = us_Rloc(n_m,n_r)
+               upm3D_Rloc(n_m_3D,n_r) = up_Rloc(n_m,n_r)
+               ekpump_m3D(n_m_3D,n_r) = zero
+               if ( l_ek_pump ) then
+                  if( m3D /= 0 ) then
+                     ekpump_m3D(n_m_3D,n_r)=ekpump(n_r)*(-om_Rloc(n_m,n_r) &
+                     &              +half*beta(n_r)*      up_Rloc(n_m,n_r) &
+                     &   +beta(n_r)*( -ci*real(m3D,cp)+                    &
+                     &    5.0_cp*r_cmb*oheight(n_r) )*    us_Rloc(n_m,n_r) )
+                  else
+                     ekpump_m3D(n_m_3D,n_r)=0.0_cp
+                     !ekpump_m3D(n_m_3D,n_r)=-CorFac*                &
+                     !&                                 ekpump(n_r)* &
+                     !&                                 up_Rloc(n_m,n_r)
+                  end if
+               end if
+            else
+               usm3D_Rloc(n_m_3D,n_r) = zero
+               upm3D_Rloc(n_m_3D,n_r) = zero
+               ekpump_m3D(n_m_3D,n_r) = zero
+            end if
+         end do
       end do
-      if( rank==0 ) print*, 'us prep check:: m=1-nRstart, m=4, nRstop', usm3D_Rloc(1,nRstart), &
-                    &        usm3D_Rloc(4,nRstop)
-      if( rank==0 ) print*, 'ek prep check:: m=1-nRstart, m=4, nRstop', ekpump_m3D(1,nRstart), &
-                    &        ekpump_m3D(4,nRstop)
 
       do n_r=nRstart,nRstop
          call ifft(usm3D_Rloc(:,n_r), this%us_phys_Rloc(:,n_r), l_3D=.true.)
          call ifft(upm3D_Rloc(:,n_r), this%up_phys_Rloc(:,n_r), l_3D=.true.)
-         if( l_ek_pump ) call ifft(ekpump_m3D(:,n_r), this%ek_phys_Rloc(:,n_r), l_3D=.true.)
+         if( l_ek_pump ) &
+         &   call ifft(ekpump_m3D(:,n_r), this%ek_phys_Rloc(:,n_r), l_3D=.true.)
       end do
-      if( rank==0 ) print*, 'us phys check:: phi=1, nRstart, phi=4, nRstop', this%us_phys_Rloc(1,nRstart), &
-                    &        this%us_phys_Rloc(4,nRstop)
-      if( rank==0 ) print*, 'ek phys check:: phi=1, nRstart, phi=4, nRstop', this%ek_phys_Rloc(1,nRstart), &
-                    &        this%ek_phys_Rloc(4,nRstop)
-      this%ek_phys_Rloc(:,:)=0.0_cp
+
+      !-- Boundary point: fix Ek-pumping to zero
+      if ( rank == 0 ) this%ek_phys_Rloc(:,1)=0.0_cp
 
    end subroutine prepare_extension
 !--------------------------------------------------------------------------------
@@ -297,20 +296,6 @@ contains
          end do
       end do
 
-#ifdef DEBUG
-      block
-      integer :: p
-
-      do p=0,n_procs-1
-      if ( rank == p ) then
-      do n_r=1,n_r_max
-         print*, 'before', n_r, tmp(10, n_r)
-      end do
-      end if
-      end do
-      end block
-#endif
-
       !-- TG: dirty fix: needs to be improved
       do n_r=1,n_r_max
          call MPI_Allreduce(MPI_IN_PLACE, tmp(:,n_r), n_phi_max_3D, MPI_DEF_REAL, &
@@ -318,20 +303,6 @@ contains
       !call MPI_reduce(MPI_IN_PLACE, tmp(:,n_r), n_phi_max_3D, MPI_DEF_REAL, &
       !     &             MPI_SUM, MPI_COMM_WORLD, ierr)
       end do
-
-#ifdef DEBUG
-      block
-      integer :: p
-
-      do p=0,n_procs-1
-      if ( rank == p ) then
-      do n_r=1,n_r_max
-         print*, 'after', n_r, tmp(10, n_r)
-      end do
-      end if
-      end do
-      end block
-#endif
 
       !-- Transforms back to spectral space
       do n_r=nRstart,nRstop
