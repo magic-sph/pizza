@@ -12,7 +12,7 @@ module shtns
 
    private
 
-   public :: init_shtns, scal_to_spat, spat_to_SH
+   public :: init_shtns, scal_to_spat, scal_to_grad_spat, spat_to_SH
 
 contains
 
@@ -67,5 +67,16 @@ contains
       !call shtns_load_cfg(0)
 
    end subroutine spat_to_SH
+!------------------------------------------------------------------------------
+   subroutine scal_to_grad_spat(Slm, gradtc, gradpc)
+      ! transform a scalar spherical harmonic field into it's gradient
+      ! on the grid
+      complex(cp), intent(in) :: Slm(lm_max)
+      real(cp), intent(out) :: gradtc(n_phi_max_3D, n_theta_max)
+      real(cp), intent(out) :: gradpc(n_phi_max_3D, n_theta_max)
+
+      call shtns_sph_to_spat(Slm, gradtc, gradpc)
+
+   end subroutine scal_to_grad_spat
 !------------------------------------------------------------------------------
 end module shtns
