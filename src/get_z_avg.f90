@@ -14,9 +14,11 @@ module z_functions
    use truncation, only: n_r_max, n_m_max, minc, idx2m, m2idx
    use truncation_3D, only: n_r_max_3D, n_z_max, n_m_max_3D, n_theta_max, &
        &                    minc_3D, idx2m3D, n_phi_max_3D
-   use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv, CorFac, ek, ra
+   use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv, CorFac, ek, ra, &
+       &                BuoFac
    use horizontal, only: cost, sint
-   use radial_functions, only: r, r_3D, beta, height, oheight, ekpump
+   use radial_functions, only: r, r_3D, beta, height, oheight, ekpump, or1_3D, &
+       &                       rgrav_3D
 
    implicit none
 
@@ -176,30 +178,6 @@ contains
       call allgather_from_rloc(this%up_phys_Rloc,upp,n_phi_max_3D)
       if( l_ek_pump ) call allgather_from_rloc(this%ek_phys_Rloc,ekp,n_phi_max_3D)
 
-#ifdef DEBUG
-      block
-
-         integer p
-
-         do p=0,n_procs-1
-            if (rank == p) then
-               do n_r=nRstart,nRstop
-                  print*, 'before', n_r, this%us_phys_Rloc(10,n_r)
-               end do
-            end if
-         end do
-
-         if ( rank == 1 ) then
-            do n_r=1,n_r_max
-               print*, 'after', n_r, usr(10,n_r)
-            end do
-         end if
-
-         if (rank==1)stop
-
-      end block
-#endif
-
       !-- Compute 3D velocity fields by a linear interpolation
       do n_r_r=nRstart3D,nRstop3D
          do n_t_t=1,n_theta_max/2
@@ -217,8 +195,10 @@ contains
                z_eta = -s_r/(r_cmb*r_cmb-s_r*s_r)*z_r ! \beta * z
                do n_phi=1,n_phi_max_3D
                   vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r-1)
+                  !-- vz = beta*vs
                   vz = z_eta*vs
                   if ( l_ek_pump ) then
+                     !-- vz = beta*vz+ekpump
                      vz = vz + z_r*(alpha_r1*ekp(n_phi,n_r) +  & 
                      &              alpha_r2*ekp(n_phi,n_r-1))
                   end if
@@ -322,12 +302,11 @@ contains
 
    end subroutine compute_avg
 !--------------------------------------------------------------------------------
-   subroutine compute_thermal_wind(this, gradth_temp_Rloc, up_Rloc, n_r)
+   subroutine compute_thermal_wind(this, dTdth, up_Rloc)
 
       !-- Input variables
       class(zfunc_type) :: this
-      real(cp), intent(in) :: gradth_temp_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      integer, intent(in)  :: n_r
+      real(cp), intent(in) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
 
       !-- Output variables - modified (inout)
       real(cp), intent(inout) :: up_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
@@ -337,46 +316,52 @@ contains
       real(cp) :: dTzdt(n_theta_max/2,nRstart3D:nRstop3D)
       !-- Local variables
       integer :: n_theta, n_z, n_z_r, n_z_t, n_t_cth
-      integer :: n_phi
-      real :: dphi, thwFac
+      integer :: n_r
+      real(cp) :: thwFac
 
-      thwFac=ek*ra/two !-- factor for thw:: ek*ra/2 --> namelists?
+      thwFac=BuoFac/CorFac
 
       !-- Remaining term for the temperature gradient
-      dTzdt(:,:)=0.0
-      dphi     =1./n_phi_max_3D
-      do n_theta=1,n_theta_max/2
-         do n_phi=1,n_phi_max_3D
-            dTzdt(n_theta,n_r)=dTzdt(n_theta,n_r) + r_3D(n_r)*          &
-            &                    gradth_temp_Rloc(n_phi,n_theta,n_r)*dphi
+      do n_r=nRstart,nRstop
+         do n_theta=1,n_theta_max/2
+            !dTzdt(n_theta,n_r)=thwFac*r_3D(n_r)* dTdth(n_theta,n_r)
+            !-- TG I don't understand the r factor in the above equation
+            !-- Th wind should be 
+            !-- duphi/dz = Ra/Pr  * g / r * dT/dtheta
+            dTzdt(n_theta,n_r)=thwFac*rgrav_3D(n_r)*or1_3D(n_r)* dTdth(n_theta,n_r)
          end do
       end do
 
       !-- Compute thermal wind
-      n_theta=1
-      do n_z=1,n_z_max/2
-         n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
-         n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
-         thw_Rloc(n_theta,n_r)=thw_Rloc(n_theta,n_r) - &
-         &                     this%interp_wt_thw(n_z,n_theta,n_r,1)* &
-         &                     dTzdt(n_z_t,n_z_r)*thwFac
-      end do
-      do n_theta=2,n_theta_max/2
+      do n_r=nRstart,nRstop
+         n_theta=1
          do n_z=1,n_z_max/2
             n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
             n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
-            thw_Rloc(n_theta,n_r)= thw_Rloc(n_theta,n_r) -                &
-            &                     (this%interp_wt_thw(n_z,n_theta,n_r,1)* &
-            & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(n_z,n_theta,n_r,2)* &
-            & dTzdt(n_z_t-1,n_z_r))*thwFac
+            thw_Rloc(n_theta,n_r)=thw_Rloc(n_theta,n_r) - &
+            &                     this%interp_wt_thw(n_z,n_theta,n_r,1)* &
+            &                     dTzdt(n_z_t,n_z_r)
          end do
-      end do
+         do n_theta=2,n_theta_max/2
+            do n_z=1,n_z_max/2
+               n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
+               n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
+               if ( n_z_t > 1 ) then
+                  thw_Rloc(n_theta,n_r)= thw_Rloc(n_theta,n_r) -                &
+                  &                     (this%interp_wt_thw(n_z,n_theta,n_r,1)* &
+                  & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(n_z,n_theta,n_r,2)* &
+                  & dTzdt(n_z_t-1,n_z_r))
+               end if
+            end do
+         end do
 
-      !-- Add thermal wind to u_phi
-      do n_theta=1,n_theta_max/2
-         n_t_cth=n_theta_max+1-n_theta
-         up_Rloc(:,n_theta,n_r)=up_Rloc(:,n_theta,n_r) + thw_Rloc(n_theta,n_r)
-         up_Rloc(:,n_t_cth,n_r)=up_Rloc(:,n_t_cth,n_r) + thw_Rloc(n_theta,n_r)
+         !-- Add thermal wind to u_phi
+         do n_theta=1,n_theta_max/2
+            n_t_cth=n_theta_max+1-n_theta
+            up_Rloc(:,n_theta,n_r)=up_Rloc(:,n_theta,n_r) + thw_Rloc(n_theta,n_r)
+            up_Rloc(:,n_t_cth,n_r)=up_Rloc(:,n_t_cth,n_r) + thw_Rloc(n_theta,n_r)
+         end do
+
       end do
 
    end subroutine compute_thermal_wind

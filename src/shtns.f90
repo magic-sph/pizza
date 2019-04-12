@@ -12,7 +12,7 @@ module shtns
 
    private
 
-   public :: init_shtns, scal_to_spat, scal_to_grad_spat, spat_to_SH
+   public :: init_shtns, scal_to_spat, spat_to_SH, scal_axi_to_grad_spat
 
 contains
 
@@ -68,15 +68,22 @@ contains
 
    end subroutine spat_to_SH
 !------------------------------------------------------------------------------
-   subroutine scal_to_grad_spat(Slm, gradtc, gradpc)
+   subroutine scal_axi_to_grad_spat(Saxi_l, gradtc)
       ! transform a scalar spherical harmonic field into it's gradient
       ! on the grid
-      complex(cp), intent(in) :: Slm(lm_max)
-      real(cp), intent(out) :: gradtc(n_phi_max_3D, n_theta_max)
-      real(cp), intent(out) :: gradpc(n_phi_max_3D, n_theta_max)
 
-      call shtns_sph_to_spat(Slm, gradtc, gradpc)
+      !-- Input variable
+      complex(cp), intent(in) :: Saxi_l(:)
 
-   end subroutine scal_to_grad_spat
+      !-- Output variable
+      real(cp), intent(out) :: gradtc(n_theta_max)
+
+      !-- Local variable
+      complex(cp) :: tmpt(n_theta_max),tmpp(n_theta_max)
+
+      call shtns_sph_to_spat_ml(0, Saxi_l, tmpt, tmpp, l_max)
+      gradtc(:)=real(tmpt)
+
+   end subroutine scal_axi_to_grad_spat
 !------------------------------------------------------------------------------
 end module shtns

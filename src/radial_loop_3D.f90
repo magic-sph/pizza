@@ -7,10 +7,10 @@ module rloop_3D
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
    use namelists, only: BuoFac, tag
-   use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max
+   use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max, l_max
    use truncation, only: idx2m, n_m_max
 #ifdef WITH_SHTNS
-   use shtns, only: spat_to_SH, scal_to_spat, scal_to_grad_spat
+   use shtns, only: spat_to_SH, scal_to_spat, scal_axi_to_grad_spat
 #endif
    use z_functions, only: zfunc_type
    use timers_mod, only: timers_type
@@ -53,7 +53,6 @@ contains
       complex(cp), intent(in) :: temp(lm_max, nRstart3D:nRstop3D)
       real(cp),    intent(in) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(in) :: ut(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      !-- OB: up modified in compute_thermal_wind
       real(cp),    intent(inout) :: up(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       logical,     intent(in) :: l_frame
       real(cp),    intent(in) :: time
@@ -61,22 +60,36 @@ contains
       class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
-      complex(cp), intent(out) :: dtempdt(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(out) :: dVrTLM(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(inout) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),       intent(out) :: dtempdt(lm_max, nRstart3D:nRstop3D)
+      complex(cp),       intent(out) :: dVrTLM(lm_max, nRstart3D:nRstop3D)
+      complex(cp),       intent(inout) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
       type(timers_type), intent(inout) :: timers
 
-
       !-- Local variables
-      real(cp) :: work(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: grad_temp_thc(n_phi_max_3D,n_theta_max, nRstart3D:nRstop3D)
-      real(cp) :: grad_temp_phc(n_phi_max_3D,n_theta_max, nRstart3D:nRstop3D)
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       integer :: n_r, n_m, m, fh_temp, info_temp
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       character(len=144) :: frame_name
+
+#ifdef aDEBUG
+      block
+      use blocking_lm, only: st_map
+
+      print*, st_map%lm2(0,0)
+      print*, st_map%lm2(l_max,0)
+
+      end block
+#endif
+
+      !-- get thermal wind
+      do n_r=nRstart3D,nRstop3D
+         !-- Take the gradient of the axisymmetric part
+         call transform_axi_to_dth_grid_space(temp(1:l_max+1,n_r), dTdth(:,n_r))
+      end do
+      !call zinterp%compute_thermal_wind(dTdth, up)
 
       !-- Open the 3-D snapshots in physical space
       if ( l_frame .and. tscheme%istage==1 ) then
@@ -91,12 +104,11 @@ contains
       end if
 
       runStart = MPI_Wtime()
-      if( rank==0 ) print*, '!!before thw::        up(4,1,nRstart), up(4,8,nRstart)', up(4,1,nRstart3D), &
-                    &       up(4,8,nRstart3D)
       do n_r=nRstart3D,nRstop3D
 
          !-- Transform temperature from (l,m) to (theta,phi)
-         call transform_to_grid_space_shtns(temp(:,n_r), gsa)
+         call transform_to_grid_space(temp(:,n_r), gsa)
+
 
          !-- Write the snapshot on the grid (easier to handle)
          if ( l_frame .and. tscheme%istage==1 ) then
@@ -107,28 +119,28 @@ contains
          end if
 
          !-- Get the temperature angular gradient for the thermal wind
-         call transform_to_grad_grid_space_shtns(temp(:,n_r),  &
-              &                        grad_temp_thc(:,:,n_r), &
-              &                        grad_temp_phc(:,:,n_r))
+         !call transform_to_grad_grid_space_shtns(temp(:,n_r),  &
+         !     &                        grad_temp_thc(:,:,n_r), &
+         !     &                        grad_temp_phc(:,:,n_r))
 
          !-- Compute thermal wind --> modify up_3D_Rloc
          !--> work for debug
-         work(:,:,n_r) = up(:,:,n_r)
-         call zinterp%compute_thermal_wind(grad_temp_thc, work, n_r)
+         !work(:,:,n_r) = up(:,:,n_r)
+         !call zinterp%compute_thermal_wind(grad_temp_thc, work, n_r)
 
          !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
               &          buo_tmp(:,:,n_r))
 
          !-- Transform back the non-linear terms to (l,m) space
-         call transform_to_lm_space_shtns(gsa, nl_lm)
+         call transform_to_lm_space(gsa, nl_lm)
 
          !-- Get theta and phi derivatives using recurrence relations
          call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r))
 
       end do
-      if( rank==0 ) print*, '!! after thw::        up(4,1,nRstart), up(4,8,nRstart)', work(4,1,nRstart3D), &
-                    &       work(4,8,nRstart3D)
+      !if( rank==0 ) print*, '!! after thw::        up(4,1,nRstart), up(4,8,nRstart)', work(4,1,nRstart3D), &
+      !              &       work(4,8,nRstart3D)
 
       runStop = MPI_Wtime()
       if (runStop>runStart) then
@@ -200,7 +212,7 @@ contains
 
    end subroutine radial_loop_3D
 !-------------------------------------------------------------------------------
-   subroutine transform_to_grid_space_shtns(temp, gsa)
+   subroutine transform_to_grid_space(temp, gsa)
 
       complex(cp), intent(in) :: temp(lm_max)
       type(grid_space_arrays_t) :: gsa
@@ -209,9 +221,9 @@ contains
       call scal_to_spat(temp, gsa%Tc)
 #endif
 
-   end subroutine transform_to_grid_space_shtns
+   end subroutine transform_to_grid_space
 !-------------------------------------------------------------------------------
-   subroutine transform_to_lm_space_shtns(gsa, nl_lm)
+   subroutine transform_to_lm_space(gsa, nl_lm)
 
       type(grid_space_arrays_t) :: gsa
       type(nonlinear_lm_t) :: nl_lm
@@ -226,20 +238,20 @@ contains
       call shtns_load_cfg(0)
 #endif
 
-   end subroutine transform_to_lm_space_shtns
-!------------------------------------------------------------------------------
-   subroutine transform_to_grad_grid_space_shtns(work_lm, grad_thc, grad_phc)
+   end subroutine transform_to_lm_space
+!-------------------------------------------------------------------------------
+   subroutine transform_axi_to_dth_grid_space(work_l, grad_thc)
 
-      !-- Transform a scalar spherical harmonic field into it's
-      !-- gradient on the grid
-      complex(cp), intent(in) :: work_lm(lm_max)
-      real(cp), intent(out) :: grad_thc(n_phi_max_3D, n_theta_max)
-      real(cp), intent(out) :: grad_phc(n_phi_max_3D, n_theta_max)
+      !-- Input variable
+      complex(cp), intent(in) :: work_l(:)
+
+      !-- Output variable
+      real(cp), intent(out) :: grad_thc(n_theta_max)
 
 #ifdef WITH_SHTNS
-      call scal_to_grad_spat(work_lm, grad_thc, grad_phc)
+      call scal_axi_to_grad_spat(work_l, grad_thc)
 #endif
 
-   end subroutine transform_to_grad_grid_space_shtns
+   end subroutine transform_axi_to_dth_grid_space
 !------------------------------------------------------------------------------
 end module rloop_3D
