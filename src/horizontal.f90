@@ -31,6 +31,7 @@ module horizontal
    real(cp), public, allocatable :: hdif_Xi(:)
 
    !-- Arrays depending on theta (colatitude):
+   real(cp), public, allocatable :: theta(:)
    real(cp), public, allocatable :: sint(:)
    real(cp), public, allocatable :: cost(:)
    real(cp), public, allocatable :: osint1(:)
@@ -74,9 +75,9 @@ contains
       if ( l_3D ) then
 
          !-- add theta functions
-         allocate( sint(n_theta_max), cost(n_theta_max) )
+         allocate( theta(n_theta_max), sint(n_theta_max), cost(n_theta_max) )
          allocate( osint1(n_theta_max), osint2(n_theta_max) )
-         bytes_allocated = bytes_allocated+4*n_theta_max*SIZEOF_DEF_REAL
+         bytes_allocated = bytes_allocated+5*n_theta_max*SIZEOF_DEF_REAL
 
          !-- Arrays depending on l and m:
          allocate( dPhi(lm_max) )
@@ -255,8 +256,9 @@ contains
       !-- cos(theta) and some basic theta functions:
       do n_theta=1,n_theta_max  ! Loop over colat in NHS
          colat =theta_ord(n_theta)
-         sint(n_theta)=sin(colat)
-         cost(n_theta)=cos(colat)
+         theta(n_theta) =colat
+         sint(n_theta)  =sin(colat)
+         cost(n_theta)  =cos(colat)
          osint1(n_theta)=one/sin(colat)
          osint2(n_theta)=one/(sin(colat)*sin(colat))
       end do

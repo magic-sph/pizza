@@ -14,7 +14,6 @@ module outputs_3D
    use mean_sd, only: mean_sd_type
    use time_schemes, only: type_tscheme
    use useful, only: round_off, getMSD2
-   use output_frames, only: write_snapshot_3D
 
    implicit none
 

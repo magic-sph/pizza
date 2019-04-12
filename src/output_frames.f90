@@ -6,6 +6,7 @@ module output_frames
    use parallel_mod
    use precision_mod
    use namelists, only:  ra, pr, ek, radratio, raxi, sc
+   use horizontal, only: theta
    use blocking, only: nRstart, nRstop, nr_per_rank, nMstart, nMstop, &
        &               nm_per_rank, nRstart3D, nRstop3D, nR_per_rank_3D
    use truncation, only: n_r_max, n_m_max, m_max, minc, n_phi_max, idx2m
@@ -17,8 +18,8 @@ module output_frames
 
    private
 
-   public :: write_snapshot, write_snapshot_3D, open_snapshot_3D, &
-   &         close_snapshot_3D, write_bulk_snapshot_3D
+   public :: write_snapshot, open_snapshot_3D, close_snapshot_3D, &
+   &         write_bulk_snapshot_3D
 
 contains
 
@@ -170,6 +171,7 @@ contains
 
          call MPI_File_Write(fh, r_3D, n_r_max_3D, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, tcond_3D, n_r_max_3D, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, theta, n_theta_max, MPI_DEF_REAL, istat, ierr)
       end if
 
       if ( rank == 0 ) then
