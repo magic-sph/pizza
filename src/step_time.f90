@@ -245,7 +245,7 @@ contains
                !-------------------
                if ( l_3D ) then
                   runStart = MPI_Wtime()
-                  call zinterp%prepare_extension(us_Rloc, up_Rloc)
+                  call zinterp%prepare_extension(us_Rloc, up_Rloc, om_Rloc)
                   call zinterp%extrapolate(ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc)
                   runStop = MPI_Wtime()
                   if ( runStop>runStart ) then
