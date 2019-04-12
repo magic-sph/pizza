@@ -92,6 +92,11 @@ class Pizza3DFields(PizzaSetup):
         f = Frame3D(filename, endian=endian)
         self.uphi = f.field
 
+        filename = self.get_filename('frame_temp_3D', ivar, datadir, tag,
+                                     verbose)
+        f = Frame3D(filename, endian=endian)
+        self.temp = f.field
+
     def get_filename(self, prefix, ivar, datadir, tag, verbose):
         """
         This routine determines the filename based on what is available
