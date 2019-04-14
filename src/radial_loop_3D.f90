@@ -66,7 +66,6 @@ contains
       type(timers_type), intent(inout) :: timers
 
       !-- Local variables
-      real(cp) :: work(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop
@@ -90,13 +89,9 @@ contains
          !-- Take the gradient of the axisymmetric part
          call transform_axi_to_dth_grid_space(temp(1:l_max+1,n_r), dTdth(:,n_r))
       end do
+
       !-- Compute thermal wind --> modify up_3D_Rloc
-      !--> work for debug
-      !if( rank==0 ) print*, '!! before thw::        up(4,8,nRstop)', up(4,8,nRstop3D)
-      !work(:,:,:) = up(:,:,:)
-      !call zinterp%compute_thermal_wind(dTdth, up)
-      !up(:,:,:) = work(:,:,:)
-      !if( rank==0 ) print*, '!! after thw::        up(4,8,nRstop)', up(4,8,nRstop3D)
+      call zinterp%compute_thermal_wind(dTdth, up)
 
       !-- Open the 3-D snapshots in physical space
       if ( l_frame .and. tscheme%istage==1 ) then

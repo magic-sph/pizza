@@ -337,7 +337,8 @@ contains
       thwFac=BuoFac/CorFac
 
       !-- Remaining term for the temperature gradient
-      do n_r=nRstart3D,nRstop3D
+      dTzdt(:,:)=0.0_cp
+      do n_r=max(2,nRstart3D),nRstop3D
          do n_theta=1,n_theta_max/2
             !dTzdt(n_theta,n_r)=thwFac*r_3D(n_r)* dTdth(n_theta,n_r)
             !-- TG I don't understand the r factor in the above equation
@@ -347,12 +348,8 @@ contains
          end do
       end do
 
-      if( rank==0 ) print*, 'bound nzp_thw', maxval(this%nzp_thw(:,:)), minval(this%nzp_thw(:,:))
-      if( rank== 0) print*, 'bound wt the1', maxval(this%interp_zp_thw(:,:,:,1)), minval(this%interp_zp_thw(:,:,:,1))
-      if( rank== 0) print*, 'bound wt the2', maxval(this%interp_zp_thw(:,:,:,2)), minval(this%interp_zp_thw(:,:,:,2))
-
-      if( rank==0 ) print*, 'max bounds dTzdt',dTzdt(64,13)
       !-- Compute thermal wind
+      thw_Rloc(:,:)=0.0_cp
       do n_r=nRstart3D,nRstop3D
          n_theta=1
          do n_z=1,this%nzp_thw(n_theta,n_r)
@@ -371,21 +368,11 @@ contains
                   &                     (this%interp_wt_thw(n_z,n_theta,n_r,1)* &
                   & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(n_z,n_theta,n_r,2)* &
                   & dTzdt(n_z_t-1,n_z_r))
-               !else if ( n_z_t == 1 .and. &
-               !&         this%interp_wt_thw(n_z,n_theta,n_r,1) /= 0.0_cp ) then
-               !   !-- A bit weird but all n_z_t=1 have 0.0_cp weight
-               !   !--       in this%interp_wt_thw(n_z,n_theta,n_r,2)
-               !   !print*, n_z_r, n_z_t, this%interp_wt_thw(n_z,n_theta,n_r,2)
-               !   thw_Rloc(n_theta,n_r)=thw_Rloc(n_theta,n_r) -                &
-               !   &                     this%interp_wt_thw(n_z,n_theta,n_r,1)* &
-               !   &                     dTzdt(n_z_t,n_z_r)
                end if
             end do
          end do
       end do
-
-      !if(n_procs>1) then
-      if( .false. ) then
+      if(n_procs>1) then
          tmp(:,:)=0.0_cp
          do n_rank=1,n_procs-1
             !print*, 'before BCast, n_rank, tmp, target', n_rank, tmp(1:2,n_rank), thw_Rloc(1:2,nRstart3D)
@@ -396,7 +383,7 @@ contains
             !print*, 'after BCast, n_rank, tmp', n_rank, tmp(1:2,n_rank)
          end do
          do n_rank=1,n_procs
-            if( rank < n_rank ) then
+            if( rank < n_rank-1 ) then
                do n_r=nRstart3D,nRstop3D
                   n_theta=1
                   n_z_t  =this%interp_zpb_thw(n_rank,n_theta,n_r)
@@ -410,14 +397,6 @@ contains
                         &                    (this%interp_wtb_thw(n_rank,n_theta,n_r,1)* &
                         & tmp(n_z_t,n_rank) + this%interp_wtb_thw(n_rank,n_theta,n_r,2)* &
                         & tmp(n_z_t-1,n_rank))
-                     else if ( n_z_t == 1 .and. &
-                     &         this%interp_wtb_thw(n_z,n_theta,n_r,1) /= 0.0_cp ) then
-                        !-- A bit weird but all n_z_t=1 have 0.0_cp weight
-                        !--      in this%interp_wtb_thw(n_z,n_theta,n_r,2)
-                        print*, n_z_r, n_z_t, this%interp_wtb_thw(n_rank,n_theta,n_r,2)
-                        thw_Rloc(n_theta,n_r)=thw_Rloc(n_theta,n_r) +                    &
-                        &                     this%interp_wtb_thw(n_rank,n_theta,n_r,1)* &
-                        &                     tmp(n_z_t,n_rank)
                      end if
                   end do
                end do
@@ -431,15 +410,8 @@ contains
             n_t_cth=n_theta_max+1-n_theta
             up_Rloc(:,n_theta,n_r)=up_Rloc(:,n_theta,n_r) + thw_Rloc(n_theta,n_r)
             up_Rloc(:,n_t_cth,n_r)=up_Rloc(:,n_t_cth,n_r) + thw_Rloc(n_theta,n_r)
-            if( up_Rloc(1,n_theta,n_r) /= up_Rloc(1,n_theta,n_r) ) then
-               print*, 'isnana in up + thw, n_r, n_theta = ', n_r, n_theta
-            end if
          end do
       end do
-
-
-      print*, ' in cmpt thw:: thw(8,nRstop3D)', thw_Rloc(8,nRstop3D)
-      print*, ' in cmpt thw:: up(4,8,nRstop3D)', up_Rloc(4,8,nRstop3D)
 
    end subroutine compute_thermal_wind
 !--------------------------------------------------------------------------------
@@ -448,11 +420,11 @@ contains
       class(zfunc_type) :: this
 
       !-- Local arrays
-      real(cp) :: zz(0:(nRstop-nRstart)+1)
+      real(cp) :: zz(0:(nRstop3D-nRstart3D)+1)
 
       !-- Local variables
-      integer :: n_r, n_z, n_r_r, n_t_t
-      integer :: n_start, n_r_rr, n_t_tt, n_rank
+      integer :: n_r, n_t, n_z, n_r_r, n_t_t
+      integer :: n_start, n_rank
       real(cp) :: r_r, z_r, c_t, h
       real(cp) :: norm, alpha_r, alpha_t
       real(cp) :: s_r, dz, th
@@ -506,108 +478,112 @@ contains
 
       !-- Get theta weights for thermal wind calculation
       zz(:) = 0.0_cp
-      do n_r_r=max(nRstart3D,2),nRstop3D
-         do n_t_t=1,n_theta_max/2
-            s_r = r_3D(n_r_r)*sint(n_t_t)
+      !do n_r=n_r_max_3D,2,-1
+      do n_r=2,n_r_max_3D !-- Flip the loop since the radii are decreasing
+      if( n_r>=nRstart3D .and. n_r<=nRstop3D ) then
+         do n_t=1,n_theta_max/2
+            s_r = r_3D(n_r)*sint(n_t)
             n_z = 0
-            !n_start = min(nRstop3D, n_r_max_3D-1)
-            n_start = max(nRstart3D,2)
-            do n_r_rr=n_start,n_r_r !-- Flip the loop since our radii are decreasing.
+            !n_start = min(nRstop,n_r_max_3D-1)
+            !do n_r_r=n_start,n_r,-1 !-- Normal loop
+            n_start = max(2, nRstart3D)
+            do n_r_r=n_start,n_r !-- Flip the loop since our radii are decreasing.
                n_z = n_z+1
-               th  = asin(s_r*or1_3D(n_r_rr)) !pi/two - theat(n_t_t)
-               zz(n_z)=sqrt(r_3D(n_r_rr)**2-s_r**2) !r_3D(n_r_rr)*cost(n_t_t)
+               th  = asin(s_r*or1_3D(n_r_r))
+               zz(n_z)=sqrt(r_3D(n_r_r)**2-s_r**2)
                if( th < theta(1) ) then
-                  n_t_tt = 1
-                  this%interp_zp_thw(n_z,n_t_t,n_r_r,1)=n_r_rr
-                  this%interp_zp_thw(n_z,n_t_t,n_r_r,2)=n_t_tt
-                  this%interp_wt_thw(n_z,n_t_t,n_r_r,1)=one
-                  this%interp_wt_thw(n_z,n_t_t,n_r_r,2)=0.0_cp
+                  n_t_t = 1
+                  this%interp_zp_thw(n_z,n_t,n_r,1)=n_r_r
+                  this%interp_zp_thw(n_z,n_t,n_r,2)=n_t_t
+                  this%interp_wt_thw(n_z,n_t,n_r,1)=one
+                  this%interp_wt_thw(n_z,n_t,n_r,2)=0.0_cp
                else
-                  n_t_tt = 2
-                  do while( th<theta(n_t_tt-1) .and. & 
-                  &         th<=theta(n_t_tt)  )
-                     n_t_tt=n_t_tt+1
+                  n_t_t = 2
+                  do while( .not.(th>=theta(n_t_t-1) .and. & 
+                  &         th<=theta(n_t_t))  )
+                     n_t_t=n_t_t+1
                   end do
-                  if ( n_r_rr==n_r_r ) then
-                     this%interp_zp_thw(n_z,n_t_t,n_r_r,1)=n_r_r
-                     this%interp_zp_thw(n_z,n_t_t,n_r_r,2)=n_t_t
-                     this%interp_wt_thw(n_z,n_t_t,n_r_r,1)=one
-                     this%interp_wt_thw(n_z,n_t_t,n_r_r,2)=0.0_cp
+                  if ( n_r_r==n_r ) then
+                     this%interp_zp_thw(n_z,n_t,n_r,1)=n_r
+                     this%interp_zp_thw(n_z,n_t,n_r,2)=n_t
+                     this%interp_wt_thw(n_z,n_t,n_r,1)=one
+                     this%interp_wt_thw(n_z,n_t,n_r,2)=0.0_cp
                   else
-                     this%interp_zp_thw(n_z,n_t_t,n_r_r,1)=n_r_rr
-                     this%interp_zp_thw(n_z,n_t_t,n_r_r,2)=n_t_tt
-                     this%interp_wt_thw(n_z,n_t_t,n_r_r,1)=(th-theta(n_t_tt-1))/ &
-                     &                          (theta(n_t_tt)-theta(n_t_tt-1))
-                     this%interp_wt_thw(n_z,n_t_t,n_r_r,2)=(theta(n_t_tt)-th)/   &
-                     &                          (theta(n_t_tt)-theta(n_t_tt-1))
+                     this%interp_zp_thw(n_z,n_t,n_r,1)=n_r_r
+                     this%interp_zp_thw(n_z,n_t,n_r,2)=n_t_t
+                     this%interp_wt_thw(n_z,n_t,n_r,1)=(th-theta(n_t_t-1))/ &
+                     &                          (theta(n_t_t)-theta(n_t_t-1))
+                     this%interp_wt_thw(n_z,n_t,n_r,2)=(theta(n_t_t)-th)/   &
+                     &                          (theta(n_t_t)-theta(n_t_t-1))
                   end if
                end if
             end do
-            this%nzp_thw(n_t_t,n_r_r)=n_z
+            this%nzp_thw(n_t,n_r)=n_z
             zz(0)=sqrt(r_3D(n_start-1)**2-s_r**2)
-            do n_z=1,this%nzp_thw(n_t_t,n_r_r)
+            do n_z=1,this%nzp_thw(n_t,n_r)
                dz=zz(n_z-1)-zz(n_z)
-               this%interp_wt_thw(n_z,n_t_t,n_r_r,1)=dz* &
-                    this%interp_wt_thw(n_z,n_t_t,n_r_r,1)
-               this%interp_wt_thw(n_z,n_t_t,n_r_r,2)=dz* &
-                    this%interp_wt_thw(n_z,n_t_t,n_r_r,2)
+               this%interp_wt_thw(n_z,n_t,n_r,1)=dz* &
+                    this%interp_wt_thw(n_z,n_t,n_r,1)
+               this%interp_wt_thw(n_z,n_t,n_r,2)=dz* &
+                    this%interp_wt_thw(n_z,n_t,n_r,2)
             end do
             if( rank /= n_procs-1 ) then
                do n_rank=1,n_procs-1
-                  n_r_rr=nRstart3D
-                  th  = asin(s_r*or1_3D(n_r_rr))
+                  n_r_r=nRstart3D
+                  th  = asin(s_r*or1_3D(n_r_r))
                   if( th < theta(1) ) then
-                     n_t_tt = 1
-                     this%interp_zpb_thw(n_rank,n_t_t,n_r_r)  =n_t_tt
-                     this%interp_wtb_thw(n_rank,n_t_t,n_r_r,1)=one
-                     this%interp_wtb_thw(n_rank,n_t_t,n_r_r,2)=0.0_cp
+                     n_t_t = 1
+                     this%interp_zpb_thw(n_rank,n_t,n_r)  =n_t_t
+                     this%interp_wtb_thw(n_rank,n_t,n_r,1)=one
+                     this%interp_wtb_thw(n_rank,n_t,n_r,2)=0.0_cp
                   else
-                     n_t_tt = 2
-                     do while( th<theta(n_t_tt-1) .and. &
-                     &         th<=theta(n_t_tt)  )
-                        n_t_tt=n_t_tt+1
+                     n_t_t = 2
+                     do while( .not.(th>=theta(n_t_t-1) .and. &
+                     &         th<=theta(n_t_t))  )
+                        n_t_t=n_t_t+1
                   end do
-                     this%interp_zpb_thw(n_rank,n_t_t,n_r_r)  =n_t_tt
-                     this%interp_wtb_thw(n_rank,n_t_t,n_r_r,1)=(th-theta(n_t_tt-1))/ &
-                     &                          (theta(n_t_tt)-theta(n_t_tt-1))
-                     this%interp_wtb_thw(n_rank,n_t_t,n_r_r,2)=(theta(n_t_tt)-th)/   &
-                     &                          (theta(n_t_tt)-theta(n_t_tt-1))
+                     this%interp_zpb_thw(n_rank,n_t,n_r)  =n_t_t
+                     this%interp_wtb_thw(n_rank,n_t,n_r,1)=(th-theta(n_t_t-1))/ &
+                     &                          (theta(n_t_t)-theta(n_t_t-1))
+                     this%interp_wtb_thw(n_rank,n_t,n_r,2)=(theta(n_t_t)-th)/   &
+                     &                          (theta(n_t_t)-theta(n_t_t-1))
                   end if
                end do
             end if
          end do
+      end if
       end do
 
 #ifdef DEBUG
-      do n_r_r=nRstart3D,nRstop3D
-         do n_t_t=1,n_theta_max/2
+      do n_r=nRstart3D,nRstop3D
+         do n_t=1,n_theta_max/2
             do n_z=1,n_procs-1
-               if( this%interp_zpb_thw(n_z,n_t_t,n_r_r)<1 .or. &
-               &   this%interp_zpb_thw(n_z,n_t_t,n_r_r)>n_theta_max/2 ) then
+               if( this%interp_zpb_thw(n_z,n_t,n_r)<1 .or. &
+               &   this%interp_zpb_thw(n_z,n_t,n_r)>n_theta_max/2 ) then
                   print*, 'WARNING!!:: segFault in fill mat interp_zpb_thw!!!'
                end if
-               if( this%interp_zpb_thw(n_z,n_t_t,n_r_r) == 1 .and. &
-               !&   (this%interp_wtb_thw(n_z,n_t_t,n_r_r,1) /= 0.0_cp .or. &
-               &   this%interp_wtb_thw(n_z,n_t_t,n_r_r,2) /= 0.0_cp) then!)  then
-                  print*, 'zpb! n_z_r, n_z_t, wt1, wt2', this%interp_zpb_thw(n_z,n_t_t,n_r_r),            &
-                  &        this%interp_zpb_thw(n_z,n_t_t,n_r_r), this%interp_wtb_thw(n_z,n_t_t,n_r_r,1), &
-                  &        this%interp_wtb_thw(n_z,n_t_t,n_r_r,2)
+               if( this%interp_zpb_thw(n_z,n_t,n_r) == 1 .and. &
+               !&   (this%interp_wtb_thw(n_z,n_t,n_r,1) /= 0.0_cp .or. &
+               &   this%interp_wtb_thw(n_z,n_t,n_r,2) /= 0.0_cp) then!)  then
+                  print*, 'zpb! n_z_r, n_z_t, wt1, wt2', this%interp_zpb_thw(n_z,n_t,n_r),            &
+                  &        this%interp_zpb_thw(n_z,n_t,n_r), this%interp_wtb_thw(n_z,n_t,n_r,1), &
+                  &        this%interp_wtb_thw(n_z,n_t,n_r,2)
                end if
             end do
-            do n_z=1,this%nzp_thw(n_t_t,n_r_r)
-               if( this%interp_zp_thw(n_z,n_t_t,n_r_r,1)<1 .or. &
-               &   this%interp_zp_thw(n_z,n_t_t,n_r_r,1)>n_r_max_3D .or. &
-               &   this%interp_zp_thw(n_z,n_t_t,n_r_r,2)<1 .or. &
-               &   this%interp_zp_thw(n_z,n_t_t,n_r_r,2)>n_theta_max/2 ) then
+            do n_z=1,this%nzp_thw(n_t,n_r)
+               if( this%interp_zp_thw(n_z,n_t,n_r,1)<nRstart3D .or. &
+               &   this%interp_zp_thw(n_z,n_t,n_r,1)>nRstop3D .or. &
+               &   this%interp_zp_thw(n_z,n_t,n_r,2)<1 .or. &
+               &   this%interp_zp_thw(n_z,n_t,n_r,2)>n_theta_max/2 ) then
                   print*, 'WARNING!!:: segFault in fill mat interp_zp_thw!!!'
                end if
-               if( this%interp_zp_thw(n_z,n_t_t,n_r_r,2) == 1 .and. &
-               &   (this%interp_wt_thw(n_z,n_t_t,n_r_r,1) /= 0.0_cp .or. &
-               &   this%interp_wt_thw(n_z,n_t_t,n_r_r,2) /= 0.0_cp))  then
-                  print*, '   n_r_r, n_t_t, n_z, rank', n_r_r, n_t_t, n_z, rank
-                  print*, 'zp n_z_r, n_z_t,  wt1, wt2', this%interp_zp_thw(n_z,n_t_t,n_r_r,1),           &
-                  &        this%interp_zp_thw(n_z,n_t_t,n_r_r,2), this%interp_wt_thw(n_z,n_t_t,n_r_r,1), &
-                  &        this%interp_wt_thw(n_z,n_t_t,n_r_r,2)
+               if( this%interp_zp_thw(n_z,n_t,n_r,2) == 1 .and. &
+               !&   (this%interp_wt_thw(n_z,n_t,n_r,1) /= 0.0_cp .or. &
+               &   this%interp_wt_thw(n_z,n_t,n_r,2) /= 0.0_cp) then!)  then
+                  print*, '   n_r_r, n_t_t, n_z, rank', n_r, n_t, n_z, rank
+                  print*, 'zp n_z_r, n_z_t,  wt1, wt2', this%interp_zp_thw(n_z,n_t,n_r,1),           &
+                  &        this%interp_zp_thw(n_z,n_t,n_r,2), this%interp_wt_thw(n_z,n_t,n_r,1), &
+                  &        this%interp_wt_thw(n_z,n_t,n_r,2)
                end if
             end do
          end do
