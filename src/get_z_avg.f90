@@ -70,9 +70,9 @@ contains
       n_size=nRstop3D-nRstart3D+1
       allocate( this%nzp_thw(n_theta_max/2,nRstart3D:nRstop3D) )
       allocate( this%interp_zp_thw(n_size,n_theta_max/2,nRstart3D:nRstop3D,2) )
-      allocate( this%interp_zpb_thw(n_procs,n_theta_max/2,nRstart3D:nRstop3D) )
+      allocate( this%interp_zpb_thw(0:n_procs-1,n_theta_max/2,nRstart3D:nRstop3D) )
       allocate( this%interp_wt_thw(n_size,n_theta_max/2,nRstart3D:nRstop3D,2) )
-      allocate( this%interp_wtb_thw(n_procs,n_theta_max/2,nRstart3D:nRstop3D,2) )
+      allocate( this%interp_wtb_thw(0:n_procs-1,n_theta_max/2,nRstart3D:nRstop3D,2) )
 
       this%nzp_thw(:,:)=1
       this%interp_zp_thw(:,:,:,:)=1
@@ -183,7 +183,7 @@ contains
       real(cp) :: upp(n_phi_max_3D,n_r_max)
       real(cp) :: ekp(n_phi_max_3D,n_r_max)
       !-- Local variables
-      integer :: n_r, n_r_r, n_phi, n_t_t, n_t_ct
+      integer :: n_r, n_r_r, n_phi, n_th_NHS, n_th_SHS
       real(cp) :: s_r, z_r, z_eta
       real(cp) :: vs, vz, vrr, vth, vph
       real(cp) :: alpha_r1, alpha_r2
@@ -194,10 +194,10 @@ contains
 
       !-- Compute 3D velocity fields by a linear interpolation
       do n_r_r=nRstart3D,nRstop3D
-         do n_t_t=1,n_theta_max/2
-            n_t_ct=n_theta_max+1-n_t_t
-            s_r = r_3D(n_r_r)*sint(n_t_t)
-            z_r = r_3D(n_r_r)*cost(n_t_t)
+         do n_th_NHS=1,n_theta_max/2
+            n_th_SHS=n_theta_max+1-n_th_NHS
+            s_r = r_3D(n_r_r)*sint(n_th_NHS)
+            z_r = r_3D(n_r_r)*cost(n_th_NHS)
             if ( s_r >= r_icb ) then !-- Outside TC
 
                n_r = 1
@@ -216,26 +216,26 @@ contains
                      vz = vz + z_r*(alpha_r1*ekp(n_phi,n_r) +  & 
                      &              alpha_r2*ekp(n_phi,n_r-1))
                   end if
-                  vrr= vz*cost(n_t_t) + vs*sint(n_t_t)
-                  ur_Rloc(n_phi,n_t_t,n_r_r) = vrr
-                  ur_Rloc(n_phi,n_t_ct,n_r_r)= vrr
-                  vth= vs*cost(n_t_t) - vz*sint(n_t_t)
+                  vrr= vz*cost(n_th_NHS) + vs*sint(n_th_NHS)
+                  ur_Rloc(n_phi,n_th_NHS,n_r_r)= vrr
+                  ur_Rloc(n_phi,n_th_SHS,n_r_r)= vrr
+                  vth= vs*cost(n_th_NHS) - vz*sint(n_th_NHS)
                   vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r-1)
-                  ut_Rloc(n_phi,n_t_t,n_r_r) = vth
-                  ut_Rloc(n_phi,n_t_ct,n_r_r)=-vth
-                  up_Rloc(n_phi,n_t_t,n_r_r) = vph
-                  up_Rloc(n_phi,n_t_ct,n_r_r)= vph
+                  ut_Rloc(n_phi,n_th_NHS,n_r_r)= vth
+                  ut_Rloc(n_phi,n_th_SHS,n_r_r)=-vth
+                  up_Rloc(n_phi,n_th_NHS,n_r_r)= vph
+                  up_Rloc(n_phi,n_th_SHS,n_r_r)= vph
                end do
 
             else !-- Inside the tangent cylinder
 
                do n_phi=1,n_phi_max_3D
-                  ur_Rloc(n_phi,n_t_t,n_r_r) =0.0_cp
-                  ur_Rloc(n_phi,n_t_ct,n_r_r)=0.0_cp
-                  ut_Rloc(n_phi,n_t_t,n_r_r) =0.0_cp
-                  ut_Rloc(n_phi,n_t_ct,n_r_r)=0.0_cp
-                  up_Rloc(n_phi,n_t_t,n_r_r) =0.0_cp
-                  up_Rloc(n_phi,n_t_ct,n_r_r)=0.0_cp
+                  ur_Rloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
+                  ur_Rloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
+                  ut_Rloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
+                  ut_Rloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
+                  up_Rloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
+                  up_Rloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
                end do
 
             end if ! Inside/outside TC
@@ -265,26 +265,26 @@ contains
 
       !-- Local variables
       integer :: n_r, n_phi, n_z, n_m_QG, n_m, m3D
-      integer :: n_r_r, n_t_t, n_t_ct
+      integer :: n_r_r, n_th_NHS, n_th_SHS
       complex(cp) :: tmp_hat(n_m_max_3D)
       real(cp) :: czavg
       real(cp) :: tmp(n_phi_max_3D,n_r_max)
 
-      tmp(:,:)=0.0_cp
+      tmp(:,:)      =0.0_cp
       zavg_Rloc(:,:)=zero
 
       !-- z-average in spatial space
       do n_r=1,n_r_max
          do n_z=1,4*n_z_max
-            n_t_t = this%interp_zt_mat(n_z,n_r)
-            n_t_ct= n_theta_max+1-n_t_t
+            n_th_NHS= this%interp_zt_mat(n_z,n_r)
+            n_th_SHS= n_theta_max+1-n_th_NHS
             n_r_r = this%interp_zr_mat(n_z,n_r)
             czavg = this%interp_wt_mat(n_z,n_r)
             if ( n_r_r >= nRstart3D .and. n_r_r <= nRstop3D ) then
                do n_phi=1,n_phi_max_3D
-                  tmp(n_phi,n_r) = tmp(n_phi,n_r) + czavg*             &
-                  &                   (work_Rloc(n_phi,n_t_t ,n_r_r)   &
-                  &                  + work_Rloc(n_phi,n_t_ct,n_r_r))
+                  tmp(n_phi,n_r) = tmp(n_phi,n_r) + czavg*               &
+                  &                   (work_Rloc(n_phi,n_th_NHS ,n_r_r)  &
+                  &                  + work_Rloc(n_phi,n_th_SHS,n_r_r))
                end do
             end if
          end do
@@ -328,10 +328,10 @@ contains
       !-- Local arrays
       real(cp) :: thw_Rloc(n_theta_max/2,nRstart3D:nRstop3D)
       real(cp) :: dTzdt(n_theta_max/2,nRstart3D:nRstop3D)
-      real(cp) :: tmp(n_theta_max/2,n_procs)
+      real(cp) :: tmp(n_theta_max/2,0:n_procs-1)
       !-- Local variables
-      integer :: n_theta, n_z, n_z_r, n_z_t, n_t_cth
-      integer :: n_r, n_rank
+      integer :: n_th_NHS, n_z, n_z_r, n_z_t, n_th_SHS
+      integer :: n_r, n_p
       real(cp) :: thwFac
 
       thwFac=BuoFac/CorFac
@@ -339,64 +339,66 @@ contains
       !-- Remaining term for the temperature gradient
       dTzdt(:,:)=0.0_cp
       do n_r=max(2,nRstart3D),nRstop3D
-         do n_theta=1,n_theta_max/2
-            !dTzdt(n_theta,n_r)=thwFac*r_3D(n_r)* dTdth(n_theta,n_r)
+         do n_th_NHS=1,n_theta_max/2
+            !dTzdt(n_th_NHS,n_r)=thwFac*r_3D(n_r)* dTdth(n_th_NHS,n_r)
             !-- TG I don't understand the r factor in the above equation
             !-- Th wind should be
             !-- duphi/dz = Ra/Pr  * g / r * dT/dtheta
-            dTzdt(n_theta,n_r)=thwFac*rgrav_3D(n_r)*or1_3D(n_r)* dTdth(n_theta,n_r)
+            dTzdt(n_th_NHS,n_r)=thwFac*rgrav_3D(n_r)*or1_3D(n_r)* &
+            &                   dTdth(n_th_NHS,n_r)
          end do
       end do
 
       !-- Compute thermal wind
       thw_Rloc(:,:)=0.0_cp
       do n_r=nRstart3D,nRstop3D
-         n_theta=1
-         do n_z=1,this%nzp_thw(n_theta,n_r)
-            n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
-            n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
-            thw_Rloc(n_theta,n_r)=thw_Rloc(n_theta,n_r) -                &
-            &                     this%interp_wt_thw(n_z,n_theta,n_r,1)* &
+         n_th_NHS=1
+         do n_z=1,this%nzp_thw(n_th_NHS,n_r)
+            n_z_r = this%interp_zp_thw(n_z,n_th_NHS,n_r,1)
+            n_z_t = this%interp_zp_thw(n_z,n_th_NHS,n_r,2)
+            thw_Rloc(n_th_NHS,n_r)=thw_Rloc(n_th_NHS,n_r) -               &
+            &                     this%interp_wt_thw(n_z,n_th_NHS,n_r,1)* &
             &                     dTzdt(n_z_t,n_z_r)
          end do
-         do n_theta=2,n_theta_max/2
-            do n_z=1,this%nzp_thw(n_theta,n_r)
-               n_z_r = this%interp_zp_thw(n_z,n_theta,n_r,1)
-               n_z_t = this%interp_zp_thw(n_z,n_theta,n_r,2)
+         do n_th_NHS=2,n_theta_max/2
+            do n_z=1,this%nzp_thw(n_th_NHS,n_r)
+               n_z_r = this%interp_zp_thw(n_z,n_th_NHS,n_r,1)
+               n_z_t = this%interp_zp_thw(n_z,n_th_NHS,n_r,2)
                if ( n_z_t > 1 ) then
-                  thw_Rloc(n_theta,n_r)= thw_Rloc(n_theta,n_r) -                &
-                  &                     (this%interp_wt_thw(n_z,n_theta,n_r,1)* &
-                  & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(n_z,n_theta,n_r,2)* &
+                  thw_Rloc(n_th_NHS,n_r)= thw_Rloc(n_th_NHS,n_r) -               &
+                  &                     (this%interp_wt_thw(n_z,n_th_NHS,n_r,1)* &
+                  & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(n_z,n_th_NHS,n_r,2)* &
                   & dTzdt(n_z_t-1,n_z_r))
                end if
             end do
          end do
       end do
-      if(n_procs>1) then
+      if( n_procs>1 ) then
          tmp(:,:)=0.0_cp
-         do n_rank=1,n_procs-1
+         do n_p=0,n_procs-1
             !print*, 'before BCast, n_rank, tmp, target', n_rank, tmp(1:2,n_rank), thw_Rloc(1:2,nRstart3D)
-            if( n_rank == rank ) tmp(:,n_rank) = thw_Rloc(:,nRstart3D)
-            call MPI_Bcast(tmp(:,n_rank), n_theta_max/2, MPI_DEF_REAL, &
-            &              n_rank, MPI_COMM_WORLD, ierr)
+            if( n_p == rank ) tmp(:,n_p) = thw_Rloc(:,nRstart3D)
+            call MPI_Bcast(tmp(:,n_p), n_theta_max/2, MPI_DEF_REAL, &
+            &              n_p, MPI_COMM_WORLD, ierr)
             call MPI_Barrier(MPI_COMM_WORLD, ierr)
-            !print*, 'after BCast, n_rank, tmp', n_rank, tmp(1:2,n_rank)
+            !print*, 'after BCast, n_p, tmp', n_p, tmp(1:2,n_p)
          end do
-         do n_rank=1,n_procs
-            if( rank < n_rank-1 ) then
+         do n_p=0,n_procs-1
+            if( rank < n_p ) then
                do n_r=nRstart3D,nRstop3D
-                  n_theta=1
-                  n_z_t  =this%interp_zpb_thw(n_rank,n_theta,n_r)
-                  thw_Rloc(n_theta,n_r)=thw_Rloc(n_theta,n_r) +                    &
-                  &                     this%interp_wtb_thw(n_rank,n_theta,n_r,1)* &
-                  &                     tmp(n_z_t,n_rank)
-                  do n_theta=2,n_theta_max/2
-                     n_z_t  =this%interp_zpb_thw(n_rank,n_theta,n_r)
+                  n_th_NHS=1
+                  n_z_t  =this%interp_zpb_thw(n_p,n_th_NHS,n_r)
+                  thw_Rloc(n_th_NHS,n_r)=thw_Rloc(n_th_NHS,n_r) +               &
+                  &                     this%interp_wtb_thw(n_p,n_th_NHS,n_r,1)*&
+                  &                     tmp(n_z_t,n_p)
+                  do n_th_NHS=2,n_theta_max/2
+                     n_z_t  =this%interp_zpb_thw(n_p,n_th_NHS,n_r)
                      if ( n_z_t > 1 ) then
-                        thw_Rloc(n_theta,n_r)= thw_Rloc(n_theta,n_r) +                   &
-                        &                    (this%interp_wtb_thw(n_rank,n_theta,n_r,1)* &
-                        & tmp(n_z_t,n_rank) + this%interp_wtb_thw(n_rank,n_theta,n_r,2)* &
-                        & tmp(n_z_t-1,n_rank))
+                        thw_Rloc(n_th_NHS,n_r)= thw_Rloc(n_th_NHS,n_r) +        &
+                        &             (this%interp_wtb_thw(n_p,n_th_NHS,n_r,1)* &
+                        &             tmp(n_z_t,n_p) +                          &
+                        &             this%interp_wtb_thw(n_p,n_th_NHS,n_r,2)*  &
+                        &             tmp(n_z_t-1,n_p))
                      end if
                   end do
                end do
@@ -406,10 +408,10 @@ contains
 
       !-- Add thermal wind to u_phi
       do n_r=nRstart3D,nRstop3D
-         do n_theta=1,n_theta_max/2
-            n_t_cth=n_theta_max+1-n_theta
-            up_Rloc(:,n_theta,n_r)=up_Rloc(:,n_theta,n_r) + thw_Rloc(n_theta,n_r)
-            up_Rloc(:,n_t_cth,n_r)=up_Rloc(:,n_t_cth,n_r) + thw_Rloc(n_theta,n_r)
+         do n_th_NHS=1,n_theta_max/2
+            n_th_SHS=n_theta_max+1-n_th_NHS
+            up_Rloc(:,n_th_NHS,n_r)=up_Rloc(:,n_th_NHS,n_r) + thw_Rloc(n_th_NHS,n_r)
+            up_Rloc(:,n_th_SHS,n_r)=up_Rloc(:,n_th_SHS,n_r) + thw_Rloc(n_th_NHS,n_r)
          end do
       end do
 
@@ -424,7 +426,7 @@ contains
 
       !-- Local variables
       integer :: n_r, n_t, n_z, n_r_r, n_t_t
-      integer :: n_start, n_rank
+      integer :: n_start, n_p
       real(cp) :: r_r, z_r, c_t, h
       real(cp) :: norm, alpha_r, alpha_t
       real(cp) :: s_r, dz, th
@@ -528,24 +530,24 @@ contains
                     this%interp_wt_thw(n_z,n_t,n_r,2)
             end do
             if( rank /= n_procs-1 ) then
-               do n_rank=1,n_procs-1
+               do n_p=0,n_procs-1
                   n_r_r=nRstart3D
                   th  = asin(s_r*or1_3D(n_r_r))
                   if( th < theta(1) ) then
                      n_t_t = 1
-                     this%interp_zpb_thw(n_rank,n_t,n_r)  =n_t_t
-                     this%interp_wtb_thw(n_rank,n_t,n_r,1)=one
-                     this%interp_wtb_thw(n_rank,n_t,n_r,2)=0.0_cp
+                     this%interp_zpb_thw(n_p,n_t,n_r)  =n_t_t
+                     this%interp_wtb_thw(n_p,n_t,n_r,1)=one
+                     this%interp_wtb_thw(n_p,n_t,n_r,2)=0.0_cp
                   else
                      n_t_t = 2
                      do while( .not.(th>=theta(n_t_t-1) .and. &
                      &         th<=theta(n_t_t))  )
                         n_t_t=n_t_t+1
                   end do
-                     this%interp_zpb_thw(n_rank,n_t,n_r)  =n_t_t
-                     this%interp_wtb_thw(n_rank,n_t,n_r,1)=(th-theta(n_t_t-1))/ &
+                     this%interp_zpb_thw(n_p,n_t,n_r)  =n_t_t
+                     this%interp_wtb_thw(n_p,n_t,n_r,1)=(th-theta(n_t_t-1))/ &
                      &                          (theta(n_t_t)-theta(n_t_t-1))
-                     this%interp_wtb_thw(n_rank,n_t,n_r,2)=(theta(n_t_t)-th)/   &
+                     this%interp_wtb_thw(n_p,n_t,n_r,2)=(theta(n_t_t)-th)/   &
                      &                          (theta(n_t_t)-theta(n_t_t-1))
                   end if
                end do
