@@ -10,7 +10,7 @@ module z_functions
    use fourier, only: ifft, fft
    use communications, only: allgather_from_rloc
    use constants, only: zero, half, one, two, ci, pi
-   use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
+   use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D, radial_balance_3D
    use truncation, only: n_r_max, n_m_max, minc, idx2m, m2idx
    use truncation_3D, only: n_r_max_3D, n_z_max, n_m_max_3D, n_theta_max, &
        &                    minc_3D, idx2m3D, n_phi_max_3D
@@ -328,7 +328,8 @@ contains
       !-- Local arrays
       real(cp) :: thw_Rloc(n_theta_max/2,nRstart3D:nRstop3D)
       real(cp) :: dTzdt(n_theta_max/2,nRstart3D:nRstop3D)
-      real(cp) :: tmp(n_theta_max/2,0:n_procs-1)
+      real(cp) :: tmp(n_theta_max/2)
+      real(cp) :: Zwb(n_theta_max/2,0:n_procs-1)
       !-- Local variables
       integer :: n_th_NHS, n_z, n_z_r, n_z_t, n_th_SHS
       integer :: n_r, n_p
@@ -374,31 +375,34 @@ contains
          end do
       end do
       if( n_procs>1 ) then
-         tmp(:,:)=0.0_cp
-         do n_p=0,n_procs-1
+         Zwb(:,:)=0.0_cp
+         do n_p=1,n_procs-1
             !print*, 'before BCast, n_rank, tmp, target', n_rank, tmp(1:2,n_rank), thw_Rloc(1:2,nRstart3D)
-            if( n_p == rank ) tmp(:,n_p) = thw_Rloc(:,nRstart3D)
-            call MPI_Bcast(tmp(:,n_p), n_theta_max/2, MPI_DEF_REAL, &
+            if( n_p == rank ) tmp(:) = thw_Rloc(:,nRstop3D)
+            call MPI_Bcast(tmp, n_theta_max/2, MPI_DEF_REAL, &
             &              n_p, MPI_COMM_WORLD, ierr)
+            ZWb(:,n_p)=tmp(:)
             call MPI_Barrier(MPI_COMM_WORLD, ierr)
             !print*, 'after BCast, n_p, tmp', n_p, tmp(1:2,n_p)
          end do
          do n_p=0,n_procs-1
-            if( rank < n_p ) then
+         !do n_p=0,n_procs-1
+            if( rank > n_p ) then
                do n_r=nRstart3D,nRstop3D
                   n_th_NHS=1
                   n_z_t  =this%interp_zpb_thw(n_p,n_th_NHS,n_r)
                   thw_Rloc(n_th_NHS,n_r)=thw_Rloc(n_th_NHS,n_r) +               &
                   &                     this%interp_wtb_thw(n_p,n_th_NHS,n_r,1)*&
-                  &                     tmp(n_z_t,n_p)
+                  &                     Zwb(n_z_t,n_p)
                   do n_th_NHS=2,n_theta_max/2
                      n_z_t  =this%interp_zpb_thw(n_p,n_th_NHS,n_r)
                      if ( n_z_t > 1 ) then
+                        !print*, n_p
                         thw_Rloc(n_th_NHS,n_r)= thw_Rloc(n_th_NHS,n_r) +        &
                         &             (this%interp_wtb_thw(n_p,n_th_NHS,n_r,1)* &
-                        &             tmp(n_z_t,n_p) +                          &
+                        &             Zwb(n_z_t,n_p) +                          &
                         &             this%interp_wtb_thw(n_p,n_th_NHS,n_r,2)*  &
-                        &             tmp(n_z_t-1,n_p))
+                        &             Zwb(n_z_t-1,n_p))
                      end if
                   end do
                end do
@@ -530,8 +534,8 @@ contains
                     this%interp_wt_thw(n_z,n_t,n_r,2)
             end do
             if( rank /= n_procs-1 ) then
-               do n_p=0,n_procs-1
-                  n_r_r=nRstart3D
+               do n_p=1,n_procs-1
+                  n_r_r=nRstart3D-1
                   th  = asin(s_r*or1_3D(n_r_r))
                   if( th < theta(1) ) then
                      n_t_t = 1
