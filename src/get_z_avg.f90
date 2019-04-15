@@ -70,9 +70,9 @@ contains
       n_size=nRstop3D-nRstart3D+1
       allocate( this%nzp_thw(n_theta_max/2,nRstart3D:nRstop3D) )
       allocate( this%interp_zp_thw(2,n_size,n_theta_max/2,nRstart3D:nRstop3D) )
-      allocate( this%interp_zpb_thw(0:n_procs-1,n_theta_max/2,nRstart3D:nRstop3D) )
+      allocate( this%interp_zpb_thw(n_theta_max/2,nRstart3D:nRstop3D,0:n_procs-1) )
       allocate( this%interp_wt_thw(2,n_size,n_theta_max/2,nRstart3D:nRstop3D) )
-      allocate( this%interp_wtb_thw(2,0:n_procs-1,n_theta_max/2,nRstart3D:nRstop3D) )
+      allocate( this%interp_wtb_thw(2,n_theta_max/2,nRstart3D:nRstop3D,0:n_procs-1))
 
       this%nzp_thw(:,:)=1
       this%interp_zp_thw(:,:,:,:)=1
@@ -392,17 +392,17 @@ contains
             if( rank > n_p ) then
                do n_r=nRstart3D,nRstop3D
                   n_th_NHS=1
-                  n_z_t  =this%interp_zpb_thw(n_p,n_th_NHS,n_r)
+                  n_z_t  =this%interp_zpb_thw(n_th_NHS,n_r,n_p)
                   thw_Rloc(n_th_NHS,n_r)=thw_Rloc(n_th_NHS,n_r) +               &
-                  &                     this%interp_wtb_thw(1,n_p,n_th_NHS,n_r)*&
+                  &                     this%interp_wtb_thw(1,n_th_NHS,n_r,n_p)*&
                   &                     Zwb(n_z_t,n_p)
                   do n_th_NHS=2,n_theta_max/2
-                     n_z_t  =this%interp_zpb_thw(n_p,n_th_NHS,n_r)
+                     n_z_t  =this%interp_zpb_thw(n_th_NHS,n_r,n_p)
                      if ( n_z_t > 1 ) then
                         thw_Rloc(n_th_NHS,n_r)= thw_Rloc(n_th_NHS,n_r) +        &
-                        &             (this%interp_wtb_thw(1,n_p,n_th_NHS,n_r)* &
+                        &             (this%interp_wtb_thw(1,n_th_NHS,n_r,n_p)* &
                         &             Zwb(n_z_t,n_p) +                          &
-                        &             this%interp_wtb_thw(2,n_p,n_th_NHS,n_r)*  &
+                        &             this%interp_wtb_thw(2,n_th_NHS,n_r,n_p)*  &
                         &             Zwb(n_z_t-1,n_p))
                      end if
                   end do
@@ -540,18 +540,18 @@ contains
                   th  = asin(s_r*or1_3D(n_r_r))
                   if( th < theta(1) ) then
                      n_t_t = 1
-                     this%interp_zpb_thw(n_p,n_t,n_r)  =n_t_t
-                     this%interp_wtb_thw(1,n_p,n_t,n_r)=one
-                     this%interp_wtb_thw(2,n_p,n_t,n_r)=0.0_cp
+                     this%interp_zpb_thw(n_t,n_r,n_p)  =n_t_t
+                     this%interp_wtb_thw(1,n_t,n_r,n_p)=one
+                     this%interp_wtb_thw(2,n_t,n_r,n_p)=0.0_cp
                   else
                      n_t_t = 2
                      do while (.not.(th>=theta(n_t_t-1) .and. th<=theta(n_t_t)))
                         n_t_t=n_t_t+1
                      end do
-                     this%interp_zpb_thw(n_p,n_t,n_r)  =n_t_t
-                     this%interp_wtb_thw(1,n_p,n_t,n_r)=(th-theta(n_t_t-1))/ &
+                     this%interp_zpb_thw(n_t,n_r,n_p)  =n_t_t
+                     this%interp_wtb_thw(1,n_t,n_r,n_p)=(th-theta(n_t_t-1))/ &
                      &                          (theta(n_t_t)-theta(n_t_t-1))
-                     this%interp_wtb_thw(2,n_p,n_t,n_r)=(theta(n_t_t)-th)/   &
+                     this%interp_wtb_thw(2,n_t,n_r,n_p)=(theta(n_t_t)-th)/   &
                      &                          (theta(n_t_t)-theta(n_t_t-1))
                   end if
                end if
