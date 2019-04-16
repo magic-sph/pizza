@@ -346,13 +346,9 @@ contains
             !-- Th wind should be
             !-- duphi/dz = Ra/Pr  * g / r * dT/dtheta
             dTzdt(n_th_NHS,n_r)=thwFac*rgrav_3D(n_r)*or1_3D(n_r)* &
+            !&                   cos(theta(n_th_NHS))
             &                   dTdth(n_th_NHS,n_r)
          end do
-         !if ( n_r == 16 ) then
-         !   do n_th_NHS=1,n_theta_max/2
-         !      print*, n_th_NHS, dTdth(n_th_NHS,n_r)
-         !   end do
-         !end if
       end do
 
       !-- Compute thermal wind
@@ -493,7 +489,7 @@ contains
             !n_start = min(nRstop,n_r_max_3D-1)
             !do n_r_r=n_start,n_r,-1 !-- Normal loop
             n_start = max(2, nRstart3D)
-            do n_r_r=n_start,n_r !-- Flip the loop since our radii are decreasing.
+            do n_r_r=n_start,n_r-1 !-- Flip the loop since our radii are decreasing.
                n_z = n_z+1
                th  = asin(s_r*or1_3D(n_r_r))
                zz(n_z)=sqrt(r_3D(n_r_r)**2-s_r**2)
@@ -506,7 +502,7 @@ contains
                else
                   n_t_t = 2
                   do while( .not.(th>=theta(n_t_t-1) .and. & 
-                  &         th<=theta(n_t_t))  )
+                  &         th<=theta(n_t_t)) )
                      n_t_t=n_t_t+1
                   end do
                   if ( n_r_r==n_r ) then
@@ -533,7 +529,6 @@ contains
                this%interp_wt_thw(2,n_z,n_t,n_r)=dz* &
                &              this%interp_wt_thw(2,n_z,n_t,n_r)
             end do
-
             do n_p=0,n_procs-1
                if ( rank > n_p ) then
                   n_r_r=radial_balance_3D(n_p)%nStop
