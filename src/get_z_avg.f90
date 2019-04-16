@@ -381,7 +381,7 @@ contains
       end do
       if( n_procs>1 ) then
          Zwb(:,:)=0.0_cp
-         do n_p=1,n_procs-1
+         do n_p=0,n_procs-1
             if( n_p == rank ) tmp(:) = thw_Rloc(:,nRstop3D)
             call MPI_Bcast(tmp, n_theta_max/2, MPI_DEF_REAL, &
             &              n_p, MPI_COMM_WORLD, ierr)

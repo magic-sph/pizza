@@ -81,6 +81,7 @@ contains
       !-- Local variable
       complex(cp) :: tmpt(n_theta_max),tmpp(n_theta_max)
 
+      call shtns_load_cfg(0)
       call shtns_sph_to_spat_ml(0, Saxi_l, tmpt, tmpp, l_max)
       gradtc(:)=real(tmpt)
 
