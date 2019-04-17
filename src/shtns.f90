@@ -59,12 +59,24 @@ contains
 !------------------------------------------------------------------------------
    subroutine spat_to_SH(f, fLM)
 
+      !-- Input variable
       real(cp), intent(in) :: f(n_phi_max_3D, n_theta_max)
-      complex(cp), intent(out) :: fLM(lmP_max)
 
-      !call shtns_load_cfg(1)
+      !-- Output variable
+      complex(cp), intent(out) :: fLM(:)
+
+      !-- Local variable
+      integer :: nlm
+
+      nlm = size(fLM)
+
+      if ( nlm == lmP_max ) then
+         call shtns_load_cfg(1)
+      else
+         call shtns_load_cfg(0)
+      end if
       call shtns_spat_to_sh(f, fLM)
-      !call shtns_load_cfg(0)
+      call shtns_load_cfg(0)
 
    end subroutine spat_to_SH
 !------------------------------------------------------------------------------

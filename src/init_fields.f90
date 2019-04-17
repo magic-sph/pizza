@@ -6,10 +6,11 @@ module init_fields
    !
 
    use constants, only: zero, one, two, three, ci, pi, half, sq4pi
-   use blocking, only: nRstart, nRstop
-   use communications, only: transp_r2m, r2m_fields
+   use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
+   use communications, only: transp_r2m, r2m_fields, transp_r2lm, r2lm_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta, rscheme_3D, &
        &                       r_3D, tcond_3D
+   use horizontal, only: theta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
        &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
@@ -19,7 +20,8 @@ module init_fields
    use blocking, only: nMstart, nMstop, nM_per_rank, lmStart, lmStop
    use blocking_lm, only: lo_map
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max
-   use truncation_3D, only: n_r_max_3D, minc_3D, l_max
+   use truncation_3D, only: n_r_max_3D, minc_3D, l_max, n_theta_max, &
+       &                    n_phi_max_3D, lm_max
    use useful, only: logWrite, abortRun, gausslike_compact_center, &
        &             gausslike_compact_middle, gausslike_compact_edge
    use radial_der, only: get_dr
@@ -29,6 +31,9 @@ module init_fields
    use fields
    use fieldsLast
    use precision_mod
+#ifdef WITH_SHTNS
+   use shtns, only: spat_to_SH
+#endif
 
    implicit none
 
@@ -347,9 +352,11 @@ contains
       complex(cp), intent(inout) :: temp_LMloc(lmStart:lmStop, n_r_max_3D)
 
       !-- Local variables
-      real(cp) :: tpert(n_r_max_3D)
-      real(cp) :: x, ra1, ra2, c_r, c_i, rdm
-      integer :: n_r, lm00, lm, l, m
+      real(cp) :: tpert(n_r_max_3D), gasp(n_r_max_3D)
+      real(cp) :: x, ra1, ra2, c_r, c_i, rdm, rc, c2, c1, sigma_r, LL
+      real(cp) :: theta0, phi0, phi
+      real(cp) :: ang_func(n_phi_max,n_theta_max)
+      integer :: n_r, lm00, lm, l, m, ir, n_th, n_phi
       logical :: rank_has_l0m0
 
       lm00 = lo_map%lm2(0,0)
@@ -389,6 +396,72 @@ contains
                else
                   temp_LMloc(lm,n_r)=temp_LMloc(lm,n_r)+cmplx(c_r,0.0_cp,kind=cp)
                end if
+            end do
+         end do
+
+      else if ( init_t == -1 ) then ! Bubble
+
+         sigma_r = 0.1_cp/sqrt(two)
+         rc = half*(r_cmb+r_icb)
+         !-- Find the closest point to the middle radius
+         ir=minloc(abs(r_3D-rc),1)
+         !-- Overwrite rc to be on the grid
+         rc = r_3D(ir)
+         c1 = half*(r_3D(1)-rc)
+         c2 = half*(rc-r_3D(n_r_max_3D))
+         LL = half * sigma_r
+
+         !-- Piecewise-definition of a compact-support Gaussian-like profile
+         !-- From Eq. (4.7) from Gaspari et al. (1999)
+         !-- This ensures that the BCs will always be fulfilled
+         do n_r=1,n_r_max_3D
+            if ( n_r == ir ) then ! Middle point
+               gasp(n_r)=one
+            else ! Middle and Edge parts
+               if ( r_3D(n_r) < rc-c2 ) then
+                  gasp(n_r) = gausslike_compact_edge(rc-r_3D(n_r),c2,LL)
+               else if ( r_3D(n_r) >= rc-c2 .and. r_3D(n_r) < rc ) then
+                  gasp(n_r) = gausslike_compact_middle(rc-r_3D(n_r),c2,LL)
+               else if ( r_3D(n_r) > rc .and. r_3D(n_r) <= rc+c1 ) then
+                  gasp(n_r) = gausslike_compact_middle(r_3D(n_r)-rc,c1,LL)
+               else if ( r_3D(n_r) > rc+c1 ) then
+                  gasp(n_r) = gausslike_compact_edge(r_3D(n_r)-rc,c1,LL)
+               end if
+            end if
+         end do
+
+         !-- Normalisation of the two branches by the middle value
+         do n_r=1,n_r_max_3D
+            if ( n_r < ir ) then
+               gasp(n_r) = gasp(n_r)/gausslike_compact_center(c1,LL)
+            else if ( n_r > ir ) then
+               gasp(n_r) = gasp(n_r)/gausslike_compact_center(c2,LL)
+            end if
+         end do
+
+         !-- Now finally define the bubble
+         phi0 = pi/minc_3D
+         theta0 = half*pi
+         do n_r=nRstart3D,nRstop3D
+            c_r = amp_t*gasp(n_r)
+            do n_th=1,n_theta_max
+               do n_phi=1,n_phi_max_3D
+                  phi = (n_phi-1)*two*pi/minc_3D/(n_phi_max_3D)
+                  ang_func(n_phi,n_th)= c_r*exp(-(phi-phi0)**2/0.2_cp**2)* &
+                  &                   exp(-(theta(n_th)-theta0)**2/0.2_cp**2)
+               end do
+            end do
+
+#ifdef WITH_SHTNS
+            call spat_to_SH(ang_func, temp_3D_Rloc(:,n_r))
+#endif
+         end do
+
+         call transp_r2lm(r2lm_fields, temp_3D_Rloc, work_LMloc)
+
+         do n_r=1,n_r_max_3D
+            do lm=lmStart,lmStop
+               temp_LMloc(lm,n_r)=temp_LMloc(lm,n_r)+work_LMloc(lm,n_r)
             end do
          end do
 
