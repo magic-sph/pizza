@@ -8,7 +8,7 @@ module z_functions
    use parallel_mod
    use mem_alloc
    use fourier, only: ifft, fft
-   use communications, only: allgather_from_rloc
+   use communications, only: allgather_from_rloc, allgather_from_rloc_3D
    use constants, only: zero, half, one, two, ci, pi
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D, radial_balance_3D
    use truncation, only: n_r_max, n_m_max, minc, idx2m, m2idx
@@ -329,8 +329,8 @@ contains
       real(cp) :: dTdth(n_theta_max,n_r_max_3D)!nRstart3D:nRstop3D)
       real(cp) :: thw_Rloc(n_theta_max/2,n_r_max_3D)!nRstart3D:nRstop3D)
       real(cp) :: dTzdt(n_theta_max/2,n_r_max_3D)!nRstart3D:nRstop3D)
-      real(cp) :: tmp(n_theta_max/2)
-      real(cp) :: Zwb(n_theta_max/2,0:n_procs-1)
+      !real(cp) :: tmp(n_theta_max/2)
+      !real(cp) :: Zwb(n_theta_max/2,0:n_procs-1)
       !-- Local variables
       integer :: n_th_NHS, n_z, n_z_r, n_z_t, n_th_SHS
       integer :: n_r, n_p
@@ -338,7 +338,7 @@ contains
 
       thwFac=BuoFac/CorFac
 
-      call allgather_from_rloc(dTdth_Rloc,dTdth,n_theta_max)
+      call allgather_from_rloc_3D(dTdth_Rloc,dTdth,n_theta_max)
 
       !-- Remaining term for the temperature gradient
       dTzdt(:,:)=0.0_cp

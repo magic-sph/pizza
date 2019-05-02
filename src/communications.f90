@@ -34,7 +34,7 @@ module communications
    &         finalize_communications, reduce_radial_on_rank,        &
    &         my_reduce_mean, my_allreduce_maxloc, transp_lm2r,      &
    &         transp_r2lm, allgather_from_Rloc,                      &
-   &         scatter_from_rank0_to_lmloc
+   &         allgather_from_Rloc_3D, scatter_from_rank0_to_lmloc
 
 contains
 
@@ -466,7 +466,7 @@ contains
       real(cp), allocatable :: rbuff(:), sbuff(:)
       integer, allocatable :: rcounts(:)
       integer, allocatable :: rdisp(:)
-      integer ::p, ii, n_r, n_m
+      integer :: p, ii, n_r, n_m
 
       allocate( rbuff(len_arr*n_r_max), sbuff(len_arr*nR_per_rank) )
       allocate ( rcounts(0:n_procs-1), rdisp(0:n_procs-1) )
@@ -505,6 +505,62 @@ contains
       deallocate( rbuff, sbuff, rcounts, rdisp)
 
    end subroutine allgather_from_Rloc
+!------------------------------------------------------------------------------
+   subroutine allgather_from_Rloc_3D(arr_Rloc, arr_full, len_arr)
+      !
+      ! This routine allgather the R-distributed array to a global array
+      !
+
+      !-- Input variable:
+      integer,  intent(in) :: len_arr
+      real(cp), intent(in) :: arr_Rloc(len_arr, nRstart3D:nRstop3D)
+
+      !-- Output variable:
+      real(cp), intent(out) :: arr_full(len_arr, n_r_max_3D)
+
+      !-- Local variables:
+      real(cp), allocatable :: rbuff(:), sbuff(:)
+      integer, allocatable :: rcounts(:)
+      integer, allocatable :: rdisp(:)
+      integer :: p, ii, n_r, n_m
+
+      allocate( rbuff(len_arr*n_r_max_3D), sbuff(len_arr*nR_per_rank_3D) )
+      allocate ( rcounts(0:n_procs-1), rdisp(0:n_procs-1) )
+
+      do p=0,n_procs-1
+         rcounts(p)=len_arr*radial_balance_3D(p)%n_per_rank
+      end do
+
+      rdisp(0)=0
+      do p=1,n_procs-1
+         rdisp(p)=rdisp(p-1)+rcounts(p-1)
+      end do
+
+      ii = 1
+      do n_r=nRstart3D,nRstop3D
+         do n_m=1,len_arr
+            sbuff(ii)=arr_Rloc(n_m,n_r)
+            ii = ii +1
+         end do
+      end do
+
+      call MPI_Allgatherv(sbuff, nR_per_rank_3D*len_arr, MPI_DEF_REAL, &
+           &              rbuff, rcounts, rdisp, MPI_DEF_REAL,         &
+           &              MPI_COMM_WORLD, ierr)
+
+      do p = 0, n_procs-1
+         ii = rdisp(p)+1
+         do n_r=radial_balance_3D(p)%nStart,radial_balance_3D(p)%nStop
+            do n_m=1,len_arr
+               arr_full(n_m,n_r)=rbuff(ii)
+               ii=ii+1
+            end do
+         end do
+      end do
+
+      deallocate( rbuff, sbuff, rcounts, rdisp)
+
+   end subroutine allgather_from_Rloc_3D
 !------------------------------------------------------------------------------
    subroutine scatter_from_rank0_to_mloc(arr_full, arr_Mloc)
 
