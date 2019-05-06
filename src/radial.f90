@@ -275,7 +275,7 @@ contains
             tcond(:) = cond_fac*(one + f_top*r_cmb*log(r(:)/r_icb) + (epsc0/two)*  &
             &                     (r_icb**2 - r(:)**2 + two*r_cmb**2*log(r(:)/r_icb)))
             dtcond(:)= cond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
-         elseif( ktop==1 .and. ktop==2 ) then
+         elseif( ktop==1 .and. kbot==2 ) then
             tcond(:) = cond_fac*(f_bot*r_icb*log(r(:)/r_cmb) + (epsc0/two)*        &
             &                     (r_cmb**2 - r(:)**2 + two*r_icb**2*log(r(:)/r_cmb)))
             dtcond(:)= cond_fac*(f_bot*r_icb*or1(:) + epsc0*(r_icb**2*or1(:) - r(:)))
