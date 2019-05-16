@@ -501,20 +501,20 @@ class Pizza2DSpectrum(PizzaSetup):
         :type endian: str
         """
         file = open(filename, 'rb')
-        dt = np.dtype("i4, 6Float64")
+        dt = np.dtype("i4, 6f8")
         self.version, params = np.fromfile(file, dtype=dt, count=1)[0]
         self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = params
         dt = np.dtype("4i4")
         self.n_r_max, self.n_m_max, self.m_max, self.minc = \
             np.fromfile(file, dtype=dt, count=1)[0]
 
-        dt = np.dtype("%iFloat64" % self.n_r_max)
+        dt = np.dtype("%if8" % self.n_r_max)
         self.radius = np.fromfile(file, dtype=dt, count=1)[0]
         self.idx2m = np.zeros(self.n_m_max)
         for i in range(self.n_m_max):
             self.idx2m[i] = i*self.minc
 
-        dt = np.dtype("(%i,%i)Float64" % (self.n_r_max, self.n_m_max))
+        dt = np.dtype("(%i,%i)f8" % (self.n_r_max, self.n_m_max))
         if self.version == 1:
             data = np.fromfile(file, dtype=dt, count=3)
         elif self.version == 2:
