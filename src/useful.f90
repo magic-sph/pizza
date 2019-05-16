@@ -1,6 +1,7 @@
 module useful
 
    use parallel_mod
+   use iso_fortran_env, only: output_unit
    use precision_mod
    use constants, only: tiny_number, two, one, pi, three, half
    
@@ -29,14 +30,14 @@ contains
       code = 32
 
       if ( rank == 0 ) then
-         write(*,*)
-         write(*,*)
-         write(*,*)
-         write(*,*) '! Something went wrong, pizza will stop running now'
-         write(*,*) '! See below the error message:'
-         write(*,*)
-         write(*,*) message
-         write(*,*)
+         write(output_unit,*)
+         write(output_unit,*)
+         write(output_unit,*)
+         write(output_unit,*) '! Something went wrong, pizza will stop running now'
+         write(output_unit,*) '! See below the error message:'
+         write(output_unit,*)
+         write(output_unit,*) message
+         write(output_unit,*)
       end if
 
       call MPI_Abort(MPI_COMM_WORLD, code, ierr)
@@ -50,8 +51,8 @@ contains
       integer,          intent(in) :: n_log_file
 
        if ( rank == 0 ) then
-          write(n_log_file,*) trim(message)
-          write(*,*)          trim(message)
+          write(n_log_file,*)  trim(message)
+          write(output_unit,*) trim(message)
        end if
 
    end subroutine logWrite
@@ -201,8 +202,8 @@ contains
 
 
       if ( n_step /= 0 .and. n_intervals /= 0 ) then
-         write(*,*) '! Error message from function l_correct_step:'
-         write(*,*) '! Either n_step or n_interval have to be zero!'
+         write(output_unit,*) '! Error message from function l_correct_step:'
+         write(output_unit,*) '! Either n_step or n_interval have to be zero!'
          call abortRun('Stop run in l_correct_step')
       end if
 

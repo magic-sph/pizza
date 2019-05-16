@@ -1,5 +1,6 @@
 module dirk_schemes
 
+   use iso_fortran_env, only: output_unit
    use precision_mod
    use parallel_mod
    use namelists, only: alpha, l_cheb_coll
@@ -281,7 +282,7 @@ contains
       !----- Stop if time step has become too small:
       if ( dt_new < dt_min ) then
          if ( rank == 0 ) then
-            write(*,'(1p,/,A,ES14.4,/,A)')             &
+            write(output_unit,'(1p,/,A,ES14.4,/,A)')   &
             &    " ! Time step too small, dt=",dt_new, &
             &    " ! I thus stop the run !"
             write(n_log_file,'(1p,/,A,ES14.4,/,A)')    &
@@ -294,10 +295,10 @@ contains
       if ( l_new_dtNext ) then
          !------ Writing info and getting new weights:
          if ( rank == 0 ) then
-            write(*,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')  &
-            &    " ! Changing time step at time=",(time+this%dt(1)),  &
-            &    "                 time step no=",n_time_step,        &
-            &    "                      last dt=",dt_old,             &
+            write(output_unit,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')  &
+            &    " ! Changing time step at time=",(time+this%dt(1)),            &
+            &    "                 time step no=",n_time_step,                  &
+            &    "                      last dt=",dt_old,                       &
             &    "                       new dt=",dt_new
             write(n_log_file,                                         &
             &    '(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')     &

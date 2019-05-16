@@ -3,6 +3,7 @@ module blocking_lm
    !  Module containing blocking information
    !
 
+   use iso_fortran_env, only: output_unit
    use precision_mod
    use blocking, only: lm_balance, lmStart, lmStop, nlm_per_rank
    use mem_alloc, only: memWrite, bytes_allocated
@@ -205,18 +206,18 @@ contains
       end do
 
       if ( lStop ) then
-         write(*,*) '! Increase sizeLMB2max in m_blocking.F90!'
-         write(*,*) '! to at least:',size
+         write(output_unit,*) '! Increase sizeLMB2max in m_blocking.F90!'
+         write(output_unit,*) '! to at least:',size
          call abortRun('Stop run in blocking')
       end if
 
       do m=0,m_max_3D,minc_3D
          do l=m,l_max
             if ( check(l,m) == 0 ) then
-               write(*,*) 'Warning, forgotten l,m:',l,m,map%lm2(l,m)
+               write(output_unit,*) 'Warning, forgotten l,m:',l,m,map%lm2(l,m)
                call abortRun('Stop run in blocking')
             else if ( check(l,m) > 1 ) then
-               write(*,*) 'Warning, too much l,m:',l,m,check(l,m)
+               write(output_unit,*) 'Warning, too much l,m:',l,m,check(l,m)
                call abortRun('Stop run in blocking')
             end if
          end do
@@ -270,11 +271,12 @@ contains
          map%lmP2lm(lmP)=-1
       end do
       if ( lm /= map%lm_max ) then
-         write(*,"(2(A,I6))") 'Wrong lm=',lm," != map%lm_max = ",map%lm_max
+         write(output_unit,"(2(A,I6))") 'Wrong lm=',lm, &
+         &                              ' != map%lm_max = ',map%lm_max
          call abortRun('Stop run in blocking')
       end if
       if ( lmP /= map%lmP_max ) then
-         write(*,*) 'Wrong lmP!'
+         write(output_unit,*) 'Wrong lmP!'
          call abortRun('Stop run in blocking')
       end if
       do lm=1,map%lm_max
@@ -424,8 +426,8 @@ contains
       nlm_per_rank = lm_balance(rank)%n_per_rank
       
       if ( lm-1 /= map%lm_max ) then
-         write(*,"(2(A,I6))") 'get_snake_lm_blocking: Wrong lm-1 = ',lm-1,&
-              & " != map%lm_max = ",map%lm_max
+         write(output_unit,"(2(A,I6))") 'get_snake_lm_blocking: Wrong lm-1 = ', &
+         &     lm-1, ' != map%lm_max = ',map%lm_max
          call abortRun('Stop run in blocking')
       end if
 

@@ -176,63 +176,64 @@ contains
          end if
 
          open(newunit=input_handle,file=trim(input_filename))
-         if ( rank == 0 ) write(*,*) '!  Reading grid parameters!'
+         if ( rank == 0 ) write(output_unit,*) '!  Reading grid parameters!'
          read(input_handle,nml=grid,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '!  No grid namelist found!'
+            write(output_unit,*) '!  No grid namelist found!'
          end if
          close(input_handle)
 
          open(newunit=input_handle,file=trim(input_filename))
-         if ( rank == 0 ) write(*,*) '!  Reading grid_3D parameters!'
+         if ( rank == 0 ) write(output_unit,*) '!  Reading grid_3D parameters!'
          read(input_handle,nml=grid_3D,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '!  No grid_3D namelist found!'
+            write(output_unit,*) '!  No grid_3D namelist found!'
          end if
          close(input_handle)
 
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading control parameters from namelists in STDIN:
-         if ( rank == 0 ) write(*,*) '!  Reading control parameters!'
+         if ( rank == 0 ) write(output_unit,*) '!  Reading control parameters!'
          read(input_handle,nml=control,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '!  No control namelist found!'
+            write(output_unit,*) '!  No control namelist found!'
          end if
          close(input_handle)
 
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading control parameters from namelists in STDIN:
-         if ( rank == 0 ) write(*,*) '!  Reading hdif parameters!'
+         if ( rank == 0 ) write(output_unit,*) '!  Reading hdif parameters!'
          read(input_handle,nml=hdif,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '!  No hdif namelist found!'
+            write(output_unit,*) '!  No hdif namelist found!'
          end if
          close(input_handle)
 
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading physical parameters from namelists in STDIN:
-         if ( rank == 0 ) write(*,*) '!  Reading physical parameters!'
+         if ( rank == 0 ) write(output_unit,*) '!  Reading physical parameters!'
          read(input_handle,nml=phys_param,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '!  No phys_param namelist found!'
+            write(output_unit,*) '!  No phys_param namelist found!'
          end if
          close(input_handle)
 
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading start field info from namelists in STDIN:
-         if ( rank == 0 ) write(*,*) '!  Reading start information!'
+         if ( rank == 0 ) write(output_unit,*) '!  Reading start information!'
          read(input_handle,nml=start_field,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '! No start_field namelist found!'
+            write(output_unit,*) '! No start_field namelist found!'
          end if
          close(input_handle)
 
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading start field info from namelists in STDIN:
-         if ( rank == 0 ) write(*,*) '!  Reading output control information!'
+         if ( rank == 0 ) write(output_unit,*) &
+         &                      '!  Reading output control information!'
          read(input_handle,nml=output_control,iostat=res)
          if ( res /= 0 .and. rank == 0 ) then
-            write(*,*) '! No output control namelist found!'
+            write(output_unit,*) '! No output control namelist found!'
          end if
          close(input_handle)
 

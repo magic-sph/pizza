@@ -70,8 +70,8 @@ program pizza
 
    !--
    if ( rank == 0 ) then
-      write(*,*)
-      write(*,*) '!--- Program pizza  ---!'
+      write(output_unit,*)
+      write(output_unit,*) '!--- Program pizza  ---!'
       call date_and_time(values=values)
       write(date, '(i4,''/'',i0.2,''/'',i0.2,'' '', i0.2,'':'',i0.2,'':'',i0.2)') &
       &     values(1), values(2), values(3), values(5), values(6), values(7)
