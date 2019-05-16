@@ -251,7 +251,7 @@ class PizzaRadial(PizzaSetup):
         fig.tight_layout()
 
         # Determine jets width and Rhines scale
-        jet_widths = np.zeros((len(idx)-1), 'Float64')
+        jet_widths = np.zeros((len(idx)-1), dype=np.float64)
         lamb_uzon = np.zeros_like(jet_widths)
         lamb_us = np.zeros_like(jet_widths)
         beta = np.zeros_like(self.radius)
