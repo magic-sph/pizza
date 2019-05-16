@@ -3,6 +3,7 @@ program pizza
    use parallel_mod
    use precision_mod
    use mem_alloc
+   use iso_fortran_env, only: output_unit
    use step_time, only: time_loop
    use courant_mod, only: initialize_courant, finalize_courant
    use radial_der, only: initialize_der_arrays
@@ -74,7 +75,7 @@ program pizza
       call date_and_time(values=values)
       write(date, '(i4,''/'',i0.2,''/'',i0.2,'' '', i0.2,'':'',i0.2,'':'',i0.2)') &
       &     values(1), values(2), values(3), values(5), values(6), values(7)
-      write(6, *) '!  Start time:  ', date
+      write(output_unit, *) '!  Start time:  ', date
 
    end if
 
@@ -152,7 +153,7 @@ program pizza
 #endif
 
    if ( rank == 0 ) then
-      call write_namelists(6)
+      call write_namelists(output_unit)
       call write_namelists(n_log_file)
       call tscheme%print_info(n_log_file)
    end if
@@ -192,7 +193,7 @@ program pizza
    !--- Write starting time to SDTOUT and logfile:
    if ( rank == 0 ) then
       do n=1,2
-         if ( n == 1 ) n_out=6
+         if ( n == 1 ) n_out=output_unit
          if ( n == 2 ) n_out=n_log_file
          write(n_out,'(/,'' ! Starting time integration at:'')')
          write(n_out,'(''   start_time ='',1p,ES18.10)') time

@@ -1,5 +1,6 @@
 module time_schemes
 
+   use iso_fortran_env, only: output_unit
    use time_array
    use precision_mod
 
@@ -127,7 +128,7 @@ contains
          integer :: n, n_out
 
          do n=1,2
-            if ( n == 1 ) n_out=6
+            if ( n == 1 ) n_out=output_unit
             if ( n == 2 ) n_out=n_log_file
             write(n_out,*) ''
             write(n_out, '('' ! Time integrator  :'',1p,A10)') this%time_scheme

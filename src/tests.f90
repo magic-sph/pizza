@@ -5,6 +5,7 @@ module tests
    use precision_mod
    use parallel_mod
    use galerkin
+   use iso_fortran_env, only: output_unit
    use blocking, only: nMstart, nMstop
    use constants, only: one, half, two, pi
    use namelists, only: l_newmap, radratio, l_rerror_fix, rerror_fac
@@ -124,7 +125,7 @@ contains
             &                                   tInteg, timeLuInt,       &
             &                                   timeSolveInt, errGal,    &
             &                                   tGal, timeLuGal, timeSolveGal
-            write(6, '(i5,6es14.6)') n_r_max_loc, errColloc, tColloc,    &
+            write(output_unit, '(i5,6es14.6)') n_r_max_loc, errColloc, tColloc, &
             &                        errInteg, tInteg, errGal, tGal
 
 
@@ -212,7 +213,8 @@ contains
             write(file_handle) rhs1
 
             err = sum(abs(rhs1))/n_r_max_loc
-            write(6, '(i5,5es20.12)') n_r_max_loc, err, rhs1(1), rhs1(n_r_max_loc/2)
+            write(output_unit, '(i5,5es20.12)') n_r_max_loc, err, rhs1(1), &
+            &                                   rhs1(n_r_max_loc/2)
 
 
 
@@ -315,8 +317,8 @@ contains
             &                                   tInteg, timeLuInt,       &
             &                                   timeSolveInt, errGal,    &
             &                                   tGal, timeLuGal, timeSolveGal
-            write(6, '(i5,6es14.6)') n_r_max_loc, errColloc, tColloc,    &
-            &                        errInteg, tInteg, errGal, tGal
+            write(output_unit, '(i5,6es14.6)') n_r_max_loc, errColloc, tColloc, &
+            &                                  errInteg, tInteg, errGal, tGal
 
 
             call rscheme%finalize()
@@ -1161,8 +1163,8 @@ contains
             err = maxval(abs(rhs1-rhs3))
             write(file_handle, '(i5,5es20.12)') n_r_max_loc, err, rhs1(5), &
             &                                   rhs3(5), rhs1(9), rhs3(9)
-            write(6, '(i5,5es20.12)') n_r_max_loc, err, rhs1(5), rhs3(5), &
-            &                         rhs1(9), rhs3(9)
+            write(output_unit, '(i5,5es20.12)') n_r_max_loc, err, rhs1(5), &
+            &                                   rhs3(5), rhs1(9), rhs3(9)
 
 
 
@@ -1388,8 +1390,8 @@ contains
             !-- Store it in a file
             write(file_handle, '(i5,4es20.12)') n_r_max_loc, err_d1, err_d1_matmul,&
             &                                   err_d2, err_d2_matmul
-            write(6, '(i5,4es20.12)') n_r_max_loc, err_d1, err_d1_matmul, err_d2, &
-            &                         err_d2_matmul
+            write(output_unit, '(i5,4es20.12)') n_r_max_loc, err_d1, err_d1_matmul,&
+            &                                   err_d2, err_d2_matmul
 
             call rscheme%finalize()
             deallocate( r_loc, f, df_theo, d2f_theo, df_num, d2f_num )

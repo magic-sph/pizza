@@ -3,6 +3,7 @@ module step_time
    ! This module controls the time advance of the code
    !
 
+   use iso_fortran_env, only: output_unit
    use communications, only: transp_m2r, m2r_fields, transp_r2m, r2m_fields, &
        &                     gather_from_mloc_to_rank0, my_reduce_mean,      &
        &                     scatter_from_rank0_to_mloc, transp_lm2r,        &
@@ -417,7 +418,7 @@ contains
                nPercent=nPercent-1
             end if
             if ( rank == 0 ) then
-               call formatTime(6,' ! Mean wall time for time step:',  &
+               call formatTime(output_unit,' ! Mean wall time for time step:',  &
                &               run_time_passed)
                call formatTime(n_log_file,' ! Mean wall time for time step:', &
                &               run_time_passed)
@@ -432,7 +433,7 @@ contains
 
       !-- Write timers info in log file  and on display
       call timers%write_log(n_log_file)
-      call timers%write_log(6)
+      call timers%write_log(output_unit)
 
    end subroutine time_loop
 !-------------------------------------------------------------------------------
