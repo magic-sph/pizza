@@ -191,7 +191,7 @@ def spec_spat(arr_M, n_phi_max):
     :rtype: numpy.ndarray
     """
     n_m = arr_M.shape[0]
-    tmp = np.zeros((int(n_phi_max/2)+1, arr_M.shape[-1]), 'Complex64')
+    tmp = np.zeros((int(n_phi_max/2)+1, arr_M.shape[-1]), dtype=np.complex128)
     tmp[:n_m, :] = arr_M
     return np.fft.irfft(tmp, n=n_phi_max, axis=0)*n_phi_max
 
@@ -264,7 +264,7 @@ def symmetrize(data, ms, reversed=False):
     return out
 
 
-def fast_read(file, skiplines=0, binary=False, precision='Float64'):
+def fast_read(file, skiplines=0, binary=False, precision=np.float64):
     """
     This function reads an input ascii table
     (can read both formatted or unformatted fortran)
@@ -280,7 +280,7 @@ def fast_read(file, skiplines=0, binary=False, precision='Float64'):
                    Fortran file
                    (default is False)
     :type binary: bool
-    :param precision: single ('Float32') or double precision ('Float64')
+    :param precision: single (np.float32) or double precision (np.float64)
     :type precision: str
     :returns: an array[nlines, ncols] that contains the data of the ascii file
     :rtype: numpy.ndarray

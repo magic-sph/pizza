@@ -5,6 +5,7 @@ module init_fields
    ! in the input namelist
    !
 
+   use iso_fortran_env, only: output_unit
    use constants, only: zero, one, two, three, four, ci, pi, half, third, sq4pi
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
    use communications, only: transp_r2m, r2m_fields, transp_r2lm, r2lm_fields
@@ -204,13 +205,14 @@ contains
          m_pertu = init_prop
 
          if ( mod(m_pertu,minc) /= 0 ) then
-            write(*,*) '! Wave number of mode for temperature initialisation'
-            write(*,*) '! not compatible with phi-symmetry:',m_pertu
+            write(output_unit,*) &
+            &            '! Wave number of mode for temperature initialisation'
+            write(output_unit,*) '! not compatible with phi-symmetry:',m_pertu
             call abortRun('Stop run in init')
          end if
          if ( m_pertu > m_max ) then
-            write(*,*) '! Degree of mode for temperature initialisation'
-            write(*,*) '! > m_max  !',m_pertu
+            write(output_unit,*) '! Degree of mode for temperature initialisation'
+            write(output_unit,*) '! > m_max  !',m_pertu
             call abortRun('Stop run in init')
          end if
 
@@ -327,13 +329,13 @@ contains
          m_pertu = init_u
 
          if ( mod(m_pertu,minc) /= 0 ) then
-            write(*,*) '! Wave number of mode for velocity initialisation'
-            write(*,*) '! not compatible with phi-symmetry:',m_pertu
+            write(output_unit,*) '! Wave number of mode for velocity initialisation'
+            write(output_unit,*) '! not compatible with phi-symmetry:',m_pertu
             call abortRun('Stop run in init')
          end if
          if ( m_pertu > m_max ) then
-            write(*,*) '! Degree of mode for velocity initialisation'
-            write(*,*) '! > m_max  !',m_pertu
+            write(output_unit,*) '! Degree of mode for velocity initialisation'
+            write(output_unit,*) '! > m_max  !',m_pertu
             call abortRun('Stop run in init')
          end if
 
@@ -498,13 +500,15 @@ contains
          m = mod(init_t, 100)
          if ( l > 99 ) m = mod(init_t, 1000)
          if ( mod(m,minc_3D) /= 0 ) then
-            write(*,*) '! Wave number of mode for 3D temperature initialisation'
-            write(*,*) '! not compatible with phi-symmetry:',m
+            write(output_unit,*)  &
+            &      '! Wave number of mode for 3D temperature initialisation'
+            write(output_unit,*) '! not compatible with phi-symmetry:',m
             call abortRun('Stop run in init')
          end if
          if ( l > l_max .or. l < m ) then
-            write(*,*) '! Degree of mode for 3D temperature initialisation'
-            write(*,*) '! > l_max or < m !',l
+            write(output_unit,*) &
+            &      '! Degree of mode for 3D temperature initialisation'
+            write(output_unit,*) '! > l_max or < m !',l
             call abortRun('Stop run in init')
          end if
 
@@ -515,7 +519,7 @@ contains
                temp_LMloc(lm,n_r)=temp_LMloc(lm,n_r)+cmplx(c_r,0.0_cp,kind=cp)
             end do
 
-            write(*,'(/'' ! Temperature (3D) initialized at mode:'', &
+            write(output_unit,'(/'' ! Temperature (3D) initialized at mode:'', &
             &      '' l='',i4,'' m='',i4,'' Ampl='',f8.5)') l,m,amp_t
          end if
 

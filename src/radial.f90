@@ -4,6 +4,7 @@ module radial_functions
    ! only. This is called only once at the initialisation of the code.
    !
 
+   use iso_fortran_env, only: output_unit
    use blocking, only: nMstart, nMstop, lmStart, lmStop
    use truncation, only: n_r_max, n_cheb_max, m_max
    use truncation_3D, only: n_r_max_3D, n_cheb_max_3D
@@ -298,8 +299,8 @@ contains
             f_top=real(tr_top,kind=cp)
          end if
       end do
-      if ( rank == 0 ) write(6,*) '! Top Flux', f_top
-      if ( rank == 0 ) write(6,*) '! Bot Flux', f_bot
+      if ( rank == 0 ) write(output_unit,*) '! Top Flux', f_top
+      if ( rank == 0 ) write(output_unit,*) '! Bot Flux', f_bot
 
       !-- Conductive Temperature profile 2D and 3D projected onto QG
       if ( l_tcond_3D ) then
@@ -358,8 +359,9 @@ contains
          endif
       end if
       !call logWrite('! Sources introduced to balance surface heat flux!')
-      if (rank == 0) write(6,*) '! Warning: Sources introduced to balance surface heat flux'
-      if (rank == 0) write(6,'(''!      epsc0*pr='',ES16.6)') epsc0
+      if (rank == 0) write(output_unit,*) &
+      &             '! Warning: Sources introduced to balance surface heat flux'
+      if (rank == 0) write(output_unit,'(''!      epsc0*pr='',ES16.6)') epsc0
       !call logWrite(message)
 
    end subroutine get_conducting_state

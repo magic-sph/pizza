@@ -25,19 +25,19 @@ class Frame3D:
 
         self.version = np.fromfile(file, dtype='i4', count=1)[0]
         self.time, self.ra, self.ek, self.pr, self.radratio, self.sc, \
-            self.raxi = np.fromfile(file, dtype='7Float64', count=1)[0]
+            self.raxi = np.fromfile(file, dtype='7f8', count=1)[0]
         self.n_r_max_3D, self.l_max, self.m_max_3D, self.lm_max, \
             self.minc_3D, self.n_theta_max, self.n_phi_max_3D = \
             np.fromfile(file, dtype='7i4', count=1)[0]
 
-        self.radius_3D = np.fromfile(file, dtype='%iFloat64' % self.n_r_max_3D,
+        self.radius_3D = np.fromfile(file, dtype='%if8' % self.n_r_max_3D,
                                      count=1)[0]
-        self.tcond_3D = np.fromfile(file, dtype='%iFloat64' % self.n_r_max_3D,
+        self.tcond_3D = np.fromfile(file, dtype='%if8' % self.n_r_max_3D,
                                     count=1)[0]
-        self.theta = np.fromfile(file, dtype='%iFloat64' % self.n_theta_max,
+        self.theta = np.fromfile(file, dtype='%if8' % self.n_theta_max,
                                  count=1)[0]
 
-        dt = np.dtype("(%i,%i,%i)Float32" % (self.n_r_max_3D,
+        dt = np.dtype("(%i,%i,%i)f4" % (self.n_r_max_3D,
                                              self.n_theta_max,
                                              self.n_phi_max_3D))
         self.field = np.fromfile(file, dtype=dt, count=1)[0]

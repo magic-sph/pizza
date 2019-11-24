@@ -1,6 +1,7 @@
 module shtns
 
    use precision_mod, only: cp
+   use iso_fortran_env, only: output_unit
    use constants, only: ci
    use truncation_3D, only: m_max_3D, l_max, n_theta_max, n_phi_max_3D, &
        &                    minc_3D, lm_max, lmP_max
@@ -24,7 +25,7 @@ contains
       integer :: norm
 
       if ( rank == 0 ) then
-         write(*,*) ''
+         write(output_unit,*) ''
          call shtns_verbose(1)
       end if
 

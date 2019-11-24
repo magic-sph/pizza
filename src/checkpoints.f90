@@ -1,5 +1,6 @@
 module checkpoints
 
+   use iso_fortran_env, only: output_unit
    use parallel_mod
    use precision_mod
    use communications, only: lm2r_fields, transp_lm2r
@@ -346,10 +347,10 @@ contains
       !-- Close checkpoint file and display a message in the log file
       if ( rank == 0 ) then
 
-         write(*,'(/,1P,A,/,A,ES20.10,/,A,I15,/,A,A)')&
-         &    " ! Storing checkpoint file:",          &
-         &    "             at time=",time,           &
-         &    "            step no.=",n_time_step,    &
+         write(output_unit,'(/,1P,A,/,A,ES20.10,/,A,I15,/,A,A)')&
+         &    " ! Storing checkpoint file:",                    &
+         &    "             at time=",time,                     &
+         &    "            step no.=",n_time_step,              &
          &    "           into file=",rst_file
 
          write(n_log_file,'(/,1P,A,/,A,ES20.10,/,A,I15,/,A,A)') &
@@ -473,26 +474,33 @@ contains
          m_max_max = max(m_max,m_max_old)
 
          !---- Compare parameters:
-         if ( ra /= ra_old ) &
-            write(*,'(/,'' ! New Rayleigh number (old/new):'',2ES16.6)') ra_old,ra
-         if ( ek /= ek_old ) &
-            write(*,'(/,'' ! New Ekman number (old/new):'',2ES16.6)') ek_old,ek
-         if ( pr /= pr_old ) &
-            write(*,'(/,'' ! New Prandtl number (old/new):'',2ES16.6)') pr_old,pr
+         if ( ra /= ra_old )     &
+            write(output_unit,   &
+            &     '(/,'' ! New Rayleigh number (old/new):'',2ES16.6)') ra_old,ra
+         if ( ek /= ek_old )     &
+            write(output_unit,   &
+            &     '(/,'' ! New Ekman number (old/new):'',2ES16.6)') ek_old,ek
+         if ( pr /= pr_old )     &
+            write(output_unit,   &
+            &     '(/,'' ! New Prandtl number (old/new):'',2ES16.6)') pr_old,pr
          if ( raxi /= raxi_old ) &
-            write(*,'(/,'' ! New composition-based Rayleigh number (old/new):'',2ES16.6)') raxi_old,raxi
-         if ( sc /= sc_old ) &
-            write(*,'(/,'' ! New Schmidt number (old/new):'',2ES16.6)') sc_old,sc
-         if ( radratio /= radratio_old )                                    &
-            write(*,'(/,'' ! New mag aspect ratio (old/new):'',2ES16.6)') &
-            radratio_old,radratio
+            write(output_unit,                                                    &
+            &     '(/,'' ! New composition Rayleigh number (old/new):'',2ES16.6)')&
+            &     raxi_old,raxi
+         if ( sc /= sc_old )     &
+            write(output_unit,   &
+            &     '(/,'' ! New Schmidt number (old/new):'',2ES16.6)') sc_old,sc
+         if ( radratio /= radratio_old )                                &
+            write(output_unit,                                          &
+            &     '(/,'' ! New mag aspect ratio (old/new):'',2ES16.6)') &
+            &     radratio_old,radratio
 
          if ( m_max_old /= m_max ) &
-         &  write(*,*) '! New m_max (old,new)       :',m_max_old,m_max
+         &  write(output_unit,*) '! New m_max (old,new)       :',m_max_old,m_max
          if ( minc_old /= minc ) &
-         &  write(*,*) '! New minc (old,new)        :',minc_old,minc
+         &  write(output_unit,*) '! New minc (old,new)        :',minc_old,minc
          if ( n_r_max_old /= n_r_max ) &
-         &  write(*,*) '! New n_r_max (old,new)     :',n_r_max_old,n_r_max
+         &  write(output_unit,*) '! New n_r_max (old,new)     :',n_r_max_old,n_r_max
 
          read(n_start_file) rscheme_version_old, n_in, n_in_2, ratio1, ratio2
          if ( rscheme_version_old == 'cheb' ) then
@@ -508,8 +516,8 @@ contains
          ! call rscheme_old%get_grid(n_r_max_old, r_icb_old, r_cmb_old, ratio1, &
               ! &                       ratio2, r_old)
 
-         if ( rscheme%version /= rscheme_old%version )               &
-         &   write(*,'(/,'' ! New radial scheme (old/new):'',2A4)')  &
+         if ( rscheme%version /= rscheme_old%version )                         &
+         &   write(output_unit,'(/,'' ! New radial scheme (old/new):'',2A4)')  &
          &   rscheme_old%version, rscheme%version
 
          allocate( r_old(n_r_max_old) )
@@ -551,16 +559,20 @@ contains
                  &                         no_work_array=.true.)
 
             if ( l_3D ) then
-               if ( l_max_old /= l_max ) &
-               &  write(*,*) '! New l_max (old,new)       :',l_max_old,l_max
-               if ( minc_3D_old /= minc_3D ) &
-               &  write(*,*) '! New minc_3D (old,new)     :',minc_3D_old,minc_3D
-               if ( n_r_max_3D_old /= n_r_max_3D ) &
-               &  write(*,*) '! New n_r_max_3D (old,new)  :',n_r_max_3D_old,n_r_max_3D
+               if ( l_max_old /= l_max )                                &
+               &  write(output_unit,*) '! New l_max (old,new)       :', &
+               &                       l_max_old,l_max
+               if ( minc_3D_old /= minc_3D )                            &
+               &  write(output_unit,*) '! New minc_3D (old,new)     :', &
+               &                       minc_3D_old,minc_3D
+               if ( n_r_max_3D_old /= n_r_max_3D )                      &
+               &  write(output_unit,*) '! New n_r_max_3D (old,new)  :', &
+               &                       n_r_max_3D_old,n_r_max_3D
 
-               if ( rscheme_3D%version /= rscheme_3D_old%version )            &
-               &  write(*,'(/,'' ! New (3D) radial scheme (old/new):'',2A4)') &
-               &  rscheme_3D_old%version, rscheme_3D%version
+               if ( rscheme_3D%version /= rscheme_3D_old%version )          &
+               &  write(output_unit,                                        &
+               &        '(/,'' ! New (3D) radial scheme (old/new):'',2A4)') &
+               &        rscheme_3D_old%version, rscheme_3D%version
             end if
 
             allocate( r_3D_old(n_r_max_3D_old) )

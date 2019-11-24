@@ -38,17 +38,17 @@ class Frame:
 
             file = npfile.npfile(filename, endian=endian)
             self.version = file.fort_read('i4')
-            self.time = file.fort_read('Float64')
+            self.time = file.fort_read('f8')
             self.ra, self.ek, self.pr, self.radratio, self.sc, \
-                self.raxi = file.fort_read('Float64')
+                self.raxi = file.fort_read('f8')
             self.n_r_max, self.n_m_max, self.m_max, self.minc, \
                 self.n_phi_max = file.fort_read('i4')
 
-            self.radius = file.fort_read('Float64')
-            self.tcond = file.fort_read('Float64')
+            self.radius = file.fort_read(np.float64)
+            self.tcond = file.fort_read(np.float64)
             self.idx2m = file.fort_read('i4')
 
-            self.field_m = file.fort_read('Complex64')
+            self.field_m = file.fort_read('c16')
             self.field_m = self.field_m.reshape((self.n_r_max, self.n_m_max))
             self.field_m = self.field_m.T
             file.close()
@@ -58,23 +58,23 @@ class Frame:
             file = open(filename, 'rb')
             self.version = np.fromfile(file, dtype='i4', count=1)[0]
             self.time, self.ra, self.ek, self.pr, self.radratio, self.sc, \
-                self.raxi = np.fromfile(file, dtype='7Float64', count=1)[0]
+                self.raxi = np.fromfile(file, dtype='7f8', count=1)[0]
             self.n_r_max, self.n_m_max, self.m_max, self.minc, \
                 self.n_phi_max = np.fromfile(file, dtype='5i4', count=1)[0]
 
-            self.radius = np.fromfile(file, dtype='%iFloat64' % self.n_r_max,
+            self.radius = np.fromfile(file, dtype='%if8' % self.n_r_max,
                                       count=1)[0]
-            self.tcond = np.fromfile(file, dtype='%iFloat64' % self.n_r_max,
+            self.tcond = np.fromfile(file, dtype='%if8' % self.n_r_max,
                                      count=1)[0]
             if self.version == 2:
                 self.xicond = np.fromfile(file,
-                                          dtype='%iFloat64' % self.n_r_max,
+                                          dtype='%if8' % self.n_r_max,
                                           count=1)[0]
 
             self.idx2m = np.fromfile(file, dtype='%ii4' % self.n_m_max,
                                      count=1)[0]
 
-            dt = np.dtype("(%i,%i)Complex64" % (self.n_r_max, self.n_m_max))
+            dt = np.dtype("(%i,%i)c16" % (self.n_r_max, self.n_m_max))
             self.field_m = np.fromfile(file, dtype=dt, count=1)[0]
             self.field_m = self.field_m.T
             file.close()
@@ -91,7 +91,7 @@ class Frame:
         x = np.array([1], dtype="i4")
         x.tofile(out)
         x = np.array([self.time, self.ra, self.ek, self.pr, self.radratio,
-                      self.sc, self.raxi], dtype='Float64')
+                      self.sc, self.raxi], dtype=np.float64)
         x.tofile(out)
         x = np.array([self.n_r_max, self.n_m_max, self.m_max, self.minc,
                       self.n_phi_max], dtype='i4')
