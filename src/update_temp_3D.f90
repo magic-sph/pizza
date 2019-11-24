@@ -427,7 +427,7 @@ contains
 #ifdef WITH_PRECOND_S
    subroutine get_Tmat(tscheme,l,tMat,tPivot,tMat_fac)
 #else
-   subroutine get_Tmat(dt,l,tMat,tPivot)
+   subroutine get_Tmat(tscheme,l,tMat,tPivot)
 #endif
       !
       !  Purpose of this subroutine is to contruct the time step matricies

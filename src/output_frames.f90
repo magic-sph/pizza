@@ -5,7 +5,7 @@ module output_frames
 
    use parallel_mod
    use precision_mod
-   use namelists, only:  ra, pr, ek, radratio, raxi, sc
+   use namelists, only:  ra, pr, ek, prmag, radratio, raxi, sc
    use horizontal, only: theta
    use blocking, only: nRstart, nRstop, nr_per_rank, nMstart, nMstop, &
        &               nm_per_rank, nRstart3D, nRstop3D, nR_per_rank_3D
@@ -277,6 +277,7 @@ contains
          call MPI_File_Write(fh, ra, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, ek, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, pr, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, prmag, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, radratio, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, sc, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, raxi, 1, MPI_DEF_REAL, istat, ierr)

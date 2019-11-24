@@ -6,12 +6,14 @@ module rloop_3D
    use nonlinear_lm_mod, only: nonlinear_lm_t
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
-   use namelists, only: BuoFac, tag
+   use namelists, only: BuoFac, tag, l_mag_3D, l_mag_LF
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max, l_max
    use truncation, only: idx2m, n_m_max
 #ifdef WITH_SHTNS
-   use shtns, only: spat_to_SH, scal_to_spat, scal_axi_to_grad_spat
+   use shtns, only: spat_to_SH, scal_to_spat, torpol_to_spat, &
+       &            torpol_to_curl_spat, scal_axi_to_grad_spat
 #endif
+   use radial_functions, only: r_3D
    use z_functions, only: zfunc_type
    use timers_mod, only: timers_type
    use time_schemes, only: type_tscheme
@@ -47,10 +49,17 @@ contains
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
    subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM, &
-              &               dpsidt_Rloc, l_frame, zinterp, timers, tscheme)
+              &               b_3D, db_3D, ddb_3D, aj_3D, dj_3D,       &
+              &               dbdt_3D, djdt_3D, dVxBhLM, dpsidt_Rloc,  &
+              &               l_frame, zinterp, timers, tscheme)
 
       !-- Input variables
       complex(cp), intent(in) :: temp(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(in) :: b_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(in) :: db_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(in) :: ddb_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(in) :: aj_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(in) :: dj_3D(lm_max, nRstart3D:nRstop3D)
       real(cp),    intent(in) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(in) :: ut(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: up(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
@@ -62,16 +71,25 @@ contains
       !-- Output variables
       complex(cp),       intent(out) :: dtempdt(lm_max, nRstart3D:nRstop3D)
       complex(cp),       intent(out) :: dVrTLM(lm_max, nRstart3D:nRstop3D)
+      complex(cp),       intent(out) :: dbdt_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp),       intent(out) :: djdt_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp),       intent(out) :: dVxBhLM(lm_max, nRstart3D:nRstop3D)
       complex(cp),       intent(inout) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
       type(timers_type), intent(inout) :: timers
 
       !-- Local variables
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: lrf_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: lrf0_tmp(n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop
+      complex(cp) :: lrfLM(lm_max,nRstart3D:nRstop3D,2)
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp) :: lrf_tmp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp) :: lrf0_tmp_Rloc(nRstart:nRstop)
       integer :: n_r, n_m, m, fh_temp, info_temp
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
+      integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
       character(len=144) :: frame_name
 
 #ifdef aDEBUG
@@ -103,14 +121,21 @@ contains
          call open_snapshot_3D(frame_name, time, fh_up, info_up)
          write(frame_name, '(A,I0,A,A)') 'frame_temp_3D_',frame_counter,'.',tag
          call open_snapshot_3D(frame_name, time, fh_temp, info_temp)
+         write(frame_name, '(A,I0,A,A)') 'frame_br_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_br, info_br)
+         write(frame_name, '(A,I0,A,A)') 'frame_bt_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_bt, info_bt)
+         write(frame_name, '(A,I0,A,A)') 'frame_bp_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_bp, info_bp)
       end if
 
       runStart = MPI_Wtime()
       do n_r=nRstart3D,nRstop3D
 
-         !-- Transform temperature from (l,m) to (theta,phi)
-         call transform_to_grid_space(temp(:,n_r), gsa)
-
+         !-- Transform temperature and magnetic-field from (l,m) to (theta,phi)
+         call transform_to_grid_space(temp(:,n_r), b_3D(:,n_r),      &
+              &                      db_3D(:,n_r), ddb_3D(:,n_r),    &
+              &                      aj_3D(:,n_r), dj_3D(:,n_r), n_r, gsa)
 
          !-- Write the snapshot on the grid (easier to handle)
          if ( l_frame .and. tscheme%istage==1 ) then
@@ -118,18 +143,21 @@ contains
             call write_bulk_snapshot_3D(fh_ut, ut(:,:,n_r))
             call write_bulk_snapshot_3D(fh_up, up(:,:,n_r))
             call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))
+            call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))
+            call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))
+            call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))
          end if
 
          !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
-              &          buo_tmp(:,:,n_r))
+              &          buo_tmp(:,:,n_r), lrf0_tmp(:,n_r))
 
          !-- Transform back the non-linear terms to (l,m) space
          call transform_to_lm_space(gsa, nl_lm)
 
          !-- Get theta and phi derivatives using recurrence relations
-         call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r))
-
+         call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r),lrfLM(:,n_r,:),      &
+              &            dVxBhLM(:,n_r),dbdt_3D(:,n_r),djdt_3D(:,n_r), n_r )
       end do
 
       runStop = MPI_Wtime()
@@ -138,18 +166,32 @@ contains
          timers%r_loop_3D   =timers%r_loop_3D+(runStop-runStart)
       end if
 
+      if (  l_mag_LF ) then
+         !-- Compute lorentz force
+         runStart = MPI_Wtime()
+         !call zinterp%compute_lorentz_force(lrf0_tmp, lrfLM, lrf_tmp, lrf0_tmp_Rloc)
+         runStop = MPI_Wtime()
+         if (runStop>runStart) then
+            timers%interp = timers%interp+(runStop-runStart)
+         end if
+      end if
+
       !--Close the 3-D snapshots in physical space
       if ( l_frame .and. tscheme%istage==1 ) then
          call close_snapshot_3D(fh_ur, info_ur)
          call close_snapshot_3D(fh_ut, info_ut)
          call close_snapshot_3D(fh_up, info_up)
          call close_snapshot_3D(fh_temp, info_temp)
+         call close_snapshot_3D(fh_br, info_br)
+         call close_snapshot_3D(fh_bt, info_bt)
+         call close_snapshot_3D(fh_bp, info_bp)
          frame_counter = frame_counter+1
       end if
 
-      !-- Compute z-averaging of buoyancy
+      !-- Compute z-averaging of buoyancy and lorentz-force
       runStart = MPI_Wtime()
       call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
+      if (  l_mag_LF ) call zinterp%compute_avg(lrf_tmp, lrf_tmp_Rloc)
       runStop = MPI_Wtime()
       if (runStop>runStart) then
          timers%interp = timers%interp+(runStop-runStart)
@@ -197,18 +239,36 @@ contains
          do n_r=nRstart,nRstop
             dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)-BuoFac*ci*m* &
             &                    buo_tmp_Rloc(n_m,n_r)
+            if ( l_mag_LF ) then
+               if ( m==0 ) then
+                  dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)-lrf0_tmp_Rloc(n_r)
+               else
+                  dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)-lrf_tmp_Rloc(n_m,n_r)
+               end if
+            end if
          end do
       end do
 
    end subroutine radial_loop_3D
 !-------------------------------------------------------------------------------
-   subroutine transform_to_grid_space(temp, gsa)
+   subroutine transform_to_grid_space(temp, B, dB, ddB, aj, dj, n_r, gsa)
 
       complex(cp), intent(in) :: temp(lm_max)
+      complex(cp), intent(in) :: B(lm_max), dB(lm_max), ddB(lm_max)
+      complex(cp), intent(in) :: aj(lm_max), dj(lm_max)
+      integer, intent(in) :: n_r
       type(grid_space_arrays_t) :: gsa
 
 #ifdef WITH_SHTNS
       call scal_to_spat(temp, gsa%Tc)
+
+      if ( l_mag_3D ) then
+         call torpol_to_spat(B, dB, aj, gsa%Brc, gsa%Btc, gsa%Bpc)
+         if (  l_mag_LF ) then
+            call torpol_to_curl_spat(B, ddB, aj, dj, n_r, gsa%curlBrc, &
+                 &                   gsa%curlBtc, gsa%curlBpc)
+         end if
+      end if
 #endif
 
    end subroutine transform_to_grid_space
@@ -224,6 +284,18 @@ contains
       call spat_to_SH(gsa%VTr, nl_lm%VTrLM)
       call spat_to_SH(gsa%VTt, nl_lm%VTtLM)
       call spat_to_SH(gsa%VTp, nl_lm%VTpLM)
+
+      if ( l_mag_3D ) then
+         call spat_to_SH(gsa%VxBr, nl_lm%VxBrLM)
+         call spat_to_SH(gsa%VxBt, nl_lm%VxBtLM)
+         call spat_to_SH(gsa%VxBp, nl_lm%VxBpLM)
+         if ( l_mag_LF ) then
+            ! LF treated extra:
+            call spat_to_SH(gsa%jxBr, nl_lm%jxBrLM)
+            call spat_to_SH(gsa%jxBt, nl_lm%jxBtLM)
+            call spat_to_SH(gsa%jxBp, nl_lm%jxBpLM)
+         end if
+      end if
 
       call shtns_load_cfg(0)
 #endif

@@ -7,18 +7,22 @@ module z_functions
    use precision_mod
    use parallel_mod
    use mem_alloc
+   use shtns, only: scal_to_spat
    use fourier, only: ifft, fft
-   use communications, only: allgather_from_rloc, allgather_from_rloc_3D
+   use communications, only: allgather_from_rloc, allgather_from_rloc_3D, &
+   &                         transp_lm2r,lm2r_fields, transp_r2lm,r2lm_fields!, transp_r2m3D, r2m3D_fields
    use constants, only: zero, half, one, two, ci, pi
-   use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D, radial_balance_3D
+   use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D, lmStart, lmStop!, nphiStart, nphiStop!, radial_balance_3D
+   use blocking_lm, only: lm2l, lm2m, lm2lmP
    use truncation, only: n_r_max, n_m_max, minc, idx2m, m2idx
    use truncation_3D, only: n_r_max_3D, n_z_max, n_m_max_3D, n_theta_max, &
-       &                    minc_3D, idx2m3D, n_phi_max_3D
+       &                    minc_3D, idx2m3D, n_phi_max_3D, lm_max
    use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv, CorFac, ek, ra, &
        &                BuoFac
    use horizontal, only: theta, cost, sint
    use radial_functions, only: r, r_3D, beta, height, oheight, ekpump, or1_3D, &
-       &                       rgrav_3D
+       &                       rgrav_3D, rscheme_3D
+   use radial_der, only: get_dr
 
    implicit none
 
@@ -37,6 +41,9 @@ module z_functions
       real(cp), allocatable :: us_phys_Rloc(:,:)
       real(cp), allocatable :: up_phys_Rloc(:,:)
       real(cp), allocatable :: ek_phys_Rloc(:,:)
+      !real(cp), allocatable :: us_phys_Mloc(:,:)
+      !real(cp), allocatable :: up_phys_Mloc(:,:)
+      !real(cp), allocatable :: ek_phys_Mloc(:,:)
    contains
       procedure :: initialize
       procedure :: finalize
@@ -44,6 +51,7 @@ module z_functions
       procedure :: prepare_extension
       procedure :: extrapolate
       procedure :: compute_thermal_wind
+      procedure :: compute_lorentz_force
       procedure :: fill_mat
    end type zfunc_type
 
@@ -56,9 +64,9 @@ contains
       !-- Local variable
       integer :: n_size
 
-      allocate( this%interp_zr_mat(4*n_z_max,n_r_max) )
-      allocate( this%interp_zt_mat(4*n_z_max,n_r_max) )
-      allocate( this%interp_wt_mat(4*n_z_max,n_r_max) )
+      allocate( this%interp_zr_mat(4*n_z_max,n_r_max) )!nRstart:nRstop) )!
+      allocate( this%interp_zt_mat(4*n_z_max,n_r_max) )!nRstart:nRstop) )!
+      allocate( this%interp_wt_mat(4*n_z_max,n_r_max) )!nRstart:nRstop) )!
 
       this%interp_zr_mat(:,:)=1
       this%interp_zt_mat(:,:)=1
@@ -68,10 +76,10 @@ contains
       bytes_allocated = bytes_allocated+4*(n_z_max*n_r_max)*SIZEOF_DEF_REAL
 
       n_size=n_z_max/2!nRstop3D-nRstart3D+1
-      allocate( this%nzp_thw(n_theta_max/2,n_r_max_3D) )!nRstart3D:nRstop3D) )
-      allocate( this%interp_zp_thw(2,n_size,n_theta_max/2,n_r_max_3D) )!nRstart3D:nRstop3D) )
+      allocate( this%nzp_thw(n_theta_max/2,nRstart3D:nRstop3D) )!n_r_max_3D) )!
+      allocate( this%interp_zp_thw(2,n_size,n_theta_max/2,nRstart3D:nRstop3D) )!n_r_max_3D) )!
       !allocate( this%interp_zpb_thw(n_theta_max/2,nRstart3D:nRstop3D,0:n_procs-1) )
-      allocate( this%interp_wt_thw(2,n_size,n_theta_max/2,n_r_max_3D) )!nRstart3D:nRstop3D) )
+      allocate( this%interp_wt_thw(2,n_size,n_theta_max/2,nRstart3D:nRstop3D) )!n_r_max_3D) )!
       !allocate( this%interp_wtb_thw(2,n_theta_max/2,nRstart3D:nRstop3D,0:n_procs-1))
 
       this%nzp_thw(:,:)=1
@@ -81,20 +89,31 @@ contains
       !this%interp_wtb_thw(:,:,:,:)=0.0_cp
 
       bytes_allocated = bytes_allocated+(2*n_size*n_theta_max/2* &
-      &                 n_r_max_3D)*SIZEOF_INTEGER
+      &                 (nRstop-nRstart+1))*SIZEOF_INTEGER
+      !&                 n_r_max_3D)*SIZEOF_INTEGER
       bytes_allocated = bytes_allocated+2*(n_size*n_theta_max/2* &
-      &                 n_r_max_3D)*SIZEOF_DEF_REAL
+      &                 (nRstop-nRstart+1))*SIZEOF_DEF_REAL
+      !&                 n_r_max_3D)*SIZEOF_DEF_REAL
 
-      allocate( this%us_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )
-      allocate( this%up_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )
-      allocate( this%ek_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )
+      allocate( this%us_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )!n_r_max) )!
+      allocate( this%up_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )!n_r_max) )!
+      allocate( this%ek_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )!n_r_max) )!
+
+      !allocate( this%us_phys_Mloc(nphiStart:nphiStop,n_r_max) )!n_r_max) )!
+      !allocate( this%up_phys_Mloc(nphiStart:nphiStop,n_r_max) )!n_r_max) )!
+      !allocate( this%ek_phys_Mloc(nphiStart:nphiStop,n_r_max) )!n_r_max) )!
 
       this%us_phys_Rloc(:,:)=0.0_cp
       this%up_phys_Rloc(:,:)=0.0_cp
       this%ek_phys_Rloc(:,:)=0.0_cp
 
+      !this%us_phys_Mloc(:,:)=0.0_cp
+      !this%up_phys_Mloc(:,:)=0.0_cp
+      !this%ek_phys_Mloc(:,:)=0.0_cp
+
       bytes_allocated = bytes_allocated+3*(n_phi_max_3D*      &
       &                 (nRstop-nRstart+1))*SIZEOF_DEF_REAL
+      !&                 n_r_max)*SIZEOF_DEF_REAL
 
    end subroutine initialize
 !--------------------------------------------------------------------------------
@@ -106,6 +125,7 @@ contains
       deallocate( this%nzp_thw, this%interp_zp_thw, this%interp_wt_thw )
       !deallocate( this%interp_zpb_thw, this%interp_wtb_thw )
       deallocate( this%us_phys_Rloc, this%up_phys_Rloc, this%ek_phys_Rloc )
+      !deallocate( this%us_phys_Mloc, this%up_phys_Mloc, this%ek_phys_Mloc )
 
    end subroutine finalize
 !--------------------------------------------------------------------------------
@@ -122,6 +142,10 @@ contains
       complex(cp) :: usm3D_Rloc(n_m_max_3D,nRstart:nRstop)
       complex(cp) :: upm3D_Rloc(n_m_max_3D,nRstart:nRstop)
       complex(cp) :: ekpump_m3D(n_m_max_3D,nRstart:nRstop)
+
+      !real(cp) :: usm3D_Mloc(n_phi_max_3D,nRstart:nRstop)
+      !real(cp) :: upm3D_Mloc(n_phi_max_3D,nRstart:nRstop)
+      !real(cp) :: ekpump_p3D(n_phi_max_3D,nRstart:nRstop)
       integer :: n_m_3D, n_m, n_r, m3D
 
       do n_r=nRstart,nRstop
@@ -162,10 +186,19 @@ contains
          call ifft(upm3D_Rloc(:,n_r), this%up_phys_Rloc(:,n_r), l_3D=.true.)
          if( l_ek_pump ) &
          &   call ifft(ekpump_m3D(:,n_r), this%ek_phys_Rloc(:,n_r), l_3D=.true.)
+         !call ifft(usm3D_Rloc(:,n_r), usm3D_Mloc(:,n_r), l_3D=.true.)
+         !call ifft(upm3D_Rloc(:,n_r), upm3D_Mloc(:,n_r), l_3D=.true.)
+         !if( l_ek_pump ) &
+         !&   call ifft(ekpump_m3D(:,n_r), ekpump_p3D(:,n_r), l_3D=.true.)
       end do
+
+      !call transp_r2m3D(r2m3D_fields, usm3D_Mloc, this%us_phys_Mloc)
+      !call transp_r2m3D(r2m3D_fields, upm3D_Mloc, this%up_phys_Mloc)
+      !if( l_ek_pump ) call transp_r2m3D(r2m3D_fields, ekpump_p3D, this%ek_phys_Mloc)
 
       !-- Boundary point: fix Ek-pumping to zero
       if ( rank == 0 ) this%ek_phys_Rloc(:,1)=0.0_cp
+      !if ( rank == 0 ) this%ek_phys_Mloc(:,1)=0.0_cp
 
    end subroutine prepare_extension
 !--------------------------------------------------------------------------------
@@ -199,7 +232,6 @@ contains
             s_r = r_3D(n_r_r)*sint(n_th_NHS)
             z_r = r_3D(n_r_r)*cost(n_th_NHS)
             if ( s_r >= r_icb ) then !-- Outside TC
-
                n_r = 1
                do while ( r(n_r) > s_r .and. n_r < n_r_max )
                   n_r = n_r+1
@@ -208,19 +240,24 @@ contains
                alpha_r1 = one - alpha_r2
                z_eta = -s_r/(r_cmb*r_cmb-s_r*s_r)*z_r ! \beta * z
                do n_phi=1,n_phi_max_3D
+               !do n_phi=nphiStart,nphiStop
                   vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r-1)
+                  !vs = alpha_r1*this%us_phys_Mloc(n_phi,n_r) + alpha_r2*this%us_phys_Mloc(n_phi,n_r-1)
                   !-- vz = beta*vs
                   vz = z_eta*vs
                   if ( l_ek_pump ) then
                      !-- vz = beta*vz+ekpump
                      vz = vz + z_r*(alpha_r1*ekp(n_phi,n_r) +  & 
                      &              alpha_r2*ekp(n_phi,n_r-1))
+                     !vz = vz + z_r*(alpha_r1*this%ek_phys_Mloc(n_phi,n_r) +  &
+                     !&              alpha_r2*this%ek_phys_Mloc(n_phi,n_r-1))
                   end if
                   vrr= vz*cost(n_th_NHS) + vs*sint(n_th_NHS)
                   ur_Rloc(n_phi,n_th_NHS,n_r_r)= vrr
                   ur_Rloc(n_phi,n_th_SHS,n_r_r)= vrr
                   vth= vs*cost(n_th_NHS) - vz*sint(n_th_NHS)
                   vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r-1)
+                  !vph= alpha_r1*this%up_phys_Mloc(n_phi,n_r) + alpha_r2*this%up_phys_Mloc(n_phi,n_r-1)
                   ut_Rloc(n_phi,n_th_NHS,n_r_r)= vth
                   ut_Rloc(n_phi,n_th_SHS,n_r_r)=-vth
                   up_Rloc(n_phi,n_th_NHS,n_r_r)= vph
@@ -230,6 +267,7 @@ contains
             else !-- Inside the tangent cylinder
 
                do n_phi=1,n_phi_max_3D
+               !do n_phi=nphiStart,nphiStop
                   ur_Rloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
                   ur_Rloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
                   ut_Rloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
@@ -268,13 +306,14 @@ contains
       integer :: n_r_r, n_th_NHS, n_th_SHS
       complex(cp) :: tmp_hat(n_m_max_3D)
       real(cp) :: czavg
-      real(cp) :: tmp(n_phi_max_3D,n_r_max)
+      real(cp) :: tmp(n_phi_max_3D,n_r_max)!nRstart:nRstop)!
 
       tmp(:,:)      =0.0_cp
       zavg_Rloc(:,:)=zero
 
       !-- z-average in spatial space
       do n_r=1,n_r_max
+      !do n_r=nRstart,nRstop
          do n_z=1,4*n_z_max
             n_th_NHS= this%interp_zt_mat(n_z,n_r)
             n_th_SHS= n_theta_max+1-n_th_NHS
@@ -282,8 +321,8 @@ contains
             czavg = this%interp_wt_mat(n_z,n_r)
             if ( n_r_r >= nRstart3D .and. n_r_r <= nRstop3D ) then
                do n_phi=1,n_phi_max_3D
-                  tmp(n_phi,n_r) = tmp(n_phi,n_r) + czavg*               &
-                  &                   (work_Rloc(n_phi,n_th_NHS ,n_r_r)  &
+                  tmp(n_phi,n_r) = tmp(n_phi,n_r) + czavg*              &
+                  &                   (work_Rloc(n_phi,n_th_NHS,n_r_r)  &
                   &                  + work_Rloc(n_phi,n_th_SHS,n_r_r))
                end do
             end if
@@ -326,9 +365,9 @@ contains
       real(cp), intent(inout) :: up_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
 
       !-- Local arrays
-      real(cp) :: dTdth(n_theta_max,n_r_max_3D)!nRstart3D:nRstop3D)
-      real(cp) :: thw_Rloc(n_theta_max/2,n_r_max_3D)!nRstart3D:nRstop3D)
-      real(cp) :: dTzdt(n_theta_max/2,n_r_max_3D)!nRstart3D:nRstop3D)
+      real(cp) :: dTdth(n_theta_max,n_r_max_3D)!nRstart3D:nRstop3D)!
+      real(cp) :: thw_Rloc(n_theta_max/2,n_r_max_3D)!nRstart3D:nRstop3D)!
+      real(cp) :: dTzdt(n_theta_max/2,n_r_max_3D)!nRstart3D:nRstop3D)!
       !real(cp) :: tmp(n_theta_max/2)
       !real(cp) :: Zwb(n_theta_max/2,0:n_procs-1)
       !-- Local variables
@@ -339,11 +378,12 @@ contains
       thwFac=BuoFac/CorFac
 
       call allgather_from_rloc_3D(dTdth_Rloc,dTdth,n_theta_max)
+      !dTdth(:,:)=dTdth_Rloc(:,:)
 
       !-- Remaining term for the temperature gradient
       dTzdt(:,:)=0.0_cp
       do n_r=2,n_r_max_3D!max(2,nRstart3D),nRstop3D
-      !do n_r=nRstart3D,nRstop3D
+      !do n_r=max(2,nRstart3D),nRstop3D
          do n_th_NHS=1,n_theta_max/2
             !dTzdt(n_th_NHS,n_r)=thwFac*r_3D(n_r)* dTdth(n_th_NHS,n_r)
             !-- TG I don't understand the r factor in the above equation
@@ -352,6 +392,7 @@ contains
             dTzdt(n_th_NHS,n_r)=thwFac*rgrav_3D(n_r)*or1_3D(n_r)* &
             !&                   cos(theta(n_th_NHS))
             &                   dTdth(n_th_NHS,n_r)
+            !&                   dTdth_Rloc(n_th_NHS,n_r)
          end do
       end do
 
@@ -422,6 +463,92 @@ contains
 
    end subroutine compute_thermal_wind
 !--------------------------------------------------------------------------------
+   subroutine compute_lorentz_force(this, lrf0, lrfLM, lrf_Rloc, lrf0_Rloc)
+
+      !-- Input variables
+      class(zfunc_type) :: this
+      real(cp), intent(in) :: lrf0(n_theta_max,nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: lrfLM(lm_max,nRstart3D:nRstop3D,2)
+
+      !-- Output variables - modified (inout)
+      real(cp), intent(inout) :: lrf_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: lrf0_Rloc(nRstart:nRstop)
+
+      !-- Local arrays
+      real(cp) :: tmp_lrf0(2,n_r_max)
+      complex(cp) :: lrf_r(lmStart:lmStop,n_r_max_3D)
+      complex(cp) :: tmp_lrf(lm_max,nRstart3D:nRstop3D)
+      !-- Local variables
+      integer :: n_z, n_m_QG, n_m, m3D
+      integer :: n_r_r, n_th_NHS, n_th_SHS
+      integer :: n_r, lm, l, m, lmP
+      real(cp) :: czavg
+
+
+      !call allgather_from_rloc_3D(lrfLM(:,:,1),lrf_r,lm_max)
+      !call get_dr( lrf_r, lrf_r, n_r_max_3D, rscheme_3D, nocopy=.true. )
+   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before get dr jxB_t',  lrf_Rloc(1,1,1)
+      call transp_r2lm(r2lm_fields, lrfLM(:,:,1),lrf_r)
+      call get_dr( lrf_r, lrf_r, lmStart, lmStop, &
+           &       n_r_max_3D, rscheme_3D, nocopy=.true. )
+      call transp_lm2r(lm2r_fields, lrf_r, lrfLM(:,:,1))
+
+   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before computing VxjxB_z',  lrf_Rloc(1,1,1)
+      !-- Remaining term for the lorentz force
+      !!$OMP PARALLEL DO default(shared) &
+      !!$OMP& private(n_theta, n_phi)
+      !-- Assemble curl jxB . e_z on the spherical grid
+      !-- = 1/r * (dr(r jxB_t) - dth(jxB_r))
+      do n_r=nRstart3D,nRstop3D
+         do lm=2,lm_max
+            l   =lm2l(lm)
+            m   =lm2m(lm)
+            lmP =lm2lmP(lm)
+            tmp_lrf(lmP,n_r)=or1_3D(n_r)*(    &
+            &                lrfLM(lmP,n_r,1)-&
+            &                lrfLM(lmP,n_r,2))
+         end do
+      end do
+      !!$OMP END PARALLEL DO
+
+   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before back to grid',  lrf_Rloc(1,1,1)
+      !-- Back to the grid before the z-averaging
+      do n_r=nRstart3D,nRstop3D
+         call scal_to_spat(tmp_lrf(:,n_r), lrf_Rloc(:,:,n_r))
+      end do
+
+   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before computing jxB_p z-avg',  lrf_Rloc(1,1,1)
+      !-- z-average of the non-axisymmetric part (m==0)
+      !-- = <jxB_p>
+      do n_r=1,n_r_max
+         do n_z=1,4*n_z_max
+            n_th_NHS= this%interp_zt_mat(n_z,n_r)
+            n_th_SHS= n_theta_max+1-n_th_NHS
+            n_r_r = this%interp_zr_mat(n_z,n_r)
+            czavg = this%interp_wt_mat(n_z,n_r)
+            if ( n_r_r >= nRstart3D .and. n_r_r <= nRstop3D ) then
+               tmp_lrf0(1,n_r) = tmp_lrf0(1,n_r) + czavg* &
+               &                    (lrf0(n_th_NHS,n_r_r) &
+               &                   + lrf0(n_th_SHS,n_r_r))
+            end if
+         end do
+      end do
+
+   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before AllReduce',  lrf_Rloc(1,1,1)
+      do n_r=1,n_r_max
+         call MPI_Allreduce(MPI_IN_PLACE, tmp_lrf0(:,n_r), 2, MPI_DEF_REAL, &
+              &             MPI_SUM, MPI_COMM_WORLD, ierr)
+      end do
+
+   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before back to grid m=0',  lrf_Rloc(1,1,1)
+      !-- Transforms back to spectral space
+      do n_r=nRstart,nRstop
+         !call fft(tmp_lrf0(n_r), lrf0_Rloc(n_r), l_3D=.true.)
+         lrf0_Rloc(n_r)=cmplx(tmp_lrf0(1,n_r),0.0,kind=cp)
+      end do
+
+   end subroutine compute_lorentz_force
+!--------------------------------------------------------------------------------
    subroutine fill_mat(this)
 
       class(zfunc_type) :: this
@@ -439,6 +566,7 @@ contains
       !-- Get z grid
       !-- for interpolation: n_r_max points on z-axis
       do n_r=1,n_r_max!-1 loop on all s
+      !do n_r=nRstart,nRstop
          h = half*height(n_r)
          !n_r_r = n_r_max_3D-1
          n_r_r = 2
@@ -456,12 +584,12 @@ contains
                n_t_t = n_t_t+1
             end do
             !-- Compute coeffs for bilinear interpolation
-            !if ( n_z /= 0 ) then
-            !   !-- Multiply by 2 because of the symmetries
-            !   norm = two/(two*n_z_max+1)
-            !else
+            if ( n_z /= 0 ) then
+               !-- Multiply by 2 because of the symmetries
+               norm = two/(two*n_z_max+1)
+            else
                norm = one/(two*n_z_max+1)
-            !endif
+            endif
             alpha_r = (r_r-r_3D(n_r_r))/(r_3D(n_r_r-1)-r_3D(n_r_r))
             alpha_t = (c_t-cost(n_t_t))/(cost(n_t_t-1)-cost(n_t_t))
             !-- Coordinates neighbourg 1: n_r_r, n_t_t
@@ -485,8 +613,9 @@ contains
 
       !-- Get theta weights for thermal wind calculation
       zz(:) = 0.0_cp
-      do n_r=2,n_r_max_3D
-      !do n_r=max(2,nRstart3D),nRstop3D
+      !do n_r=2,n_r_max_3D
+      !do n_r=max(1,nRstart3D-1),min(nRstop3D+1,n_r_max_3D)
+      do n_r=max(2,nRstart3D),nRstop3D
          do n_t=1,n_theta_max/2
             s_r = r_3D(n_r)*sint(n_t)
             n_z = 0
@@ -514,7 +643,7 @@ contains
                   if( n_t_t > n_theta_max/2 ) print*, 'w!! segFault in n_t_t loop!; n_t_t', n_t_t
                   if ( n_r_r==n_r ) then
                      this%interp_zp_thw(1,n_z,n_t,n_r)=n_r
-                     this%interp_zp_thw(2,n_z,n_t,n_r)=n_theta_max/2
+                     this%interp_zp_thw(2,n_z,n_t,n_r)=n_t!heta_max/2
                      this%interp_wt_thw(1,n_z,n_t,n_r)=one
                      this%interp_wt_thw(2,n_z,n_t,n_r)=0.0_cp
                   else

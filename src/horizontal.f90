@@ -8,13 +8,13 @@ module horizontal
    use parallel_mod
    use mem_alloc
    use constants, only: zero, one, pi, two, half
-   use blocking, only: nMstart, nMstop, m_balance, nm_per_rank
+   use blocking, only: nMstart, nMstop, m_balance, nm_per_rank, lmStart, lmStop
    use truncation, only: idx2m, n_m_max
    use truncation_3D, only: n_theta_max, lm_max, l_max, minc_3D, m_max_3D
    use blocking_lm, only: lmP2l, lmP2lm, lm2l, lm2m
    use namelists, only: hdif_m, hdif_exp, hdif_vel, hdif_temp, tag,   &
        &                t_bot, t_top, xi_bot, xi_top, hdif_comp,      &
-       &                l_heat, l_chem, l_3D
+       &                l_heat, l_chem, l_3D, l_mag_3D, hdif_mag
 
    implicit none
 
@@ -29,6 +29,7 @@ module horizontal
    real(cp), public, allocatable :: hdif_V(:)
    real(cp), public, allocatable :: hdif_T(:)
    real(cp), public, allocatable :: hdif_Xi(:)
+   real(cp), public, allocatable :: hdif_B(:)
 
    !-- Arrays depending on theta (colatitude):
    real(cp), public, allocatable :: theta(:)
@@ -71,6 +72,10 @@ contains
          bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_DEF_REAL+&
          &                 2*(nMstop-nMstart+1)*SIZEOF_DEF_COMPLEX
       end if
+      if ( l_mag_3D ) then
+         allocate( hdif_B(lmStart:lmStop) )
+         bytes_allocated = bytes_allocated+(lmStop-lmStart+1)*SIZEOF_DEF_REAL
+      end if
 
       if ( l_3D ) then
 
@@ -99,6 +104,7 @@ contains
       if ( l_heat ) deallocate( bott_Mloc, topt_Mloc, hdif_T )
       if ( l_chem ) deallocate( botxi_Mloc, topxi_Mloc, hdif_Xi )
       deallocate( hdif_V )
+      if ( l_mag_3D ) deallocate( hdif_B )
 
       if ( l_3D ) then
          !-- theta functions
@@ -161,7 +167,6 @@ contains
          call MPI_GatherV(hdif_V, nm_per_rank, MPI_DEF_REAL,  &
               &           hdif_V_global, recvcounts, displs,  &
               &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
-
 
          !-- Now rank0 writes an output file
          if ( rank== 0 ) then
@@ -246,7 +251,9 @@ contains
 
       !-- Local variables
       integer :: l, m
-      integer :: n_theta, lm
+      integer :: n_theta, lm, n_p, file_handle
+      integer :: displs(0:n_procs-1), recvcounts(0:n_procs-1)
+      real(cp) :: eps, hdif_B_global(lm_max)
       real(cp) :: clm(0:l_max+1,0:l_max+1), colat
       real(cp) :: theta_ord(n_theta_max), gauss(n_theta_max)
 
@@ -292,7 +299,7 @@ contains
          !-- Operator ( 1/sin(theta) * d/d theta * sin(theta)**2 )
          dTheta1S(lm)=real(l+1,cp)        *clm(l,m)    ! = qcl1
          dTheta1A(lm)=real(l,cp)          *clm(l+1,m)  ! = qcl
-         !-- Operator ( sin(thetaR) * d/d theta )
+         !-- Operator ( sin(theta) * d/d theta )
          dTheta2S(lm)=real(l-1,cp)        *clm(l,m)    ! = qclm1
          dTheta2A(lm)=real(l+2,cp)        *clm(l+1,m)  ! = qcl2
          !-- Operator ( sin(theta) * d/d theta + cos(theta) dLh )
@@ -302,6 +309,53 @@ contains
          dTheta4S(lm)=dTheta1S(lm)*real((l-1)*l,cp)
          dTheta4A(lm)=dTheta1A(lm)*real((l+1)*(l+2),cp)
       enddo
+
+      eps = 10.0_cp*epsilon(one)
+      if ( abs(hdif_mag) > eps ) then
+
+         do lm=lmStart,lmStop
+            l=lm2l(lm)
+            m=lm2l(lm)
+
+            if ( l > hdif_m ) then ! This is the Nataf & Schaffer (2015) form
+               if ( l_mag_3D ) hdif_B(lm) = hdif_mag**(l-hdif_m)
+            else
+               if ( l_mag_3D ) hdif_B(lm) = one
+            end if
+
+         end do
+
+         !-- Gather the profiles on rank 0 to write the profiles in hdif.TAG
+         do n_p=0,n_procs-1
+            recvcounts(n_p)=m_balance(n_p)%n_per_rank
+         end do
+         displs(0)=0
+         do n_p=1,n_procs-1
+            displs(n_p)=displs(n_p-1)+recvcounts(n_p-1)
+         end do
+         if ( l_mag_3D ) then
+            call MPI_GatherV(hdif_B, nm_per_rank, MPI_DEF_REAL,  &
+                 &           hdif_B_global, recvcounts, displs,  &
+                 &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+         end if
+
+         !-- Now rank0 writes an output file
+         if ( rank== 0 ) then
+            open(newunit=file_handle, file='hdif.'//tag, status='new')
+
+            do lm=1,lm_max
+               l=lm2l(lm)
+               m=lm2l(lm)
+               write(file_handle, '(I5, 3es16.8)') l, m, hdif_B_global(lm)
+            end do
+            close(file_handle)
+         end if
+
+      else
+
+         if ( l_mag_3D ) hdif_B(:) = one
+
+      end if
 
    end subroutine spherical_functions
 !--------------------------------------------------------------------------------

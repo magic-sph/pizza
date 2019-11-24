@@ -7,7 +7,7 @@ module fieldsLast
    use precision_mod
    use constants, only: zero
    use mem_alloc, only: bytes_allocated
-   use namelists, only: l_heat, l_chem, l_heat_3D
+   use namelists, only: l_heat, l_chem, l_heat_3D, l_mag_3D
    use time_array
 
    implicit none
@@ -28,10 +28,16 @@ module fieldsLast
    complex(cp), public, allocatable :: dVrT_3D_LMloc(:,:)
    complex(cp), public, allocatable :: dtempdt_3D_Rloc(:,:)
    complex(cp), public, allocatable :: dVrT_3D_Rloc(:,:)
+   complex(cp), public, allocatable :: dVxBh_3D_LMloc(:,:)
+   complex(cp), public, allocatable :: djdt_3D_Rloc(:,:)
+   complex(cp), public, allocatable :: dbdt_3D_Rloc(:,:)
+   complex(cp), public, allocatable :: dVxBh_3D_Rloc(:,:)
 
    type(type_tarray), public :: dpsidt
    type(type_tarray), public :: dTdt, dXidt
    type(type_tarray), public :: dTdt_3D
+   type(type_tarray), public :: dBdt_3D
+   type(type_tarray), public :: djdt_3D
 
    public :: initialize_fieldsLast, finalize_fieldsLast, initialize_fieldsLast_3D
 
@@ -150,6 +156,19 @@ contains
          allocate( dVrT_3D_LMloc(0,0) )
       end if
 
+      if ( l_mag_3D ) then
+         call dBdt_3D%initialize(lmStart, lmStop, n_r_max, norder_imp, norder_exp, &
+              &                 norder_imp_lin)
+         call djdt_3D%initialize(lmStart, lmStop, n_r_max, norder_imp, norder_exp, &
+              &                 norder_imp_lin)
+         allocate( dVxBh_3D_LMloc(lmStart:lmStop,n_r_max) )
+         bytes_allocated = bytes_allocated + 1*(lmStop-lmStart+1)* &
+         &                 n_r_max*SIZEOF_DEF_COMPLEX
+         dVxBh_3D_LMloc(:,:)=zero
+      else
+         allocate( dVxBh_3D_LMloc(0,0) )
+      end if
+
       if ( l_heat_3D ) then
          allocate( dtempdt_3D_Rloc(lm_max,nRstart:nRstop) )
          allocate( dVrT_3D_Rloc(lm_max,nRstart:nRstop) )
@@ -161,10 +180,28 @@ contains
          allocate( dtempdt_3D_Rloc(0,0), dVrT_3D_Rloc(0,0) )
       end if
 
+      if ( l_mag_3D ) then
+         allocate( dbdt_3D_Rloc(lm_max,nRstart:nRstop) )
+         allocate( djdt_3D_Rloc(lm_max,nRstart:nRstop) )
+         allocate( dVxBh_3D_Rloc(lm_max,nRstart:nRstop) )
+         bytes_allocated = bytes_allocated + 3*(nRstop-nRStart+1)* &
+         &                 lm_max*SIZEOF_DEF_COMPLEX
+         dVxBh_3D_Rloc(:,:)=zero
+         djdt_3D_Rloc(:,:) =zero
+         dbdt_3D_Rloc(:,:) =zero
+      else
+         allocate( dbdt_3D_Rloc(0,0), djdt_3D_Rloc(0,0), dVxBh_3D_Rloc(0,0) )
+      end if
+
    end subroutine initialize_fieldsLast_3D
 !-------------------------------------------------------------------------------
    subroutine finalize_fieldsLast
 
+      if ( l_mag_3D ) then
+         call dBdt_3D%finalize()
+         call djdt_3D%finalize()
+         deallocate( dVxBh_3D_LMloc, dVxBh_3D_Rloc, djdt_3D_Rloc, dbdt_3D_Rloc )
+      end if
       if ( l_heat_3D ) then
          call dTdt_3D%finalize()
          deallocate( dVrT_3D_LMloc, dVrT_3D_Rloc, dtempdt_3D_Rloc )

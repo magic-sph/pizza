@@ -6,7 +6,7 @@ module communications
    use blocking_lm, only: st_map, lo_map
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, n_m_max
-   use truncation_3D, only: n_r_max_3D, lm_max
+   use truncation_3D, only: n_r_max_3D, lm_max, n_phi_max_3D
    use parallel_mod, only: n_procs, rank, ierr
 
    implicit none
@@ -24,6 +24,7 @@ module communications
    end type
 
    type(help_transp), public :: r2m_fields
+   type(help_transp), public :: r2m3D_fields
    type(help_transp), public :: m2r_fields
    type(help_transp), public :: lm2r_fields
    type(help_transp), public :: r2lm_fields
@@ -33,7 +34,7 @@ module communications
    &         gather_from_mloc_to_rank0, scatter_from_rank0_to_mloc, &
    &         finalize_communications, reduce_radial_on_rank,        &
    &         my_reduce_mean, my_allreduce_maxloc, transp_lm2r,      &
-   &         transp_r2lm, allgather_from_Rloc,                      &
+   &         transp_r2lm, allgather_from_Rloc, transp_r2m3D,        &
    &         allgather_from_Rloc_3D, scatter_from_rank0_to_lmloc
 
 contains
@@ -47,6 +48,7 @@ contains
       call create_r2all_type(r2all_fields)
 
       if ( l_3D ) then
+         call create_r2m3D_type(r2m3D_fields)
          call create_lm2r_type(lm2r_fields)
          call create_r2lm_type(r2lm_fields)
       end if
@@ -60,6 +62,7 @@ contains
       if ( l_3D ) then
          call destroy_communicator(r2lm_fields)
          call destroy_communicator(lm2r_fields)
+         call destroy_communicator(r2m3D_fields)
       end if
 
       call destroy_communicator(m2r_fields)
@@ -100,6 +103,39 @@ contains
       &                 SIZEOF_DEF_COMPLEX
 
    end subroutine create_r2m_type
+!------------------------------------------------------------------------------
+   subroutine create_r2m3D_type(self)
+
+      type(help_transp) :: self
+      integer :: p
+
+      allocate ( self%rcounts(0:n_procs-1), self%scounts(0:n_procs-1) )
+      allocate ( self%rdisp(0:n_procs-1), self%sdisp(0:n_procs-1) )
+
+      do p=0,n_procs-1
+         self%scounts(p)=nR_per_rank*phi_balance(p)%n_per_rank
+         self%rcounts(p)=radial_balance(p)%n_per_rank*nphi_per_rank
+      end do
+
+      self%rdisp(0)=0
+      self%sdisp(0)=0
+      do p=1,n_procs-1
+         self%sdisp(p)=self%sdisp(p-1)+self%scounts(p-1)
+         self%rdisp(p)=self%rdisp(p-1)+self%rcounts(p-1)
+      end do
+
+      self%max_send = sum(self%scounts)
+      self%max_recv = sum(self%rcounts)
+
+      bytes_allocated = bytes_allocated+4*n_procs*SIZEOF_INTEGER
+
+      allocate( self%sbuff(1:self%max_send) )
+      allocate( self%rbuff(1:self%max_recv) )
+
+      bytes_allocated = bytes_allocated+(self%max_send+self%max_recv)*&
+      &                 SIZEOF_DEF_REAL
+
+   end subroutine create_r2m3D_type
 !------------------------------------------------------------------------------
    subroutine destroy_communicator(self)
 
@@ -357,6 +393,44 @@ contains
       end do
 
    end subroutine transp_r2m
+!------------------------------------------------------------------------------
+   subroutine transp_r2m3D(self, arr_Rloc, arr_Mloc)
+
+      !-- Input variables
+      type(help_transp), intent(inout) :: self
+      real(cp),       intent(in) :: arr_Rloc(n_phi_max_3D,nRstart:nRstop)
+
+      !-- Output variable
+      real(cp), intent(out) :: arr_Mloc(nphiStart:nphiStop,n_r_max)
+
+      !-- Local variables
+      integer :: p, ii, n_r, n_m
+
+      do p = 0, n_procs-1
+         ii = self%sdisp(p)+1
+         do n_r=nRstart,nRstop
+            do n_m=phi_balance(p)%nStart,phi_balance(p)%nStop
+               self%sbuff(ii)=arr_Rloc(n_m,n_r)
+               ii = ii +1
+            end do
+         end do
+      end do
+
+      call MPI_Alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
+           &             self%rbuff, self%rcounts, self%rdisp, MPI_DEF_COMPLEX, &
+           &             MPI_COMM_WORLD, ierr)
+
+      do p = 0, n_procs-1
+         ii = self%rdisp(p)+1
+         do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
+            do n_m=nphiStart,nphiStop
+               arr_Mloc(n_m,n_r)=self%rbuff(ii)
+               ii=ii+1
+            end do
+         end do
+      end do
+
+   end subroutine transp_r2m3D
 !------------------------------------------------------------------------------
    subroutine transp_m2r(self, arr_Mloc, arr_Rloc)
 

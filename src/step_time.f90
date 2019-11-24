@@ -7,21 +7,25 @@ module step_time
        &                     gather_from_mloc_to_rank0, my_reduce_mean,      &
        &                     scatter_from_rank0_to_mloc, transp_lm2r,        &
        &                     lm2r_fields, transp_r2lm, r2lm_fields
-   use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,        &
-       &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc,    &
-       &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,       &
-       &             xi_Rloc, dxi_Mloc, xi_hat_Mloc, temp_3D_LMloc,        &
-       &             dtemp_3D_LMloc, temp_3D_Rloc, ur_3D_Rloc, ut_3D_Rloc, &
-       &             up_3D_Rloc
-   use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
-       &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,  &
-       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,       &
-       &                 dTdt_3D, dVrT_3D_LMloc, dVrT_3D_Rloc,            &
-       &                 dtempdt_3D_Rloc
+   use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,            &
+       &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc,        &
+       &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc, xi_Rloc,  &
+       &             dxi_Mloc, xi_hat_Mloc, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,&
+       &             temp_3D_LMloc, dtemp_3D_LMloc, temp_3D_Rloc, b_3D_LMloc,  &
+       &             db_3D_LMloc, ddb_3D_LMloc, b_3D_Rloc, db_3D_Rloc,         &
+       &             ddb_3D_Rloc, aj_3D_LMloc, dj_3D_LMloc, aj_3D_Rloc,        &
+       &             dj_3D_Rloc
+   use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc,      &
+       &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,       &
+       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,            &
+       &                 dTdt_3D, dVrT_3D_LMloc, dVrT_3D_Rloc, dtempdt_3D_Rloc,&
+       &                 dBdt_3D, djdt_3D, dVxBh_3D_LMloc, dVxBh_3D_Rloc,      &
+       &                 dbdt_3D_Rloc, djdt_3D_Rloc
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
    use update_temp_3D_mod, only:  get_temp_3D_rhs_imp
+   use update_mag_3D_mod, only:  get_mag_3D_rhs_imp
    use update_temp_coll, only: get_temp_rhs_imp_coll
    use update_xi_coll, only: get_xi_rhs_imp_coll
    use update_temp_integ, only: get_temp_rhs_imp_int
@@ -39,7 +43,7 @@ module step_time
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance,      &
-       &                l_heat, l_chem, l_3D, l_heat_3D
+       &                l_heat, l_chem, l_3D, l_heat_3D, l_mag_3D
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
    use outputs_3D, only: write_outputs_3D
@@ -49,6 +53,7 @@ module step_time
    use precision_mod
    use timers_mod, only: timers_type
    use z_functions, only: zfunc_type
+   use truncation_3D, only: n_r_max_3D
 
    implicit none
 
@@ -193,7 +198,8 @@ contains
               &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
               &             dpsidt, dTdt, dxidt, temp_3D_Rloc, dTdt_3D)
          if ( l_3D ) then
-            call write_outputs_3D(time, tscheme, l_log, l_stop_time, temp_3D_LMloc)
+            call write_outputs_3D(time, tscheme, l_log, l_stop_time, temp_3D_LMloc, &
+            &                     b_3D_LMloc, aj_3D_LMloc)
          end if
          runStop = MPI_Wtime()
          if (runStop>runStart) then
@@ -220,6 +226,14 @@ contains
                if ( l_chem ) call transp_m2r(m2r_fields, xi_Mloc, xi_Rloc)
                if ( l_heat_3D ) call transp_lm2r(lm2r_fields, temp_3D_LMloc, &
                                      &           temp_3D_Rloc)
+               if ( l_mag_3D ) then
+                  call transp_lm2r(lm2r_fields, b_3D_LMloc, b_3D_Rloc)
+                  call transp_lm2r(lm2r_fields, db_3D_LMloc, db_3D_Rloc)
+                  call transp_lm2r(lm2r_fields, ddb_3D_LMloc, ddb_3D_Rloc)
+                  call transp_lm2r(lm2r_fields, aj_3D_LMloc, aj_3D_Rloc)
+                  call transp_lm2r(lm2r_fields, dj_3D_LMloc, dj_3D_Rloc)
+               end if
+
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%n_mpi_comms=timers%n_mpi_comms+1
@@ -252,10 +266,12 @@ contains
                      timers%n_interp=timers%n_interp+1
                      timers%interp  =timers%interp+(runStop-runStart)
                   end if
-                  call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc, &
-                       &              temp_3D_Rloc, dtempdt_3D_Rloc,            &
-                       &              dVrT_3D_Rloc, dpsidt_Rloc, l_frame,       &
-                       &              zinterp, timers, tscheme)
+                  call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,    &
+                       &              temp_3D_Rloc, dtempdt_3D_Rloc, dVrT_3D_Rloc, &
+                       &              b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc,          &
+                       &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,        &
+                       &              djdt_3d_Rloc, dVxBh_3D_Rloc, dpsidt_Rloc,    &
+                       &              l_frame, zinterp, timers, tscheme)
                end if
 
                !------------------
@@ -280,6 +296,13 @@ contains
                        &           dTdt_3D%expl(:,:,tscheme%istage))
                   call transp_r2lm(r2lm_fields, dVrT_3D_Rloc, dVrT_3D_LMloc)
                end if
+               if ( l_mag_3D ) then
+                  call transp_r2lm(r2lm_fields, dBdt_3D_Rloc, &
+                       &           dBdt_3D%expl(:,:,tscheme%istage))
+                  call transp_r2lm(r2lm_fields, djdt_3D_Rloc, &
+                       &           djdt_3D%expl(:,:,tscheme%istage))
+                  call transp_r2lm(r2lm_fields, dVxBh_3D_Rloc, dVxBh_3D_LMloc)
+               end if
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%mpi_comms=timers%mpi_comms+(runStop-runStart)
@@ -301,7 +324,8 @@ contains
 
                if ( l_3D ) then
                   runStart = MPI_Wtime()
-                  call finish_explicit_assembly_3D(dVrT_3D_LMloc, dTdt_3D, tscheme)
+                  call finish_explicit_assembly_3D(dVrT_3D_LMloc, dTdt_3D,        &
+                       &                           dVxBh_3D_LMloc,djdt_3D, tscheme)
                   runStop = MPI_Wtime()
                   if (runStop>runStart) then
                      timers%lm_loop=timers%lm_loop+(runStop-runStart)
@@ -371,7 +395,10 @@ contains
                !-- LM-loop (update routines)
                !--------------------
                runStart = MPI_Wtime()
-               call LMloop(temp_3D_LMloc, dtemp_3D_LMloc, dTdt_3D, tscheme, lMat)
+               call LMloop(temp_3D_LMloc, dtemp_3D_LMloc, dTdt_3D,         &
+                    &      b_3D_LMloc, db_3D_LMloc, ddb_3D_LMloc, dBdt_3D, &
+                    &      aj_3D_LMloc,dj_3D_LMloc, djdt_3D,               &
+                    &      tscheme, lMat)
                runStop = MPI_Wtime()
                if ( .not. lMat ) then
                   if (runStop>runStart) then
@@ -488,6 +515,14 @@ contains
             call get_temp_3D_rhs_imp(temp_3D_LMloc, dtemp_3D_LMloc,           &
                  &                   dTdt_3D%old(:,:,1), dTdt_3D%impl(:,:,1), &
                  &                   .true.)
+         end if
+
+         if ( l_mag_3D ) then
+            call get_mag_3D_rhs_imp(b_3D_LMloc, db_3D_LMloc, ddb_3D_LMloc,   &
+                 &                  dbdt_3D%old(:,:,1), dbdt_3D%impl(:,:,1), &
+                 &                  aj_3D_LMloc,dj_3D_LMloc,                 &
+                 &                  djdt_3D%old(:,:,1), djdt_3D%impl(:,:,1), &
+                 &                  .true.)
          end if
 
          call tscheme%bridge_with_cnab2()
