@@ -102,6 +102,21 @@ class Pizza3DFields(PizzaSetup):
         f = Frame3D(filename, endian=endian)
         self.temp = f.field
 
+        filename = self.get_filename('frame_br_3D', ivar, datadir, tag,
+                                     verbose)
+        f = Frame3D(filename, endian=endian)
+        self.br = f.field
+
+        filename = self.get_filename('frame_bt_3D', ivar, datadir, tag,
+                                     verbose)
+        f = Frame3D(filename, endian=endian)
+        self.bt = f.field
+
+        filename = self.get_filename('frame_bp_3D', ivar, datadir, tag,
+                                     verbose)
+        f = Frame3D(filename, endian=endian)
+        self.bp = f.field
+
     def get_filename(self, prefix, ivar, datadir, tag, verbose):
         """
         This routine determines the filename based on what is available
@@ -193,6 +208,12 @@ class Pizza3DFields(PizzaSetup):
             data = self.utheta.mean(axis=0)
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
             data = self.uphi.mean(axis=0)
+        elif field in ('br', 'Br'):
+            data = self.br.mean(axis=0)
+        elif field in ('bt', 'Bt', 'btheta', 'Btheta'):
+            data = self.bt.mean(axis=0)
+        elif field in ('bp', 'Bp', 'bphi', 'Bphi'):
+            data = self.bp.mean(axis=0)
 
         self.fig, xx, yy = merContour(data, self.radius_3D, colat=self.theta,
                                       label=label,
@@ -252,6 +273,12 @@ class Pizza3DFields(PizzaSetup):
             data = self.utheta[:, self.n_theta_max/2, :]
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
             data = self.uphi[:, self.n_theta_max/2, :]
+        elif field in ('br', 'Br'):
+            data = self.br[:, self.n_theta_max/2, :]
+        elif field in ('bt', 'Bt', 'btheta', 'Btheta'):
+            data = self.bt[:, self.n_theta_max/2, :]
+        elif field in ('bp', 'Bp', 'bphi', 'Bphi'):
+            data = self.bp[:, self.n_theta_max/2, :]
 
         if deminc:
             data = symmetrize(data, ms=self.minc_3D)
@@ -357,6 +384,12 @@ class Pizza3DFields(PizzaSetup):
             data = self.utheta[:, :, irad]
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
             data = self.uphi[:, :, irad]
+        elif field in ('br', 'Br'):
+            data = self.br[:, :, irad]
+        elif field in ('bt', 'Bt', 'btheta', 'Btheta'):
+            data = self.bt[:, :, irad]
+        elif field in ('bp', 'Bp', 'bphi', 'Bphi'):
+            data = self.bp[:, :, irad]
 
         if deminc:
             data = symmetrize(data, ms=self.minc_3D)
