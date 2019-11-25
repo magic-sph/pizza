@@ -200,7 +200,7 @@ contains
               &             dpsidt, dTdt, dxidt, temp_3D_Rloc, dTdt_3D)
          if ( l_3D ) then
             call write_outputs_3D(time, tscheme, l_log, l_stop_time, temp_3D_LMloc, &
-            &                     b_3D_LMloc, aj_3D_LMloc)
+            &                     b_3D_LMloc, db_3D_LMloc, aj_3D_LMloc)
          end if
          runStop = MPI_Wtime()
          if (runStop>runStart) then

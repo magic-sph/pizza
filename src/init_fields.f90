@@ -648,7 +648,7 @@ contains
 !         if ( lmStartB(rank+1) <= lm10 .and. lmStopB(rank+1) >= lm10 ) then ! select processor
             b_pol=amp_B
             do n_r=1,n_r_max_3D
-               b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol*(r_cmb+r_icb)/2**2!*r_3D(n_r)**2!
+               b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol*r_3D(n_r)**2!*(r_cmb+r_icb)/2**2!
             end do
          end if
 

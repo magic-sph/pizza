@@ -156,14 +156,6 @@ class PizzaTs(PizzaSetup):
             self.toptemp = data[:, 5]
             self.bottemp = data[:, 6]
             self.beta_t = data[:, 7]
-        elif self.field == 'mag_3D':
-            self.time = data[:, 0]
-            self.topb = data[:, 1]
-            self.botb = data[:, 2]
-            self.topdb = data[:, 3]
-            self.botdb = data[:, 4]
-            self.topj = data[:, 5]
-            self.botj = data[:, 6]
         elif self.field == 'comp' or self.field == 'composition':
             self.time = data[:, 0]
             self.topsh = data[:, 1]
@@ -281,17 +273,6 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='lower right', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Nusselt number')
-            fig.tight_layout()
-        elif self.field == 'mag_3D':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.plot(self.time, self.topb, label='Top B')
-            ax.plot(self.time, self.botb, label='Bottom B')
-            ax.plot(self.time, self.topj, label='Top J')
-            ax.plot(self.time, self.botj, label='Bottom J')
-            ax.legend(loc='lower right', frameon=False)
-            ax.set_xlabel('Time')
-            ax.set_ylabel('Magnetic quantities')
             fig.tight_layout()
         elif self.field == 'comp' or self.field == 'composition':
             fig = plt.figure()

@@ -5,16 +5,18 @@ module outputs_3D
 
    use parallel_mod
    use precision_mod
-   use constants, only: osq4pi
+   use constants, only: zero, two, half, pi, osq4pi
+   use communications, only: reduce_radial_on_rank
    use truncation_3D, only: n_r_max_3D, n_theta_max, n_phi_max_3D
    use blocking, only: lmStart, lmStop, nRstart3D, nRstop3D
    use blocking_lm, only: lo_map
-   use namelists, only: l_heat_3D, l_mag_3D, tag
-   use radial_functions, only: rscheme_3D, dtcond_3D, tcond_3D, r_3D
+   use namelists, only: l_heat_3D, l_mag_3D, tag, DyMagFac
+   use radial_functions, only: rscheme_3D, dtcond_3D, tcond_3D, r_3D, or2_3D
    use radial_der, only: get_dr
    use mean_sd, only: mean_sd_type
    use time_schemes, only: type_tscheme
-   use useful, only: round_off, getMSD2
+   use integration, only: rInt_R
+   use useful, only: round_off, getMSD2, cc2real
 
    implicit none
 
@@ -60,7 +62,8 @@ contains
 
    end subroutine finalize_outputs_3D
 !---------------------------------------------------------------------------------
-   subroutine write_outputs_3D(time, tscheme, l_log, l_stop_time, temp_3D, b_3D, aj_3D)
+   subroutine write_outputs_3D(time, tscheme, l_log, l_stop_time, temp_3D, &
+   &                           b_3D, db_3D, aj_3D)
 
       !-- Input variables
       real(cp),            intent(in) :: time
@@ -69,35 +72,53 @@ contains
       logical,             intent(in) :: l_stop_time
       complex(cp),         intent(in) :: temp_3D(lmStart:lmStop,n_r_max_3D)
       complex(cp),         intent(in) :: b_3D(lmStart:lmStop,n_r_max_3D)
+      complex(cp),         intent(in) :: db_3D(lmStart:lmStop,n_r_max_3D)
       complex(cp),         intent(in) :: aj_3D(lmStart:lmStop,n_r_max_3D)
 
       timeAvg_rad  = timeAvg_rad  + tscheme%dt(1)
 
       if ( l_log ) then
-         call write_time_series(time, temp_3D, b_3D, aj_3D)
+         call write_time_series(time, temp_3D, b_3D, db_3D, aj_3D)
          call get_radial_averages(timeAvg_rad, l_stop_time, temp_3D)
       end if
 
    end subroutine write_outputs_3D
 !---------------------------------------------------------------------------------
-   subroutine write_time_series(time, temp_3D, b_3D, aj_3D)
+   subroutine write_time_series(time, temp_3D, b_3D, db_3D, aj_3D)
 
       !-- Input variables
       real(cp),    intent(in) :: time
       complex(cp), intent(in) :: temp_3D(lmStart:lmStop,n_r_max_3D)
       complex(cp), intent(in) :: b_3D(lmStart:lmStop,n_r_max_3D)
+      complex(cp), intent(in) :: db_3D(lmStart:lmStop,n_r_max_3D)
       complex(cp), intent(in) :: aj_3D(lmStart:lmStop,n_r_max_3D)
 
       !-- Local variables
       real(cp) :: temp0(n_r_max_3D), dtemp0(n_r_max_3D)
-      real(cp) :: b0(n_r_max_3D), db0(n_r_max_3D), j0(n_r_max_3D)
-      real(cp) :: b2(n_r_max_3D), db2(n_r_max_3D), j2(n_r_max_3D)
+      !real(cp) :: b0(n_r_max_3D), db0(n_r_max_3D), j0(n_r_max_3D)
+      !real(cp) :: b2(n_r_max_3D), db2(n_r_max_3D), j2(n_r_max_3D)
       real(cp) :: NuTop, NuBot, tTop, tBot, NuDelta, beta_t
-      real(cp) :: dbTop, dbBot, bTop, bBot, jTop, jBot
-      real(cp) :: bTop2, bBot2, jTop2, jBot2
-      real(cp) :: bm, jm
-      integer :: n_r
-      integer :: lm10, lm20
+      !real(cp) :: dbTop, dbBot, bTop, bBot, jTop, jBot
+      !real(cp) :: bTop2, bBot2, jTop2, jBot2
+      !real(cp) :: bm, jm
+      logical :: rank_has_lm10, rank_has_lm11
+#ifdef WITH_MPI
+      integer :: status(MPI_STATUS_SIZE)
+#endif
+      integer :: sr_tag, request1, request2
+      integer :: n_r, lm, l, m
+      integer :: lm10, lm11
+      complex(cp) :: b10, b11
+      real(cp) :: dLh, e_pol_tmp, e_tor_tmp, E_dip_axis
+      real(cp) :: rad, theta_dip, phi_dip, Efac
+      real(cp) :: E_pol      ! Volume averaged poloidal magnetic energy
+      real(cp) :: E_tor      ! Volume averaged toroidal magnetic energy
+      real(cp) :: E_pol_axis ! Volume averaged axisymmetric poloidal magnetic energy
+      real(cp) :: E_tor_axis ! Volume averaged axisymmetric toroidal magnetic energy
+      real(cp) :: E_cmb      ! Magnetic energy at the CMB
+      real(cp) :: EDip       ! Relative magnetic energy of axial dipole
+      real(cp) :: e_pol_r(n_r_max_3D), e_tor_r(n_r_max_3D)
+      real(cp) :: e_pol_axis_r(n_r_max_3D), e_tor_axis_r(n_r_max_3D), e_dipole_axis_r(n_r_max_3D)
 
       if ( rank == 0 ) then
          temp0(:) = osq4pi*real(temp_3D(1, :))
@@ -122,42 +143,143 @@ contains
          &                                            NuDelta, tTop, tBot,  &
          &                                            beta_t
 
-         if ( l_mag_3D ) then
-            lm10 = lo_map%lm2(1,0)
-            lm20 = lo_map%lm2(2,0)
-            b0(:) = osq4pi*real(b_3D(lm10, :))
-            j0(:) = osq4pi*real(aj_3D(lm10, :))
-            b2(:) = osq4pi*real(b_3D(lm20, :))
-            j2(:) = osq4pi*real(aj_3D(lm20, :))
-            call get_dr(b0, db0, n_r_max_3D, rscheme_3D)
-            bm=0.0_cp
-            jm=0.0_cp
-            do n_r=1,n_r_max_3D
-               bm = bm + b0(n_r)!/n_r_max_3D
-               jm = jm + j0(n_r)!/n_r_max_3D
-            end do
+      end if
 
-            !--Test Mag values at top and bottom
-            dbTop = db0(1)!/djcond_3D(1)
-            dbBot = db0(n_r_max_3D)!/djcond_3D(n_r_max_3D)
+      E_pol     = 0.0_cp
+      E_tor     = 0.0_cp
+      E_pol_axis= 0.0_cp
+      E_tor_axis= 0.0_cp
+      E_cmb     = 0.0_cp
+      EDip      = 0.0_cp
+      if ( l_mag_3D ) then
+         do n_r=1,n_r_max_3D
+            e_pol_r(:)        = 0.0_cp
+            e_tor_r(:)        = 0.0_cp
+            e_pol_axis_r(:)   = 0.0_cp
+            e_tor_axis_r(:)   = 0.0_cp
+            e_dipole_axis_r(:)= 0.0_cp
+            do lm=max(2,lmStart),lmStop
+               l=lo_map%lm2l(lm)
+               m=lo_map%lm2m(lm)
+               dLh = real(l*(l+1),cp)
 
-            !-- Top and bottom B and j
-            bTop = b0(1)
-            bBot = b0(n_r_max_3D)
-            jTop = j0(1)
-            jBot = j0(n_r_max_3D)
-            bTop2 = b2(1)
-            bBot2 = b2(n_r_max_3D)
-            jTop2 = j2(1)
-            jBot2 = j2(n_r_max_3D)
+               e_pol_tmp= dLh*(dLh*or2_3D(n_r)*cc2real( b_3D(lm,n_r),m) &
+               &                              +cc2real(db_3D(lm,n_r),m) )
+               e_tor_tmp= dLh*cc2real(aj_3D(lm,n_r),m)
 
-            write(n_mag_file, '(1P, ES20.12, 5ES20.12)') time, bTop, bBot,   &
-            !&                                           dbTop, dbBot, jTop, &
-            &                                           jTop, jBot!bm, jm!, jTop, &
-            !&                                           jBot
+               if ( m == 0 ) then  ! axisymmetric part
+                  if ( l == 1 ) then
+                     e_dipole_axis_r(n_r)=e_pol_tmp
+                  end if
+                  e_pol_axis_r(n_r)=e_pol_axis_r(n_r) + e_pol_tmp
+                  e_tor_axis_r(n_r)=e_tor_axis_r(n_r) + e_tor_tmp
+                  !if ( mod(l,2) == 1 ) then
+                  !   e_pol_eaxis_r(n_r)=e_pol_eaxis_r(n_r)+e_pol_tmp
+                  !else
+                  !   e_tor_eaxis_r(n_r)=e_tor_eaxis_r(n_r)+e_tor_tmp
+                  !end if
+               else
+                  !if ( l == 1 ) e_dipole_r(n_r)=e_dipole_r(n_r)+e_pol_tmp
+                  e_pol_r(n_r)=e_pol_r(n_r) + e_pol_tmp
+                  e_tor_r(n_r)=e_tor_r(n_r) + e_tor_tmp
+               end if
+               !if ( mod(l+m,2) == 1 ) then
+               !   e_pol_es_r(n_r)=e_pol_es_r(n_r) + e_pol_tmp
+               !else
+               !   e_tor_es_r(n_r)=e_tor_es_r(n_r) + e_tor_tmp
+               !end if
+
+            end do    ! do loop over lms in block
+            e_pol_r(n_r)=e_pol_r(n_r)+e_pol_axis_r(n_r)
+            e_tor_r(n_r)=e_tor_r(n_r)+e_tor_axis_r(n_r)
+         end do    ! radial grid points
+
+         call reduce_radial_on_rank(e_pol_r, 0)
+         call reduce_radial_on_rank(e_tor_r, 0)
+         call reduce_radial_on_rank(e_pol_axis_r, 0)
+         call reduce_radial_on_rank(e_tor_axis_r, 0)
+         call reduce_radial_on_rank(e_dipole_axis_r, 0)
+
+         if ( rank == 0 ) then
+            !-- Get Values at CMB: n_r=1 == n_r_cmb
+            E_cmb      =e_pol_r(1)+e_tor_r(1)
+            E_pol      =rInt_R(e_pol_r,r_3D,rscheme_3D)
+            E_tor      =rInt_R(e_tor_r,r_3D,rscheme_3D)
+            E_pol_axis =rInt_R(e_pol_axis_r,r_3D,rscheme_3D)
+            E_tor_axis =rInt_R(e_tor_axis_r,r_3D,rscheme_3D)
+            E_dip_axis =rInt_R(e_dipole_axis_r,r_3D,rscheme_3D)
+
+            Efac=half*DyMagFac!*eScale
+            E_cmb      =Efac*E_cmb
+            E_pol      =Efac*E_pol
+            E_tor      =Efac*E_tor
+            E_pol_axis =Efac*E_pol_axis
+            E_tor_axis =Efac*E_tor_axis
+            E_dip_axis =Efac*E_dip_axis
+
+            lm10=lo_map%lm2(1,0)
+            lm11=lo_map%lm2(1,1)
+
+            ! some arbitrary send recv tag
+            sr_tag=18657
+            rank_has_lm10=.false.
+            rank_has_lm11=.false.
+            if ( (lm10 >= lmStart) .and. (lm10 <= lmStop) ) then
+               b10=b_3D(lm10,1)
+#ifdef WITH_MPI
+               if (rank /= 0) then
+                  call MPI_Send(b10,1,MPI_DEF_COMPLEX,0,sr_tag,MPI_COMM_WORLD,ierr)
+               end if
+#endif
+               rank_has_lm10=.true.
+            end if
+            if ( lm11 > 0 ) then
+               if ( (lm11 >= lmStart) .and. (lm11 <= lmStop) ) then
+                  b11=b_3D(lm11,1)
+#ifdef WITH_MPI
+                  if (rank /= 0) then
+                     call MPI_Send(b11,1,MPI_DEF_COMPLEX,0,sr_tag+1,MPI_COMM_WORLD,ierr)
+                  end if
+#endif
+                  rank_has_lm11=.true.
+               end if
+            else
+               b11=zero
+               rank_has_lm11=.true.
+            end if
+            rad =180.0_cp/pi
+#ifdef WITH_MPI
+            if (.not.rank_has_lm10) then
+               call MPI_IRecv(b10,1,MPI_DEF_COMPLEX,MPI_ANY_SOURCE,&
+                    &         sr_tag,MPI_COMM_WORLD,request1, ierr)
+            end if
+            if ( .not. rank_has_lm11 ) then
+               call MPI_IRecv(b11,1,MPI_DEF_COMPLEX,MPI_ANY_SOURCE,&
+                    &         sr_tag+1,MPI_COMM_WORLD,request2,ierr)
+            end if
+            if ( .not. rank_has_lm10 ) then
+               call MPI_Wait(request1,status,ierr)
+            end if
+            if ( .not. rank_has_lm11 ) then
+               call MPI_Wait(request2,status,ierr)
+            end if
+#endif
+
+            theta_dip= rad*atan2(sqrt(two)*abs(b11),real(b10))
+            if ( theta_dip < 0.0_cp ) theta_dip=180.0_cp+theta_dip
+            if ( abs(b11) < 1.e-20_cp ) then
+               phi_dip=0.0_cp
+            else
+               phi_dip=-rad*atan2(aimag(b11),real(b11))
+            end if
+            EDip      =E_dip_axis/(E_pol+E_tor)
+
+            write(n_mag_file, '(1P, ES20.12, 5ES20.12)') time, E_pol, E_tor,   & !1, 2,3
+            &                                           E_pol_axis, E_tor_axis!,& !   4,5
+            !&                                           E_cmb, EDip              !   6,7 (Dipole-var)
          end if
 
-      end if
+      end if ! l_mag_3D?
 
    end subroutine write_time_series
 !---------------------------------------------------------------------------------
