@@ -27,6 +27,7 @@ module namelists
    real(cp), public :: ra            ! Rayleigh number
    real(cp), public :: ek            ! Ekman number
    real(cp), public :: pr            ! Prandtl number
+   real(cp), public :: prmag         ! Magnetic Prandtl number
    real(cp), public :: radratio      ! Radius ratio
    real(cp), public :: raxi          ! Compisitional Rayleigh number
    real(cp), public :: sc            ! Schmidt number
@@ -41,6 +42,8 @@ module namelists
    integer,  public :: ktopt, kbott  ! Temperature boundary condition
    integer,  public :: ktopxi, kbotxi! Boundary conditions for chemical composition
    integer,  public :: ktopv, kbotv  ! Velocity boundary condition
+   integer,  public :: ktopb, kbotb  ! Magnetic field boundary condition
+   integer,  public :: lm_mag_cond   ! Imposed magnetic field for magnetoconvection, at the boundaries
    real(cp), public :: t_bot(3*n_t_bounds), xi_bot(3*n_t_bounds)
    real(cp), public :: t_top(3*n_t_bounds), xi_top(3*n_t_bounds)
    real(cp), public :: g0, g1, g2
@@ -80,6 +83,9 @@ module namelists
    real(cp), public :: amp_u
    integer,  public :: init_u
    real(cp), public :: scale_u
+   real(cp), public :: amp_B
+   integer,  public :: init_B
+   real(cp), public :: scale_B
    logical,  public :: l_start_file     ! taking fields from startfile ?
    logical,  public :: l_reset_t ! Should we reset the time stored in the startfile?
    character(len=72), public :: start_file  ! name of start_file           
@@ -100,7 +106,8 @@ module namelists
    real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
    logical,  public :: l_3D            ! Require 3-D functions
    logical,  public :: l_heat_3D       ! 3-D treatment of temperature
-   logical,  public :: l_mag
+   logical,  public :: l_mag_3D        ! Treatment of the magnetic field (3-D)
+   logical,  public :: l_mag_LF        ! Treatment of the Lorentz-Force
    logical,  public :: l_heat
    logical,  public :: l_chem
    logical,  public :: l_AB1
@@ -112,10 +119,12 @@ module namelists
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb           ! Outer core radius
    real(cp), public :: r_icb           ! Inner core radius
-   real(cp), public :: CorFac, BuoFac, TdiffFac, ViscFac, XiDiffFac, ChemFac
+   real(cp), public :: CorFac, BuoFac, TdiffFac, ViscFac, XiDiffFac, ChemFac, &
+   &                   BdiffFac, DyMagFac
    real(cp), public :: hdif_temp       ! Hyperdiffusion amplitude on temperature
    real(cp), public :: hdif_comp       ! Hyperdiffusion amplitude on composition
    real(cp), public :: hdif_vel        ! Hyperdiffusion amplitude on velocity
+   real(cp), public :: hdif_mag        ! Hyperdiffusion amplitude on magnetic field
    integer,  public :: hdif_exp        ! Exponent of the hyperdiffusion profile
    integer,  public :: hdif_m          ! Azimuthal wavenumber for hdif
 
@@ -140,22 +149,20 @@ contains
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
       &                matrix_solve,corio_term,buo_term,bc_method
-      namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
-      namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,      &
+      namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp,hdif_mag
+      namelist/phys_param/ra,ek,pr,prmag,raxi,sc,radratio,g0,g1,g2,&
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
       &                   l_tcond_3D,tcond_fac,l_temp_advz,        &
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
-      &                   xi_bot,xi_top, l_xi_3D, xicond_fac, l_heat_3D
+      &                   xi_bot,xi_top, ktopb,kbotb,xicond_fac,   &
+      &                   l_xi_3D,l_heat_3D,l_mag_3D,l_mag_LF,lm_mag_cond
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
-      &                    scale_xi
+      &                    scale_xi,scale_B,init_B,amp_B
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
       &                       l_vphi_balance,l_vort_balance,bl_cut,        &
       &                       l_2D_spectra, l_2D_SD, l_corr
-
-
-      l_mag = .false. ! To be removed when the magnetic field will be there
 
    !namelist/control/tag,n_times
 
@@ -280,6 +287,11 @@ contains
          end if
       end if
 
+      if ( prmag == 0.0_cp ) then
+         l_mag_3D=.false.
+         l_mag_LF=.false.
+      end if
+
       if ( raxi == 0.0_cp ) then
          l_chem=.false.
       else
@@ -393,6 +405,8 @@ contains
       end if
 
       !-- Time unit
+      BdiffFac = one/prmag !--- To be modified!
+      DyMagFac = ek/prmag     !--- To be modified!
       call capitalize(time_scale) 
       if ( l_non_rot ) then
          CorFac = 0.0_cp
@@ -505,6 +519,7 @@ contains
       hdif_vel         =0.0_cp
       hdif_temp        =0.0_cp
       hdif_comp        =0.0_cp
+      hdif_mag         =0.0_cp
       hdif_m           =0
       hdif_exp         =0
 
@@ -516,6 +531,7 @@ contains
       l_xi_3D          =.false.
       ra               =1.0e5_cp
       pr               =one
+      prmag            =5.0_cp
       ek               =1.0e-3_cp
       raxi             =0.0e5_cp
       sc               =0.0_cp
@@ -534,6 +550,9 @@ contains
       kbotxi           =1
       ktopv            =2
       kbotv            =2
+      ktopb            =1
+      kbotb            =1
+      lm_mag_cond      =0
       !----- Parameters for temp. BCs
       do n=1,3*n_t_bounds
          t_bot(n) =0.0_cp
@@ -544,6 +563,10 @@ contains
 
       !-- 3D treatment of temperature
       l_heat_3D = .false.
+
+      !-- treatment of magnetic field (3D)
+      l_mag_3D = .false.
+      l_mag_LF = .false.
 
       !----- Namelist start_field:
       l_reset_t        =.false.
@@ -558,6 +581,9 @@ contains
       init_u           =0
       scale_u          =1.0_cp
       amp_u            =0.0_cp
+      init_B           =0
+      scale_B          =1.0_cp
+      amp_B            =0.0_cp
 
       !----- Output namelist
       n_log_step       =50
@@ -641,6 +667,7 @@ contains
       write(n_out,'(''  hdif_vel        ='',ES14.6,'','')') hdif_vel
       write(n_out,'(''  hdif_temp       ='',ES14.6,'','')') hdif_temp
       write(n_out,'(''  hdif_comp       ='',ES14.6,'','')') hdif_comp
+      write(n_out,'(''  hdif_mag        ='',ES14.6,'','')') hdif_mag
       write(n_out,'(''  hdif_exp        ='',i4,'','')') hdif_exp
       write(n_out,'(''  hdif_m          ='',i4,'','')') hdif_m
       write(n_out,*) "/"
@@ -649,6 +676,7 @@ contains
       write(n_out,'(''  ra              ='',ES14.6,'','')') ra
       write(n_out,'(''  pr              ='',ES14.6,'','')') pr
       write(n_out,'(''  ek              ='',ES14.6,'','')') ek
+      write(n_out,'(''  prmag           ='',ES14.6,'','')') prmag
       write(n_out,'(''  raxi            ='',ES14.6,'','')') raxi
       write(n_out,'(''  sc              ='',ES14.6,'','')') sc
       write(n_out,'(''  radratio        ='',ES14.6,'','')') radratio
@@ -663,6 +691,8 @@ contains
       write(n_out,'(''  l_tcond_3D      ='',l3,'','')') l_tcond_3D
       write(n_out,'(''  l_xi_3D         ='',l3,'','')') l_xi_3D
       write(n_out,'(''  l_heat_3D       ='',l3,'','')') l_heat_3D
+      write(n_out,'(''  l_mag_3D        ='',l3,'','')') l_mag_3D
+      write(n_out,'(''  l_mag_LF        ='',l3,'','')') l_mag_LF
       !--- Heat boundary condition:
       write(n_out,'(''  ktopt           ='',i3,'','')') ktopt
       write(n_out,'(''  kbott           ='',i3,'','')') kbott
@@ -670,6 +700,9 @@ contains
       write(n_out,'(''  kbotxi          ='',i3,'','')') kbotxi
       write(n_out,'(''  ktopv           ='',i3,'','')') ktopv
       write(n_out,'(''  kbotv           ='',i3,'','')') kbotv
+      write(n_out,'(''  ktopb           ='',i3,'','')') ktopb
+      write(n_out,'(''  kbotb           ='',i3,'','')') kbotb
+      write(n_out,'(''  lm_mag_cond     ='',i7,'','')') lm_mag_cond
       write(n_out,*) "/"
 
       write(n_out,*) "&start_field"
@@ -686,6 +719,9 @@ contains
       write(n_out,'(''  scale_u         ='',ES14.6,'','')') scale_u
       write(n_out,'(''  init_u          ='',i7,'','')') init_u
       write(n_out,'(''  amp_u           ='',ES14.6,'','')') amp_u
+      write(n_out,'(''  scale_B         ='',ES14.6,'','')') scale_B
+      write(n_out,'(''  init_B          ='',i7,'','')') init_B
+      write(n_out,'(''  amp_B           ='',ES14.6,'','')') amp_B
       write(n_out,*) "/"
 
       write(n_out,*) "&output_control"

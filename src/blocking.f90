@@ -3,7 +3,7 @@ module blocking
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, n_m_max, m2idx
-   use truncation_3D, only: n_r_max_3D, lm_max
+   use truncation_3D, only: n_r_max_3D, lm_max, n_phi_max_3D
    use parallel_mod, only: n_procs, rank
 
    implicit none
@@ -21,11 +21,13 @@ module blocking
    type(load), public, allocatable :: radial_balance_3D(:)
    type(load), public, allocatable :: m_balance(:)
    type(load), public, allocatable :: lm_balance(:)
+   type(load), public, allocatable :: phi_balance(:)
 
    integer, public :: nRstart, nRstop, nR_per_rank
    integer, public :: nMstart, nMstop, nm_per_rank
    integer, public :: nRstart3D, nRstop3D, nR_per_rank_3D
    integer, public :: nlm_per_rank, lmStart, lmStop
+   integer, public :: nphi_per_rank, nphiStart, nphiStop
    logical, public :: l_rank_has_m0
 
    public :: set_mpi_domains, destroy_mpi_domains
@@ -43,6 +45,7 @@ contains
       if ( l_3D ) then
          allocate ( radial_balance_3D(0:n_procs-1) )
          allocate ( lm_balance(0:n_procs-1) )
+         allocate ( phi_balance(0:n_procs-1) )
       end if
 
       call getBlocks(radial_balance, n_r_max, n_procs)
@@ -67,6 +70,11 @@ contains
          lmStart = lm_balance(rank)%nStart
          lmStop = lm_balance(rank)%nStop
          nlm_per_rank = lm_balance(rank)%n_per_rank
+
+         call getBlocks(phi_balance, n_phi_max_3D, n_procs)
+         nphiStart = phi_balance(rank)%nStart
+         nphiStop = phi_balance(rank)%nStop
+         nphi_per_rank = phi_balance(rank)%n_per_rank
       end if
 
       idx = m2idx(0)
@@ -84,7 +92,7 @@ contains
       logical, intent(in) :: l_3D
 
       deallocate( m_balance, radial_balance )
-      if (l_3D ) deallocate(radial_balance_3D, lm_balance)
+      if (l_3D ) deallocate(radial_balance_3D, lm_balance, phi_balance)
 
    end subroutine destroy_mpi_domains
 !------------------------------------------------------------------------------

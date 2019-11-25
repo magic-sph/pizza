@@ -6,18 +6,20 @@ module init_fields
    !
 
    use iso_fortran_env, only: output_unit
-   use constants, only: zero, one, two, three, ci, pi, half, sq4pi
+   use constants, only: zero, one, two, three, four, ci, pi, half, third, sq4pi
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
    use communications, only: transp_r2m, r2m_fields, transp_r2lm, r2lm_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta, rscheme_3D, &
-       &                       r_3D, tcond_3D
-   use horizontal, only: theta
+       &                       r_3D, or1_3D, tcond_3D
+   use horizontal, only: theta, hdif_B
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
        &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
-       &                l_heat_3D
+       &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac,      &
+       &                lm_mag_cond
    use outputs, only: n_log_file
    use parallel_mod, only: rank
+   use algebra, only: prepare_full_mat, solve_full_mat
    use blocking, only: nMstart, nMstop, nM_per_rank, lmStart, lmStop
    use blocking_lm, only: lo_map
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max
@@ -25,7 +27,7 @@ module init_fields
        &                    n_phi_max_3D, lm_max
    use useful, only: logWrite, abortRun, gausslike_compact_center, &
        &             gausslike_compact_middle, gausslike_compact_edge
-   use radial_der, only: get_dr
+   use radial_der, only: get_dr, get_ddr
    use fourier, only: fft
    use checkpoints, only: read_checkpoint
    use time_schemes, only: type_tscheme
@@ -42,6 +44,9 @@ module init_fields
 
    public :: get_start_fields
 
+   !----- Peak values for magnetic field:
+   real(cp), public :: bpeakbot, bpeaktop
+
 contains
 
    subroutine get_start_fields(time, tscheme)
@@ -51,7 +56,7 @@ contains
       class(type_tscheme), intent(inout) :: tscheme
 
       !-- Local variables
-      integer :: m, n_r, n_m
+      integer :: m, n_r, n_m, lm, l
       logical :: lMat
       real(cp) :: h2
       character(len=76) :: message
@@ -88,6 +93,13 @@ contains
 
       else
 
+         if ( l_mag_3D ) then
+            b_3D_LMloc(:,:) =zero
+            aj_3D_LMloc(:,:)=zero
+            db_3D_LMloc(:,:)=zero
+            dj_3D_LMloc(:,:)=zero
+            ddb_3D_LMloc(:,:)=zero
+         end if
          if ( l_heat_3D ) temp_3D_LMloc(:,:)=zero
          if ( l_heat ) temp_Mloc(:,:)=zero
          if ( l_chem ) xi_Mloc(:,:)  =zero
@@ -95,6 +107,11 @@ contains
          up_Mloc(:,:) =zero
          psi_Mloc(:,:)=zero
          call dpsidt%set_initial_values()
+         if ( l_mag_3D ) then
+            print*, 'flag initial values'
+            call dBdt_3D%set_initial_values()
+            call djdt_3D%set_initial_values()
+         end if
          if ( l_heat_3D ) call dTdt_3D%set_initial_values()
          if ( l_heat ) call dTdt%set_initial_values()
          if ( l_chem ) call dxidt%set_initial_values()
@@ -116,6 +133,8 @@ contains
 
       if ( init_t /= 0 .and. l_heat_3D ) call initT_3D(temp_3D_LMloc, init_t, amp_t)
 
+      if ( init_B /= 0 .and. l_mag_3D ) call initB_3D(b_3D_LMloc, aj_3D_LMloc, init_B, amp_B)
+
       if ( init_u /= 0 ) call initU(us_Mloc, up_Mloc)
 
       !-- Reconstruct missing fields, dtemp_Mloc, om_Mloc
@@ -125,6 +144,12 @@ contains
                          &      n_r_max, rscheme)
       if ( l_heat_3D ) call get_dr(temp_3D_LMloc, dtemp_3D_LMloc, lmStart, lmStop,&
                             &      n_r_max_3D, rscheme_3D)
+      if ( l_mag_3D ) then
+         call get_ddr(b_3D_LMloc, db_3D_LMloc, ddb_3D_LMloc, lmStart, lmStop,&
+              &      n_r_max_3D, rscheme_3D)
+         call get_dr(aj_3D_LMloc, dj_3D_LMloc, lmStart, lmStop,&
+              &      n_r_max_3D, rscheme_3D)
+     end if
       call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
@@ -501,5 +526,225 @@ contains
       end if
 
    end subroutine initT_3D
+!----------------------------------------------------------------------------------
+   subroutine initB_3D(b_LMloc, aj_LMloc, init_B, amp_B)
+      !
+      ! Purpose of this subroutine is to initialize the magnetic field
+      ! according to the control parameters imagcon and init_B/2.
+      ! In addition CMB and ICB peak values are calculated for
+      ! magneto convection.
+      !
+
+      !-- Input variables
+      real(cp),    intent(in) :: amp_B
+      integer,     intent(in) :: init_B
+
+      !-- Output variables:
+      complex(cp), intent(inout) :: b_LMloc(lmStart:lmStop, n_r_max_3D)
+      complex(cp), intent(inout) :: aj_LMloc(lmStart:lmStop, n_r_max_3D)
+
+      !-- Local variables:
+      integer :: n_r
+      real(cp) :: b_pol, b_tor
+
+      real(cp) :: b1(n_r_max_3D)
+      real(cp) :: jVarCond(n_r_max_3D)
+      real(cp) :: bR, bI, rr, rdm
+      real(cp) :: aVarCond, bVarCond,x
+      integer :: bExp
+
+      integer :: lm, lm0, l1, m1
+      integer :: lm10, lm20, lm30, lm11
+
+
+      lm10 = lo_map%lm2(1,0)
+      lm20 = lo_map%lm2(2,0)
+      lm30 = lo_map%lm2(3,0)
+      lm11 = lo_map%lm2(1,1)
+
+      lm0=lm20 ! Default quadrupole field
+
+      !-- WARING!:: Imposed magnetic field for magnetoconvection.! To be removed later, if never used!
+      if ( lm_mag_cond == 101 ) then
+         !----- impose l=1,m=0 poloidal field at ICB:
+         lm0=lm10
+         bpeaktop= 0.0_cp
+         bpeakbot=-sqrt(third*pi)*r_icb**2*amp_B
+
+      else if ( lm_mag_cond == 110 ) then
+         !----- impose l=1,m=0 poloidal field at CMB:
+         lm0=lm10
+         bpeaktop=-sqrt(third*pi)*r_cmb**2*amp_B
+         bpeakbot= 0.0_cp
+
+      else if ( lm_mag_cond == 122 ) then
+         !----- impose l=1,m=0 toroidal field at ICB and CMB:
+         lm0 = lm10
+         bpeaktop= two*sqrt(third*pi)*r_cmb*amp_B
+         bpeakbot= two*sqrt(third*pi)*r_icb*amp_B
+
+      else if ( lm_mag_cond == 202 ) then
+         !----- impose l=2,m=0 toroidal field at ICB:
+         lm0=lm20
+         bpeaktop= 0.0_cp
+         bpeakbot= four*third*sqrt(pi/5.0_cp)*r_icb*amp_B
+
+      else if ( lm_mag_cond == 222 ) then
+         !----- impose l=2,m=0 toroidal field at ICB and CMB:
+         lm0=lm20
+         bpeaktop= four*third*sqrt(pi/5.0_cp)*r_cmb*amp_B
+         bpeakbot= four*third*sqrt(pi/5.0_cp)*r_icb*amp_B
+
+      else if ( lm_mag_cond == -222 ) then
+         !----- same as ktopb == 2 .and. kbotb == 2 but opposite sign at CMB:
+         lm0=lm20
+         bpeaktop=-four*third*sqrt(pi/5.0_cp)*r_cmb*amp_B
+         bpeakbot= four*third*sqrt(pi/5.0_cp)*r_icb*amp_B
+
+      else if ( lm_mag_cond == 200 ) then
+         !----- impose zero field at ICB and CMB:
+         lm0 = lm20
+         bpeakbot= 0.0_cp
+         bpeaktop= 0.0_cp
+
+      end if
+
+      if ( init_B < 0 ) then  ! l,m mixture, random init
+      !-- Random noise initialization of all (l,m) modes exept (l=0,m=0):
+         bExp=abs(init_B)
+         do n_r=1,n_r_max_3D
+            !x=two*r_3D(n_r)-r_cmb-r_icb
+            !b1(n_r)=one-three*x**2+three*x**4-x**6
+            b1(n_r)=(r_3D(n_r)/r_cmb)**2 * ( one-three/5.0_cp*(r_3D(n_r)/r_cmb)**2 )
+         end do
+
+         do lm=max(lmStart,2),lmStop
+            call random_number(rdm)
+            l1=lo_map%lm2l(lm)
+            m1=lo_map%lm2m(lm)
+            if ( l1 > 0 ) then
+               bR=(-one+two*rdm)*amp_B/(real(l1,cp))**(bExp-1)
+               bI=(-one+two*rdm)*amp_B/(real(l1,cp))**(bExp-1)
+            else
+               bR=0.0_cp
+               bI=0.0_cp
+            end if
+            if ( m1 == 0 ) bI=0.0_cp
+            do n_r=1,n_r_max_3D
+               b_LMloc(lm,n_r)=b_LMloc(lm,n_r) + cmplx(bR*b1(n_r),bI*b1(n_r),kind=cp)
+            end do
+         end do
+
+      else if ( init_B == 301 .or. lm_mag_cond == 301 ) then
+      !----- Test of variable conductivity case with analytical solution:
+      !      Assume the magnetic diffusivity is lambda=r**5, that the aspect ratio
+      !      is 0.5, and that there is no flow.
+      !      The analytical stationary solution for the (l=3,m=0) toroidal field
+      !      with bounday condition aj(r=r_ICB)=1, aj(r=r_CMB)=0 is then
+      !      given by jVarCond(r)!
+      !      A disturbed solution is used to initialize aj,
+      !      the disturbance should decay with time.
+      !      The solution is stored in file testVarCond.TAG at the end of the run,
+      !      where the first column denotes radius, the second is aj(l=3,m=0,r) and
+      !      the third is jVarCond(r). Second and third should be identical when
+      !      the stationary solution has been reached.
+         lm0=lm30  ! This is l=3,m=0
+         bpeaktop= 0.0_cp
+         bpeakbot= one
+         aVarCond=-one/255.0_cp
+         bVarCond= 256.0_cp/255.0_cp
+         if( (lm0>=lmStart) .and. (lm0<=lmStop) ) then ! select processor
+!         if ( lmStart(rank+1) <= lm0 .and. lmStop(rank+1) >= lm0 ) then ! select processor
+            do n_r=1,n_r_max_3D          ! Diffusive toroidal field
+               jVarCond(n_r)=aVarCond*r_3D(n_r)**2 + bVarCond/(r_3D(n_r)**6)
+               aj_LMloc(lm0,n_r)= jVarCond(n_r) + 0.1_cp*sin((r_3D(n_r)-r_icb)*pi)
+            end do
+         end if
+
+      else if ( init_B == 2 ) then  ! l=1,m=0 analytical toroidal field
+      ! with a maximum of amp_B at mid-radius
+      ! between r_icb and r_cmb for an insulating
+      ! inner core and at r_cmb/2 for a conducting
+      ! inner core
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+!         if ( lmStartB(rank+1) <= lm10 .and. lmStopB(rank+1) >= lm10 ) then ! select processor
+            b_tor=-two*amp_B*sqrt(third*pi)  ! minus sign makes phi comp. > 0
+            do n_r=1,n_r_max_3D
+               aj_LMloc(lm10,n_r)=aj_LMloc(lm10,n_r) + b_tor*r_3D(n_r)*sin(pi*(r_3D(n_r)-r_icb))
+            end do
+         end if
+
+      else if ( init_B == 3 ) then
+         ! l=2,m=0 toroidal field and l=1,m=0 poloidal field
+         ! toroidal field has again its maximum of amp_B
+         ! at mid-radius between r_icb and r_cmb for an
+         ! insulating inner core and at r_cmb/2 for a
+         ! conducting inner core
+         ! The outer core poloidal field is defined by
+         ! a homogeneous  current density, its maximum at
+         ! the ICB is set to amp_B.
+         ! The inner core poloidal field is chosen accordingly.
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+!         if ( lmStartB(rank+1) <= lm10 .and. lmStopB(rank+1) >= lm10 ) then ! select processor
+            b_tor=-four*third*amp_B*sqrt(pi/5.0_cp)
+            b_pol= amp_B*sqrt(three*pi)/four
+            do n_r=1,n_r_max_3D
+               b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol * ( &
+               &     r_3D(n_r)**3 - four*third*r_cmb*r_3D(n_r)**2  &
+               &     + third*r_icb**4/r(n_r)                )
+            end do
+         end if
+
+         if( (lm20>=lmStart) .and. (lm20<=lmStop) ) then ! select processor
+!         if ( lmStartB(rank+1) <= lm20 .and. lmStopB(rank+1) >= lm20 ) then ! select processor
+            b_tor=-four*third*amp_B*sqrt(pi/5.0_cp)
+            b_pol=amp_B*sqrt(three*pi)/four
+            do n_r=1,n_r_max_3D
+               aj_LMloc(lm20,n_r)=aj_LMloc(lm20,n_r) + b_tor*r(n_r)*sin(pi*(r_3D(n_r)-r_icb))
+            end do
+         end if
+
+      else if ( init_B == 4 ) then  ! l=1,m0 poloidal field
+      ! with max field amplitude amp_B at r_icb
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+!         if ( lmStartB(rank+1) <= lm10 .and. lmStopB(rank+1) >= lm10 ) then ! select processor
+            b_pol=-amp_B*r_icb**3*sqrt(third*pi)
+            do n_r=1,n_r_max_3D
+               b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol*or1_3D(n_r)
+            end do
+         end if
+
+     else if ( init_B == 5 ) then  ! l=1,m=0 poloidal field , constant in r !
+      ! no potential at r_cmb but simple
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+!         if ( lmStartB(rank+1) <= lm10 .and. lmStopB(rank+1) >= lm10 ) then ! select processor
+            b_pol=amp_B
+            do n_r=1,n_r_max_3D
+               b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol*(r_cmb+r_icb)/2**2!*r_3D(n_r)**2!
+            end do
+         end if
+
+      else if ( init_B == 6 ) then  ! l=1,m0 poloidal field
+      ! which is potential field at r_cmb
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+!         if ( lmStartB(rank+1) <= lm10 .and. lmStopB(rank+1) >= lm10 ) then ! select processor
+            b_pol=amp_B*5.0_cp*half*sqrt(third*pi)*r_icb**2
+            do n_r=1,n_r_max_3D
+               b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol*(r_3D(n_r)/r_icb)**2 * &
+               &               ( one - three/5.0_cp*(r_3D(n_r)/r_cmb)**2 )
+            end do
+         end if
+
+      else if ( init_B == 1010 ) then  ! l=1,m=0 decay mode , radial bessel function of order 1 !
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+            do n_r=1,n_r_max_3D
+               x = pi*r_3D(n_r)/r_cmb!pi*(r_3D(n_r)-r_icb+1e-4_cp)/(r_cmb-r_icb)!
+               b_LMloc(lm10,n_r)=amp_B*(sin(x)/x/x - cos(x)/x)!)!
+            end do
+         end if
+
+      end if
+
+   end subroutine initB_3D
 !----------------------------------------------------------------------------------
 end module init_fields

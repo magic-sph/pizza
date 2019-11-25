@@ -19,7 +19,7 @@ module checkpoints
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &
        &                l_bridge_step, l_cheb_coll, scale_xi, l_3D,       &
-       &                l_heat_3D, l_mag
+       &                l_heat_3D, l_mag_3D
    use radial_scheme, only: type_rscheme
    use radial_functions, only: rscheme, r, rscheme_3D, r_3D
    use chebyshev, only: type_cheb
@@ -156,7 +156,7 @@ contains
             call MPI_File_Write(fh, 0.0_cp, 1, MPI_DEF_REAL, istat, ierr)
             call MPI_File_Write(fh, r_3D, n_r_max_3D, MPI_DEF_REAL, istat, ierr)
             call MPI_File_Write(fh, l_heat_3D, 1, MPI_LOGICAL, istat, ierr)
-            call MPI_File_Write(fh, l_mag, 1, MPI_LOGICAL, istat, ierr)
+            call MPI_File_Write(fh, l_mag_3D, 1, MPI_LOGICAL, istat, ierr)
          end if
 
       end if
@@ -394,7 +394,7 @@ contains
       real(cp) :: ratio1, ratio2
       integer :: n_in, n_in_2, m, n_m, n_r_max_max, m_max_max
       integer :: norder_imp_lin_old, norder_exp_old, n_o, norder_imp_old
-      logical :: l_coll_old, l_3D_old, l_heat_3D_old, l_mag_old
+      logical :: l_coll_old, l_3D_old, l_heat_3D_old, l_mag_3D_old
       real(cp), allocatable :: dt_array_old(:)
       integer, allocatable :: lm2lmo(:)
       integer :: n_r_max_3D_old, n_theta_max_old, n_phi_tot_old
@@ -538,7 +538,7 @@ contains
          allocate(     work(n_m_max, n_r_max) )
 
          l_heat_3D_old = .false.
-         l_mag_old = .false.
+         l_mag_3D_old = .false.
          if ( version == 6 ) then
             read(n_start_file) l_3D_old
          else
@@ -577,7 +577,7 @@ contains
 
             allocate( r_3D_old(n_r_max_3D_old) )
             read(n_start_file) r_3D_old
-            read(n_start_file) l_heat_3D_old, l_mag_old
+            read(n_start_file) l_heat_3D_old, l_mag_3D_old
          end if
 
          if ( l_3D_old .and. l_3D ) then
@@ -613,7 +613,7 @@ contains
       call MPI_Bcast(l_heat_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_3D_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_heat_3D_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
-      call MPI_Bcast(l_mag_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(l_mag_3D_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
 
       !-- Fill the time step array
       do n_o=1,size(tscheme%dt)

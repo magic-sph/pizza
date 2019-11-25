@@ -17,7 +17,7 @@ program pizza
    use blocking_lm, only: initialize_blocking, finalize_blocking
    use namelists, only: read_namelists, write_namelists, tag, time_scheme,    &  
        &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve,&
-       &                courfac, l_heat, l_chem, l_3D, l_heat_3D
+       &                courfac, l_heat, l_chem, l_3D, l_heat_3D, l_mag_3D
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use outputs_3D, only: initialize_outputs_3D, finalize_outputs_3D
    use pre_calculations, only: preCalc
@@ -36,6 +36,7 @@ program pizza
    use update_xi_coll, only: initialize_xi_coll, finalize_xi_coll
    use update_temp_integ, only: initialize_temp_integ, finalize_temp_integ
    use update_temp_3D_mod, only: initialize_update_temp_3D, finalize_update_temp_3D
+   use update_mag_3D_mod, only: initialize_update_mag_3D, finalize_update_mag_3D
    use update_xi_integ, only: initialize_xi_integ, finalize_xi_integ
    use update_psi_coll_smat, only: initialize_om_coll_smat, finalize_om_coll_smat
    use update_psi_coll_dmat, only: initialize_om_coll_dmat, finalize_om_coll_dmat
@@ -180,6 +181,7 @@ program pizza
       end if
    end if
    if ( l_heat_3D ) call initialize_update_temp_3D()
+   if ( l_mag_3D ) call initialize_update_mag_3D()
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('M loop', local_bytes_used)
    call finalize_memory_counter()
@@ -230,6 +232,7 @@ program pizza
    end if
 
    !-- Close files
+   if ( l_mag_3D )  call finalize_update_mag_3D()
    if ( l_heat_3D )  call finalize_update_temp_3D()
    if ( l_cheb_coll ) then
       if ( l_heat ) call finalize_temp_coll()
