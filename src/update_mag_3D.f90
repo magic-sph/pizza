@@ -276,8 +276,13 @@ contains
       end do
 
       !-- Bring magnetic vectors back to physical space
+      call get_ddr(b_3D, db_3D, ddb_3D, lmStart, lmStop,  &
+           &       n_r_max_3D, rscheme_3D, l_dct_in=.false.)
       call rscheme_3D%costf1(b_3D, lmStart, lmStop, n_r_max_3D)
+      call get_dr(aj_3D, dj_3D, lmStart, lmStop,  &
+           &      n_r_max_3D, rscheme_3D, l_dct_in=.false.)
       call rscheme_3D%costf1(aj_3D, lmStart, lmStop, n_r_max_3D)
+
 
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dBdt_3D, lmStart, lmStop, n_r_max_3D)

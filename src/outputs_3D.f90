@@ -271,7 +271,7 @@ contains
             end if
             EDip      =E_dip_axis/(E_pol+E_tor)
 
-            write(n_mag_file, '(1P, ES20.12, 4ES16.7)') time, E_pol, E_tor,   & 
+            write(n_mag_file, '(1P, ES20.12, 4ES16.8)') time, E_pol, E_tor,   & 
             &                                           E_pol_axis, E_tor_axis
          end if
 
