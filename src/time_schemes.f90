@@ -118,24 +118,24 @@ module time_schemes
 
 contains
 
-      subroutine print_info(this, n_log_file)
+   subroutine print_info(this, n_log_file)
 
-         class(type_tscheme) :: this
+      class(type_tscheme) :: this
 
-         integer, intent(in) :: n_log_file
+      integer, intent(in) :: n_log_file
 
-         !-- Local variables
-         integer :: n, n_out
+      !-- Local variables
+      integer :: n, n_out
 
-         do n=1,2
-            if ( n == 1 ) n_out=output_unit
-            if ( n == 2 ) n_out=n_log_file
-            write(n_out,*) ''
-            write(n_out, '('' ! Time integrator  :'',1p,A10)') this%time_scheme
-            write(n_out, '('' ! CFL value        :'',es12.4)') this%courfac
-            write(n_out,*) ''
-         end do
+      do n=1,2
+         if ( n == 1 ) n_out=output_unit
+         if ( n == 2 ) n_out=n_log_file
+         write(n_out,*) ''
+         write(n_out, '('' ! Time integrator  :'',1p,A10)') this%time_scheme
+         write(n_out, '('' ! CFL value        :'',es12.4)') this%courfac
+         write(n_out,*) ''
+      end do
 
-      end subroutine print_info
+   end subroutine print_info
 !------------------------------------------------------------------------------
 end module time_schemes

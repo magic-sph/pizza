@@ -313,16 +313,16 @@ contains
                     &           work_3D_Rloc)
                disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
                call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
-                 &                  MPI_INFO_NULL, ierr)
+                    &                 MPI_INFO_NULL, ierr)
                call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
-                    &              MPI_DEF_COMPLEX, istat, ierr)
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
             end do
             do n_o=2,tscheme%norder_imp_lin-1
                call transp_lm2r(lm2r_fields, dTdt_3D%impl(:,:,n_o), &
                     &           work_3D_Rloc)
                disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
                call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
-                    &                  MPI_INFO_NULL, ierr)
+                    &                 MPI_INFO_NULL, ierr)
                call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
             end do
@@ -331,7 +331,7 @@ contains
                     &           work_3D_Rloc)
                disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
                call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
-                    &                  MPI_INFO_NULL, ierr)
+                    &                 MPI_INFO_NULL, ierr)
                call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
                     &                  MPI_DEF_COMPLEX, istat, ierr)
             end do

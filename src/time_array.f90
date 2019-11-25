@@ -42,7 +42,7 @@ contains
       allocate( this%old(nMstart:nMstop,n_r_max,norder_imp-1) )
 
       bytes_allocated = bytes_allocated + (nMstop-nMstart+1)*n_r_max*(norder_exp+&
-      &                 norder_imp+norder_imp_lin-2)
+      &                 norder_imp+norder_imp_lin-2)*SIZEOF_DEF_COMPLEX
 
       call this%set_initial_values()
 
