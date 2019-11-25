@@ -29,7 +29,7 @@ module horizontal
    real(cp), public, allocatable :: hdif_V(:)
    real(cp), public, allocatable :: hdif_T(:)
    real(cp), public, allocatable :: hdif_Xi(:)
-   real(cp), public, allocatable :: hdif_B(:)
+   real(cp), public, allocatable :: hdif_B(:)   !-- WARNING:: Totally wrong -> to be modified!!
 
    !-- Arrays depending on theta (colatitude):
    real(cp), public, allocatable :: theta(:)

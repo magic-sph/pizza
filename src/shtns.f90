@@ -6,7 +6,7 @@ module shtns
    use truncation_3D, only: m_max_3D, l_max, n_theta_max, n_phi_max_3D, &
        &                    minc_3D, lm_max, lmP_max
    use horizontal, only: dLh
-   use radial_functions, only: or2_3D
+   use radial_functions, only: or2_3D, or1_3D
    use parallel_mod
 
    implicit none
@@ -61,8 +61,9 @@ contains
 
    end subroutine scal_to_spat
 !------------------------------------------------------------------------------
-   subroutine torpol_to_spat(Wlm, dWlm, Zlm, fieldrc, fieldtc, fieldpc)
+   subroutine torpol_to_spat(Wlm, dWlm, Zlm, n_r, fieldrc, fieldtc, fieldpc)
       complex(cp), intent(in) :: Wlm(lm_max), dWlm(lm_max), Zlm(lm_max)
+      integer, intent(in) :: n_r
       real(cp), intent(out) :: fieldrc(n_phi_max_3D, n_theta_max)
       real(cp), intent(out) :: fieldtc(n_phi_max_3D, n_theta_max)
       real(cp), intent(out) :: fieldpc(n_phi_max_3D, n_theta_max)
@@ -72,10 +73,14 @@ contains
       integer :: lm
 
       do lm = 1, lm_max
-         Qlm(lm) = dLh(lm) * Wlm(lm)
+         Qlm(lm) = dLh(lm) * or2_3D(n_r) * Wlm(lm)
+         !Qlm(lm) = dLh(lm) * Wlm(lm)
       end do
 
       call shtns_qst_to_spat(Qlm, dWlm, Zlm, fieldrc, fieldtc, fieldpc)
+
+      fieldtc(:,:) = or1_3D(n_r) * fieldtc(:,:)
+      fieldpc(:,:) = or1_3D(n_r) * fieldpc(:,:)
 
    end subroutine torpol_to_spat
 !------------------------------------------------------------------------------
@@ -93,11 +98,15 @@ contains
       integer :: lm
 
       do lm = 1, lm_max
+         !Qlm(lm) = dLh(lm) * or2_3D(n_r) * Jlm(lm)
          Qlm(lm) = dLh(lm) * Jlm(lm)
          Tlm(lm) = or2_3D(n_r) * dLh(lm) * Blm(lm) - ddBlm(lm)
       end do
 
       call shtns_qst_to_spat(Qlm, dJlm, Tlm, curlfieldrc, curlfieldtc, curlfieldpc)
+
+      !curlfieldtc(:,:) = or1_3D(n_r) * curlfieldtc(:,:)
+      !curlfieldpc(:,:) = or1_3D(n_r) * curlfieldpc(:,:)
 
    end subroutine torpol_to_curl_spat
 !------------------------------------------------------------------------------

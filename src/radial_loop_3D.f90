@@ -13,7 +13,7 @@ module rloop_3D
    use shtns, only: spat_to_SH, scal_to_spat, torpol_to_spat, &
        &            torpol_to_curl_spat, scal_axi_to_grad_spat
 #endif
-   use radial_functions, only: r_3D
+   use radial_functions, only: r_3D!, or1_3D
    use z_functions, only: zfunc_type
    use timers_mod, only: timers_type
    use time_schemes, only: type_tscheme
@@ -90,6 +90,7 @@ contains
       integer :: n_r, n_m, m, fh_temp, info_temp
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
+      integer :: fh_curlbr, info_curlbr, fh_curlbt, info_curlbt, fh_curlbp, info_curlbp
       character(len=144) :: frame_name
 
 #ifdef aDEBUG
@@ -127,6 +128,12 @@ contains
          call open_snapshot_3D(frame_name, time, fh_bt, info_bt)
          write(frame_name, '(A,I0,A,A)') 'frame_bp_3D_',frame_counter,'.',tag
          call open_snapshot_3D(frame_name, time, fh_bp, info_bp)
+         write(frame_name, '(A,I0,A,A)') 'frame_curlbr_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_curlbr, info_curlbr)
+         write(frame_name, '(A,I0,A,A)') 'frame_curlbt_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_curlbt, info_curlbt)
+         write(frame_name, '(A,I0,A,A)') 'frame_curlbp_3D_',frame_counter,'.',tag
+         call open_snapshot_3D(frame_name, time, fh_curlbp, info_curlbp)
       end if
 
       runStart = MPI_Wtime()
@@ -146,6 +153,9 @@ contains
             call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))
             call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))
             call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))
+            call write_bulk_snapshot_3D(fh_curlbr, gsa%curlBrc(:,:))
+            call write_bulk_snapshot_3D(fh_curlbt, gsa%curlBtc(:,:))
+            call write_bulk_snapshot_3D(fh_curlbp, gsa%curlBpc(:,:))
          end if
 
          !-- Construct non-linear terms in physical space
@@ -185,6 +195,9 @@ contains
          call close_snapshot_3D(fh_br, info_br)
          call close_snapshot_3D(fh_bt, info_bt)
          call close_snapshot_3D(fh_bp, info_bp)
+         call close_snapshot_3D(fh_curlbr, info_curlbr)
+         call close_snapshot_3D(fh_curlbt, info_curlbt)
+         call close_snapshot_3D(fh_curlbp, info_curlbp)
          frame_counter = frame_counter+1
       end if
 
@@ -263,11 +276,13 @@ contains
       call scal_to_spat(temp, gsa%Tc)
 
       if ( l_mag_3D ) then
-         call torpol_to_spat(B, dB, aj, gsa%Brc, gsa%Btc, gsa%Bpc)
-         if (  l_mag_LF ) then
+         call torpol_to_spat(B, dB, aj, n_r, gsa%Brc, gsa%Btc, gsa%Bpc)
+         !if (  l_mag_LF ) then
             call torpol_to_curl_spat(B, ddB, aj, dj, n_r, gsa%curlBrc, &
                  &                   gsa%curlBtc, gsa%curlBpc)
-         end if
+         !end if
+         !gsa%Btc(:,:) = or1_3D(n_r)*gsa%Btc(:,:)
+         !gsa%Bpc(:,:) = or1_3D(n_r)*gsa%Bpc(:,:)
       end if
 #endif
 
