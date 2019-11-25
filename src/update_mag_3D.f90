@@ -105,15 +105,16 @@ contains
       !-- Input/output of scalar potentials and time stepping arrays:
       complex(cp), intent(inout) :: b_3D(lmStart:lmStop,n_r_max_3D)
       complex(cp), intent(inout) :: aj_3D(lmStart:lmStop,n_r_max_3D)
-      complex(cp), intent(inout) :: db_3D(lmStart:lmStop,n_r_max_3D)
-      complex(cp), intent(inout) :: ddb_3D(lmStart:lmStop,n_r_max_3D)
-      complex(cp), intent(inout) :: dj_3D(lmStart:lmStop,n_r_max_3D)
+      complex(cp), intent(out) :: db_3D(lmStart:lmStop,n_r_max_3D)
+      complex(cp), intent(out) :: ddb_3D(lmStart:lmStop,n_r_max_3D)
+      complex(cp), intent(out) :: dj_3D(lmStart:lmStop,n_r_max_3D)
 
       type(type_tarray), intent(inout) :: dBdt_3D
       type(type_tarray), intent(inout) :: djdt_3D
 
       !-- Local variables:
       integer :: l1,m1               ! degree and order
+      integer :: lmStart_00          ! max(2,lmStart)
       integer :: lm1,lm,lmB          ! position of (l,m) in array
       integer :: nLMB2
       integer :: n_r_out             ! No of cheb polynome (degree+1)
@@ -136,6 +137,7 @@ contains
       lm2(0:,0:) => lo_map%lm2
       lm2l(1:lm_max) => lo_map%lm2l
       lm2m(1:lm_max) => lo_map%lm2m
+      lmStart_00 = max(2,lmStart)
 
       !-- Calculation of the implicit part
       call get_mag_3D_rhs_imp(b_3D, db_3D, ddb_3D,               &
@@ -170,11 +172,11 @@ contains
          if ( l1 > 0 ) then
             if ( .not. lBmat(l1) ) then
 #ifdef WITH_PRECOND_BJ
-               call get_bMat(tscheme,l1,hdif_B(st_map%lm2(l1,0)),      &
+               call get_bMat(tscheme,l1,one,      &
                     &        bMat(:,:,l1),bPivot(:,l1), bMat_fac(:,l1),&
                     &        jMat(:,:,l1),jPivot(:,l1), jMat_fac(:,l1))
 #else
-               call get_bMat(tscheme,l1,hdif_B(st_map%lm2(l1,0)), &
+               call get_bMat(tscheme,l1,one, &
                     &        bMat(:,:,l1),bPivot(:,l1),           &
                     &        jMat(:,:,l1),jPivot(:,l1) )
 #endif
@@ -205,6 +207,7 @@ contains
                   !-------- Magnetic boundary conditions, outer core:
                   !         Note: the CMB condition is not correct if we assume free slip
                   !         and a conducting mantle
+
                   rhs1(1,lmB,threadid)         =zero
                   rhs1(n_r_max_3D,lmB,threadid)=zero
                   if ( kbotb == 2 ) rhs1(n_r_max_3D-1,lmB,threadid)=zero
@@ -269,7 +272,7 @@ contains
 
       !-- Set cheb modes > rscheme_3D%n_max to zero (dealiazing)
       do n_r_out=rscheme_3D%n_max+1,n_r_max_3D
-         do lm1=max(2,lmStart),lmStop
+         do lm1=lmStart_00,lmStop
             b_3D(lm1,n_r_out) =zero
             aj_3D(lm1,n_r_out)=zero
          end do
@@ -282,7 +285,6 @@ contains
       call get_dr(aj_3D, dj_3D, lmStart, lmStop,          &
            &      n_r_max_3D, rscheme_3D, l_dct_in=.false.)
       call rscheme_3D%costf1(aj_3D, lmStart, lmStop, n_r_max_3D)
-
 
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dBdt_3D, lmStart, lmStop, n_r_max_3D)
@@ -334,13 +336,14 @@ contains
 
       !-- Local variables
       real(cp) :: dL
-      integer :: n_r, lm, l1
+      integer :: n_r, lm, l1, lmStart_00
       integer, pointer :: lm2l(:)
 
       lm2l(1:lm_max) => lo_map%lm2l
+      lmStart_00 = max(2,lmStart)
 
       do n_r=1,n_r_max_3D
-         do lm=lmStart,lmStop
+         do lm=lmStart_00,lmStop
             l1 = lm2l(lm)
             dL = real(l1*(l1+1),cp)
             B_last(lm,n_r) = dL*or2_3D(n_r)* b_3D(lm,n_r)
@@ -356,7 +359,7 @@ contains
 
          !-- Calculate explicit time step part:
          do n_r=1,n_r_max_3D
-            do lm=max(2,lmStart),lmStop
+            do lm=lmStart_00,lmStop
                l1 = lm2l(lm)
                dL = real(l1*(l1+1),cp)
                dB_imp_last(lm,n_r)=BdiffFac* (      dL * or2_3D(n_r) * (   &
@@ -398,7 +401,7 @@ contains
       real(cp) :: dLh
  
       dLh=real(l*(l+1),kind=cp)
-    
+
       !-- matricies depend on degree l but not on order m,
       !   we thus have to construct bmat and ajmat for each l:
 

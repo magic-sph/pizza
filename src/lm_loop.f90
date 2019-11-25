@@ -29,12 +29,12 @@ contains
       logical,             intent(in) :: lMat
 
       !-- Output variables
-      complex(cp),       intent(out) :: temp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(inout) :: temp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
       complex(cp),       intent(out) :: dtemp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-      complex(cp),       intent(out) :: b_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(inout) :: b_3D_LMloc(lmStart:lmStop,n_r_max_3D)
       complex(cp),       intent(out) :: db_3D_LMloc(lmStart:lmStop,n_r_max_3D)
       complex(cp),       intent(out) :: ddb_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-      complex(cp),       intent(out) :: aj_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(inout) :: aj_3D_LMloc(lmStart:lmStop,n_r_max_3D)
       complex(cp),       intent(out) :: dj_3D_LMloc(lmStart:lmStop,n_r_max_3D)
       type(type_tarray), intent(inout) :: dTdt_3D
       type(type_tarray), intent(inout) :: dBdt_3D
