@@ -8,7 +8,6 @@ module update_temp_3D_mod
    use namelists, only: kbott, ktopt, TdiffFac
    use blocking_lm, only: st_map, lo_map, lo_sub_map, chunksize
    use blocking, only: lmStart, lmStop
-   use horizontal, only: dLh
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
    use radial_der, only: get_ddr, get_dr
@@ -308,11 +307,11 @@ contains
       complex(cp), intent(out) :: dtemp_imp_last(lmStart:lmStop,n_r_max_3D)
 
       !-- Local variables
-      integer :: n_r, lm
-      integer, pointer :: lm2l(:),lm2m(:)
+      real(cp) :: dL
+      integer :: n_r, lm, l1
+      integer, pointer :: lm2l(:)
 
       lm2l(1:lm_max) => lo_map%lm2l
-      lm2m(1:lm_max) => lo_map%lm2m
 
       do n_r=1,n_r_max_3D
          do lm=lmStart,lmStop
@@ -327,11 +326,12 @@ contains
          !-- Calculate explicit time step part:
          do n_r=1,n_r_max_3D
             do lm=lmStart,lmStop
+               l1 = lm2l(lm)
+               dL = real(l1*(l1+1),cp)
                dtemp_imp_last(lm,n_r)=TdiffFac* (                           & 
                &                                         work_LMloc(lm,n_r) &
                &        + two*or1_3D(n_r)                * dtemp_3D(lm,n_r) &
-               &        - dLh(st_map%lm2(lm2l(lm),lm2m(lm))) * or2_3D(n_r)  &
-               &                                         *  temp_3D(lm,n_r) )
+               &        - dL * or2_3D(n_r)               *  temp_3D(lm,n_r) )
             end do
          end do
 

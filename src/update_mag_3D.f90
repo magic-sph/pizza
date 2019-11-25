@@ -5,15 +5,15 @@ module update_mag_3D_mod
    use mem_alloc, only: bytes_allocated
    use truncation_3D, only: n_r_max_3D, lm_max, l_max
    use radial_functions, only: r_3D, or1_3D, or2_3D, rscheme_3D
-   use namelists, only: kbotb, ktopb, init_B, BdiffFac, lm_mag_cond
+   use namelists, only: kbotb, ktopb, BdiffFac
    use blocking_lm, only: st_map, lo_map, lo_sub_map, chunksize
    use blocking, only: lmStart, lmStop
-   use horizontal, only: dLh, hdif_B
+   use horizontal, only: hdif_B
    use init_fields, only: bpeaktop, bpeakbot
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
    use radial_der, only: get_ddr, get_dr
-   use fields, only:  work_b_LMloc, work_j_LMloc
+   use fields, only:  work_b_LMloc, work_j_LMloc ! reduce number of  arrays
    use constants, only: zero, one, two, sq4pi
    use useful, only: abortRun
    use time_schemes, only: type_tscheme
@@ -87,7 +87,7 @@ contains
    end subroutine finalize_update_mag_3D
 !-----------------------------------------------------------------------------
    subroutine update_mag_3D(b_3D, db_3D, ddB_3D, dBdt_3D, aj_3D, dj_3D, &
-              &            djdt_3D, tscheme, lMat, nLMB)
+              &             djdt_3D, tscheme, lMat, nLMB)
       !                                                                   
       !  Calculated update of magnetic field potential and the time       
       !  stepping arrays dbdtLast, ...                                    
@@ -170,12 +170,12 @@ contains
          if ( l1 > 0 ) then
             if ( .not. lBmat(l1) ) then
 #ifdef WITH_PRECOND_BJ
-               call get_bMat(tscheme,l1,hdif_B(st_map%lm2(l1,0)),           &
+               call get_bMat(tscheme,l1,hdif_B(st_map%lm2(l1,0)),      &
                     &        bMat(:,:,l1),bPivot(:,l1), bMat_fac(:,l1),&
                     &        jMat(:,:,l1),jPivot(:,l1), jMat_fac(:,l1))
 #else
                call get_bMat(tscheme,l1,hdif_B(st_map%lm2(l1,0)), &
-                    &        bMat(:,:,l1),bPivot(:,l1),      &
+                    &        bMat(:,:,l1),bPivot(:,l1),           &
                     &        jMat(:,:,l1),jPivot(:,l1) )
 #endif
                lBmat(l1)=.true.
@@ -212,25 +212,6 @@ contains
                   rhs2(1,lmB,threadid)         =zero
                   rhs2(n_r_max_3D,lmB,threadid)=zero
 
-                  if ( m1 == 0 ) then   ! Magnetoconvection boundary conditions
-                     if ( lm_mag_cond /= 0 ) then !.and. tmagcon <= time ) then
-                        if ( l1 == 2 .and. lm_mag_cond /= -222 ) then
-                           rhs2(1,lmB,threadid)         =cmplx(bpeaktop,0.0_cp,kind=cp)
-                           rhs2(n_r_max_3D,lmB,threadid)=cmplx(bpeakbot,0.0_cp,kind=cp)
-                        else if( l1 == 1 .and. lm_mag_cond == -222 ) then
-                           rhs2(1,lmB,threadid)         =cmplx(bpeaktop,0.0_cp,kind=cp)
-                           rhs2(n_r_max_3D,lmB,threadid)=cmplx(bpeakbot,0.0_cp,kind=cp)
-                        else if( l1 == 1 .and. lm_mag_cond == 101 ) then
-                           rhs1(n_r_max_3D,lmB,threadid)=cmplx(bpeakbot,0.0_cp,kind=cp)
-                        else if( l1 == 1 .and. lm_mag_cond == 110 ) then
-                           rhs1(1,lmB,threadid)         =cmplx(bpeaktop,0.0_cp,kind=cp)
-                        else if( l1 == 3 .and. lm_mag_cond == 300 ) then
-                           rhs2(1,lmB,threadid)         =cmplx(bpeaktop,0.0_cp,kind=cp)
-                           rhs2(n_r_max_3D,lmB,threadid)=cmplx(bpeakbot,0.0_cp,kind=cp)
-                        end if
-                     end if
-                  end if
-                  
                   do n_r=2,n_r_max_3D-1
                      rhs1(n_r,lmB,threadid)=work_b_LMloc(lm1,n_r)
                      rhs2(n_r,lmB,threadid)=work_j_LMloc(lm1,n_r)
@@ -302,9 +283,6 @@ contains
       call tscheme%rotate_imex(dBdt_3D, lmStart, lmStop, n_r_max_3D)
       call tscheme%rotate_imex(djdt_3D, lmStart, lmStop, n_r_max_3D)
 
-      if(rank==0) print*, ''
-      if(rank==0) print*, ''
-
    end subroutine update_mag_3D
 !-------------------------------------------------------------------------------
    subroutine finish_exp_mag_3D(dVxBh_LMloc, dj_exp_last)
@@ -324,7 +302,7 @@ contains
       do n_r=1,n_r_max_3D
          do lm=max(2,lmStart),lmStop
             dj_exp_last(lm,n_r)=              dj_exp_last(lm,n_r) &
-            &                   -or2_3D(n_r)*work_j_LMloc(lm,n_r)
+            &                   +or2_3D(n_r)*work_j_LMloc(lm,n_r)
          end do
       end do
 
@@ -350,16 +328,18 @@ contains
       complex(cp), intent(out) :: dj_imp_last(lmStart:lmStop,n_r_max_3D)
 
       !-- Local variables
-      integer :: n_r, lm
-      integer, pointer :: lm2l(:),lm2m(:)
+      real(cp) :: dL
+      integer :: n_r, lm, l1
+      integer, pointer :: lm2l(:)
 
       lm2l(1:lm_max) => lo_map%lm2l
-      lm2m(1:lm_max) => lo_map%lm2m
 
       do n_r=1,n_r_max_3D
          do lm=lmStart,lmStop
-            B_last(lm,n_r) = b_3D(lm,n_r)
-            aj_last(lm,n_r)=aj_3D(lm,n_r)
+            l1 = lm2l(lm)
+            dL = real(l1*(l1+1),cp)
+            B_last(lm,n_r) = dL*or2_3D(n_r)* b_3D(lm,n_r)
+            aj_last(lm,n_r)= dL*or2_3D(n_r)*aj_3D(lm,n_r)
          end do
       end do
 
@@ -372,16 +352,12 @@ contains
          !-- Calculate explicit time step part:
          do n_r=1,n_r_max_3D
             do lm=max(2,lmStart),lmStop
-               dB_imp_last(lm,n_r)=BdiffFac* (                                &
-               &       dLh(st_map%lm2(lm2l(lm),lm2m(lm))) * or2_3D(n_r) * (   &
-               &                                            ddb_3D(lm,n_r)    &
-               &     - dLh(st_map%lm2(lm2l(lm),lm2m(lm))) * or2_3D(n_r) *     &
-               &                                              b_3D(lm,n_r) ) )
-               dj_imp_last(lm,n_r)=BdiffFac* (                                &
-               &       dLh(st_map%lm2(lm2l(lm),lm2m(lm))) * or2_3D(n_r) * (   &
-               &                                      work_j_LMloc(lm,n_r)    &
-               &     - dLh(st_map%lm2(lm2l(lm),lm2m(lm))) * or2_3D(n_r) *     &
-               &                                             aj_3D(lm,n_r) ) )
+               l1 = lm2l(lm)
+               dL = real(l1*(l1+1),cp)
+               dB_imp_last(lm,n_r)=BdiffFac* (      dL * or2_3D(n_r) * (   &
+               &             ddb_3D(lm,n_r)-dL*or2_3D(n_r)*b_3D(lm,n_r) ) )
+               dj_imp_last(lm,n_r)=BdiffFac* (      dL * or2_3D(n_r) * (   &
+               &       work_j_LMloc(lm,n_r)-dL*or2_3D(n_r)*aj_3D(lm,n_r) ) )
             end do
          end do
       end if
@@ -432,8 +408,7 @@ contains
             &                      rscheme_3D%drMat(1,n_r_out) + &
             &  real(l,cp)*or1_3D(1)*rscheme_3D%rMat(1,n_r_out)  )
 
-            jMat(1,n_r_out)=rscheme_3D%rnorm*(                  &
-            &                      rscheme_3D%rMat(1,n_r_out) )
+            jMat(1,n_r_out)=rscheme_3D%rnorm*rscheme_3D%rMat(1,n_r_out)
          else if ( ktopb == 2 ) then
             call abortRun('! Boundary condition ktopb=2 not defined!')
          else if ( ktopb == 3 ) then
@@ -463,13 +438,6 @@ contains
             bMat(n_r_max_3D,n_r_out)=rscheme_3D%rnorm*rscheme_3D%drMat(n_r_max_3D,n_r_out)
             jMat(n_r_max_3D,n_r_out)= rscheme_3D%rnorm*rscheme_3D%rMat(n_r_max_3D,n_r_out)
          end if
-         !-------- Imposed fields: (overwrites above IC boundary cond.)
-         if ( l == 1 .and. ( lm_mag_cond == 101 .or. lm_mag_cond == 110 ) ) then
-            bMat(n_r_max_3D,n_r_out)=  rscheme_3D%rnorm * rscheme_3D%rMat(n_r_max_3D,n_r_out)
-         else if ( l == 3 .and. lm_mag_cond == 301 ) then
-            jMat(1,n_r_out)         =rscheme_3D%rnorm* rscheme_3D%rMat(1,n_r_out)
-            jMat(n_r_max_3D,n_r_out)=rscheme_3D%rnorm* rscheme_3D%rMat(n_r_max_3D,n_r_out)
-         end if
       end do ! loop over cheb modes !
       !----- fill up with zeros:
       if ( rscheme_3D%n_max < n_r_max_3D ) then ! fill with zeros !
@@ -494,41 +462,25 @@ contains
       !----- Other points:
       do n_r_out=1,n_r_max_3D
          do n_r=2,n_r_max_3D-1
-            !bMat(n_r,n_r_out)=rscheme_3D%rnorm*(                    &
-            !&        dLh*or2_3D(n_r)*rscheme_3D%rMat(n_r,n_r_out) - &
-            !!&         alpha*opm*lambda(n_r)*hdif*dLh*or2_3D(n_r) * (&
-            !& tscheme%wimp_lin(1)*BdiffFac*hdif*dLh*or2_3D(n_r) * ( &
-            !&                      rscheme_3D%d2rMat(n_r,n_r_out) - &
-            !&        dLh*or2_3D(n_r)*rscheme_3D%rMat(n_r,n_r_out) ) )
-    
-            !jMat(n_r,n_r_out)=rscheme_3D%rnorm*(                    &
-            !&        dLh*or2_3D(n_r)*rscheme_3D%rMat(n_r,n_r_out) - &
-            !!&         alpha*opm*lambda(n_r)*hdif*dLh*or2_3D(n_r) * (&
-            !& tscheme%wimp_lin(1)*BdiffFac*hdif*dLh*or2_3D(n_r) * ( &
-            !&                      rscheme_3D%d2rMat(n_r,n_r_out) + &
-            !!&         dLlambda(n_r)*rscheme_3D%drMat(n_r,n_r_out) - &
-            !&         0.0_cp*rscheme_3D%drMat(n_r,n_r_out) - &
-            !&        dLh*or2_3D(n_r)*rscheme_3D%rMat(n_r,n_r_out) ) )
-
             bMat(n_r,n_r_out)=rscheme_3D%rnorm*(                    &
-            &        rscheme_3D%rMat(n_r,n_r_out) - &
+            &        dLh*or2_3D(n_r)*rscheme_3D%rMat(n_r,n_r_out) - &
             & BdiffFac*tscheme%wimp_lin(1)*hdif*dLh*or2_3D(n_r) * ( &
-            &              rscheme_3D%d2rMat(n_r,n_r_out) - &
+            &                      rscheme_3D%d2rMat(n_r,n_r_out) - &
             &        dLh*or2_3D(n_r)*rscheme_3D%rMat(n_r,n_r_out) ) )
     
             jMat(n_r,n_r_out)=rscheme_3D%rnorm*(                    &
-            &        rscheme_3D%rMat(n_r,n_r_out) - &
+            &        dLh*or2_3D(n_r)*rscheme_3D%rMat(n_r,n_r_out) - &
             & BdiffFac*tscheme%wimp_lin(1)*hdif*dLh*or2_3D(n_r) * ( &
-            &            rscheme_3D%d2rMat(n_r,n_r_out) - &
+            &                      rscheme_3D%d2rMat(n_r,n_r_out) - &
             &        dLh*or2_3D(n_r)*rscheme_3D%rMat(n_r,n_r_out) ) )
          end do
       end do
     
       !----- normalization for highest and lowest Cheb mode:
       do n_r=1,n_r_max_3D
-         bMat(n_r,1)      =rscheme_3D%boundary_fac*bMat(n_r,1)
+         bMat(n_r,1)         =rscheme_3D%boundary_fac*bMat(n_r,1)
          bMat(n_r,n_r_max_3D)=rscheme_3D%boundary_fac*bMat(n_r,n_r_max_3D)
-         jMat(n_r,1)      =rscheme_3D%boundary_fac*jMat(n_r,1)
+         jMat(n_r,1)         =rscheme_3D%boundary_fac*jMat(n_r,1)
          jMat(n_r,n_r_max_3D)=rscheme_3D%boundary_fac*jMat(n_r,n_r_max_3D)
       end do
     

@@ -187,19 +187,18 @@ contains
             !------- Radial component of
             !           \curl\curl(UxB) = \grad\div(VxB) - \laplace(VxB)
             !------- This is the radial part of \laplace (VxB)
-            djdt(lm)= dLh*or2_3D(n_r)*or2_3D(n_r) &
-            &        *this%VxBrLM(lmP)
+            djdt(lm)= dLh*or2_3D(n_r)*or2_3D(n_r)*this%VxBrLM(lmP)
 
             !------- This is r^2 * horizontal divergence of (VxB)
             !        Radial derivative performed in get_dr_td
             !PERFON('td_mnl2')
             if ( l > m ) then
-               dVxBhLM(lm)= r_3D(n_r)*r_3D(n_r)*(          &
+               dVxBhLM(lm)= r_3D(n_r)*r_3D(n_r)*(           &
                &             dTheta1S(lm)*this%VxBtLM(lmPS) &
                &            -dTheta1A(lm)*this%VxBtLM(lmPA) &
                &            +dPhi(lm)    *this%VxBpLM(lmP) )
             else if ( l == m ) then
-               dVxBhLM(lm)= r_3D(n_r)*r_3D(n_r)*(          &
+               dVxBhLM(lm)= r_3D(n_r)*r_3D(n_r)*(           &
                &            -dTheta1A(lm)*this%VxBtLM(lmPA) &
                &            +dPhi(lm)    *this%VxBpLM(lmP) )
             end if

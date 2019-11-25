@@ -29,16 +29,16 @@ contains
       logical,             intent(in) :: lMat
 
       !-- Output variables
-      complex(cp),         intent(out) :: temp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-      complex(cp),         intent(out) :: dtemp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-      complex(cp),         intent(out) :: b_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-      complex(cp),         intent(out) :: db_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-      complex(cp),         intent(out) :: ddb_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-      complex(cp),         intent(out) :: aj_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-      complex(cp),         intent(out) :: dj_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-      type(type_tarray),   intent(inout) :: dTdt_3D
-      type(type_tarray),   intent(inout) :: dBdt_3D
-      type(type_tarray),   intent(inout) :: djdt_3D
+      complex(cp),       intent(out) :: temp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(out) :: dtemp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(out) :: b_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(out) :: db_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(out) :: ddb_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(out) :: aj_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),       intent(out) :: dj_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      type(type_tarray), intent(inout) :: dTdt_3D
+      type(type_tarray), intent(inout) :: dBdt_3D
+      type(type_tarray), intent(inout) :: djdt_3D
 
       !--- Local counter
       integer :: nLMB
@@ -58,7 +58,8 @@ contains
 
    end subroutine LMLoop
 !--------------------------------------------------------------------------------
-   subroutine finish_explicit_assembly_3D(dVrT_LMloc, dTdt_3D, dVxBh_LMloc, djdt_3D, tscheme)
+   subroutine finish_explicit_assembly_3D(dVrT_LMloc, dTdt_3D, dVxBh_LMloc, &
+              &                           djdt_3D, tscheme)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme

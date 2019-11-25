@@ -15,8 +15,7 @@ module init_fields
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
        &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
-       &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac,      &
-       &                lm_mag_cond
+       &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
@@ -564,51 +563,6 @@ contains
 
       lm0=lm20 ! Default quadrupole field
 
-      !-- WARING!:: Imposed magnetic field for magnetoconvection.! To be removed later, if never used!
-      if ( lm_mag_cond == 101 ) then
-         !----- impose l=1,m=0 poloidal field at ICB:
-         lm0=lm10
-         bpeaktop= 0.0_cp
-         bpeakbot=-sqrt(third*pi)*r_icb**2*amp_B
-
-      else if ( lm_mag_cond == 110 ) then
-         !----- impose l=1,m=0 poloidal field at CMB:
-         lm0=lm10
-         bpeaktop=-sqrt(third*pi)*r_cmb**2*amp_B
-         bpeakbot= 0.0_cp
-
-      else if ( lm_mag_cond == 122 ) then
-         !----- impose l=1,m=0 toroidal field at ICB and CMB:
-         lm0 = lm10
-         bpeaktop= two*sqrt(third*pi)*r_cmb*amp_B
-         bpeakbot= two*sqrt(third*pi)*r_icb*amp_B
-
-      else if ( lm_mag_cond == 202 ) then
-         !----- impose l=2,m=0 toroidal field at ICB:
-         lm0=lm20
-         bpeaktop= 0.0_cp
-         bpeakbot= four*third*sqrt(pi/5.0_cp)*r_icb*amp_B
-
-      else if ( lm_mag_cond == 222 ) then
-         !----- impose l=2,m=0 toroidal field at ICB and CMB:
-         lm0=lm20
-         bpeaktop= four*third*sqrt(pi/5.0_cp)*r_cmb*amp_B
-         bpeakbot= four*third*sqrt(pi/5.0_cp)*r_icb*amp_B
-
-      else if ( lm_mag_cond == -222 ) then
-         !----- same as ktopb == 2 .and. kbotb == 2 but opposite sign at CMB:
-         lm0=lm20
-         bpeaktop=-four*third*sqrt(pi/5.0_cp)*r_cmb*amp_B
-         bpeakbot= four*third*sqrt(pi/5.0_cp)*r_icb*amp_B
-
-      else if ( lm_mag_cond == 200 ) then
-         !----- impose zero field at ICB and CMB:
-         lm0 = lm20
-         bpeakbot= 0.0_cp
-         bpeaktop= 0.0_cp
-
-      end if
-
       if ( init_B < 0 ) then  ! l,m mixture, random init
       !-- Random noise initialization of all (l,m) modes exept (l=0,m=0):
          bExp=abs(init_B)
@@ -634,32 +588,6 @@ contains
                b_LMloc(lm,n_r)=b_LMloc(lm,n_r) + cmplx(bR*b1(n_r),bI*b1(n_r),kind=cp)
             end do
          end do
-
-      else if ( init_B == 301 .or. lm_mag_cond == 301 ) then
-      !----- Test of variable conductivity case with analytical solution:
-      !      Assume the magnetic diffusivity is lambda=r**5, that the aspect ratio
-      !      is 0.5, and that there is no flow.
-      !      The analytical stationary solution for the (l=3,m=0) toroidal field
-      !      with bounday condition aj(r=r_ICB)=1, aj(r=r_CMB)=0 is then
-      !      given by jVarCond(r)!
-      !      A disturbed solution is used to initialize aj,
-      !      the disturbance should decay with time.
-      !      The solution is stored in file testVarCond.TAG at the end of the run,
-      !      where the first column denotes radius, the second is aj(l=3,m=0,r) and
-      !      the third is jVarCond(r). Second and third should be identical when
-      !      the stationary solution has been reached.
-         lm0=lm30  ! This is l=3,m=0
-         bpeaktop= 0.0_cp
-         bpeakbot= one
-         aVarCond=-one/255.0_cp
-         bVarCond= 256.0_cp/255.0_cp
-         if( (lm0>=lmStart) .and. (lm0<=lmStop) ) then ! select processor
-!         if ( lmStart(rank+1) <= lm0 .and. lmStop(rank+1) >= lm0 ) then ! select processor
-            do n_r=1,n_r_max_3D          ! Diffusive toroidal field
-               jVarCond(n_r)=aVarCond*r_3D(n_r)**2 + bVarCond/(r_3D(n_r)**6)
-               aj_LMloc(lm0,n_r)= jVarCond(n_r) + 0.1_cp*sin((r_3D(n_r)-r_icb)*pi)
-            end do
-         end if
 
       else if ( init_B == 2 ) then  ! l=1,m=0 analytical toroidal field
       ! with a maximum of amp_B at mid-radius
@@ -689,7 +617,7 @@ contains
             b_tor=-four*third*amp_B*sqrt(pi/5.0_cp)
             b_pol= amp_B*sqrt(three*pi)/four
             do n_r=1,n_r_max_3D
-               b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol * ( &
+               b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol * (       &
                &     r_3D(n_r)**3 - four*third*r_cmb*r_3D(n_r)**2  &
                &     + third*r_icb**4/r(n_r)                )
             end do

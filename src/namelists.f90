@@ -43,7 +43,6 @@ module namelists
    integer,  public :: ktopxi, kbotxi! Boundary conditions for chemical composition
    integer,  public :: ktopv, kbotv  ! Velocity boundary condition
    integer,  public :: ktopb, kbotb  ! Magnetic field boundary condition
-   integer,  public :: lm_mag_cond   ! Imposed magnetic field for magnetoconvection, at the boundaries
    real(cp), public :: t_bot(3*n_t_bounds), xi_bot(3*n_t_bounds)
    real(cp), public :: t_top(3*n_t_bounds), xi_top(3*n_t_bounds)
    real(cp), public :: g0, g1, g2
@@ -155,7 +154,7 @@ contains
       &                   l_tcond_3D,tcond_fac,l_temp_advz,        &
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
       &                   xi_bot,xi_top, ktopb,kbotb,xicond_fac,   &
-      &                   l_xi_3D,l_heat_3D,l_mag_3D,l_mag_LF,lm_mag_cond
+      &                   l_xi_3D,l_heat_3D,l_mag_LF
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi,scale_B,init_B,amp_B
@@ -290,6 +289,8 @@ contains
       if ( prmag == 0.0_cp ) then
          l_mag_3D=.false.
          l_mag_LF=.false.
+      else
+         l_mag_3D=.true.
       end if
 
       if ( raxi == 0.0_cp ) then
@@ -405,8 +406,10 @@ contains
       end if
 
       !-- Time unit
-      BdiffFac = one/prmag !--- To be modified!
-      DyMagFac = ek/prmag     !--- To be modified!
+      if ( l_mag_3D ) then
+         BdiffFac = one/prmag !--- To be modified!
+         DyMagFac = ek/prmag     !--- To be modified!
+      end if
       call capitalize(time_scale) 
       if ( l_non_rot ) then
          CorFac = 0.0_cp
@@ -531,7 +534,7 @@ contains
       l_xi_3D          =.false.
       ra               =1.0e5_cp
       pr               =one
-      prmag            =5.0_cp
+      prmag            =0.0_cp
       ek               =1.0e-3_cp
       raxi             =0.0e5_cp
       sc               =0.0_cp
@@ -552,7 +555,6 @@ contains
       kbotv            =2
       ktopb            =1
       kbotb            =1
-      lm_mag_cond      =0
       !----- Parameters for temp. BCs
       do n=1,3*n_t_bounds
          t_bot(n) =0.0_cp
@@ -565,7 +567,6 @@ contains
       l_heat_3D = .false.
 
       !-- treatment of magnetic field (3D)
-      l_mag_3D = .false.
       l_mag_LF = .false.
 
       !----- Namelist start_field:
@@ -702,7 +703,6 @@ contains
       write(n_out,'(''  kbotv           ='',i3,'','')') kbotv
       write(n_out,'(''  ktopb           ='',i3,'','')') ktopb
       write(n_out,'(''  kbotb           ='',i3,'','')') kbotb
-      write(n_out,'(''  lm_mag_cond     ='',i7,'','')') lm_mag_cond
       write(n_out,*) "/"
 
       write(n_out,*) "&start_field"
