@@ -153,11 +153,11 @@ contains
       EDip      = 0.0_cp
       if ( l_mag_3D ) then
          do n_r=1,n_r_max_3D
-            e_pol_r(:)        = 0.0_cp
-            e_tor_r(:)        = 0.0_cp
-            e_pol_axis_r(:)   = 0.0_cp
-            e_tor_axis_r(:)   = 0.0_cp
-            e_dipole_axis_r(:)= 0.0_cp
+            e_pol_r(n_r)        = 0.0_cp
+            e_tor_r(n_r)        = 0.0_cp
+            e_pol_axis_r(n_r)   = 0.0_cp
+            e_tor_axis_r(n_r)   = 0.0_cp
+            e_dipole_axis_r(n_r)= 0.0_cp
             do lm=max(2,lmStart),lmStop
                l=lo_map%lm2l(lm)
                m=lo_map%lm2m(lm)
@@ -220,27 +220,25 @@ contains
             lm10=lo_map%lm2(1,0)
             lm11=lo_map%lm2(1,1)
 
+#ifdef TOTO
             ! some arbitrary send recv tag
             sr_tag=18657
             rank_has_lm10=.false.
             rank_has_lm11=.false.
             if ( (lm10 >= lmStart) .and. (lm10 <= lmStop) ) then
                b10=b_3D(lm10,1)
-#ifdef WITH_MPI
                if (rank /= 0) then
                   call MPI_Send(b10,1,MPI_DEF_COMPLEX,0,sr_tag,MPI_COMM_WORLD,ierr)
                end if
-#endif
                rank_has_lm10=.true.
             end if
             if ( lm11 > 0 ) then
                if ( (lm11 >= lmStart) .and. (lm11 <= lmStop) ) then
                   b11=b_3D(lm11,1)
-#ifdef WITH_MPI
                   if (rank /= 0) then
-                     call MPI_Send(b11,1,MPI_DEF_COMPLEX,0,sr_tag+1,MPI_COMM_WORLD,ierr)
+                     call MPI_Send(b11,1,MPI_DEF_COMPLEX,0,sr_tag+1, &
+                          &        MPI_COMM_WORLD,ierr)
                   end if
-#endif
                   rank_has_lm11=.true.
                end if
             else
@@ -248,7 +246,6 @@ contains
                rank_has_lm11=.true.
             end if
             rad =180.0_cp/pi
-#ifdef WITH_MPI
             if (.not.rank_has_lm10) then
                call MPI_IRecv(b10,1,MPI_DEF_COMPLEX,MPI_ANY_SOURCE,&
                     &         sr_tag,MPI_COMM_WORLD,request1, ierr)
@@ -274,9 +271,8 @@ contains
             end if
             EDip      =E_dip_axis/(E_pol+E_tor)
 
-            write(n_mag_file, '(1P, ES20.12, 5ES20.12)') time, E_pol, E_tor,   & !1, 2,3
-            &                                           E_pol_axis, E_tor_axis!,& !   4,5
-            !&                                           E_cmb, EDip              !   6,7 (Dipole-var)
+            write(n_mag_file, '(1P, ES20.12, 4ES16.7)') time, E_pol, E_tor,   & 
+            &                                           E_pol_axis, E_tor_axis
          end if
 
       end if ! l_mag_3D?

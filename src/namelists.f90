@@ -408,7 +408,7 @@ contains
       !-- Time unit
       if ( l_mag_3D ) then
          BdiffFac = one/prmag !--- To be modified!
-         DyMagFac = ek/prmag     !--- To be modified!
+         DyMagFac = one/ek/prmag     !--- To be modified!
       end if
       call capitalize(time_scale) 
       if ( l_non_rot ) then
