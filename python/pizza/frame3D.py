@@ -25,19 +25,19 @@ class Frame3D:
 
         self.version = np.fromfile(file, dtype='i4', count=1)[0]
         self.time, self.ra, self.ek, self.pr, self.radratio, self.sc, \
-            self.raxi = np.fromfile(file, dtype='7f8', count=1)[0]
+            self.raxi = np.fromfile(file, dtype='7Float64', count=1)[0]
         self.n_r_max_3D, self.l_max, self.m_max_3D, self.lm_max, \
             self.minc_3D, self.n_theta_max, self.n_phi_max_3D = \
             np.fromfile(file, dtype='7i4', count=1)[0]
 
-        self.radius_3D = np.fromfile(file, dtype='%if8' % self.n_r_max_3D,
+        self.radius_3D = np.fromfile(file, dtype='%iFloat64' % self.n_r_max_3D,
                                      count=1)[0]
-        self.tcond_3D = np.fromfile(file, dtype='%if8' % self.n_r_max_3D,
+        self.tcond_3D = np.fromfile(file, dtype='%iFloat64' % self.n_r_max_3D,
                                     count=1)[0]
-        self.theta = np.fromfile(file, dtype='%if8' % self.n_theta_max,
+        self.theta = np.fromfile(file, dtype='%iFloat64' % self.n_theta_max,
                                  count=1)[0]
 
-        dt = np.dtype("(%i,%i,%i)f4" % (self.n_r_max_3D,
+        dt = np.dtype("(%i,%i,%i)Float32" % (self.n_r_max_3D,
                                              self.n_theta_max,
                                              self.n_phi_max_3D))
         self.field = np.fromfile(file, dtype=dt, count=1)[0]
@@ -116,6 +116,21 @@ class Pizza3DFields(PizzaSetup):
                                      verbose)
         f = Frame3D(filename, endian=endian)
         self.bp = f.field
+
+        filename = self.get_filename('frame_curlbr_3D', ivar, datadir, tag,
+                                     verbose)
+        f = Frame3D(filename, endian=endian)
+        self.curlbr = f.field
+
+        filename = self.get_filename('frame_curlbt_3D', ivar, datadir, tag,
+                                     verbose)
+        f = Frame3D(filename, endian=endian)
+        self.curlbt = f.field
+
+        filename = self.get_filename('frame_curlbp_3D', ivar, datadir, tag,
+                                     verbose)
+        f = Frame3D(filename, endian=endian)
+        self.curlbp = f.field
 
     def get_filename(self, prefix, ivar, datadir, tag, verbose):
         """
@@ -210,10 +225,16 @@ class Pizza3DFields(PizzaSetup):
             data = self.uphi.mean(axis=0)
         elif field in ('br', 'Br'):
             data = self.br.mean(axis=0)
-        elif field in ('bt', 'Bt', 'btheta', 'Btheta'):
+        elif field in ('bt', 'Bt', 'bth', 'Bth', 'btheta', 'Btheta'):
             data = self.bt.mean(axis=0)
-        elif field in ('bp', 'Bp', 'bphi', 'Bphi'):
+        elif field in ('bp', 'Bp', 'bph', 'Bph', 'bphi', 'Bphi'):
             data = self.bp.mean(axis=0)
+        elif field in ('curlbr', 'curlBr','Curlbr', 'CurlBr'):
+            data = self.curlbr.mean(axis=0)
+        elif field in ('curlbt', 'curlBt', 'curlbth', 'curlBth', 'curlbtheta', 'curlBtheta'):
+            data = self.curlbt.mean(axis=0)
+        elif field in ('curlbp', 'curlBp', 'curlbph', 'curlBph', 'curlbphi', 'curlBphi'):
+            data = self.curlbp.mean(axis=0)
 
         self.fig, xx, yy = merContour(data, self.radius_3D, colat=self.theta,
                                       label=label,
@@ -275,10 +296,16 @@ class Pizza3DFields(PizzaSetup):
             data = self.uphi[:, self.n_theta_max/2, :]
         elif field in ('br', 'Br'):
             data = self.br[:, self.n_theta_max/2, :]
-        elif field in ('bt', 'Bt', 'btheta', 'Btheta'):
+        elif field in ('bt', 'Bt', 'bth', 'Bth', 'btheta', 'Btheta'):
             data = self.bt[:, self.n_theta_max/2, :]
-        elif field in ('bp', 'Bp', 'bphi', 'Bphi'):
+        elif field in ('bp', 'Bp', 'bph', 'Bph', 'bphi', 'Bphi'):
             data = self.bp[:, self.n_theta_max/2, :]
+        elif field in ('curlbr', 'curlBr','Curlbr', 'CurlBr'):
+            data = self.curlbr[:, self.n_theta_max/2, :]
+        elif field in ('curlbt', 'curlBt', 'curlbth', 'curlBth', 'curlbtheta', 'curlBtheta'):
+            data = self.curlbt[:, self.n_theta_max/2, :]
+        elif field in ('curlbp', 'curlBp', 'curlbph', 'curlBph', 'curlbphi', 'curlBphi'):
+            data = self.curlbp[:, self.n_theta_max/2, :]
 
         if deminc:
             data = symmetrize(data, ms=self.minc_3D)
@@ -386,10 +413,16 @@ class Pizza3DFields(PizzaSetup):
             data = self.uphi[:, :, irad]
         elif field in ('br', 'Br'):
             data = self.br[:, :, irad]
-        elif field in ('bt', 'Bt', 'btheta', 'Btheta'):
+        elif field in ('bt', 'Bt','bth', 'Bth', 'btheta', 'Btheta'):
             data = self.bt[:, :, irad]
-        elif field in ('bp', 'Bp', 'bphi', 'Bphi'):
+        elif field in ('bp', 'Bp', 'bph', 'Bph', 'bphi', 'Bphi'):
             data = self.bp[:, :, irad]
+        elif field in ('curlbr', 'curlBr'):
+            data = self.curlbr[:, :, irad]
+        elif field in ('curlbt', 'curlBt','curlbth', 'curlBth', 'curlbtheta', 'curlBtheta'):
+            data = self.curlbt[:, :, irad]
+        elif field in ('curlbp', 'curlBp', 'curlbph', 'curlBph', 'curlbphi', 'curlBphi'):
+            data = self.curlbp[:, :, irad]
 
         if deminc:
             data = symmetrize(data, ms=self.minc_3D)

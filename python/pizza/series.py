@@ -147,6 +147,12 @@ class PizzaTs(PizzaSetup):
             self.delnuss = data[:, 3]
             self.toptemp = data[:, 4]
             self.bottemp = data[:, 5]
+        elif self.field == 'mag_3D':
+            self.time = data[:, 0]
+            self.epol = data[:, 1]
+            self.etor = data[:, 2]
+            self.epolaxs = data[:, 3]
+            self.etoraxs = data[:, 4]
         elif self.field == 'heat':
             self.time = data[:, 0]
             self.topnuss = data[:, 1]
@@ -261,6 +267,17 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='lower right', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Nusselt number')
+            fig.tight_layout()
+        elif self.field == 'mag_3D':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(self.time, self.epol, label='E mag Poloidal')
+            ax.plot(self.time, self.etor, label='E mag Toroidal')
+            ax.plot(self.time, self.epolaxs, label='E mag Axis Poloidal')
+            ax.plot(self.time, self.etoraxs, label='E mag Axis Toroidal')
+            ax.legend(loc='lower right', frameon=False)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Magnetic Energy')
             fig.tight_layout()
         elif self.field == 'heat':
             fig = plt.figure()
