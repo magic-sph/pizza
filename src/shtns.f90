@@ -74,7 +74,6 @@ contains
 
       do lm = 1, lm_max
          Qlm(lm) = dLh(lm) * or2_3D(n_r) * Wlm(lm)
-         !Qlm(lm) = dLh(lm) * Wlm(lm)
       end do
 
       call shtns_qst_to_spat(Qlm, dWlm, Zlm, fieldrc, fieldtc, fieldpc)
@@ -98,15 +97,14 @@ contains
       integer :: lm
 
       do lm = 1, lm_max
-         !Qlm(lm) = dLh(lm) * or2_3D(n_r) * Jlm(lm)
-         Qlm(lm) = dLh(lm) * Jlm(lm)
+         Qlm(lm) = dLh(lm) * or2_3D(n_r) * Jlm(lm)
          Tlm(lm) = or2_3D(n_r) * dLh(lm) * Blm(lm) - ddBlm(lm)
       end do
 
       call shtns_qst_to_spat(Qlm, dJlm, Tlm, curlfieldrc, curlfieldtc, curlfieldpc)
 
-      !curlfieldtc(:,:) = or1_3D(n_r) * curlfieldtc(:,:)
-      !curlfieldpc(:,:) = or1_3D(n_r) * curlfieldpc(:,:)
+      curlfieldtc(:,:) = or1_3D(n_r) * curlfieldtc(:,:)
+      curlfieldpc(:,:) = or1_3D(n_r) * curlfieldpc(:,:)
 
    end subroutine torpol_to_curl_spat
 !------------------------------------------------------------------------------

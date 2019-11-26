@@ -281,8 +281,6 @@ contains
             call torpol_to_curl_spat(B, ddB, aj, dj, n_r, gsa%curlBrc, &
                  &                   gsa%curlBtc, gsa%curlBpc)
          !end if
-         !gsa%Btc(:,:) = or1_3D(n_r)*gsa%Btc(:,:)
-         !gsa%Bpc(:,:) = or1_3D(n_r)*gsa%Bpc(:,:)
       end if
 #endif
 
