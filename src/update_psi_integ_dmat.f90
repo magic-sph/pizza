@@ -5,7 +5,7 @@ module update_psi_integ_dmat
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
-       &                l_ek_pump, ViscFac, ek, l_buo_imp, l_mag_LF
+       &                l_ek_pump, ViscFac, ek, l_buo_imp
    use horizontal, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
@@ -501,11 +501,6 @@ contains
                      vort_bal%buo(n_m,n_r)=buo_Mloc(n_m,n_r)
                   end if
                   dom_exp_last(n_m,n_r)=dom_exp_last(n_m,n_r)+buo_Mloc(n_m,n_r)
-               end if
-            else
-               if ( l_mag_LF ) then
-                  dom_exp_last(n_m,n_r)=dom_exp_last(n_m,n_r)+&
-                  &                       dVsOm_Mloc(n_m,n_r)
                end if
             end if
          end do

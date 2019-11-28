@@ -6,7 +6,7 @@ module update_psi_integ_smat
    use constants, only: one, zero, ci, half
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, l_coriolis_imp, ek, l_buo_imp,    &
-       &                l_galerkin, l_mag_LF
+       &                l_galerkin
    use horizontal, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
@@ -589,11 +589,6 @@ contains
             if ( m /= 0 ) then
                dpsi_exp_last(n_m,n_cheb)=dpsi_exp_last(n_m,n_cheb)-&
                &                             work_Mloc(n_m,n_cheb)
-            else
-               if ( l_mag_LF ) then
-                  dpsi_exp_last(n_m,n_cheb)=dpsi_exp_last(n_m,n_cheb)+&
-                  &                            dVsOm_Mloc(n_m,n_cheb)
-               end if
             end if
          end do
       end do

@@ -15,9 +15,9 @@ module grid_space_arrays_mod
    use general_arrays_mod
    use precision_mod
    use mem_alloc, only: bytes_allocated
-   use constants, only: zero, two, pi
-   !use namelists, only: DyMagFac
-   use truncation_3D, only: n_r_max_3D, n_theta_max, n_phi_max_3D
+   use constants, only: zero
+   use blocking, only: nRstart3D, nRstop3D
+   use truncation_3D, only: n_theta_max, n_phi_max_3D
    use radial_functions, only: or1_3D, or2_3D, r_3D, rgrav_3D
    use horizontal, only: cost, sint, osint1
 
@@ -29,7 +29,7 @@ module grid_space_arrays_mod
       !----- Nonlinear terms in phi/theta space: 
       real(cp), allocatable :: VTr(:,:), VTt(:,:), VTp(:,:)
       real(cp), allocatable :: VxBr(:,:), VxBt(:,:), VxBp(:,:)
-      real(cp), allocatable :: jxBr(:,:), jxBt(:,:), jxBp(:,:)
+      real(cp), allocatable :: jxBs(:,:,:), jxBp(:,:,:)
 
       !----- Fields calculated from these help arrays by legtf:
       real(cp), pointer :: Tc(:,:)
@@ -53,10 +53,8 @@ contains
       allocate( this%VxBr(n_phi_max_3D,n_theta_max) )
       allocate( this%VxBt(n_phi_max_3D,n_theta_max) )
       allocate( this%VxBp(n_phi_max_3D,n_theta_max) )
-      allocate( this%jxBr(n_phi_max_3D,n_theta_max) )
-      allocate( this%jxBt(n_phi_max_3D,n_theta_max) )
-      allocate( this%jxBp(n_phi_max_3D,n_theta_max) )
-
+      allocate( this%jxBs(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
+      allocate( this%jxBp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
 
       !----- Fields calculated from these help arrays by legtf:
       allocate( this%Tc(n_phi_max_3D,n_theta_max) )
@@ -66,7 +64,8 @@ contains
       allocate( this%curlBrc(n_phi_max_3D,n_theta_max) )
       allocate( this%curlBtc(n_phi_max_3D,n_theta_max) )
       allocate( this%curlBpc(n_phi_max_3D,n_theta_max) )
-      bytes_allocated=bytes_allocated + 16*n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL
+      bytes_allocated=bytes_allocated + 15*n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL + &
+      &                                 2*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_REAL
 
       this%VTr(:,:)=zero
       this%VTt(:,:)=zero
@@ -74,9 +73,8 @@ contains
       this%VxBr(:,:)=zero
       this%VxBt(:,:)=zero
       this%VxBp(:,:)=zero
-      this%jxBr(:,:)=zero
-      this%jxBt(:,:)=zero
-      this%jxBp(:,:)=zero
+      this%jxBs(:,:,:)=zero
+      this%jxBp(:,:,:)=zero
       this%Tc(:,:)=zero
       this%Brc(:,:)=zero
       this%Btc(:,:)=zero
@@ -93,14 +91,14 @@ contains
 
       deallocate( this%VTr, this%VTt, this%VTp )
       deallocate( this%VxBr, this%VxBt, this%VxBp )
-      deallocate( this%jxBr, this%jxBt, this%jxBp )
+      deallocate( this%jxBs, this%jxBp )
       deallocate( this%Tc )
       deallocate( this%Brc, this%Btc, this%Bpc )
       deallocate( this%curlBrc, this%curlBtc, this%curlBpc )
 
    end subroutine finalize
 !----------------------------------------------------------------------------
-   subroutine get_nl(this, vr, vt, vp, n_r, buo, lfs)
+   subroutine get_nl(this, vr, vt, vp, n_r, buo)
       !
       !  calculates non-linear products in grid-space for radial
       !  level n_r and returns them in arrays wnlr1-3, snlr1-3, bnlr1-3
@@ -119,7 +117,6 @@ contains
 
       !-- Output of variable:
       real(cp), intent(out) :: buo(n_phi_max_3D,n_theta_max)
-      real(cp), intent(out) :: lfs(n_phi_max_3D,n_theta_max)
 
       !-- Local variables:
       integer :: n_theta, n_phi
@@ -180,40 +177,27 @@ contains
 
       !------ Get the Lorentz force:
       !$OMP PARALLEL DO default(shared) &
-      !$OMP& private(n_theta, n_phi, or1sn1, DyMagFac)
+      !$OMP& private(n_theta, n_phi, or1sn1)
       do n_theta=1,n_theta_max
-         !or1sn1=or1_3D(n_r)*osint1(n_theta)
+         or1sn1=or1_3D(n_r)*osint1(n_theta) ! 1/r_s
          do n_phi=1,n_phi_max_3D
-            !---- jxBr= r**2/(E*Pm) * ( curl(B)_t*B_p - curl(B)_p*B_t )
-            this%jxBr(n_phi,n_theta)=1.0_cp*( &!DyMagFac*r2*(&
-            &    this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)- &
-            &    this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) )
+            !---- jxBs= r**2/(E*Pm) * ( curl(B)_z*B_p - curl(B)_p*B_z )
+            !--       = sint * jxBr + cost/r_s * jxBt
+            this%jxBs(n_phi,n_theta,n_r)=sint(n_theta)*(              &
+            &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
+            &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) ) &
+            &                           +cost(n_theta)*or1sn1*(       &
+            &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-  &
+            &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
          end do
-         !---- jxBt= 1/(E*Pm) * 1/(r*sin(theta)) * ( curl(B)_p*B_r - curl(B)_r*B_p )
+         !---- jxBp= 1/(E*Pm) * ( curl(B)_r*B_t - curl(B)_t*B_r )
          do n_phi=1,n_phi_max_3D
-            this%jxBt(n_phi,n_theta)=1.0_cp*( &!DyMagFac*or1sn1*(&
-            &    this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)- &
-            &    this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
-         end do
-         !---- jxBp= 1/(E*Pm) * 1/(r*sin(theta)) * ( curl(B)_r*B_t - curl(B)_t*B_r )
-         do n_phi=1,n_phi_max_3D
-            this%jxBp(n_phi,n_theta)=1.0_cp*( &!DyMagFac*or1sn1*(&
+            this%jxBp(n_phi,n_theta,n_r) =                            &
             &    this%curlBrc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
-            &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
+            &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) 
          end do
       end do   ! theta loop
       !$OMP END PARALLEL DO
-
-      !-- Assemble parts of Lorentz-force on the spherical grid: 
-      !-- curl( curl(B) x B )_z
-      !-- (jxB) . e_s  and r . (jxB) . e_p
-      do n_theta=1,n_theta_max
-         do n_phi=1,n_phi_max_3D
-            lfs(n_phi,n_theta)=sint(n_theta)*this%jxBr(n_phi,n_theta)+ &
-            &      or1_3D(n_r)*cost(n_theta)*this%jxBt(n_phi,n_theta)
-         end do
-      end do
-      !$OMP E
 
    end subroutine get_nl
 !----------------------------------------------------------------------------

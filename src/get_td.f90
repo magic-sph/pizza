@@ -116,16 +116,16 @@ contains
          !$OMP shared(dBdt,djdt,dTheta1S,dTheta1A,dPhi) &
          !$OMP shared(LF_pol,LF_tor,dVxBhLM) &
          !$OMP shared(dLh,or2_3D,r_3D,n_r,this)
-        if ( l_mag_LF ) then !#ifdef SHTNS
-         do lm=1,lm_max
-            l   =lm2l(lm)
-            lmP =lm2lmP(lm)
-            dLh =real(l*(l+1),kind=cp)
-            dbdt(lm)   = dLh*this%VxBpLM(lmP)
-            dVxBhLM(lm)=-dLh*this%VxBtLM(lmP)*r_3D(n_r)!*r_3D(n_r)
-            djdt(lm)   = dLh*this%VxBrLM(lmP)*or2_3D(n_r)!*or2_3D(n_r)
-         end do
-        else !#endifdef SHTNS
+        !if ( if qst_to_spat get_nl% ) then !#ifdef SHTNS
+        ! do lm=1,lm_max
+        !    l   =lm2l(lm)
+        !    lmP =lm2lmP(lm)
+        !    dLh =real(l*(l+1),kind=cp)
+        !    dbdt(lm)   = dLh*this%VxBpLM(lmP)
+        !    dVxBhLM(lm)=-dLh*this%VxBtLM(lmP)*r_3D(n_r)!*r_3D(n_r)
+        !    djdt(lm)   = dLh*this%VxBrLM(lmP)*or2_3D(n_r)!*or2_3D(n_r)
+        ! end do
+        !else !#endifdef SHTNS
          do lm=1,lm_max
             if ( lm == 1 ) then
                lmP=1
@@ -177,7 +177,7 @@ contains
          end do
          !$OMP END PARALLEL DO
          !PERFOFF
-        end if
+        !end if
       else
          do lm=1,lm_max
             dBdt(lm)   =zero
@@ -185,11 +185,6 @@ contains
             dVxBhLM(lm)=zero
          end do
       end if
-
-         l   =lo_map%lm2(1,0)
-         print*, 'INSIDE get_TD::: dbdt(lm10), djdt(lm10)', dbdt(l), djdt(l)
-         l   =lo_map%lm2(1,1)
-         print*, 'INSIDE get_TD::: dbdt(lm11), djdt(lm11)', dbdt(l), djdt(l)
 
    end subroutine get_td
 !-----------------------------------------------------------------------------

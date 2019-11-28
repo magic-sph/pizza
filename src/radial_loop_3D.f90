@@ -2,7 +2,7 @@ module rloop_3D
 
    use precision_mod
    use parallel_mod
-   use constants, only: pi, ci
+   use constants, only: pi, ci, two
    use nonlinear_lm_mod, only: nonlinear_lm_t
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
@@ -13,7 +13,8 @@ module rloop_3D
    use shtns, only: spat_to_SH, scal_to_spat, torpol_to_spat, &
        &            torpol_to_curl_spat, scal_axi_to_grad_spat
 #endif
-   use radial_functions, only: r, r_3D!, or1_3D
+   use horizontal, only: cost, sint
+   use radial_functions, only: r, r_3D, or1
    use z_functions, only: zfunc_type
    use timers_mod, only: timers_type
    use time_schemes, only: type_tscheme
@@ -81,16 +82,14 @@ contains
 
       !-- Local variables
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: lfs_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: runStart, runStop
+      real(cp) :: runStart, runStop, phi!, rsint
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_tmp_Rloc(n_m_max,nRstart:nRstop)
-      integer :: n_r, n_m, m, fh_temp, info_temp
+      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta, n_phi
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
-      integer :: fh_curlbr, info_curlbr, fh_curlbt, info_curlbt, fh_curlbp, info_curlbp
       character(len=144) :: frame_name
 
 #ifdef aDEBUG
@@ -128,24 +127,24 @@ contains
          call open_snapshot_3D(frame_name, time, fh_bt, info_bt)
          write(frame_name, '(A,I0,A,A)') 'frame_bp_3D_',frame_counter,'.',tag
          call open_snapshot_3D(frame_name, time, fh_bp, info_bp)
-         write(frame_name, '(A,I0,A,A)') 'frame_curlbr_3D_',frame_counter,'.',tag
-         call open_snapshot_3D(frame_name, time, fh_curlbr, info_curlbr)
-         write(frame_name, '(A,I0,A,A)') 'frame_curlbt_3D_',frame_counter,'.',tag
-         call open_snapshot_3D(frame_name, time, fh_curlbt, info_curlbt)
-         write(frame_name, '(A,I0,A,A)') 'frame_curlbp_3D_',frame_counter,'.',tag
-         call open_snapshot_3D(frame_name, time, fh_curlbp, info_curlbp)
       end if
 
-      !ur(:,:,:) = 0.0_cp
-      !ut(:,:,:) = 0.0_cp
-      !up(:,:,:) = 0.0_cp
+      ur(:,:,:) = 0.0_cp
+      ut(:,:,:) = 0.0_cp
+      up(:,:,:) = 0.0_cp
       runStart = MPI_Wtime()
       do n_r=nRstart3D,nRstop3D
-         !if ( n_r .ne. 1 .or. n_r .ne. n_r_max_3D ) then
-         !   ur(:,:,n_r) = 0.0_cp
-         !   ut(:,:,n_r) = 10.0_cp*sin(pi*(r_3D(n_r)-r_icb)/(r_cmb-r_icb))**2.
-         !   up(:,:,n_r) = 10.0_cp*sin(pi*((r_3D(n_r)-r_icb)/(r_cmb-r_icb)))
-         !end if
+         if ( n_r .ne. 1 .or. n_r .ne. n_r_max_3D ) then
+            do n_theta=1,n_theta_max
+               !rsint = r_3D(n_r)*sint(n_theta)
+               do n_phi=1,n_phi_max_3D
+                  phi = (n_phi-1)*two*pi/(n_phi_max_3D)
+                  ur(n_phi,n_theta,n_r) = 0.0_cp
+                  ut(n_phi,n_theta,n_r) = sint(n_theta)
+                  up(n_phi,n_theta,n_r) = cos(4*phi)
+               end do
+            end do
+         end if
 
          !-- Transform temperature and magnetic-field from (l,m) to (theta,phi)
          call transform_to_grid_space(temp(:,n_r), b_3D(:,n_r),      &
@@ -161,14 +160,11 @@ contains
             call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))
             call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))
             call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))
-            call write_bulk_snapshot_3D(fh_curlbr, gsa%jxBr(:,:))
-            call write_bulk_snapshot_3D(fh_curlbt, gsa%jxBt(:,:))
-            call write_bulk_snapshot_3D(fh_curlbp, gsa%jxBp(:,:))
          end if
 
          !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
-              &          buo_tmp(:,:,n_r), lfs_tmp(:,:,n_r))
+              &          buo_tmp(:,:,n_r))
 
          !-- Transform back the non-linear terms to (l,m) space
          call transform_to_lm_space(gsa, nl_lm)
@@ -193,17 +189,14 @@ contains
          call close_snapshot_3D(fh_br, info_br)
          call close_snapshot_3D(fh_bt, info_bt)
          call close_snapshot_3D(fh_bp, info_bp)
-         call close_snapshot_3D(fh_curlbr, info_curlbr)
-         call close_snapshot_3D(fh_curlbt, info_curlbt)
-         call close_snapshot_3D(fh_curlbp, info_curlbp)
          frame_counter = frame_counter+1
       end if
 
       !-- Compute z-averaging of buoyancy and lorentz-force
       runStart = MPI_Wtime()
       call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
-      if (  l_mag_LF ) call zinterp%compute_avg(lfs_tmp, lfs_tmp_Rloc)
-      if (  l_mag_LF ) call zinterp%compute_avg(gsa%jxBp,lfp_tmp_Rloc)
+      if (  l_mag_LF ) call zinterp%compute_avg(gsa%jxBs, lfs_tmp_Rloc)
+      if (  l_mag_LF ) call zinterp%compute_avg(gsa%jxBp, lfp_tmp_Rloc)
       runStop = MPI_Wtime()
       if (runStop>runStart) then
          timers%interp = timers%interp+(runStop-runStart)
@@ -254,12 +247,12 @@ contains
             if ( l_mag_LF ) then
             !-- Finish assembling both parts of lorentz force and sum it with dpsidt and dVsOm
                if ( m == 0 ) then
-                  dVsOm_Rloc(n_m,n_r)=DyMagFac*lfp_tmp_Rloc(n_m,n_r)
+                  dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)+DyMagFac*lfp_tmp_Rloc(n_m,n_r)
                else
-                  dVsOm_Rloc(n_m,n_r)= dVsOm_Rloc(n_m,n_r)+DyMagFac*r(n_r)*&
+                  dVsOm_Rloc(n_m,n_r)= dVsOm_Rloc(n_m,n_r)-DyMagFac*r(n_r)*&
                   &                  lfp_tmp_Rloc(n_m,n_r)
                   dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-DyMagFac*ci*m* &
-                  &                    lfs_tmp_Rloc(n_m,n_r)
+                  &                    lfs_tmp_Rloc(n_m,n_r)*or1(n_r)
                end if
             end if
          end do
@@ -305,6 +298,9 @@ contains
          call spat_to_SH(gsa%VxBr, nl_lm%VxBrLM)
          call spat_to_SH(gsa%VxBt, nl_lm%VxBtLM)
          call spat_to_SH(gsa%VxBp, nl_lm%VxBpLM)
+         !-- In get_td --> ifdef SHTNS could be used instead and replace the 3 above lines by:
+         !-- spat_to_qst(gsa%VxBr,gsa%VxBt, gsa%VxBp, nl_lm%VxBrLM, nl_lm%VxBtLM, nl_lm%VxBpLM)
+         !-- can also be done for the temperature!
       end if
 
       call shtns_load_cfg(0)
