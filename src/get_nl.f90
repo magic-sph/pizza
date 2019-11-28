@@ -16,10 +16,10 @@ module grid_space_arrays_mod
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, two, pi
-   use namelists, only: DyMagFac
+   !use namelists, only: DyMagFac
    use truncation_3D, only: n_r_max_3D, n_theta_max, n_phi_max_3D
    use radial_functions, only: or1_3D, or2_3D, r_3D, rgrav_3D
-   use horizontal, only: osint1
+   use horizontal, only: cost, sint, osint1
 
    implicit none
 
@@ -100,7 +100,7 @@ contains
 
    end subroutine finalize
 !----------------------------------------------------------------------------
-   subroutine get_nl(this, vr, vt, vp, n_r, buo, lrf)
+   subroutine get_nl(this, vr, vt, vp, n_r, buo, lfs)
       !
       !  calculates non-linear products in grid-space for radial
       !  level n_r and returns them in arrays wnlr1-3, snlr1-3, bnlr1-3
@@ -119,7 +119,7 @@ contains
 
       !-- Output of variable:
       real(cp), intent(out) :: buo(n_phi_max_3D,n_theta_max)
-      real(cp), intent(out) :: lrf(n_theta_max)
+      real(cp), intent(out) :: lfs(n_phi_max_3D,n_theta_max)
 
       !-- Local variables:
       integer :: n_theta, n_phi
@@ -158,7 +158,7 @@ contains
       !$OMP PARALLEL DO default(shared) &
       !$OMP& private(n_theta, n_phi, or1sn1)
       do n_theta=1,n_theta_max
-         or1sn1=or1_3D(n_r)*osint1(n_theta)
+         or1sn1=or1_3D(n_r)*osint1(n_theta)!sint(n_theta)!
          do n_phi=1,n_phi_max_3D     ! calculate V x B components
             this%VxBr(n_phi,n_theta)=r2*(                   &
             &    vt(n_phi,n_theta)*this%Bpc(n_phi,n_theta)- &
@@ -173,43 +173,47 @@ contains
             &    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
          end do
       end do   ! theta loop
-      this%VxBr(:,:) = zero
-      this%VxBt(:,:) = zero
-      this%VxBp(:,:) = zero
+      !this%VxBr(:,:) = zero
+      !this%VxBt(:,:) = zero
+      !this%VxBp(:,:) = zero
       !$OMP END PARALLEL DO
 
       !------ Get the Lorentz force:
       !$OMP PARALLEL DO default(shared) &
       !$OMP& private(n_theta, n_phi, or1sn1, DyMagFac)
       do n_theta=1,n_theta_max
-         or1sn1=or1_3D(n_r)*osint1(n_theta)
+         !or1sn1=or1_3D(n_r)*osint1(n_theta)
          do n_phi=1,n_phi_max_3D
             !---- jxBr= r**2/(E*Pm) * ( curl(B)_t*B_p - curl(B)_p*B_t )
-            this%jxBr(n_phi,n_theta)=DyMagFac*r2*(                    &
+            this%jxBr(n_phi,n_theta)=1.0_cp*( &!DyMagFac*r2*(&
             &    this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)- &
             &    this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) )
          end do
          !---- jxBt= 1/(E*Pm) * 1/(r*sin(theta)) * ( curl(B)_p*B_r - curl(B)_r*B_p )
          do n_phi=1,n_phi_max_3D
-            this%jxBt(n_phi,n_theta)=DyMagFac*or1sn1*(                &
+            this%jxBt(n_phi,n_theta)=1.0_cp*( &!DyMagFac*or1sn1*(&
             &    this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)- &
             &    this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
          end do
          !---- jxBp= 1/(E*Pm) * 1/(r*sin(theta)) * ( curl(B)_r*B_t - curl(B)_t*B_r )
          do n_phi=1,n_phi_max_3D
-            this%jxBp(n_phi,n_theta)=DyMagFac*or1sn1*(                &
+            this%jxBp(n_phi,n_theta)=1.0_cp*( &!DyMagFac*or1sn1*(&
             &    this%curlBrc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
             &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
          end do
       end do   ! theta loop
       !$OMP END PARALLEL DO
-!      end if
 
-      !-- Store the phi-average of jxB . e_p on the spherical grid
-      do n_phi=1,n_phi_max_3D
-         lrf(:)=lrf(:) + this%jxBp(n_phi,:)
+      !-- Assemble parts of Lorentz-force on the spherical grid: 
+      !-- curl( curl(B) x B )_z
+      !-- (jxB) . e_s  and r . (jxB) . e_p
+      do n_theta=1,n_theta_max
+         do n_phi=1,n_phi_max_3D
+            lfs(n_phi,n_theta)=sint(n_theta)*this%jxBr(n_phi,n_theta)+ &
+            &      or1_3D(n_r)*cost(n_theta)*this%jxBt(n_phi,n_theta)
+         end do
       end do
-      lrf(:)=lrf(:)/(two*pi)
+      !$OMP E
 
    end subroutine get_nl
 !----------------------------------------------------------------------------

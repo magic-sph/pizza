@@ -272,7 +272,7 @@ contains
                        &              b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc,          &
                        &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,        &
                        &              djdt_3d_Rloc, dVxBh_3D_Rloc, dpsidt_Rloc,    &
-                       &              l_frame, zinterp, timers, tscheme)
+                       &              dVsOm_Rloc, l_frame, zinterp, timers, tscheme)
                end if
 
                !------------------

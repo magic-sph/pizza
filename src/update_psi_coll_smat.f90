@@ -6,7 +6,8 @@ module update_psi_coll_smat
    use constants, only: one, zero, ci, half
    use horizontal, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
-       &                l_coriolis_imp, l_buo_imp, l_ek_pump, l_non_rot
+       &                l_coriolis_imp, l_buo_imp, l_ek_pump,        &
+       &                l_non_rot, l_mag_LF
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -302,7 +303,11 @@ contains
                if ( .not. l_buo_imp ) then
                   dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)+buo_Mloc(n_m,n_r)
                end if
-
+            else
+               if ( l_mag_LF ) then
+                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)+&
+                  &                         dVsOm_Mloc(n_m,n_r)
+               end if
             end if
          end do
       end do

@@ -51,7 +51,6 @@ module z_functions
       procedure :: prepare_extension
       procedure :: extrapolate
       procedure :: compute_thermal_wind
-      procedure :: compute_lorentz_force
       procedure :: fill_mat
    end type zfunc_type
 
@@ -372,7 +371,7 @@ contains
       !real(cp) :: Zwb(n_theta_max/2,0:n_procs-1)
       !-- Local variables
       integer :: n_th_NHS, n_z, n_z_r, n_z_t, n_th_SHS
-      integer :: n_r, n_p
+      integer :: n_r!, n_p
       real(cp) :: thwFac
 
       thwFac=BuoFac/CorFac
@@ -463,92 +462,6 @@ contains
 
    end subroutine compute_thermal_wind
 !--------------------------------------------------------------------------------
-   subroutine compute_lorentz_force(this, lrf0, lrfLM, lrf_Rloc, lrf0_Rloc)
-
-      !-- Input variables
-      class(zfunc_type) :: this
-      real(cp), intent(in) :: lrf0(n_theta_max,nRstart3D:nRstop3D)
-      complex(cp), intent(inout) :: lrfLM(lm_max,nRstart3D:nRstop3D,2)
-
-      !-- Output variables - modified (inout)
-      real(cp), intent(inout) :: lrf_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      complex(cp), intent(inout) :: lrf0_Rloc(nRstart:nRstop)
-
-      !-- Local arrays
-      real(cp) :: tmp_lrf0(2,n_r_max)
-      complex(cp) :: lrf_r(lmStart:lmStop,n_r_max_3D)
-      complex(cp) :: tmp_lrf(lm_max,nRstart3D:nRstop3D)
-      !-- Local variables
-      integer :: n_z, n_m_QG, n_m, m3D
-      integer :: n_r_r, n_th_NHS, n_th_SHS
-      integer :: n_r, lm, l, m, lmP
-      real(cp) :: czavg
-
-
-      !call allgather_from_rloc_3D(lrfLM(:,:,1),lrf_r,lm_max)
-      !call get_dr( lrf_r, lrf_r, n_r_max_3D, rscheme_3D, nocopy=.true. )
-   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before get dr jxB_t',  lrf_Rloc(1,1,1)
-      call transp_r2lm(r2lm_fields, lrfLM(:,:,1),lrf_r)
-      call get_dr( lrf_r, lrf_r, lmStart, lmStop, &
-           &       n_r_max_3D, rscheme_3D, nocopy=.true. )
-      call transp_lm2r(lm2r_fields, lrf_r, lrfLM(:,:,1))
-
-   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before computing VxjxB_z',  lrf_Rloc(1,1,1)
-      !-- Remaining term for the lorentz force
-      !!$OMP PARALLEL DO default(shared) &
-      !!$OMP& private(n_theta, n_phi)
-      !-- Assemble curl jxB . e_z on the spherical grid
-      !-- = 1/r * (dr(r jxB_t) - dth(jxB_r))
-      do n_r=nRstart3D,nRstop3D
-         do lm=2,lm_max
-            l   =lm2l(lm)
-            m   =lm2m(lm)
-            lmP =lm2lmP(lm)
-            tmp_lrf(lmP,n_r)=or1_3D(n_r)*(    &
-            &                lrfLM(lmP,n_r,1)-&
-            &                lrfLM(lmP,n_r,2))
-         end do
-      end do
-      !!$OMP END PARALLEL DO
-
-   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before back to grid',  lrf_Rloc(1,1,1)
-      !-- Back to the grid before the z-averaging
-      do n_r=nRstart3D,nRstop3D
-         call scal_to_spat(tmp_lrf(:,n_r), lrf_Rloc(:,:,n_r))
-      end do
-
-   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before computing jxB_p z-avg',  lrf_Rloc(1,1,1)
-      !-- z-average of the non-axisymmetric part (m==0)
-      !-- = <jxB_p>
-      do n_r=1,n_r_max
-         do n_z=1,4*n_z_max
-            n_th_NHS= this%interp_zt_mat(n_z,n_r)
-            n_th_SHS= n_theta_max+1-n_th_NHS
-            n_r_r = this%interp_zr_mat(n_z,n_r)
-            czavg = this%interp_wt_mat(n_z,n_r)
-            if ( n_r_r >= nRstart3D .and. n_r_r <= nRstop3D ) then
-               tmp_lrf0(1,n_r) = tmp_lrf0(1,n_r) + czavg* &
-               &                    (lrf0(n_th_NHS,n_r_r) &
-               &                   + lrf0(n_th_SHS,n_r_r))
-            end if
-         end do
-      end do
-
-   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before AllReduce',  lrf_Rloc(1,1,1)
-      do n_r=1,n_r_max
-         call MPI_Allreduce(MPI_IN_PLACE, tmp_lrf0(:,n_r), 2, MPI_DEF_REAL, &
-              &             MPI_SUM, MPI_COMM_WORLD, ierr)
-      end do
-
-   if( rank==0 ) print*, 'INSIDE LORENTZ_force - before back to grid m=0',  lrf_Rloc(1,1,1)
-      !-- Transforms back to spectral space
-      do n_r=nRstart,nRstop
-         !call fft(tmp_lrf0(n_r), lrf0_Rloc(n_r), l_3D=.true.)
-         lrf0_Rloc(n_r)=cmplx(tmp_lrf0(1,n_r),0.0,kind=cp)
-      end do
-
-   end subroutine compute_lorentz_force
-!--------------------------------------------------------------------------------
    subroutine fill_mat(this)
 
       class(zfunc_type) :: this
@@ -558,7 +471,7 @@ contains
 
       !-- Local variables
       integer :: n_r, n_t, n_z, n_r_r, n_t_t
-      integer :: n_start, n_p
+      integer :: n_start!, n_p
       real(cp) :: r_r, z_r, c_t, h
       real(cp) :: norm, alpha_r, alpha_t
       real(cp) :: s_r, dz, th
