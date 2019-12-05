@@ -303,7 +303,7 @@ contains
       !-- Local variables
       integer :: n_r, lm
 
-      call get_dr( dVxBh_LMloc,work_j_LMloc, lmStart, lmStop, &
+      call get_dr( dVxBh_LMloc, work_j_LMloc, lmStart, lmStop, &
            &       n_r_max_3D, rscheme_3D, nocopy=.true. )
 
       do n_r=1,n_r_max_3D
@@ -419,8 +419,6 @@ contains
             jMat(1,n_r_out)=rscheme_3D%rnorm*rscheme_3D%rMat(1,n_r_out)
          else if ( ktopb == 2 ) then
             call abortRun('! Boundary condition ktopb=2 not defined!')
-         else if ( ktopb == 3 ) then
-            call abortRun('! Boundary condition ktopb=3 not defined!')
          else if ( ktopb == 4 ) then
             !----- pseudo vacuum condition, field has only
             !      a radial component, horizontal components

@@ -99,10 +99,8 @@ contains
          allocate( r_3D(n_r_max_3D), or1_3D(n_r_max_3D), or2_3D(n_r_max_3D) )
          allocate( rgrav_3D(n_r_max_3D) )
          bytes_allocated = bytes_allocated+4*n_r_max_3D*SIZEOF_DEF_REAL
-         if ( l_heat_3D ) then
-            allocate( tcond_3D(n_r_max_3D),dtcond_3D(n_r_max_3D) )
-            bytes_allocated = bytes_allocated+2*n_r_max_3D*SIZEOF_DEF_REAL
-         end if
+         allocate( tcond_3D(n_r_max_3D),dtcond_3D(n_r_max_3D) )
+         bytes_allocated = bytes_allocated+2*n_r_max_3D*SIZEOF_DEF_REAL
 
          allocate ( type_cheb :: rscheme_3D )
          call rscheme_3D%initialize(lmStart,lmStop,n_r_max_3D,n_cheb_max_3D,0,.true.)
@@ -120,7 +118,7 @@ contains
       deallocate( r, or1, or2 )
 
       if ( l_3D ) then
-         if ( l_heat_3D ) deallocate( tcond_3D, dtcond_3D )
+         deallocate( tcond_3D, dtcond_3D )
          deallocate( r_3D, or1_3D, or2_3D, rgrav_3D )
          call rscheme_3D%finalize()
       end if
@@ -251,11 +249,16 @@ contains
       or2_3D(:)=or1_3D*or1_3D(:) ! 1/r_3D**2
 
       !-- Conducting state
-      if ( kbott == 1 .and. ktopt == 1 ) then
-         tcond_3D(:) = r_icb*r_cmb*or1_3D(:)-r_icb
-         dtcond_3D(:)= -r_icb*r_cmb*or2_3D(:)
+      if ( l_heat_3D ) then
+         if ( kbott == 1 .and. ktopt == 1 ) then
+            tcond_3D(:) = r_icb*r_cmb*or1_3D(:)-r_icb
+            dtcond_3D(:)= -r_icb*r_cmb*or2_3D(:)
+         else
+            call abortRun('tcond 3D with other BCs not done yet')
+         end if
       else
-         call abortRun('tcond 3D with other BCs not done yet')
+         tcond_3D(:) = 0.0_cp
+         dtcond_3D(:) = 0.0_cp
       end if
 
    end subroutine radial_3D

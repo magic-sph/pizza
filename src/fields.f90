@@ -5,7 +5,8 @@ module fields
    !
    use precision_mod
    use constants, only: zero
-   use namelists, only: l_cheb_coll, l_heat, l_chem, l_heat_3D, l_mag_3D
+   use namelists, only: l_cheb_coll, l_heat, l_chem, l_heat_3D, l_mag_3D, &
+       &                l_3D
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
    use truncation_3D, only: lm_max, n_r_max_3D, n_theta_max, n_phi_max_3D
@@ -154,22 +155,14 @@ contains
       up_Rloc(:,:)=zero
       om_Rloc(:,:)=zero
 
-      !-- 3-D temperature:
-      if ( l_heat_3D ) then
-         allocate( temp_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
-         allocate( dtemp_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
+      !-- 3-D velocity field:
+      if ( l_3D ) then
          allocate( work_LMloc(lmStart:lmStop,n_r_max_3D) )
-         allocate( temp_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
          allocate( work_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
          bytes_allocated = bytes_allocated + &
-         &                 2*(lmStop-lmStart+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
+         &                 (lmStop-lmStart+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
          bytes_allocated = bytes_allocated + &
-         &                 2*lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
-         temp_3D_LMloc(:,:) =zero
-         dtemp_3D_LMloc(:,:)=zero
-         work_LMloc(:,:)    =zero
-         temp_3D_Rloc(:,:)  =zero
-         work_3D_Rloc(:,:)  =zero
+         &                 lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
 
          allocate( ur_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
          allocate( ut_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
@@ -179,8 +172,24 @@ contains
          ur_3D_Rloc(:,:,:)=0.0_cp
          ut_3D_Rloc(:,:,:)=0.0_cp
          up_3D_Rloc(:,:,:)=0.0_cp
+      end if 
+
+      !-- 3-D temperature:
+      if ( l_heat_3D ) then
+         allocate( temp_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
+         allocate( dtemp_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
+         allocate( temp_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
+         bytes_allocated = bytes_allocated + &
+         &                 2*(lmStop-lmStart+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
+         bytes_allocated = bytes_allocated + &
+         &                 lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
+         temp_3D_LMloc(:,:) =zero
+         dtemp_3D_LMloc(:,:)=zero
+         work_LMloc(:,:)    =zero
+         temp_3D_Rloc(:,:)  =zero
+         work_3D_Rloc(:,:)  =zero
       else
-         allocate( temp_3D_Rloc(1,1), temp_3D_LMloc(1,1) )
+         allocate( temp_3D_Rloc(1,1), temp_3D_LMloc(1,1), dtemp_3D_LMloc(1,1) )
       end if
 
       !-- Magnetic field 3-D:
@@ -231,9 +240,12 @@ contains
          deallocate( b_3D_LMloc, db_3D_LMloc, ddb_3D_LMloc, work_b_LMloc )
       end if
       if ( l_heat_3D ) then
+         deallocate( temp_3D_LMloc, dtemp_3D_LMloc )
+         deallocate( temp_3D_Rloc )
+      end if
+      if ( l_3D ) then
+         deallocate( work_3D_Rloc, work_LMloc )
          deallocate( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc )
-         deallocate( work_LMloc, temp_3D_LMloc, dtemp_3D_LMloc )
-         deallocate( work_3D_Rloc, temp_3D_Rloc )
       end if
       if ( l_heat ) then
          deallocate( temp_Mloc, dtemp_Mloc, temp_Rloc )

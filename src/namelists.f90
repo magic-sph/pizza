@@ -293,6 +293,8 @@ contains
          l_mag_3D=.true.
       end if
 
+      if ( l_mag_3D ) l_3D = .true.
+
       if ( raxi == 0.0_cp ) then
          l_chem=.false.
       else

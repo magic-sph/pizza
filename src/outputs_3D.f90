@@ -42,7 +42,7 @@ contains
             open(newunit=n_heat_file, file=file_name, status='new')
          end if
          if ( l_mag_3D ) then
-            file_name = 'mag_3D.'//tag
+            file_name = 'e_mag.'//tag
             open(newunit=n_mag_file, file=file_name, status='new')
          end if
          call tempR%initialize(1,n_r_max_3D)
@@ -95,17 +95,9 @@ contains
 
       !-- Local variables
       real(cp) :: temp0(n_r_max_3D), dtemp0(n_r_max_3D)
-      !real(cp) :: b0(n_r_max_3D), db0(n_r_max_3D), j0(n_r_max_3D)
-      !real(cp) :: b2(n_r_max_3D), db2(n_r_max_3D), j2(n_r_max_3D)
       real(cp) :: NuTop, NuBot, tTop, tBot, NuDelta, beta_t
-      !real(cp) :: dbTop, dbBot, bTop, bBot, jTop, jBot
-      !real(cp) :: bTop2, bBot2, jTop2, jBot2
-      !real(cp) :: bm, jm
-      logical :: rank_has_lm10, rank_has_lm11
-#ifdef WITH_MPI
-      integer :: status(MPI_STATUS_SIZE)
-#endif
-      integer :: sr_tag, request1, request2
+      !logical :: rank_has_lm10, rank_has_lm11
+      !integer :: sr_tag, request1, request2
       integer :: n_r, lm, l, m
       integer :: lm10, lm11
       complex(cp) :: b10, b11
@@ -120,7 +112,7 @@ contains
       real(cp) :: e_pol_r(n_r_max_3D), e_tor_r(n_r_max_3D)
       real(cp) :: e_pol_axis_r(n_r_max_3D), e_tor_axis_r(n_r_max_3D), e_dipole_axis_r(n_r_max_3D)
 
-      if ( rank == 0 ) then
+      if ( l_heat_3D .and. rank == 0  ) then
          temp0(:) = osq4pi*real(temp_3D(1, :))
          call get_dr(temp0, dtemp0, n_r_max_3D, rscheme_3D)
 
@@ -130,7 +122,7 @@ contains
 
          !-- Nusset based on the ratio of temperature contrast
          NuDelta = (tcond_3D(n_r_max_3D)-tcond_3D(1)) / &
-         &         (temp0(n_r_max_3D)-temp0(1))
+         &         (temp0(n_r_max_3D)-temp0(1)+epsilon(1.0_cp)) !-> Divide by 0 when 0 Temperature
 
          !-- Temperature gradient at mid-shell
          beta_t = dtemp0(n_r_max_3D/2)
@@ -269,7 +261,7 @@ contains
             else
                phi_dip=-rad*atan2(aimag(b11),real(b11))
             end if
-            EDip      =E_dip_axis/(E_pol+E_tor)
+            EDip      =E_dip_axis/(E_pol+E_tor+epsilon(1.0_cp)) !-> Divide by 0 when 0 field
 
             write(n_mag_file, '(1P, ES20.12, 4ES16.8)') time, E_pol, E_tor,   & 
             &                                           E_pol_axis, E_tor_axis

@@ -271,7 +271,7 @@ contains
                        &              temp_3D_Rloc, dtempdt_3D_Rloc, dVrT_3D_Rloc, &
                        &              b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc,          &
                        &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,        &
-                       &              djdt_3d_Rloc, dVxBh_3D_Rloc, dpsidt_Rloc,    &
+                       &              djdt_3D_Rloc, dVxBh_3D_Rloc, dpsidt_Rloc,    &
                        &              dVsOm_Rloc, l_frame, zinterp, timers, tscheme)
                end if
 
@@ -413,6 +413,28 @@ contains
                   end if
                end if
             end if
+
+      block
+
+         use truncation, only: n_r_max, n_m_max
+         use communications, only: gather_from_mloc_to_rank0
+
+         integer :: file_handle
+         complex(cp) :: dpsidt_tmp_hat(n_m_max,n_r_max)
+
+         call gather_from_mloc_to_rank0(dpsidt%expl(:,:,tscheme%istage), dpsidt_tmp_hat)
+
+         print*, dpsidt_tmp_hat(1,:)
+
+         open(newunit=file_handle, file='dpsidt.dat', status='new', form='unformatted',&
+         &    access='stream')
+         write(file_handle) dpsidt_tmp_hat
+         close(file_handle)
+      end block
+
+      print*, 'ALL GOOD END END!**'
+
+      stop
 
             ! Increment current stage
             tscheme%istage = tscheme%istage+1

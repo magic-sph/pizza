@@ -55,7 +55,7 @@ contains
       class(type_tscheme), intent(inout) :: tscheme
 
       !-- Local variables
-      integer :: m, n_r, n_m, lm, l
+      integer :: m, n_r, n_m
       logical :: lMat
       real(cp) :: h2
       character(len=76) :: message
@@ -547,19 +547,19 @@ contains
       real(cp) :: b_pol, b_tor
 
       real(cp) :: b1(n_r_max_3D)
-      real(cp) :: jVarCond(n_r_max_3D)
-      real(cp) :: bR, bI, rr, rdm
-      real(cp) :: aVarCond, bVarCond,x
+      real(cp) :: bR, bI, rdm
+      real(cp) :: x
       integer :: bExp
 
       integer :: lm, lm0, l1, m1
-      integer :: lm10, lm20, lm30, lm11
+      integer :: lm10, lm20, lm30, lm11, lm44
 
 
       lm10 = lo_map%lm2(1,0)
       lm20 = lo_map%lm2(2,0)
       lm30 = lo_map%lm2(3,0)
       lm11 = lo_map%lm2(1,1)
+      lm44 = lo_map%lm2(4,4)
 
       lm0=lm20 ! Default quadrupole field
 
@@ -619,8 +619,16 @@ contains
             do n_r=1,n_r_max_3D
                b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol * (       &
                &     r_3D(n_r)**3 - four*third*r_cmb*r_3D(n_r)**2  &
-               &     + third*r_icb**4/r(n_r)                )
+               &     + third*r_icb**4/r_3D(n_r)                )
             end do
+
+            !b_tor=-four*third*amp_B*sqrt(pi/20.0_cp)
+            !b_pol= amp_B*sqrt(three*pi)/10.0_cp
+            !do n_r=1,n_r_max_3D
+            !   b_LMloc(lm44,n_r)=b_LMloc(lm44,n_r)+b_pol * (       &
+            !   &     (r_3D(n_r)-r_icb)**3 - four*third*r_cmb*r_3D(n_r)**2  &
+            !   &     + third*r_icb**4/r_3D(n_r)                )
+            !end do
          end if
 
          if( (lm20>=lmStart) .and. (lm20<=lmStop) ) then ! select processor
@@ -628,7 +636,7 @@ contains
             b_tor=-four*third*amp_B*sqrt(pi/5.0_cp)
             b_pol=amp_B*sqrt(three*pi)/four
             do n_r=1,n_r_max_3D
-               aj_LMloc(lm20,n_r)=aj_LMloc(lm20,n_r) + b_tor*r(n_r)*sin(pi*(r_3D(n_r)-r_icb))
+               aj_LMloc(lm20,n_r)=aj_LMloc(lm20,n_r) + b_tor*r_3D(n_r)*sin(pi*(r_3D(n_r)-r_icb))
             end do
          end if
 

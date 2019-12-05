@@ -6,7 +6,7 @@ module nonlinear_lm_mod
    use truncation_3D, only: lm_max, lmP_max
    use radial_functions, only: r_3D, or2_3D
    use horizontal, only: dTheta1S, dTheta1A, dPhi
-   use namelists, only: l_mag_3D, l_mag_LF
+   use namelists, only: l_heat_3D, l_mag_3D
    use constants, only: zero
 
    implicit none
@@ -32,16 +32,25 @@ contains
       class(nonlinear_lm_t) :: this
       integer, intent(in) :: lmP_max
 
-      allocate( this%VTrLM(lmP_max), this%VTtLM(lmP_max), this%VTpLM(lmP_max) )
-      allocate( this%VxBrLM(lmP_max), this%VxBtLM(lmP_max), this%VxBpLM(lmP_max) )
-      bytes_allocated = bytes_allocated + 6*lmP_max*SIZEOF_DEF_COMPLEX
+      if ( l_heat_3D ) then
+         allocate( this%VTrLM(lmP_max), this%VTtLM(lmP_max), this%VTpLM(lmP_max) )
+         bytes_allocated = bytes_allocated + 3*lmP_max*SIZEOF_DEF_COMPLEX
+      endif
+      if ( l_mag_3D ) then
+         allocate( this%VxBrLM(lmP_max), this%VxBtLM(lmP_max), this%VxBpLM(lmP_max) )
+         bytes_allocated = bytes_allocated + 3*lmP_max*SIZEOF_DEF_COMPLEX
+      endif
 
-      this%VTrLM(:)=zero
-      this%VTtLM(:)=zero
-      this%VTpLM(:)=zero
-      this%VxBrLM(:)=zero
-      this%VxBtLM(:)=zero
-      this%VxBpLM(:)=zero
+      if ( l_heat_3D ) then
+         this%VTrLM(:)=zero
+         this%VTtLM(:)=zero
+         this%VTpLM(:)=zero
+      endif
+      if ( l_mag_3D ) then
+         this%VxBrLM(:)=zero
+         this%VxBtLM(:)=zero
+         this%VxBpLM(:)=zero
+      endif
 
    end subroutine initialize
 !----------------------------------------------------------------------------
@@ -49,8 +58,12 @@ contains
 
       class(nonlinear_lm_t) :: this
 
-      deallocate( this%VTrLM, this%VTtLM, this%VTpLM )
-      deallocate( this%VxBrLM, this%VxBtLM, this%VxBpLM )
+      if ( l_heat_3D ) then
+         deallocate( this%VTrLM, this%VTtLM, this%VTpLM )
+      endif
+      if ( l_mag_3D ) then
+         deallocate( this%VxBrLM, this%VxBtLM, this%VxBpLM )
+      endif
 
    end subroutine finalize
 !----------------------------------------------------------------------------
@@ -76,37 +89,39 @@ contains
       real(cp) :: dLh
       complex(cp) :: dTdt_loc
 
-      !-- Spherically-symmetric contribution:
-      dVTrLM(1)=this%VTrLM(1)
-      dTdt(1)  =zero
+      if ( l_heat_3D  ) then
+         !-- Spherically-symmetric contribution:
+         dVTrLM(1)=this%VTrLM(1)
+         dTdt(1)  =zero
 
-      !PERFON('td_heat')
-      !$OMP PARALLEL DEFAULT(shared) &
-      !$OMP private(lm,l,m,lmP,lmPS,lmPA,dTdt_loc)
-      !LIKWID_ON('td_heat')
-      !$OMP DO
-      do lm=2,lm_max
-         l   =lm2l(lm)
-         m   =lm2m(lm)
-         lmP =lm2lmP(lm)
-         lmPS=lmP2lmPS(lmP)
-         lmPA=lmP2lmPA(lmP)
-         !------ This is horizontal heat advection:
-         if ( l > m ) then
-            dTdt_loc=-dTheta1S(lm)*this%VTtLM(lmPS) &
-            &        +dTheta1A(lm)*this%VTtLM(lmPA) &
-            &            -dPhi(lm)*this%VTpLM(lmP)
-         else if ( l == m ) then
-            dTdt_loc= dTheta1A(lm)*this%VTtLM(lmPA) &
-            &         -dPhi(lm)*this%VTpLM(lmP)
-         end if
-         dVTrLM(lm)=this%VTrLM(lmP)
-         dTdt(lm)  =dTdt_loc
+         !PERFON('td_heat')
+         !$OMP PARALLEL DEFAULT(shared) &
+         !$OMP private(lm,l,m,lmP,lmPS,lmPA,dTdt_loc)
+         !LIKWID_ON('td_heat')
+         !$OMP DO
+         do lm=2,lm_max
+            l   =lm2l(lm)
+            m   =lm2m(lm)
+            lmP =lm2lmP(lm)
+            lmPS=lmP2lmPS(lmP)
+            lmPA=lmP2lmPA(lmP)
+            !------ This is horizontal heat advection:
+            if ( l > m ) then
+               dTdt_loc=-dTheta1S(lm)*this%VTtLM(lmPS) &
+               &        +dTheta1A(lm)*this%VTtLM(lmPA) &
+               &            -dPhi(lm)*this%VTpLM(lmP)
+            else if ( l == m ) then
+               dTdt_loc= dTheta1A(lm)*this%VTtLM(lmPA) &
+               &         -dPhi(lm)*this%VTpLM(lmP)
+            end if
+            dVTrLM(lm)=this%VTrLM(lmP)
+            dTdt(lm)  =dTdt_loc
          end do
-      !$OMP end do
-      !LIKWID_OFF('td_heat')
-      !$OMP END PARALLEL
-      !PERFOFF
+         !$OMP end do
+         !LIKWID_OFF('td_heat')
+         !$OMP END PARALLEL
+         !PERFOFF
+      end if ! l_heat_3D?
 
       if ( l_mag_3D  ) then
          !PERFON('td_magnl')
@@ -116,21 +131,21 @@ contains
          !$OMP shared(dBdt,djdt,dTheta1S,dTheta1A,dPhi) &
          !$OMP shared(LF_pol,LF_tor,dVxBhLM) &
          !$OMP shared(dLh,or2_3D,r_3D,n_r,this)
-        !if ( if qst_to_spat get_nl% ) then !#ifdef SHTNS
-        ! do lm=1,lm_max
-        !    l   =lm2l(lm)
-        !    lmP =lm2lmP(lm)
-        !    dLh =real(l*(l+1),kind=cp)
-        !    dbdt(lm)   = dLh*this%VxBpLM(lmP)
-        !    dVxBhLM(lm)=-dLh*this%VxBtLM(lmP)*r_3D(n_r)!*r_3D(n_r)
-        !    djdt(lm)   = dLh*this%VxBrLM(lmP)*or2_3D(n_r)!*or2_3D(n_r)
-        ! end do
-        !else !#endifdef SHTNS
+         !if ( if qst_to_spat get_nl% ) then !#ifdef SHTNS
+         ! do lm=1,lm_max
+         !    l   =lm2l(lm)
+         !    lmP =lm2lmP(lm)
+         !    dLh =real(l*(l+1),kind=cp)
+         !    dbdt(lm)   = dLh*this%VxBpLM(lmP)
+         !    dVxBhLM(lm)=-dLh*this%VxBtLM(lmP)*r_3D(n_r)!*r_3D(n_r)
+         !    djdt(lm)   = dLh*this%VxBrLM(lmP)*or2_3D(n_r)!*or2_3D(n_r)
+         ! end do
+         !else !#endifdef SHTNS
          do lm=1,lm_max
             if ( lm == 1 ) then
                lmP=1
                lmPA=lmP2lmPA(lmP)
-               dVxBhLM(lm)=-r_3D(n_r)*r_3D(n_r)           &!1.0_cp&!
+               dVxBhLM(lm)=-r_3D(n_r)*r_3D(n_r)           &
                &           *dTheta1A(lm)*this%VxBtLM(lmPA)
                dBdt(lm)   =-dTheta1A(lm)*this%VxBpLM(lmPA)
                djdt(lm)   = zero
@@ -164,12 +179,12 @@ contains
             !        Radial derivative performed in get_dr_td
             !PERFON('td_mnl2')
             if ( l > m ) then
-               dVxBhLM(lm)= r_3D(n_r)*r_3D(n_r)*(           &!(&!
+               dVxBhLM(lm)= r_3D(n_r)*r_3D(n_r)*(           &
                &             dTheta1S(lm)*this%VxBtLM(lmPS) &
                &            -dTheta1A(lm)*this%VxBtLM(lmPA) &
                &            +dPhi(lm)    *this%VxBpLM(lmP) )
             else if ( l == m ) then
-               dVxBhLM(lm)= r_3D(n_r)*r_3D(n_r)*(           &!(&!
+               dVxBhLM(lm)= r_3D(n_r)*r_3D(n_r)*(           &
                &            -dTheta1A(lm)*this%VxBtLM(lmPA) &
                &            +dPhi(lm)    *this%VxBpLM(lmP) )
             end if
@@ -177,14 +192,7 @@ contains
          end do
          !$OMP END PARALLEL DO
          !PERFOFF
-        !end if
-      else
-         do lm=1,lm_max
-            dBdt(lm)   =zero
-            djdt(lm)   =zero
-            dVxBhLM(lm)=zero
-         end do
-      end if
+      end if ! l_mag_3D?
 
    end subroutine get_td
 !-----------------------------------------------------------------------------

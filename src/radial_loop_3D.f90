@@ -6,7 +6,7 @@ module rloop_3D
    use nonlinear_lm_mod, only: nonlinear_lm_t
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
-   use namelists, only: BuoFac, DyMagFac, tag, l_mag_3D, l_mag_LF, r_cmb, r_icb
+   use namelists, only: BuoFac, DyMagFac, tag, l_heat_3D, l_mag_3D, l_mag_LF, r_cmb, r_icb
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max, l_max, n_r_max_3D
    use truncation, only: idx2m, n_m_max
 #ifdef WITH_SHTNS
@@ -82,6 +82,8 @@ contains
 
       !-- Local variables
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: jxBs(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: jxBp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop, phi!, rsint
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
@@ -103,10 +105,12 @@ contains
 #endif
 
       !-- get thermal wind
-      do n_r=nRstart3D,nRstop3D
-         !-- Take the gradient of the axisymmetric part
-         call transform_axi_to_dth_grid_space(temp(1:l_max+1,n_r), dTdth(:,n_r))
-      end do
+      if ( l_heat_3D ) then
+         do n_r=nRstart3D,nRstop3D
+            !-- Take the gradient of the axisymmetric part
+            call transform_axi_to_dth_grid_space(temp(1:l_max+1,n_r), dTdth(:,n_r))
+         end do
+      end if
 
       !-- Compute thermal wind --> modify up_3D_Rloc
       call zinterp%compute_thermal_wind(dTdth, up)
@@ -119,52 +123,59 @@ contains
          call open_snapshot_3D(frame_name, time, fh_ut, info_ut)
          write(frame_name, '(A,I0,A,A)') 'frame_up_3D_',frame_counter,'.',tag
          call open_snapshot_3D(frame_name, time, fh_up, info_up)
-         write(frame_name, '(A,I0,A,A)') 'frame_temp_3D_',frame_counter,'.',tag
-         call open_snapshot_3D(frame_name, time, fh_temp, info_temp)
-         write(frame_name, '(A,I0,A,A)') 'frame_br_3D_',frame_counter,'.',tag
-         call open_snapshot_3D(frame_name, time, fh_br, info_br)
-         write(frame_name, '(A,I0,A,A)') 'frame_bt_3D_',frame_counter,'.',tag
-         call open_snapshot_3D(frame_name, time, fh_bt, info_bt)
-         write(frame_name, '(A,I0,A,A)') 'frame_bp_3D_',frame_counter,'.',tag
-         call open_snapshot_3D(frame_name, time, fh_bp, info_bp)
+         if ( l_heat_3D ) then
+            write(frame_name, '(A,I0,A,A)') 'frame_temp_3D_',frame_counter,'.',tag
+            call open_snapshot_3D(frame_name, time, fh_temp, info_temp)
+         end if
+         if ( l_mag_3D ) then
+            write(frame_name, '(A,I0,A,A)') 'frame_br_3D_',frame_counter,'.',tag
+            call open_snapshot_3D(frame_name, time, fh_br, info_br)
+            write(frame_name, '(A,I0,A,A)') 'frame_bt_3D_',frame_counter,'.',tag
+            call open_snapshot_3D(frame_name, time, fh_bt, info_bt)
+            write(frame_name, '(A,I0,A,A)') 'frame_bp_3D_',frame_counter,'.',tag
+            call open_snapshot_3D(frame_name, time, fh_bp, info_bp)
+         end if
       end if
 
-      ur(:,:,:) = 0.0_cp
-      ut(:,:,:) = 0.0_cp
-      up(:,:,:) = 0.0_cp
+      !ur(:,:,:) = 0.0_cp
+      !ut(:,:,:) = 0.0_cp
+      !up(:,:,:) = 0.0_cp
       runStart = MPI_Wtime()
       do n_r=nRstart3D,nRstop3D
-         if ( n_r .ne. 1 .or. n_r .ne. n_r_max_3D ) then
-            do n_theta=1,n_theta_max
-               !rsint = r_3D(n_r)*sint(n_theta)
-               do n_phi=1,n_phi_max_3D
-                  phi = (n_phi-1)*two*pi/(n_phi_max_3D)
-                  ur(n_phi,n_theta,n_r) = 0.0_cp
-                  ut(n_phi,n_theta,n_r) = sint(n_theta)
-                  up(n_phi,n_theta,n_r) = cos(4*phi)
-               end do
-            end do
-         end if
+            !do n_theta=1,n_theta_max
+            !   do n_phi=1,n_phi_max_3D
+            !      phi = (n_phi-1)*two*pi/(n_phi_max_3D)
+            !      ur(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi+pi*0.25_cp)
+            !      ut(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*cost(n_theta)
+            !      up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi)
+            !   end do
+            !end do
 
          !-- Transform temperature and magnetic-field from (l,m) to (theta,phi)
          call transform_to_grid_space(temp(:,n_r), b_3D(:,n_r),      &
               &                      db_3D(:,n_r), ddb_3D(:,n_r),    &
               &                      aj_3D(:,n_r), dj_3D(:,n_r), n_r, gsa)
 
+
+         !-- Construct non-linear terms in physical space
+         call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
+              &          buo_tmp(:,:,n_r),jxBs(:,:,n_r),jxBp(:,:,n_r))
+
          !-- Write the snapshot on the grid (easier to handle)
          if ( l_frame .and. tscheme%istage==1 ) then
             call write_bulk_snapshot_3D(fh_ur, ur(:,:,n_r))
             call write_bulk_snapshot_3D(fh_ut, ut(:,:,n_r))
             call write_bulk_snapshot_3D(fh_up, up(:,:,n_r))
-            call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))
-            call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))
-            call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))
-            call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))
+            if ( l_heat_3D ) then
+               call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))
+            end if
+            if ( l_mag_3D ) then
+               call write_bulk_snapshot_3D(fh_br, jxBs(:,:,n_r))!gsa%Brc(:,:))
+               call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))
+               call write_bulk_snapshot_3D(fh_bp, jxBp(:,:,n_r))!gsa%Bpc(:,:))
+            end if
          end if
 
-         !-- Construct non-linear terms in physical space
-         call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
-              &          buo_tmp(:,:,n_r))
 
          !-- Transform back the non-linear terms to (l,m) space
          call transform_to_lm_space(gsa, nl_lm)
@@ -172,6 +183,15 @@ contains
          !-- Get theta and phi derivatives using recurrence relations
          call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r),                     &
               &            dVxBhLM(:,n_r),dbdt_3D(:,n_r),djdt_3D(:,n_r), n_r )
+
+
+            do n_theta=1,n_theta_max
+               do n_phi=1,n_phi_max_3D
+                  phi = (n_phi-1)*two*pi/(n_phi_max_3D)
+                  !jxBp(n_phi,n_theta,n_r) = sint(n_theta)*r_3D(n_r) + cost(n_theta)*cost(n_theta)
+                  jxBp(n_phi,n_theta,n_r) =  r_3D(n_r)*cost(n_theta)*sin(pi*r_3D(n_r)*cost(n_theta))
+               end do
+            end do
       end do
 
       runStop = MPI_Wtime()
@@ -185,18 +205,22 @@ contains
          call close_snapshot_3D(fh_ur, info_ur)
          call close_snapshot_3D(fh_ut, info_ut)
          call close_snapshot_3D(fh_up, info_up)
-         call close_snapshot_3D(fh_temp, info_temp)
-         call close_snapshot_3D(fh_br, info_br)
-         call close_snapshot_3D(fh_bt, info_bt)
-         call close_snapshot_3D(fh_bp, info_bp)
+         if ( l_heat_3D ) then
+            call close_snapshot_3D(fh_temp, info_temp)
+         end if
+         if ( l_mag_3D ) then
+            call close_snapshot_3D(fh_br, info_br)
+            call close_snapshot_3D(fh_bt, info_bt)
+            call close_snapshot_3D(fh_bp, info_bp)
+         end if
          frame_counter = frame_counter+1
       end if
 
       !-- Compute z-averaging of buoyancy and lorentz-force
       runStart = MPI_Wtime()
-      call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
-      if (  l_mag_LF ) call zinterp%compute_avg(gsa%jxBs, lfs_tmp_Rloc)
-      if (  l_mag_LF ) call zinterp%compute_avg(gsa%jxBp, lfp_tmp_Rloc)
+      !call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
+      !if (  l_mag_LF ) call zinterp%compute_avg(jxBs, lfs_tmp_Rloc)
+      if (  l_mag_LF ) call zinterp%compute_avg(jxBp, lfp_tmp_Rloc)
       runStop = MPI_Wtime()
       if (runStop>runStart) then
          timers%interp = timers%interp+(runStop-runStart)
@@ -242,8 +266,10 @@ contains
       do n_m=1,n_m_max
          m = idx2m(n_m)
          do n_r=nRstart,nRstop
-            dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*m* &
-            &                    buo_tmp_Rloc(n_m,n_r)
+            if ( l_heat_3D ) then
+               dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*m* &
+               &                    buo_tmp_Rloc(n_m,n_r)
+            end if
             if ( l_mag_LF ) then
             !-- Finish assembling both parts of lorentz force and sum it with dpsidt and dVsOm
                if ( m == 0 ) then
@@ -258,6 +284,28 @@ contains
          end do
       end do
 
+      block
+
+         !use truncation, only: n_r_max, n_m_max
+         !use communications, only: allgather_from_Rloc
+
+         integer :: file_handle
+         !complex(cp) :: dpsidt_hat(n_m_max,n_r_max)
+
+         !call allgather_from_Rloc(dpsidt_Rloc, dpsidt_hat, n_m_max)
+
+         !print*, dpsidt_hat(1,:)
+
+         open(newunit=file_handle, file='dpsidt_rloc.dat', status='new', form='unformatted',&
+         &    access='stream')
+         write(file_handle) lfp_tmp_Rloc!dpsidt_Rloc
+         close(file_handle)
+      end block
+
+      print*, 'ALL GOOD RAD_3D!**'
+
+      stop
+
    end subroutine radial_loop_3D
 !-------------------------------------------------------------------------------
    subroutine transform_to_grid_space(temp, B, dB, ddB, aj, dj, n_r, gsa)
@@ -269,7 +317,9 @@ contains
       type(grid_space_arrays_t) :: gsa
 
 #ifdef WITH_SHTNS
-      call scal_to_spat(temp, gsa%Tc)
+      if ( l_heat_3D ) then
+         call scal_to_spat(temp, gsa%Tc)
+      end if
 
       if ( l_mag_3D ) then
          call torpol_to_spat(B, dB, aj, n_r, gsa%Brc, gsa%Btc, gsa%Bpc)
@@ -290,9 +340,11 @@ contains
 #ifdef WITH_SHTNS
       call shtns_load_cfg(1)
 
-      call spat_to_SH(gsa%VTr, nl_lm%VTrLM)
-      call spat_to_SH(gsa%VTt, nl_lm%VTtLM)
-      call spat_to_SH(gsa%VTp, nl_lm%VTpLM)
+      if ( l_heat_3D ) then
+         call spat_to_SH(gsa%VTr, nl_lm%VTrLM)
+         call spat_to_SH(gsa%VTt, nl_lm%VTtLM)
+         call spat_to_SH(gsa%VTp, nl_lm%VTpLM)
+      end if
 
       if ( l_mag_3D ) then
          call spat_to_SH(gsa%VxBr, nl_lm%VxBrLM)
