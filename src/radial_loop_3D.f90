@@ -137,19 +137,8 @@ contains
          end if
       end if
 
-      !ur(:,:,:) = 0.0_cp
-      !ut(:,:,:) = 0.0_cp
-      !up(:,:,:) = 0.0_cp
       runStart = MPI_Wtime()
       do n_r=nRstart3D,nRstop3D
-            !do n_theta=1,n_theta_max
-            !   do n_phi=1,n_phi_max_3D
-            !      phi = (n_phi-1)*two*pi/(n_phi_max_3D)
-            !      ur(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi+pi*0.25_cp)
-            !      ut(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*cost(n_theta)
-            !      up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi)
-            !   end do
-            !end do
 
          !-- Transform temperature and magnetic-field from (l,m) to (theta,phi)
          call transform_to_grid_space(temp(:,n_r), b_3D(:,n_r),      &
@@ -170,9 +159,9 @@ contains
                call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))
             end if
             if ( l_mag_3D ) then
-               call write_bulk_snapshot_3D(fh_br, jxBs(:,:,n_r))!gsa%Brc(:,:))
+               call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!
                call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))
-               call write_bulk_snapshot_3D(fh_bp, jxBp(:,:,n_r))!gsa%Bpc(:,:))
+               call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!
             end if
          end if
 
@@ -184,14 +173,6 @@ contains
          call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r),                     &
               &            dVxBhLM(:,n_r),dbdt_3D(:,n_r),djdt_3D(:,n_r), n_r )
 
-
-            do n_theta=1,n_theta_max
-               do n_phi=1,n_phi_max_3D
-                  phi = (n_phi-1)*two*pi/(n_phi_max_3D)
-                  !jxBp(n_phi,n_theta,n_r) = sint(n_theta)*r_3D(n_r) + cost(n_theta)*cost(n_theta)
-                  jxBp(n_phi,n_theta,n_r) =  r_3D(n_r)*cost(n_theta)*sin(pi*r_3D(n_r)*cost(n_theta))
-               end do
-            end do
       end do
 
       runStop = MPI_Wtime()
@@ -218,15 +199,15 @@ contains
 
       !-- Compute z-averaging of buoyancy and lorentz-force
       runStart = MPI_Wtime()
-      !call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
-      !if (  l_mag_LF ) call zinterp%compute_avg(jxBs, lfs_tmp_Rloc)
+      call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
+      if (  l_mag_LF ) call zinterp%compute_avg(jxBs, lfs_tmp_Rloc)
       if (  l_mag_LF ) call zinterp%compute_avg(jxBp, lfp_tmp_Rloc)
       runStop = MPI_Wtime()
       if (runStop>runStart) then
          timers%interp = timers%interp+(runStop-runStart)
       end if
 
-#ifdef DEBUG
+#ifdef aDEBUG
       block
 
          use truncation, only: n_r_max
@@ -254,11 +235,6 @@ contains
          end do
          close(file_handle)
 
-         !open(newunit=file_handle, file='buo_3D', status='new', form='unformatted',&
-         !&    access='stream')
-         !write(file_handle) buo_tmp
-         !close(file_handle)
-
       end block
 #endif
 
@@ -284,6 +260,7 @@ contains
          end do
       end do
 
+#ifdef TOTO
       block
 
          !use truncation, only: n_r_max, n_m_max
@@ -305,6 +282,7 @@ contains
       print*, 'ALL GOOD RAD_3D!**'
 
       stop
+#endif
 
    end subroutine radial_loop_3D
 !-------------------------------------------------------------------------------
