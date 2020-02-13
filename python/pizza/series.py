@@ -147,7 +147,7 @@ class PizzaTs(PizzaSetup):
             self.delnuss = data[:, 3]
             self.toptemp = data[:, 4]
             self.bottemp = data[:, 5]
-        elif self.field == 'mag_3D':
+        elif self.field == 'e_mag_3D':
             self.time = data[:, 0]
             self.epol = data[:, 1]
             self.etor = data[:, 2]
@@ -268,7 +268,7 @@ class PizzaTs(PizzaSetup):
             ax.set_xlabel('Time')
             ax.set_ylabel('Nusselt number')
             fig.tight_layout()
-        elif self.field == 'mag_3D':
+        elif self.field == 'e_mag_3D':
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.plot(self.time, self.epol, label='E mag Poloidal')

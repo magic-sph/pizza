@@ -5,6 +5,7 @@ module outputs_3D
 
    use parallel_mod
    use precision_mod
+   use spectra_3D, only: spectra_3D_type
    use constants, only: zero, two, half, pi, osq4pi
    use communications, only: reduce_radial_on_rank
    use truncation_3D, only: n_r_max_3D, n_theta_max, n_phi_max_3D
@@ -23,8 +24,10 @@ module outputs_3D
    private
 
    type(mean_sd_type) :: tempR
+   type(spectra_3D_type), public :: spec_3D
    integer :: n_heat_file, n_mag_file, n_calls
    real(cp) :: timeLast_rad, timeAvg_rad
+   real(cp) :: timeAvg_spec
 
    public :: initialize_outputs_3D, finalize_outputs_3D, write_outputs_3D
 
@@ -35,6 +38,7 @@ contains
       character(len=144) :: file_name
 
       timeAvg_rad = 0.0_cp
+      timeAvg_spec= 0.0_cp
 
       if ( rank == 0 ) then
          if ( l_heat_3D ) then
@@ -42,13 +46,15 @@ contains
             open(newunit=n_heat_file, file=file_name, status='new')
          end if
          if ( l_mag_3D ) then
-            file_name = 'e_mag.'//tag
+            file_name = 'e_mag_3D.'//tag
             open(newunit=n_mag_file, file=file_name, status='new')
          end if
          call tempR%initialize(1,n_r_max_3D)
          n_calls     =0
          timeLast_rad=0.0_cp
       end if
+
+      call spec_3D%initialize()
 
    end subroutine initialize_outputs_3D
 !---------------------------------------------------------------------------------
@@ -59,6 +65,8 @@ contains
          if ( l_heat_3D ) close(n_heat_file)
          if ( l_mag_3D ) close(n_mag_file)
       end if
+
+      call spec_3D%finalize()
 
    end subroutine finalize_outputs_3D
 !---------------------------------------------------------------------------------
@@ -76,11 +84,25 @@ contains
       complex(cp),         intent(in) :: aj_3D(lmStart:lmStop,n_r_max_3D)
 
       timeAvg_rad  = timeAvg_rad  + tscheme%dt(1)
+      timeAvg_spec = timeAvg_spec + tscheme%dt(1)
 
       if ( l_log ) then
          call write_time_series(time, temp_3D, b_3D, db_3D, aj_3D)
          call get_radial_averages(timeAvg_rad, l_stop_time, temp_3D)
       end if
+
+      if ( l_mag_3D ) then
+      !-- Calculate spectra
+      if ( l_log .or. spec_3D%l_calc ) then
+         call spec_3D%compute_spectra_3D(timeAvg_spec, l_stop_time, b_3D, &
+              &                         db_3D, aj_3D)
+      end if
+      end if
+
+      !!-- Write spectra
+      !if ( spec%l_calc ) then
+      !   call spec%write_spectra(E_pol_l, E_tor_l)
+      !end if
 
    end subroutine write_outputs_3D
 !---------------------------------------------------------------------------------
@@ -137,6 +159,7 @@ contains
 
       end if
 
+      Efac     = 0.0_cp
       E_pol     = 0.0_cp
       E_tor     = 0.0_cp
       E_pol_axis= 0.0_cp
@@ -186,11 +209,11 @@ contains
             e_tor_r(n_r)=e_tor_r(n_r)+e_tor_axis_r(n_r)
          end do    ! radial grid points
 
-         call reduce_radial_on_rank(e_pol_r, 0)
-         call reduce_radial_on_rank(e_tor_r, 0)
-         call reduce_radial_on_rank(e_pol_axis_r, 0)
-         call reduce_radial_on_rank(e_tor_axis_r, 0)
-         call reduce_radial_on_rank(e_dipole_axis_r, 0)
+         call reduce_radial_on_rank(e_pol_r, n_r_max_3D, 0)
+         call reduce_radial_on_rank(e_tor_r, n_r_max_3D, 0)
+         call reduce_radial_on_rank(e_pol_axis_r, n_r_max_3D, 0)
+         call reduce_radial_on_rank(e_tor_axis_r, n_r_max_3D, 0)
+         call reduce_radial_on_rank(e_dipole_axis_r, n_r_max_3D, 0)
 
          if ( rank == 0 ) then
             !-- Get Values at CMB: n_r=1 == n_r_cmb
@@ -202,6 +225,7 @@ contains
             E_dip_axis =rInt_R(e_dipole_axis_r,r_3D,rscheme_3D)
 
             Efac=half*DyMagFac!*eScale
+            !print*, Efac, E_cmb, E_pol, E_tor, E_pol_axis, E_tor_axis, E_dip_axis
             E_cmb      =Efac*E_cmb
             E_pol      =Efac*E_pol
             E_tor      =Efac*E_tor

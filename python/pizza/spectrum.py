@@ -501,20 +501,20 @@ class Pizza2DSpectrum(PizzaSetup):
         :type endian: str
         """
         file = open(filename, 'rb')
-        dt = np.dtype("i4, 6f8")
+        dt = np.dtype("i4, 6Float64")
         self.version, params = np.fromfile(file, dtype=dt, count=1)[0]
         self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = params
         dt = np.dtype("4i4")
         self.n_r_max, self.n_m_max, self.m_max, self.minc = \
             np.fromfile(file, dtype=dt, count=1)[0]
 
-        dt = np.dtype("%if8" % self.n_r_max)
+        dt = np.dtype("%iFloat64" % self.n_r_max)
         self.radius = np.fromfile(file, dtype=dt, count=1)[0]
         self.idx2m = np.zeros(self.n_m_max)
         for i in range(self.n_m_max):
             self.idx2m[i] = i*self.minc
 
-        dt = np.dtype("(%i,%i)f8" % (self.n_r_max, self.n_m_max))
+        dt = np.dtype("(%i,%i)Float64" % (self.n_r_max, self.n_m_max))
         if self.version == 1:
             data = np.fromfile(file, dtype=dt, count=3)
         elif self.version == 2:
@@ -650,3 +650,290 @@ class Pizza2DSpectrum(PizzaSetup):
 
         fig.colorbar(im)
         fig.tight_layout()
+
+
+class PizzaSpectrum3D(PizzaSetup):
+    """
+    This class can be used to read and display the spherical quantities spectra 'spec_3D#.TAG'
+    or 'spec_3D_avg.TAG'
+
+    >>> # display the content of spec_3D_1.TAG
+    >>> # where TAG is the most recent file in the current directory
+    >>> sp = PizzaSpectrum3D(ispec=1)
+    >>> # stack the content of spec_3D_ave.test_a to spec_3D_ave.test_c
+    >>> sp = PizzaSpectrum3D(tag='test_[a-c]', iplot=False)
+    """
+
+    def __init__(self, field='spec_3D', datadir='.', iplot=True, ispec=None,
+                 ave=True, tag=None, all=False):
+        """
+        :param field: a string to decide which spectra one wants to load
+                      and plot
+        :type field: str
+        :param iplot: display the output plot when set to True
+                      (default is True)
+        :type iplot: bool
+        :param ispec: the number of the spectrum you want to plot
+        :type ispec: int
+        :param tag: file suffix (tag), if not specified the most recent one in
+                    the current directory is chosen
+        :type tag: str
+        :param ave: plot a time-averaged spectrum when set to True
+        :type ave: bool
+        :param datadir: current working directory
+        :type datadir: str
+        :param all: when set to True, the complete time series is reconstructed
+                    by stacking all the corresponding files from the working
+                    directory (False by default)
+        :type all: bool
+        """
+
+        if ispec is not None:
+            ave = False
+
+        self.ave = ave
+
+        if field in ('dyn_terms'):
+            self.name = 'dyn_terms_avg'
+            self.ave = True
+            ispec = None
+        else:
+            if self.ave:
+                self.name = 'spec_3D_avg'
+            else:
+                self.name = 'spec_3D_'
+
+        if not all:
+            if tag is not None:
+                if ispec is not None:
+                    self.name += '%i' % ispec
+                pattern = os.path.join(datadir, '%s.%s' % (self.name, tag))
+                files = scanDir(pattern)
+                # Either the log.tag directly exists and the setup is easy
+                # to obtain
+                if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                    PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                        nml='log.%s' % tag)
+                # Or the tag is a bit more complicated and we need to find
+                # the corresponding log file
+                else:
+                    mask = re.compile(r'%s/%s\.(.*)' % (datadir, self.name))
+                    if mask.match(files[-1]):
+                        ending = mask.search(files[-1]).groups(0)[0]
+                        pattern = os.path.join(datadir, 'log.%s' % ending)
+                        if os.path.exists(pattern):
+                            PizzaSetup.__init__(self, datadir=datadir,
+                                                quiet=True,
+                                                nml='log.%s' % ending)
+
+                # Sum the files that correspond to the tag
+                mask = re.compile(r'%s\.(.*)' % self.name)
+                for k, file in enumerate(files):
+                    print('reading %s' % file)
+                    tag = mask.search(file).groups(0)[0]
+                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                                     quiet=True)
+                    filename = file
+                    if k == 0:
+                        self.tstart = nml.start_time
+                        self.tstop = nml.stop_time  # will be replaced later
+                        data = fast_read(filename)
+                    else:
+                        if os.path.exists(filename):
+                            tmp = fast_read(filename)
+                            data = self.add(data, tmp, nml.stop_time,
+                                            nml.start_time)
+
+            else:
+                if ispec is not None:
+                    pattern = os.path.join(datadir, '%s%i*' % (self.name,
+                                                               ispec))
+                else:
+                    pattern = os.path.join(datadir, '%s*' % self.name)
+                files = scanDir(pattern)
+                filename = files[-1]
+                print('reading %s' % filename)
+                # Determine the setup
+                if ispec is not None:
+                    mask = re.compile(r'%s%i\.(.*)' % (self.name, ispec))
+
+                else:
+                    mask = re.compile(r'%s\.(.*)' % self.name)
+                ending = mask.search(files[-1]).groups(0)[0]
+                if os.path.exists('log.%s' % ending):
+                    try:
+                        PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                            nml='log.%s' % ending)
+                    except AttributeError:
+                        pass
+
+                data = fast_read(filename, skiplines=0)
+
+        else:  # if all is requested
+            pattern = os.path.join(datadir, '%s.*' % self.name)
+            files = scanDir(pattern)
+
+            # Determine the setup
+            mask = re.compile(r'%s\.(.*)' % self.name)
+            for k, file in enumerate(files):
+                print('reading %s' % file)
+                tag = mask.search(file).groups(0)[0]
+                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                                 quiet=True)
+                filename = file
+                if k == 0:
+                    self.tstart = nml.start_time
+                    self.tstop = nml.stop_time  # will be replaced later
+                    data = fast_read(filename)
+                else:
+                    if os.path.exists(filename):
+                        tmp = fast_read(filename)
+                        data = self.add(data, tmp, nml.stop_time,
+                                        nml.start_time)
+            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                nml='log.%s' % tag)
+
+            # Determine the setup
+            mask = re.compile(r'.*\.(.*)')
+            ending = mask.search(files[-1]).groups(0)[0]
+            if os.path.exists(os.path.join(datadir, 'log.%s' % ending)):
+                PizzaSetup.__init__(self, datadir=datadir, quiet=True,
+                                    nml='log.%s' % ending)
+
+        self.index = data[:, 0]
+
+        if self.name == 'dyn_terms_avg':
+            self.thwind_mean = data[:, 1]
+            self.thwind_std = data[:, 2]
+            self.lzf_mean = data[:, 3]
+            self.lzf_std = data[:, 4]
+            self.cia_mean = data[:, 5]
+            self.cia_std = data[:, 6]
+        else:
+            if not self.ave:
+                self.bpol2 = data[:, 1]
+                self.btor2 = data[:, 2]
+            else:
+                self.bpol2_mean = data[:, 1]
+                self.bpol2_std = data[:, 2]
+                self.btor2_mean = data[:, 3]
+                self.btor2_std = data[:, 4]
+
+        if iplot:
+            self.plot()
+
+    def add(self, data, tmp, stop_time, start_time):
+        """
+        Clean way to stack data
+        """
+        out = copy.deepcopy(data)
+        out[:, 0] = tmp[:, 0]
+
+        nm_new = len(tmp[:, 0])
+        nm_old = len(data[:, 0])
+
+        fac_old = self.tstop-self.tstart
+        fac_new = stop_time-start_time
+        self.tstop = stop_time
+        fac_tot = self.tstop-self.tstart
+
+        if nm_new == nm_old:  # Same grid before and after
+            if self.name == 'dyn_terms_avg':
+                for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
+                    out[:, j] = (fac_old*data[:, j]+fac_new*tmp[:, j])/fac_tot
+                for j in [2, 4, 6, 8, 10, 12, 14, 16]:
+                    out[:, j] = np.sqrt((fac_old*data[:, j]**2 +
+                                         fac_new*tmp[:, j]**2) / fac_tot)
+            else:
+                if not self.ave:
+                    out[:, 1:] = 0.5*(data[:, 1:]+tmp[:, 1:])
+                else:
+                    for j in [1, 3]:
+                        out[:, j] = (fac_old*data[:, j]+fac_new*tmp[:, j]) / \
+                                     fac_tot
+                    for j in [2, 4]:
+                        out[:, j] = np.sqrt((fac_old*data[:, j]**2 +
+                                             fac_new*tmp[:, j]**2) / fac_tot)
+        else:
+            print('Not implemented yet ...')
+
+        return out
+
+    def plot(self):
+        """
+        Plotting function
+        """
+        if self.name == 'dyn_terms_avg':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            sd = self.thwind_std/np.sqrt(self.thwind_mean)/2.
+            ax.fill_between(self.index, np.sqrt(self.thwind_mean)-sd,
+                            np.sqrt(self.buo_mean)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.thwind_mean), label='Thermal Wind')
+
+            sd = self.lzf_std/np.sqrt(self.lzf_mean)/2.
+            ax.fill_between(self.index, np.sqrt(self.lzf_mean)-sd,
+                            np.sqrt(self.lzf_mean)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.lzf_mean), label='Lorentz Force')
+
+            sd = self.cia_std/np.sqrt(self.cia_mean)/2.
+            ax.fill_between(self.index, np.sqrt(self.cia_mean)-sd,
+                            np.sqrt(self.cia_mean)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.cia_mean), label='CIA')
+
+            ax.set_yscale('log')
+            ax.set_xscale('log')
+            ax.set_xlabel('m')
+            ax.set_ylabel('Forces')
+            ax.set_xlim(1, self.index[-1])
+            ax.legend(loc='best', frameon=False)
+            fig.tight_layout()
+
+        else:
+            if not self.ave:
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                if abs(self.bpol2[0]) > 0.:
+                    ax.loglog(self.index[1:]+1, self.bpol2[1:], label='b_pol**2')
+                    ax.loglog(self.index+1, self.btor2, label='b_tor**2')
+                else:
+                    ax.loglog(self.index[1:]+1, self.bpol2[1:], label='b_pol**2')
+                    ax.loglog(self.index[1:]+1, self.btor2[1:], label='b_tor**2')
+                ax.set_xlabel('l+1')
+                ax.set_xlim(1, self.index[-1])
+                ax.legend(loc='best', frameon=False)
+                fig.tight_layout()
+            else:
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+
+                if abs(self.bpol2_mean[0]) > 0.:
+                    ax.fill_between(self.index[1:]+1,
+                                    self.bpol2_mean[1:]-self.bpol2_std[1:],
+                                    self.bpol2_mean[1:]+self.bpol2_std[1:],
+                                    alpha=0.1)
+                    ax.plot(self.index[1:]+1, self.bpol2_mean[1:], label='bpol**2')
+
+                    ax.fill_between(self.index+1, self.btor2_mean-self.btor2_std,
+                                    self.btor2_mean+self.btor2_std, alpha=0.1)
+                    ax.plot(self.index+1, self.btor2_mean, label='btor**2')
+
+                else:
+                    ax.fill_between(self.index[1:]+1,
+                                    self.bpol2_mean[1:]-self.bpol2_std[1:],
+                                    self.bpol2_mean[1:]+self.bpol2_std[1:],
+                                    alpha=0.1)
+                    ax.plot(self.index[1:]+1, self.bpol2_mean[1:], label='bpol**2')
+
+                    ax.fill_between(self.index[1:]+1,
+                                    self.btor2_mean[1:]-self.btor2_std[1:],
+                                    self.btor2_mean[1:]+self.btor2_std[1:],
+                                    alpha=0.1)
+                    ax.plot(self.index[1:]+1, self.btor2_mean[1:], label='btor**2')
+
+                ax.set_yscale('log')
+                ax.set_xscale('log')
+                ax.set_xlabel('l+1')
+                ax.set_xlim(1, self.index[-1])
+                ax.legend(loc='best', frameon=False)
+                fig.tight_layout()
