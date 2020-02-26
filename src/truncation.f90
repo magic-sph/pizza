@@ -9,6 +9,7 @@ module truncation
 
    integer, public :: n_r_max
    integer, public :: n_cheb_max
+   integer, public :: n_z_max
    integer, public :: m_max
    integer, public :: minc
    integer, public :: n_m_max
@@ -24,6 +25,9 @@ contains
    subroutine initialize_truncation
 
       integer :: n_m, m
+
+      ! number of points for z-grid in the 3D interpolation
+      n_z_max = 2*n_r_max! 2xn_s
 
       n_m_max = m_max/minc+1
 
@@ -64,6 +68,8 @@ contains
       write(n_out,'(''  n_r_max      ='',i6, &
            &   '' = number of radial grid points'')') n_r_max
       write(n_out,'(''  n_cheb_max   ='',i6)') n_cheb_max
+      write(n_out,'(''  n_z_max      ='',i6, &
+           &   '' = number of z-points for 3D interpolation'')') n_z_max
       write(n_out,'(''  n_phi_max    ='',i6, &
            &   '' = no of azimuthal grid points'')') n_phi_max
       write(n_out,'(''  m_max        ='',i6, '' = max oder'')') m_max

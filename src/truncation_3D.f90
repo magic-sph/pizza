@@ -10,7 +10,7 @@ module truncation_3D
    integer, public :: minc_3D
    integer, public :: n_r_max_3D
    integer, public :: n_cheb_max_3D
-   integer, public :: n_z_max
+   !integer, public :: n_z_max
    integer, public :: l_max         ! max degree of Plms
    integer, public :: n_theta_max
    integer, public :: m_max_3D
@@ -33,7 +33,7 @@ contains
       integer :: n_m, m
 
       ! number of points for z-grid in the 3D interpolation
-      n_z_max = 2*n_r_max_3D
+      !n_z_max = 2*n_r_max_3D! 2xn_s -> In truncation.f90
 
       ! number of theta grid-points & phi 3D grid
       n_phi_max_3D=n_phi_tot_3D/minc_3D

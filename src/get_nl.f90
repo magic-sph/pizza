@@ -16,7 +16,6 @@ module grid_space_arrays_mod
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use namelists, only: l_heat_3D, l_mag_3D, l_mag_LF
-   use constants, only: zero
    use blocking, only: nRstart3D, nRstop3D
    use truncation_3D, only: n_theta_max, n_phi_max_3D
    use radial_functions, only: or1_3D, r_3D, rgrav_3D
@@ -72,22 +71,22 @@ contains
       end if
 
       if ( l_heat_3D ) then
-         this%VTr(:,:)=zero
-         this%VTt(:,:)=zero
-         this%VTp(:,:)=zero
-         this%Tc(:,:)=zero
+         this%VTr(:,:)=0.0_cp
+         this%VTt(:,:)=0.0_cp
+         this%VTp(:,:)=0.0_cp
+         this%Tc(:,:)=0.0_cp
       end if
       if ( l_mag_3D ) then
-         this%VxBr(:,:)=zero
-         this%VxBt(:,:)=zero
-         this%VxBp(:,:)=zero
-         this%Brc(:,:)=zero
-         this%Btc(:,:)=zero
-         this%Bpc(:,:)=zero
+         this%VxBr(:,:)=0.0_cp
+         this%VxBt(:,:)=0.0_cp
+         this%VxBp(:,:)=0.0_cp
+         this%Brc(:,:)=0.0_cp
+         this%Btc(:,:)=0.0_cp
+         this%Bpc(:,:)=0.0_cp
          if ( l_mag_LF ) then
-            this%curlBrc(:,:)=zero
-            this%curlBtc(:,:)=zero
-            this%curlBpc(:,:)=zero
+            this%curlBrc(:,:)=0.0_cp
+            this%curlBtc(:,:)=0.0_cp
+            this%curlBpc(:,:)=0.0_cp
          end if
       end if
 
@@ -196,7 +195,7 @@ contains
             !$OMP& private(n_theta, n_phi, or1sn1)
             do n_theta=1,n_theta_max
                do n_phi=1,n_phi_max_3D
-                  !---- jxBs= r**2/(E*Pm) * ( curl(B)_z*B_p - curl(B)_p*B_z )
+                  !---- jxBs= 1/(E*Pm) * ( curl(B)_z*B_p - curl(B)_p*B_z )
                   !--       = sint * jxBr + cost/r_3D * jxBt
                   jxBs(n_phi,n_theta)=sint(n_theta)*(                       &
                   &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
