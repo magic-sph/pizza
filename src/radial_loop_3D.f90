@@ -85,11 +85,11 @@ contains
       real(cp) :: jxBs(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: jxBp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: runStart, runStop, phi!, rsint
+      real(cp) :: runStart, runStop
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_tmp_Rloc(n_m_max,nRstart:nRstop)
-      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta, n_phi
+      integer :: n_r, n_m, m, fh_temp, info_temp
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
       character(len=144) :: frame_name

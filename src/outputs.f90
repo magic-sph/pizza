@@ -13,7 +13,6 @@ module outputs
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
        &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac,&
        &                l_vort_balance, l_corr, l_heat, l_chem, ChemFac
-   use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
    use truncation_3D, only: lm_max
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
@@ -488,19 +487,19 @@ contains
       end do
 
       !-- MPI reductions to get the s-profiles on rank==0
-      call reduce_radial_on_rank(us2_r, 0)
-      call reduce_radial_on_rank(up2_r, 0)
-      call reduce_radial_on_rank(up2_axi_r, 0)
-      call reduce_radial_on_rank(enstrophy, 0)
-      call reduce_radial_on_rank(pump, 0)
+      call reduce_radial_on_rank(us2_r, n_r_max, 0)
+      call reduce_radial_on_rank(up2_r, n_r_max, 0)
+      call reduce_radial_on_rank(up2_axi_r, n_r_max, 0)
+      call reduce_radial_on_rank(enstrophy, n_r_max, 0)
+      call reduce_radial_on_rank(pump, n_r_max, 0)
       if ( l_heat ) then
-         call reduce_radial_on_rank(buo_power, 0)
-         call reduce_radial_on_rank(flux_r, 0)
-         call reduce_radial_on_rank(nu_vol_r, 0)
+         call reduce_radial_on_rank(buo_power, n_r_max, 0)
+         call reduce_radial_on_rank(flux_r, n_r_max, 0)
+         call reduce_radial_on_rank(nu_vol_r, n_r_max, 0)
       end if
       if ( l_chem ) then
-         call reduce_radial_on_rank(sh_vol_r, 0)
-         call reduce_radial_on_rank(chem_power, 0)
+         call reduce_radial_on_rank(sh_vol_r, n_r_max, 0)
+         call reduce_radial_on_rank(chem_power, n_r_max, 0)
       end if
 
       !-------
@@ -814,7 +813,7 @@ contains
       end do
 
       !-- MPI reduction
-      call reduce_radial_on_rank(tmp, 0)
+      call reduce_radial_on_rank(tmp, n_r_max, 0)
 
       if ( rank == 0 ) then
          !-- Radial integration
