@@ -197,7 +197,8 @@ contains
          call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame, &
               &             l_vphi_bal_write, l_stop_time, us_Mloc,  up_Mloc,  &
               &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
-              &             dpsidt, dTdt, dxidt, temp_3D_Rloc, dTdt_3D)
+              &             dpsidt, dTdt, dxidt, temp_3D_Rloc, dTdt_3D,        & 
+              &             b_3D_Rloc, dBdt_3D, aj_3D_Rloc, djdt_3D)
          if ( l_3D ) then
             call write_outputs_3D(time, tscheme, l_log, l_stop_time, temp_3D_LMloc, &
             &                     b_3D_LMloc, db_3D_LMloc, aj_3D_LMloc)
@@ -414,6 +415,7 @@ contains
                end if
             end if
 
+#ifdef TOTO
       block
 
          use truncation, only: n_r_max, n_m_max
@@ -435,6 +437,7 @@ contains
       print*, 'ALL GOOD END END!**'
 
       stop
+#endif
 
             ! Increment current stage
             tscheme%istage = tscheme%istage+1

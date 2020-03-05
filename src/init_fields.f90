@@ -61,8 +61,9 @@ contains
       character(len=76) :: message
 
       if ( l_start_file ) then
-         call read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, dpsidt, &
-              &               dTdt, dxidt, temp_3D_LMloc, dTdt_3D, time, tscheme)
+         call read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, dpsidt,   &
+              &               dTdt, dxidt, temp_3D_LMloc, dTdt_3D, b_3D_LMloc,&
+              &               dBdt_3D, aj_3D_LMloc, djdt_3D, time, tscheme)
 
          if ( l_reset_t ) time = 0.0_cp
 
@@ -107,7 +108,6 @@ contains
          psi_Mloc(:,:)=zero
          call dpsidt%set_initial_values()
          if ( l_mag_3D ) then
-            print*, 'flag initial values'
             call dBdt_3D%set_initial_values()
             call djdt_3D%set_initial_values()
          end if
@@ -136,7 +136,7 @@ contains
 
       if ( init_u /= 0 ) call initU(us_Mloc, up_Mloc)
 
-      !-- Reconstruct missing fields, dtemp_Mloc, om_Mloc
+      !-- Reconstruct missing fields, dtemp_Mloc, om_Mloc, dB, dj, etc.
       if ( l_heat ) call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, &
                          &      n_r_max, rscheme)
       if ( l_chem ) call get_dr(xi_Mloc, dxi_Mloc, nMstart, nMstop, &
@@ -148,7 +148,7 @@ contains
               &      n_r_max_3D, rscheme_3D)
          call get_dr(aj_3D_LMloc, dj_3D_LMloc, lmStart, lmStop,&
               &      n_r_max_3D, rscheme_3D)
-     end if
+      end if
       call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop

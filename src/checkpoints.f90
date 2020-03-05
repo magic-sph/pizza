@@ -38,7 +38,8 @@ contains
    subroutine write_checkpoint(time, tscheme, n_time_step, n_log_file,     &
               &                l_stop_time, t_Mloc, xi_Mloc, us_Mloc,      &
               &                up_Mloc, dTdt, dxidt, dpsidt, temp_3D_Rloc, &
-              &                dTdt_3D)
+              &                dTdt_3D, b_3D_Rloc, dBdt_3D, aj_3D_Rloc,    &
+              &                djdt_3D)
       !
       ! This subroutine writes the checkpoint files using MPI-IO. For the sake
       ! of simplicity we do not include the record marker. Classical Fortran can
@@ -57,10 +58,14 @@ contains
       complex(cp),         intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: temp_3D_Rloc(lm_max,nRstart3D:nRstop3D)
+      complex(cp),         intent(in) :: b_3D_Rloc(lm_max,nRstart3D:nRstop3D)
+      complex(cp),         intent(in) :: aj_3D_Rloc(lm_max,nRstart3D:nRstop3D)
       type(type_tarray),   intent(in) :: dTdt
       type(type_tarray),   intent(in) :: dxidt
       type(type_tarray),   intent(in) :: dpsidt
       type(type_tarray),   intent(in) :: dTdt_3D
+      type(type_tarray),   intent(in) :: dBdt_3D
+      type(type_tarray),   intent(in) :: djdt_3D
 
       !-- Local variables
       integer :: info, fh, filetype, n_o, lmtype
@@ -304,6 +309,7 @@ contains
          !-- Set the view after the QG fields
          call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, &
               &                 lmtype, "native", MPI_INFO_NULL, ierr)
+         disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
          call MPI_File_Write_all(fh, temp_3D_Rloc, lm_max*nR_per_rank_3D,  &
               &                  MPI_DEF_COMPLEX, istat, ierr)
 
@@ -340,6 +346,93 @@ contains
          call MPI_Type_Free(lmtype, ierr)
       end if
 
+      !-- Write 3-D magnetic field
+      if ( l_mag_3D ) then
+         arr_size(1) = lm_max
+         arr_size(2) = n_r_max_3D
+         arr_loc_size(1) = lm_max
+         arr_loc_size(2) = nR_per_rank_3D
+         arr_start(1) = 0
+         arr_start(2) = nRStart3D-1
+         call MPI_Type_Create_Subarray(2,arr_size, arr_loc_size, arr_start, &
+              &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,  &
+              &                        lmtype, ierr)
+         call MPI_Type_Commit(lmtype, ierr)
+
+         !-- Set the view after the QG fields
+         !-- poloidal B field
+         call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, &
+              &                 lmtype, "native", MPI_INFO_NULL, ierr)
+         disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+         call MPI_File_Write_all(fh, b_3D_Rloc, lm_max*nR_per_rank_3D,  &
+              &                  MPI_DEF_COMPLEX, istat, ierr)
+         !-- toroidal j field
+         call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, &
+              &                 lmtype, "native", MPI_INFO_NULL, ierr)
+         disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+         call MPI_File_Write_all(fh, aj_3D_Rloc, lm_max*nR_per_rank_3D,  &
+              &                  MPI_DEF_COMPLEX, istat, ierr)
+
+         if ( tscheme%family == 'MULTISTEP' ) then
+            do n_o=2,tscheme%norder_exp
+               !-- poloidal B field
+               call transp_lm2r(lm2r_fields, dBdt_3D%expl(:,:,n_o), &
+                    &           work_3D_Rloc)
+               disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+               call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+                    &                 MPI_INFO_NULL, ierr)
+               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+               !-- toroidal j field
+               call transp_lm2r(lm2r_fields, djdt_3D%expl(:,:,n_o), &
+                    &           work_3D_Rloc)
+               disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+               call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+                    &                 MPI_INFO_NULL, ierr)
+               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end do
+            do n_o=2,tscheme%norder_imp_lin-1
+               !-- poloidal B field
+               call transp_lm2r(lm2r_fields, dBdt_3D%impl(:,:,n_o), &
+                    &           work_3D_Rloc)
+               disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+               call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+                    &                 MPI_INFO_NULL, ierr)
+               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+               !-- toroidal j field
+               call transp_lm2r(lm2r_fields, djdt_3D%impl(:,:,n_o), &
+                    &           work_3D_Rloc)
+               disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+               call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+                    &                 MPI_INFO_NULL, ierr)
+               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end do
+            do n_o=2,tscheme%norder_imp-1
+               !-- poloidal B field
+               call transp_lm2r(lm2r_fields, dBdt_3D%old(:,:,n_o), &
+                    &           work_3D_Rloc)
+               disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+               call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+                    &                 MPI_INFO_NULL, ierr)
+               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+               !-- toroidal j field
+               call transp_lm2r(lm2r_fields, djdt_3D%old(:,:,n_o), &
+                    &           work_3D_Rloc)
+               disp = disp+n_r_max_3D*lm_max*SIZEOF_DEF_COMPLEX
+               call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, lmtype, "native", &
+                    &                 MPI_INFO_NULL, ierr)
+               call MPI_File_Write_all(fh, work_3D_Rloc, lm_max*nR_per_rank_3D, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end do
+         end if
+
+         call MPI_Type_Free(lmtype, ierr)
+      end if
+
       call MPI_Type_Free(filetype, ierr)
       call MPI_Info_free(info, ierr)
       call MPI_File_close(fh, ierr)
@@ -363,8 +456,9 @@ contains
 
    end subroutine write_checkpoint
 !------------------------------------------------------------------------------
-   subroutine read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, dpsidt, &
-              &               dTdt, dxidt, temp_3D_LMloc, dTdt_3D, time, tscheme)
+   subroutine read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, dpsidt,    &
+              &               dTdt, dxidt, temp_3D_LMloc, dTdt_3D, b_3D_LMloc, &
+              &               dBdt_3D, aj_3D_LMloc, djdt_3D, time, tscheme)
 
       !-- Output variables
       class(type_tscheme), intent(inout) :: tscheme
@@ -373,10 +467,14 @@ contains
       complex(cp),         intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),         intent(out) :: xi_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),         intent(out) :: temp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),         intent(out) :: b_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+      complex(cp),         intent(out) :: aj_3D_LMloc(lmStart:lmStop,n_r_max_3D)
       type(type_tarray),   intent(inout) :: dpsidt
       type(type_tarray),   intent(inout) :: dTdt
       type(type_tarray),   intent(inout) :: dxidt
       type(type_tarray),   intent(inout) :: dTdt_3D
+      type(type_tarray),   intent(inout) :: dBdt_3D
+      type(type_tarray),   intent(inout) :: djdt_3D
       real(cp),            intent(out) :: time
 
       !-- Local variables
@@ -843,6 +941,7 @@ contains
                call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
                     &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
                     &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
+               print*, 'READ FILES!!!! TEMP3D OKOKOK', work(1,1)
             end if
             call scatter_from_rank0_to_lmloc(work, temp_3D_LMloc)
 
@@ -889,7 +988,120 @@ contains
                end do
             end if
          else
-            call abortRun('2-D to 3-D Not implemented yet')
+            call abortRun('2-D to 3-D for 3D-Temperature-field Not implemented yet')
+         end if
+         if ( l_mag_3D_old ) then
+            !-- poloidal B field
+            if ( rank == 0 ) then
+               deallocate( work_old, work )
+               allocate( work_old(lm_max_old,n_r_max_3D_old) )
+               allocate( work(lm_max,n_r_max_3D) )
+               read( n_start_file ) work_old
+               call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
+                    &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
+                    &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
+               print*, 'READ FILES!!!! B3D OKOKOK', work(1,1)
+            end if
+            call scatter_from_rank0_to_lmloc(work, b_3D_LMloc)
+            !-- toroidal j field
+            if ( rank == 0 ) then
+               deallocate( work_old, work )
+               allocate( work_old(lm_max_old,n_r_max_3D_old) )
+               allocate( work(lm_max,n_r_max_3D) )
+               read( n_start_file ) work_old
+               call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
+                    &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
+                    &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
+               print*, 'READ FILES!!!! J3D OKOKOK', work(1,1)
+            end if
+            call scatter_from_rank0_to_lmloc(work, aj_3D_LMloc)
+
+            if ( tscheme_family_old == 'MULTISTEP' ) then
+               !-- Explicit time step
+               !-- poloidal B field
+               do n_o=2,norder_exp_old
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,  &
+                          &            lm2lmo,  scale_t, lm_max_old,              &
+                          &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
+                          &            l_phys_space=.true.)
+                  end if
+                  if ( n_o <= tscheme%norder_exp ) then
+                     call scatter_from_rank0_to_lmloc(work, dBdt_3D%expl(:,:,n_o))
+                  end if
+               end do
+               !-- toroidal j field
+               do n_o=2,norder_exp_old
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,  &
+                          &            lm2lmo,  scale_t, lm_max_old,              &
+                          &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
+                          &            l_phys_space=.true.)
+                  end if
+                  if ( n_o <= tscheme%norder_exp ) then
+                     call scatter_from_rank0_to_lmloc(work, djdt_3D%expl(:,:,n_o))
+                  end if
+               end do
+
+               !-- Implicit time step
+               !-- poloidal B field
+               do n_o=2,norder_imp_lin_old-1
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,  &
+                          &            lm2lmo,  scale_t, lm_max_old,              &
+                          &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
+                          &            l_phys_space=.true.)
+                  end if
+                  if ( n_o <= tscheme%norder_imp_lin-1 ) then
+                     call scatter_from_rank0_to_lmloc(work, dBdt_3D%impl(:,:,n_o))
+                  end if
+               end do
+               !-- toroidal j field
+               do n_o=2,norder_imp_lin_old-1
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,  &
+                          &            lm2lmo,  scale_t, lm_max_old,              &
+                          &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
+                          &            l_phys_space=.true.)
+                  end if
+                  if ( n_o <= tscheme%norder_imp_lin-1 ) then
+                     call scatter_from_rank0_to_lmloc(work, djdt_3D%impl(:,:,n_o))
+                  end if
+               end do
+
+               !-- poloidal B field
+               do n_o=2,norder_imp_old-1
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old, &
+                          &            lm2lmo,  scale_t, lm_max_old,             &
+                          &            n_r_max_3D_old, n_r_max_3D_max,           &
+                          &            lBc=.false., l_phys_space=.true.)
+                  end if
+                  if ( n_o <= tscheme%norder_imp-1 ) then
+                     call scatter_from_rank0_to_lmloc(work, dBdt_3D%old(:,:,n_o))
+                  end if
+               end do
+               !-- toroidal j field
+               do n_o=2,norder_imp_old-1
+                  if ( rank == 0 ) then
+                     read( n_start_file ) work_old
+                     call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old, &
+                          &            lm2lmo,  scale_t, lm_max_old,             &
+                          &            n_r_max_3D_old, n_r_max_3D_max,           &
+                          &            lBc=.false., l_phys_space=.true.)
+                  end if
+                  if ( n_o <= tscheme%norder_imp-1 ) then
+                     call scatter_from_rank0_to_lmloc(work, djdt_3D%old(:,:,n_o))
+                  end if
+               end do
+            end if
+         else
+            call abortRun('2-D to 3-D for 3D-Magnetic-field Not implemented yet')
          end if
       end if
 

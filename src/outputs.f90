@@ -226,7 +226,8 @@ contains
    subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame, &
               &             l_vphi_bal_write, l_stop_time,  us_Mloc, up_Mloc,  &
               &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
-              &             dpsidt, dTdt, dxidt, temp_3D_Rloc, dTdt_3D)
+              &             dpsidt, dTdt, dxidt, temp_3D_Rloc, dTdt_3D,        &
+              &             b_3D_Rloc, dBdt_3D, aj_3D_Rloc, djdt_3D)
 
       !-- Input variables
       real(cp),            intent(in) :: time
@@ -245,10 +246,14 @@ contains
       complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: dxi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: b_3D_Rloc(lm_max,nRstart3D:nRstop3D)
+      complex(cp),         intent(in) :: aj_3D_Rloc(lm_max,nRstart3D:nRstop3D)
       type(type_tarray),   intent(in) :: dpsidt
       type(type_tarray),   intent(in) :: dTdt
       type(type_tarray),   intent(in) :: dTdt_3D
       type(type_tarray),   intent(in) :: dxidt
+      type(type_tarray),   intent(in) :: dBdt_3D
+      type(type_tarray),   intent(in) :: djdt_3D
 
       !-- Local variable
       character(len=144) :: frame_name
@@ -265,7 +270,8 @@ contains
          call write_checkpoint(time, tscheme, n_time_step, n_log_file,     &
               &                l_stop_time, temp_Mloc, xi_Mloc, us_Mloc,   &
               &                up_Mloc, dTdt, dxidt, dpsidt, temp_3D_Rloc, &
-              &                dTdt_3D)
+              &                dTdt_3D, b_3D_Rloc, dBdt_3D, aj_3D_Rloc,    &
+              &                djdt_3D)
       end if
 
       !-- Calculate spectra

@@ -130,7 +130,7 @@ contains
          !--Radial integration
             E_pol_l(l) =Efac*rInt_R(e_pol_r_l(:,l),r_3D,rscheme_3D)
             E_tor_l(l) =Efac*rInt_R(e_tor_r_l(:,l),r_3D,rscheme_3D)
-            !-- Mean and SD of m-spectra
+            !-- Mean and SD of l-spectra
             call getMSD2(this%bpol2L%mean(l), this%bpol2L%SD(l), E_pol_l(l), &
                  &       this%n_calls, this%dt, time)
             call getMSD2(this%btor2L%mean(l), this%btor2L%SD(l), E_tor_l(l), &
@@ -147,7 +147,7 @@ contains
       !if ( l_stop_time ) call this%write_spectra_avg()
 
       !----------------
-      !- First write the time-average m spectra
+      !- First write the time-average l spectra
       !----------------
 
       !-- Only rank==0 writes the spec_avg.TAG file

@@ -46,7 +46,6 @@ module fields
    complex(cp), allocatable, public :: work_b_LMloc(:,:)
    complex(cp), allocatable, public :: aj_3D_LMloc(:,:), dj_3D_LMloc(:,:)
    complex(cp), allocatable, public :: aj_3D_Rloc(:,:), dj_3D_Rloc(:,:)
-   complex(cp), allocatable, public :: work_j_LMloc(:,:)
 
    !-- 3-D velocity in the physical space
    real(cp), allocatable, public :: ur_3D_Rloc(:,:,:)
@@ -200,7 +199,6 @@ contains
          allocate( work_b_LMloc(lmStart:lmStop,n_r_max_3D) )
          allocate( aj_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
          allocate( dj_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
-         allocate( work_j_LMloc(lmStart:lmStop,n_r_max_3D) )
          allocate( b_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
          allocate( db_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
          allocate( ddb_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
@@ -216,7 +214,6 @@ contains
          work_b_LMloc(:,:)=zero
          aj_3D_LMloc(:,:) =zero
          dj_3D_LMloc(:,:) =zero
-         work_j_LMloc(:,:)=zero
          b_3D_Rloc(:,:)   =zero
          db_3D_Rloc(:,:)  =zero
          ddb_3D_Rloc(:,:) =zero
@@ -236,7 +233,7 @@ contains
       if ( l_mag_3D ) then
          deallocate( aj_3D_Rloc, dj_3D_Rloc )
          deallocate( b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc )
-         deallocate( aj_3D_LMloc, dj_3D_LMloc, work_j_LMloc )
+         deallocate( aj_3D_LMloc, dj_3D_LMloc )
          deallocate( b_3D_LMloc, db_3D_LMloc, ddb_3D_LMloc, work_b_LMloc )
       end if
       if ( l_heat_3D ) then

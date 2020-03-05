@@ -13,7 +13,7 @@ module update_mag_3D_mod
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
    use radial_der, only: get_ddr, get_dr
-   use fields, only:  work_b_LMloc, work_j_LMloc ! reduce number of  arrays
+   use fields, only:  work_b_LMloc, work_LMloc
    use constants, only: zero, one, two, sq4pi
    use useful, only: abortRun
    use time_schemes, only: type_tscheme
@@ -148,9 +148,9 @@ contains
            &                 djdt_3D%impl(:,:,tscheme%istage),   &
            &                  tscheme%l_imp_calc_rhs(tscheme%istage))
 
-      !-- Now assemble the right hand side and store it in work_b_LMloc and work_j_LMloc
+      !-- Now assemble the right hand side and store it in work_b_LMloc and work_j_LMloc->3D_LMloc
       call tscheme%set_imex_rhs(work_b_LMloc, dBdt_3D, lmStart, lmStop, n_r_max_3D)
-      call tscheme%set_imex_rhs(work_j_LMloc, djdt_3D, lmStart, lmStop, n_r_max_3D)
+      call tscheme%set_imex_rhs(work_LMloc, djdt_3D, lmStart, lmStop, n_r_max_3D)
 
       ! This is a loop over all l values which should be treated on
       ! the actual MPI rank
@@ -217,7 +217,7 @@ contains
 
                   do n_r=2,n_r_max_3D-1
                      rhs1(n_r,lmB,threadid)=work_b_LMloc(lm1,n_r)
-                     rhs2(n_r,lmB,threadid)=work_j_LMloc(lm1,n_r)
+                     rhs2(n_r,lmB,threadid)=work_LMloc(lm1,n_r)
                   end do
                end if ! l>0
             end do ! loop over lm in block
@@ -303,13 +303,13 @@ contains
       !-- Local variables
       integer :: n_r, lm
 
-      call get_dr( dVxBh_LMloc, work_j_LMloc, lmStart, lmStop, &
+      call get_dr( dVxBh_LMloc, work_LMloc, lmStart, lmStop, &
            &       n_r_max_3D, rscheme_3D, nocopy=.true. )
 
       do n_r=1,n_r_max_3D
          do lm=max(2,lmStart),lmStop
-            dj_exp_last(lm,n_r)=              dj_exp_last(lm,n_r) &
-            &                   +or2_3D(n_r)*work_j_LMloc(lm,n_r)
+            dj_exp_last(lm,n_r)=            dj_exp_last(lm,n_r) &
+            &                   +or2_3D(n_r)*work_LMloc(lm,n_r)
          end do
       end do
 
@@ -354,7 +354,7 @@ contains
       if ( l_calc_lin_rhs ) then
          call get_ddr(b_3D, db_3D, ddb_3D, lmStart, lmStop,  &
               &       n_r_max_3D, rscheme_3D)
-         call get_ddr(aj_3D,dj_3D,work_j_LMloc,lmStart,lmStop,&
+         call get_ddr(aj_3D,dj_3D,work_LMloc,lmStart,lmStop, &
               &       n_r_max_3D, rscheme_3D)
 
          !-- Calculate explicit time step part:
@@ -365,7 +365,7 @@ contains
                dB_imp_last(lm,n_r)=BdiffFac* (      dL * or2_3D(n_r) * (   &
                &             ddb_3D(lm,n_r)-dL*or2_3D(n_r)*b_3D(lm,n_r) ) )
                dj_imp_last(lm,n_r)=BdiffFac* (      dL * or2_3D(n_r) * (   &
-               &       work_j_LMloc(lm,n_r)-dL*or2_3D(n_r)*aj_3D(lm,n_r) ) )
+               &         work_LMloc(lm,n_r)-dL*or2_3D(n_r)*aj_3D(lm,n_r) ) )
             end do
          end do
       end if

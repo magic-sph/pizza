@@ -22,7 +22,6 @@ module z_functions
    use horizontal, only: theta, cost, sint
    use radial_functions, only: r, r_3D, beta, oheight, ekpump, or1_3D, &
        &                       rgrav_3D, rscheme_3D
-   use radial_der, only: get_dr
 
    implicit none
 
@@ -205,6 +204,14 @@ contains
       call allgather_from_rloc(this%up_phys_Rloc,upp,n_phi_max_3D)
       if( l_ek_pump ) call allgather_from_rloc(this%ek_phys_Rloc,ekp,n_phi_max_3D)
 
+      !do n_r=1,n_r_max
+      !   do n_phi=1,n_phi_max_3D
+      !      usr(n_phi,n_r) =(one-r(n_r))**2*r(n_r)**2
+      !      upp(n_phi,n_r) =(one-r(n_r))**2*r(n_r)**2
+      !      ekp(n_phi,n_r) = 1.0_cp
+      !   end do
+      !end do
+
       !-- Compute 3D velocity fields by a linear interpolation
       do n_r_r=nRstart3D,nRstop3D
          do n_th_NHS=1,n_theta_max/2
@@ -254,6 +261,30 @@ contains
          end do
       end do
 
+      !!print*, 'r_icb, what is wrong!!!!', r_icb, r_cmb
+      !print*, 'eqjhn, what is wrong!!!!', rank, nRstart3D, nRstop3D
+
+      !do n_r=nRstart3D,nRstop3D
+      !   do n_th_NHS=1,n_theta_max
+      !      n_th_SHS=n_theta_max+1-n_th_NHS
+      !      s_r = r_3D(n_r)*sint(n_th_NHS)
+      !!      ur_Rloc(:,n_th_NHS,n_r) = (one-r_3D(n_r))**2*r_3D(n_r)**2
+      !!      ut_Rloc(:,n_th_NHS,n_r) = (one-r_3D(n_r))**2*r_3D(n_r)**2
+      !!      up_Rloc(:,n_th_NHS,n_r) = (one-r_3D(n_r))**2*r_3D(n_r)**2
+      !      if ( s_r < r_icb ) then !-- Inside TC
+      !         if ( s_r > r_icb ) print*, 'n_th_NHS, s_r, r_icb', n_th_NHS, s_r, r_icb
+      !         do n_phi=1,n_phi_max_3D
+      !            ur_Rloc(n_phi,n_th_NHS,n_r)=0.0_cp
+      !            ur_Rloc(n_phi,n_th_SHS,n_r)=0.0_cp
+      !            ut_Rloc(n_phi,n_th_NHS,n_r)=0.0_cp
+      !            ut_Rloc(n_phi,n_th_SHS,n_r)=0.0_cp
+      !            up_Rloc(n_phi,n_th_NHS,n_r)=0.0_cp
+      !            up_Rloc(n_phi,n_th_SHS,n_r)=0.0_cp
+      !         end do!
+      !      end if ! Inside/outside TC
+      !   end do
+      !end do
+
       !-- CMB values
       if ( nRstart3D == 1 ) then
          ur_Rloc(:,:,1) = 0.0_cp
@@ -262,6 +293,24 @@ contains
             up_Rloc(:,:,1) = 0.0_cp
          end if
       end if
+
+#ifdef TOTO
+      block
+         integer :: n_r, file_handle
+
+      if( rank == 0 ) then
+         open(newunit=file_handle, file='extrapol_rloc.dat', status='new', form='formatted')
+         do n_r=1,n_r_max
+            write(file_handle, '(2es20.12)') r_3D(n_r), ur_Rloc(1,n_theta_max/2,n_r)
+         end do
+         close(file_handle)
+      endif
+      end block
+
+      print*, 'ALL GOOD extrapolate!**'!
+
+      stop
+#endif
 
    end subroutine extrapolate
 !--------------------------------------------------------------------------------
@@ -285,8 +334,9 @@ contains
       tmp(:,:)      =0.0_cp
       zavg_Rloc(:,:)=zero
 
-      if( n_procs == 1 .and. .false.) then
+      if( .false. ) then!n_procs == 1 .and. .false. ) then!
       !-- z-average in spatial space with a 4th-order scheme
+      if ( rank == 0) print*, 'WARNING:: Inside Slow 4th order Simpson scheme'
       do n_phi=1,n_phi_max_3D
          call cyl_avg(work_Rloc(n_phi,:,:),tmp(n_phi,:))
       end do
@@ -373,6 +423,14 @@ contains
       integer :: n_th_NHS, n_z, n_z_r, n_z_t, n_th_SHS
       integer :: n_r!, n_theta!, n_p
       real(cp) :: thwFac
+      !real(cp) :: r_i(n_r_max),r_i3D(n_r_max_3D)
+
+      !open(1,file='./../../MagIC/test-build-out/urextra_com.dat')
+      !do n_r=1,n_r_max
+      !   read(1,*) r_i(n_r_max_3D+1-n_r)
+      !enddo
+      !close(1)
+      !r_i3D(:) = r_i(:)
 
       thwFac=BuoFac/CorFac
 
@@ -392,8 +450,11 @@ contains
             !&                   cos(theta(n_th_NHS))
             &                   dTdth(n_th_NHS,n_r)
             !&                   dTdth_Rloc(n_th_NHS,n_r)
+            !dTzdt(n_th_NHS,n_r)=(-r_3D(n_r)*cost(n_th_NHS))**2.!one!r_i3D(n_r)*theta(n_theta)
+            !dTzdt(n_th_NHS,n_r)=r_3D(n_r)*cost(n_th_NHS)*sin(pi*r_3D(n_r)*cost(n_th_NHS))
          end do
       end do
+
       !-- Compute thermal wind
       thw_Rloc(:,:)=0.0_cp
       do n_r=nRstart3D,nRstop3D
@@ -453,19 +514,49 @@ contains
       !      end if
       !   end do
       !end if
+
 #ifdef TOTO
       block
          integer :: file_handle
+
+         open(newunit=file_handle, file='Cwznr.dat', status='new', form='formatted')
+         do n_r=1,n_r_max
+            write(file_handle, '(35i3)') this%interp_zp_thw(1,2,:n_theta_max/2,n_r)
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='Cwznt.dat', status='new', form='formatted')
+         do n_r=1,n_r_max
+            write(file_handle, '(35i3)') this%interp_zp_thw(2,2,:n_theta_max/2,n_r)
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='Cwzwr.dat', status='new', form='formatted')
+         do n_r=1,n_r_max
+            write(file_handle, '(35es20.12)') this%interp_wt_thw(1,2,:n_theta_max/2,n_r)
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='Cwzwt.dat', status='new', form='formatted')
+         do n_r=1,n_r_max
+            write(file_handle, '(35es20.12)') this%interp_wt_thw(2,2,:n_theta_max/2,n_r)
+         end do
+         close(file_handle)
+
          open(newunit=file_handle, file='thw_rloc.dat', status='new', form='formatted')
+         write(file_handle, '(129es20.12)') 78374.0, theta(:n_theta_max/2)
          do n_r=1,n_r_max_3D
-            write(file_handle, '(26es20.12)') r_i3D(n_r), thw_Rloc(:n_theta_max/2,n_r)
+            write(file_handle, '(129es20.12)') r_3D(n_r), thw_Rloc(:n_theta_max/2,n_r)
          end do
          close(file_handle)
       end block
-      print*, 'Radius OUTPUT.dat', r_i3D(n_r_max_3D/2), 'Latitude OUTPUT.dat', theta(n_theta_max/4)
+
+      print*, 'Radius OUTPUT.dat', r_3D(n_r_max_3D/2), 'Latitude OUTPUT.dat', theta(n_theta_max/4)
       print*, 'ALL GOOD compute_thw!**'
+
       stop
 #endif
+
       !-- Add thermal wind to u_phi
       do n_r=nRstart3D,nRstop3D
          do n_th_NHS=1,n_theta_max/2
@@ -474,6 +565,7 @@ contains
             up_Rloc(:,n_th_SHS,n_r)=up_Rloc(:,n_th_SHS,n_r) + thw_Rloc(n_th_NHS,n_r)
          end do
       end do
+
    end subroutine compute_thermal_wind
 !--------------------------------------------------------------------------------
    subroutine cyl_avg(work,cylavg)
@@ -482,10 +574,13 @@ contains
       !-- 
       !-- work: (input) array depending on phi,theta and r
       !-- cylavg: (output) mean value on cylinder surface
+
       !-- Input variables
-      real(cp), intent(in) :: work(:,:)
+      real(cp), intent(in) :: work(n_theta_max,nRStart3D:nRStop3D)
+
       !-- Output variable
-      real(cp), intent(out) :: cylavg(:)
+      real(cp), intent(out) :: cylavg(n_r_max)
+
       !-- Local variables
       integer :: n_z, nz, n_s, n_th, n_r, itr
       integer :: n_r0, n_r1, n_r2, n_r3, n_th0, n_th1, n_th2, n_th3
@@ -494,19 +589,24 @@ contains
       real(cp) :: tt0, tt1, tt2, tt3, t10, t20, t30, t21, t31, t32
       real(cp) :: a01, a12, a23, a012, a123, tot
       real(cp) :: acyl(-n_r_max:n_r_max,n_r_max), aith(0:3)
+
       cylavg(:)=0.0_cp
       eps=10.0_cp*epsilon(one)
+
       !-- Loop over axial cylinders starts here
       sLoop: do n_s=1,n_r_max
+
          if ( r(n_s) < r_icb ) exit sLoop
+
          zmax = sqrt(r_cmb*r_cmb-r(n_s)*r(n_s)) ! zmax
          zmin = 0.0_cp
          nz = 2*int(n_r_max*(zmax-zmin)/(two*r_cmb)) ! Number of z points (one HS)
          nz = max(nz, 4)  ! Minimum to 4 for Simpson integration
          dz = (zmax-zmin)/real(nz,cp)
+
          !-- Loop over z starts
          do n_z=-nz,nz
-            z=zmin+dz*n_z 
+            z=zmin+dz*n_z
             rc=sqrt(r(n_s)*r(n_s)+z*z)   ! radius from center
             if (rc >= r_cmb) rc=r_cmb-eps
             thet=half*pi-atan(z/r(n_s))  ! polar angle of point (rax,z)
@@ -516,17 +616,32 @@ contains
             !  **** (z,rax)-grid using a fourth-order Lagrangian scheme
             !
             !--  Find indices of radial grid levels that bracket rc
-            rbracket: do n_r=n_r_max_3D-1,1,-1
+            !rbracket: do n_r=n_r_max_3D-1,1,-1
+            !   if ( r_3D(n_r) >= rc ) then
+            !      n_r2 = n_r
+            !      exit rbracket
+            !   end if
+            !end do rbracket
+            !if(n_r2 == n_r_max_3D-1) n_r2=n_r_max_3D-2
+            !if(n_r2 == 1 ) n_r2=2
+            rbracket: do n_r=n_r_max_3D-1,1,-1!nRstop3D-1,nRstart3D,-1!
                if ( r_3D(n_r) >= rc ) then
                   n_r2 = n_r
                   exit rbracket
                end if
             end do rbracket
-            if(n_r2 == n_r_max_3D-1) n_r2=n_r_max_3D-2
-            if(n_r2 == 1 ) n_r2=2
+            if(n_r2 >= nRstop3D-2) n_r2=nRstop3D-2
+            if(n_r2 <= nRstart3D+1 ) n_r2=nRstart3D+1
             n_r3=n_r2-1
             n_r1=n_r2+1
             n_r0=n_r2+2
+            !if ( rank == 1 ) then
+            !   n_r3=n_r3-n_r_max_3D/2
+             !  n_r2=n_r2-n_r_max_3D/2
+            !   n_r1=n_r1-n_r_max_3D/2
+            !   n_r0=n_r0-n_r_max_3D/2
+            !end if
+
             !-- Find indices of angular grid levels that bracket thet
             tbracket: do n_th=n_theta_max,1,-1
                if( theta(n_th) <= thet) then
@@ -540,6 +655,7 @@ contains
             n_th2=n_th1+1
             n_th3=n_th1+2
             n_th0=n_th1-1
+
             !--  Calculate differences in r for 4th-order interpolation
             rr0=rc-r_3D(n_r0)
             rr1=rc-r_3D(n_r1)
@@ -551,6 +667,7 @@ contains
             r21= one/(r_3D(n_r2)-r_3D(n_r1))
             r31= one/(r_3D(n_r3)-r_3D(n_r1))
             r32= one/(r_3D(n_r3)-r_3D(n_r2))
+
             !--  Calculate differences in theta for 4th-order interpolation
             tt0=thet-theta(n_th0)
             tt1=thet-theta(n_th1)
@@ -562,6 +679,7 @@ contains
             t21=one/(theta(n_th2)-theta(n_th1))
             t31=one/(theta(n_th3)-theta(n_th1))
             t32=one/(theta(n_th3)-theta(n_th2))
+
             !-- Loop over 4 neighboring grid angles
             do itr=0,3
                n_th=n_th0+itr
@@ -572,10 +690,13 @@ contains
                &    rr2*work(n_th,n_r1))*r21
                a23=(rr2*work(n_th,n_r3) -    &
                &    rr3*work(n_th,n_r2))*r32
+
                a012=(rr0*a12-rr2*a01)*r20
                a123=(rr1*a23-rr3*a12)*r31
+
                aith(itr)=(rr0*a123-rr3*a012)*r30
             end do
+
             !-- Interpolation in theta-direction
             a01=(tt0*aith(1)-tt1*aith(0))*t10
             a12=(tt1*aith(2)-tt2*aith(1))*t21
@@ -599,22 +720,30 @@ contains
          enddo
          cylavg(n_s)=tot/(6.0_cp*nz)
       end do sLoop
+
       !!--  special case s=rmax
       !cylavg(0) = half*( work(n_theta_max/2,1)  + &
       !&                  work(n_theta_max/2+1,1) )
+
    end subroutine cyl_avg
 !--------------------------------------------------------------------------------
    subroutine fill_mat(this)
+
       !-- Input variables
       class(zfunc_type) :: this
+
       !-- Local arrays
       real(cp) :: zz(0:n_r_max_3D)!(nRstop3D-nRstart3D)+1)
+
       !-- Local variables
       integer :: n_r, n_t, n_z, n_r_r, n_t_t
       integer :: n_start!, n_p
       real(cp) :: r_r, z_r, c_t, h
       real(cp) :: norm, alpha_r, alpha_t
       real(cp) :: s_r, dz, th
+
+      !real(cp) :: r_i(1:n_r_max), h_i(1:n_r_max), r_i3D(1:n_r_max_3D)
+
 #ifdef TOTO
       !-- Get z grid
       !-- for interpolation: n_r_max points on z-axis
@@ -656,6 +785,7 @@ contains
 !#ifdef TOTO
       !-- Get z grid
       !-- for interpolation: n_r_max points on z-axis
+      norm = one/(two*n_z_max+1)
       do n_r=1,n_r_max!-1 loop on all s
          h = sqrt(r_cmb**2-r(n_r)**2)!half*height(n_r)! WARNING:: beta_shift in height!
          !n_r_r = n_r_max_3D-1
@@ -678,7 +808,7 @@ contains
             !   !-- Multiply by 2 because of the symmetries
             !   norm = two/(two*n_z_max+1)
             !else
-               norm = one/(two*n_z_max+1)
+            !   norm = one/(two*n_z_max+1)
             !endif
             alpha_r = (r_r-r_3D(n_r_r))/(r_3D(n_r_r-1)-r_3D(n_r_r))
             alpha_t = (c_t-cost(n_t_t))/(cost(n_t_t-1)-cost(n_t_t))
@@ -701,6 +831,26 @@ contains
          end do
       end do
 !#endif
+
+      !do n_r=1,n_r_max
+      !   r_i(n_r) = r(n_r_max+1-n_r)
+      !   h_i(n_r) = sqrt(r_cmb**2-r_i(n_r)**2)!half*height(n_r_max+1-n_r)
+      !end do
+      !!r_i(1) = 0.55112921932131431
+      !do n_r=1,n_r_max_3D
+      !   r_i3D(n_r)=r_3D(n_r_max_3D+1-n_r)
+      !end do
+      !print*, 'reversed s :: s_i(1), s_i(-1)', r_i(1), r_i(n_r_max)
+      !print*, 'reversed r :: r_i(1), r_i(-1)', r_i3D(1), r_i3D(n_r_max_3D)
+
+      !open(1,file='./../../MagIC/test-build-out/urextra_com.dat')
+      !do n_r=1,n_r_max
+      !   read(1,*) r_i(n_r_max_3D+1-n_r)
+      !enddo
+      !close(1)
+      !r_i3D(:) = r_i(:)
+      !print*, r_i(:)
+
       !-- Get theta weights for thermal wind calculation
       zz(:) = 0.0_cp
       !do n_r=2,n_r_max_3D
@@ -713,7 +863,7 @@ contains
             do n_r_r=n_start,n_r!-1 !-- Flip the loop since our radii are decreasing.
                if( n_r_r > n_r_max_3D) print*, 'w!! segFault in n_r_r loop!; n_r_r', n_r_r
                n_z = n_z+1
-               th  = asin(s_r*or1_3D(n_r_r))
+               th  = asin(s_r*or1_3D(n_r_r))!/r_i3D(n_r_r))!
                if( th < 0.0_cp ) print*, 'w!! th<0; n_z, n_r, n_t =', n_z, n_r, n_t
                zz(n_z)=sqrt(r_3D(n_r_r)**2-s_r**2)
                if( th /= th ) print*, 'w!! nan in th; n_z, n_r, n_t =', th, n_z, n_r, n_t
@@ -733,7 +883,7 @@ contains
                   if( n_t_t > n_theta_max/2 ) print*, 'w!! segFault in n_t_t loop!; n_t_t', n_t_t
                   if ( n_r_r==n_r ) then
                      this%interp_zp_thw(1,n_z,n_t,n_r)=n_r
-                     this%interp_zp_thw(2,n_z,n_t,n_r)=n_t!heta_max/2
+                     this%interp_zp_thw(2,n_z,n_t,n_r)=n_t!heta_max/2 !--> Really important, for some reasons...
                      this%interp_wt_thw(1,n_z,n_t,n_r)=one
                      this%interp_wt_thw(2,n_z,n_t,n_r)=0.0_cp
                   else
@@ -782,15 +932,19 @@ contains
             !end do
          end do
       end do
+
    end subroutine fill_mat
 !--------------------------------------------------------------------------------
    subroutine add_new_point(this, n_s, n_r, n_t, weight)
+
       !-- Input variables
       class(zfunc_type) :: this
       integer :: n_s, n_r, n_t
       real(cp) :: weight
+
       !-- Local variables
       integer :: n_p
+
       !-- Add a new point for the z-integral-interpolation
       do n_p=1,this%nzp_zavg(n_s)! number of points already stored
          !-- Scan to see if point is already used ...
@@ -807,6 +961,7 @@ contains
       this%interp_zt_mat(n_p,n_s)=n_t
       this%interp_wt_mat(n_p,n_s)=weight
       this%nzp_zavg(n_s)=n_p
+
    end subroutine add_new_point
 !--------------------------------------------------------------------------------
 end module z_functions
