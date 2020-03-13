@@ -941,7 +941,6 @@ contains
                call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
                     &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
                     &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
-               print*, 'READ FILES!!!! TEMP3D OKOKOK', work(1,1)
             end if
             call scatter_from_rank0_to_lmloc(work, temp_3D_LMloc)
 
@@ -1000,7 +999,6 @@ contains
                call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
                     &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
                     &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
-               print*, 'READ FILES!!!! B3D OKOKOK', work(1,1)
             end if
             call scatter_from_rank0_to_lmloc(work, b_3D_LMloc)
             !-- toroidal j field
@@ -1012,7 +1010,6 @@ contains
                call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
                     &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
                     &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
-               print*, 'READ FILES!!!! J3D OKOKOK', work(1,1)
             end if
             call scatter_from_rank0_to_lmloc(work, aj_3D_LMloc)
 
@@ -1100,8 +1097,8 @@ contains
                   end if
                end do
             end if
-         else
-            call abortRun('2-D to 3-D for 3D-Magnetic-field Not implemented yet')
+         !else
+         !   call abortRun('2-D to 3-D for 3D-Magnetic-field Not implemented yet')
          end if
       end if
 

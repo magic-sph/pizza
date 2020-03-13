@@ -669,24 +669,24 @@ contains
 
    end subroutine scatter_from_rank0_to_lmloc
 !------------------------------------------------------------------------------
-   subroutine reduce_radial_on_rank(arr_dist, n_r_max, irank)
+   subroutine reduce_radial_on_rank(arr_dist, len_arr_r, irank)
 
       !-- Input variable
-      integer,  intent(in) :: n_r_max
+      integer,  intent(in) :: len_arr_r
       integer,  intent(in) :: irank
 
       !-- Output variable
-      real(cp), intent(inout) :: arr_dist(n_r_max)
+      real(cp), intent(inout) :: arr_dist(len_arr_r)
 
       !-- Local variable
       integer :: n_r
-      real(cp) :: work(n_r_max)
+      real(cp) :: work(len_arr_r)
 
-      call MPI_Reduce(arr_dist, work, n_r_max, MPI_DEF_REAL, &
+      call MPI_Reduce(arr_dist, work, len_arr_r, MPI_DEF_REAL, &
            &          MPI_SUM, irank, MPI_COMM_WORLD, ierr)
 
       if ( rank == irank ) then
-         do n_r=1,n_r_max
+         do n_r=1,len_arr_r
             arr_dist(n_r) = work(n_r)
          end do
       end if
