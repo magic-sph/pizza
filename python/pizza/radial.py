@@ -140,8 +140,11 @@ class PizzaRadial(PizzaSetup):
         if ( self.l_heat_3D or self.l_mag_3D ):
             self.temp_mean = data_t3D[:, 1]
             self.temp_std = data_t3D[:, 2]
-            self.mag_mean = data_t3D[:, 3]
-            self.mag_std = data_t3D[:, 4]
+            self.bpol_mean = data_t3D[:, 3]
+            self.bpol_std = data_t3D[:, 4]
+            self.btor_mean = data_t3D[:, 5]
+            self.btor_std = data_t3D[:, 6]
+            self.mag_mean = self.bpol_mean + self.btor_mean
         else:
             self.temp_mean = data[:, 9]
             self.temp_std = data[:, 10]
@@ -214,9 +217,13 @@ class PizzaRadial(PizzaSetup):
         if ( self.l_mag_3D ):
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.fill_between(self.radius, self.mag_mean-self.temp_std,
-                            self.mag_mean+self.temp_std, alpha=0.1)
-            ax.plot(self.radius, self.mag_mean, label='b_pol_r**2 + b_tor_r**2')
+            ax.fill_between(self.radius, self.bpol_mean-self.bpol_std,
+                            self.bpol_mean+self.bpol_std, facecolor='blue', alpha=0.1)
+            ax.plot(self.radius, self.bpol_mean, c='b', label='b_tor_r**2')
+            ax.fill_between(self.radius, self.btor_mean-self.btor_std,
+                            self.btor_mean+self.btor_std, facecolor='red', alpha=0.1)
+            ax.plot(self.radius, self.btor_mean, c='r', label='b_tor_r**2')
+            ax.plot(self.radius, self.mag_mean, c='k', ls='-', lw=1.9, alpha=0.8, label='b_pol_r**2 + b_tor_r**2')
             ax.set_yscale('log')
             ax.set_xlabel('Radius')
             ax.set_ylabel('Magnetic Energy')

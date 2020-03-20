@@ -133,6 +133,8 @@ contains
       E_tor_l(:) = 0.0_cp
       E_pol_m(:) = 0.0_cp
       E_tor_m(:) = 0.0_cp
+      E_pol_r(:) = 0.0_cp
+      E_tor_r(:) = 0.0_cp
       do n_r=1,n_r_max_3D
          e_pol_r_l(:,n_r) = 0.0_cp
          e_tor_r_l(:,n_r) = 0.0_cp
