@@ -125,6 +125,7 @@ module namelists
    real(cp), public :: hdif_vel        ! Hyperdiffusion amplitude on velocity
    real(cp), public :: hdif_mag        ! Hyperdiffusion amplitude on magnetic field
    integer,  public :: hdif_exp        ! Exponent of the hyperdiffusion profile
+   integer,  public :: hdif_l          ! Latitudinal wavenumber for 3D hyper diffusion
    integer,  public :: hdif_m          ! Azimuthal wavenumber for hdif
 
    public :: read_namelists, write_namelists
@@ -147,8 +148,11 @@ contains
       &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
-      &                matrix_solve,corio_term,buo_term,bc_method
-      namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp,hdif_mag
+      &                matrix_solve,corio_term,buo_term,bc_method,  &
+      &                hdif_temp,hdif_vel,hdif_comp,hdif_mag,       &
+      &                hdif_exp,hdif_l,hdif_m
+      !namelist/hdif/hdif_temp,hdif_vel,hdif_comp,hdif_mag,&
+      !&             hdif_exp,hdif_l,hdif_m
       namelist/phys_param/ra,ek,pr,prmag,raxi,sc,radratio,g0,g1,g2,&
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
       &                   l_tcond_3D,tcond_fac,l_temp_advz,        &
@@ -206,14 +210,14 @@ contains
          end if
          close(input_handle)
 
-         open(newunit=input_handle,file=trim(input_filename))
-         !-- Reading control parameters from namelists in STDIN:
-         if ( rank == 0 ) write(output_unit,*) '!  Reading hdif parameters!'
-         read(input_handle,nml=hdif,iostat=res)
-         if ( res /= 0 .and. rank == 0 ) then
-            write(output_unit,*) '!  No hdif namelist found!'
-         end if
-         close(input_handle)
+         !open(newunit=input_handle,file=trim(input_filename))
+         !!-- Reading hdif parameters from namelists in STDIN:
+         !if ( rank == 0 ) write(output_unit,*) '!  Reading hdif parameters!'
+         !read(input_handle,nml=param_overdif,iostat=res)
+         !if ( res /= 0 .and. rank == 0 ) then
+         !   write(output_unit,*) '!  No hdif namelist found!'
+         !end if
+         !close(input_handle)
 
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading physical parameters from namelists in STDIN:
@@ -525,8 +529,9 @@ contains
       hdif_temp        =0.0_cp
       hdif_comp        =0.0_cp
       hdif_mag         =0.0_cp
-      hdif_m           =0
       hdif_exp         =0
+      hdif_l           =0
+      hdif_m           =0
 
       !-- Physcal parameters
       l_non_rot        =.false.
@@ -672,6 +677,7 @@ contains
       write(n_out,'(''  hdif_comp       ='',ES14.6,'','')') hdif_comp
       write(n_out,'(''  hdif_mag        ='',ES14.6,'','')') hdif_mag
       write(n_out,'(''  hdif_exp        ='',i4,'','')') hdif_exp
+      write(n_out,'(''  hdif_l          ='',i4,'','')') hdif_l
       write(n_out,'(''  hdif_m          ='',i4,'','')') hdif_m
       write(n_out,*) "/"
 

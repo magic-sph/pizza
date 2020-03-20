@@ -283,6 +283,7 @@ class PizzaSpectrum(PizzaSetup):
                     ax.loglog(self.index[1:]+1, self.up2[1:], label='up**2')
                     ax.loglog(self.index[1:]+1, self.enst[1:],
                               label='omega**2')
+                ax.set_ylabel('Kinetic Energy Spectra')
                 ax.set_xlabel('m+1')
                 ax.set_xlim(1, self.index[-1])
                 ax.legend(loc='best', frameon=False)
@@ -327,6 +328,7 @@ class PizzaSpectrum(PizzaSetup):
 
                 ax.set_yscale('log')
                 ax.set_xscale('log')
+                ax.set_ylabel('Kinetic Energy Spectra')
                 ax.set_xlabel('m+1')
                 ax.set_xlim(1, self.index[-1])
                 ax.legend(loc='best', frameon=False)
@@ -585,7 +587,7 @@ class Pizza2DSpectrum(PizzaSetup):
         ax.set_yscale('log')
 
         ax.set_xlabel('m+1')
-        ax.set_ylabel('Spectra')
+        ax.set_ylabel('Kinetic Energy Spectra')
 
         ax.legend(loc='best', frameon=False)
 
@@ -811,13 +813,22 @@ class PizzaSpectrum3D(PizzaSetup):
             self.cia_std = data[:, 6]
         else:
             if not self.ave:
-                self.bpol2 = data[:, 1]
-                self.btor2 = data[:, 2]
+                self.bpol2l = data[:, 1]
+                self.btor2l = data[:, 2]
+                self.bpol2m = data[:, 3]
+                self.btor2m = data[:, 4]
             else:
-                self.bpol2_mean = data[:, 1]
-                self.bpol2_std = data[:, 2]
-                self.btor2_mean = data[:, 3]
-                self.btor2_std = data[:, 4]
+                self.bpol2l_mean = data[:, 1]
+                self.bpol2l_std = data[:, 2]
+                self.btor2l_mean = data[:, 3]
+                self.btor2l_std = data[:, 4]
+                self.bpol2m_mean = data[:, 5]
+                self.bpol2m_std = data[:, 6]
+                self.btor2m_mean = data[:, 7]
+                self.btor2m_std = data[:, 8]
+
+        self.emagl_mean = self.bpol2l_mean+self.btor2l_mean
+        self.emagm_mean = self.bpol2m_mean+self.btor2m_mean
 
         if iplot:
             self.plot()
@@ -848,10 +859,10 @@ class PizzaSpectrum3D(PizzaSetup):
                 if not self.ave:
                     out[:, 1:] = 0.5*(data[:, 1:]+tmp[:, 1:])
                 else:
-                    for j in [1, 3]:
+                    for j in [1, 3, 5, 7]:
                         out[:, j] = (fac_old*data[:, j]+fac_new*tmp[:, j]) / \
                                      fac_tot
-                    for j in [2, 4]:
+                    for j in [2, 4, 6, 8]:
                         out[:, j] = np.sqrt((fac_old*data[:, j]**2 +
                                              fac_new*tmp[:, j]**2) / fac_tot)
         else:
@@ -893,13 +904,17 @@ class PizzaSpectrum3D(PizzaSetup):
             if not self.ave:
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
-                if abs(self.bpol2[0]) > 0.:
-                    ax.loglog(self.index[1:]+1, self.bpol2[1:], label='b_pol**2')
-                    ax.loglog(self.index+1, self.btor2, label='b_tor**2')
+                if abs(self.btor2l[0]) > 0.:
+                    ax.loglog(self.index+1, self.bpol2l, label='b_pol_l**2')
+                    ax.loglog(self.index+1, self.btor2l, label='b_tor_l**2')
                 else:
-                    ax.loglog(self.index[1:]+1, self.bpol2[1:], label='b_pol**2')
-                    ax.loglog(self.index[1:]+1, self.btor2[1:], label='b_tor**2')
-                ax.set_xlabel('l+1')
+                    ax.loglog(self.index[1:]+1, self.bpol2l[1:], label='b_pol_l**2')
+                    ax.loglog(self.index[1:]+1, self.btor2l[1:], label='b_tor_l**2')
+                if abs(self.bpol2m[0]) > 0.:
+                    ax.loglog(self.index+1, self.bpol2m, ls='-.', label='b_pol_m**2')
+                    ax.loglog(self.index+1, self.btor2m, ls='-.', label='b_tor_m**2')
+                ax.set_ylabel('Magnetic Energy Spectra')
+                ax.set_xlabel('l+1 (m+2)')
                 ax.set_xlim(1, self.index[-1])
                 ax.legend(loc='best', frameon=False)
                 fig.tight_layout()
@@ -907,33 +922,46 @@ class PizzaSpectrum3D(PizzaSetup):
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
 
-                if abs(self.bpol2_mean[0]) > 0.:
-                    ax.fill_between(self.index[1:]+1,
-                                    self.bpol2_mean[1:]-self.bpol2_std[1:],
-                                    self.bpol2_mean[1:]+self.bpol2_std[1:],
+                if abs(self.btor2l_mean[0]) > 0.:
+                    ax.fill_between(self.index+1,
+                                    self.bpol2l_mean-self.bpol2l_std,
+                                    self.bpol2l_mean+self.bpol2l_std,
                                     alpha=0.1)
-                    ax.plot(self.index[1:]+1, self.bpol2_mean[1:], label='bpol**2')
+                    ax.plot(self.index+1, self.bpol2l_mean, label='b_pol_l**2')
 
-                    ax.fill_between(self.index+1, self.btor2_mean-self.btor2_std,
-                                    self.btor2_mean+self.btor2_std, alpha=0.1)
-                    ax.plot(self.index+1, self.btor2_mean, label='btor**2')
+                    ax.fill_between(self.index+1, self.btor2l_mean-self.btor2l_std,
+                                    self.btor2l_mean+self.btor2l_std, alpha=0.1)
+                    ax.plot(self.index+1, self.btor2l_mean, label='b_tor_l**2')
 
                 else:
                     ax.fill_between(self.index[1:]+1,
-                                    self.bpol2_mean[1:]-self.bpol2_std[1:],
-                                    self.bpol2_mean[1:]+self.bpol2_std[1:],
+                                    self.bpol2l_mean[1:]-self.bpol2l_std[1:],
+                                    self.bpol2l_mean[1:]+self.bpol2l_std[1:],
                                     alpha=0.1)
-                    ax.plot(self.index[1:]+1, self.bpol2_mean[1:], label='bpol**2')
+                    ax.plot(self.index[1:]+1, self.bpol2l_mean[1:], label='b_pol_l**2')
 
                     ax.fill_between(self.index[1:]+1,
-                                    self.btor2_mean[1:]-self.btor2_std[1:],
-                                    self.btor2_mean[1:]+self.btor2_std[1:],
+                                    self.btor2l_mean[1:]-self.btor2l_std[1:],
+                                    self.btor2l_mean[1:]+self.btor2l_std[1:],
                                     alpha=0.1)
-                    ax.plot(self.index[1:]+1, self.btor2_mean[1:], label='btor**2')
+                    ax.plot(self.index[1:]+1, self.btor2l_mean[1:], label='b_tor_l**2')
+                if abs(self.bpol2m_mean[0]) > 0.:
+                    ax.fill_between(self.index,
+                                    self.bpol2m_mean-self.bpol2m_std,
+                                    self.bpol2m_mean+self.bpol2m_std,
+                                    alpha=0.1)
+                    ax.plot(self.index, self.bpol2m_mean, ls='-.', label='b_pol_m**2')
+
+                    ax.fill_between(self.index, self.btor2m_mean-self.btor2m_std,
+                                    self.btor2m_mean+self.btor2m_std, alpha=0.1)
+                    ax.plot(self.index, self.btor2m_mean, ls='-.', label='b_tor_m**2')
+                ax.loglog(self.index, self.emagm_mean, lw=1.8,ls='-.',alpha=0.8, label='e_mag_m**2')
+                ax.loglog(self.index+1, self.emagl_mean, c='k', lw=1.9, alpha=0.8, label='e_mag_l**2')
 
                 ax.set_yscale('log')
                 ax.set_xscale('log')
-                ax.set_xlabel('l+1')
+                ax.set_ylabel('Magnetic Energy Spectra')
+                ax.set_xlabel('l+1 (m+2)')
                 ax.set_xlim(1, self.index[-1])
                 ax.legend(loc='best', frameon=False)
                 fig.tight_layout()

@@ -24,6 +24,7 @@ module outputs_3D
    private
 
    type(mean_sd_type) :: tempR
+   type(mean_sd_type) :: magR
    type(spectra_3D_type), public :: spec_3D
    integer :: n_heat_file, n_mag_file, n_calls
    real(cp) :: timeLast_rad, timeAvg_rad
@@ -50,6 +51,7 @@ contains
             open(newunit=n_mag_file, file=file_name, status='new')
          end if
          call tempR%initialize(1,n_r_max_3D)
+         call magR%initialize(1,n_r_max_3D)
          n_calls     =0
          timeLast_rad=0.0_cp
       end if
@@ -61,6 +63,7 @@ contains
    subroutine finalize_outputs_3D
 
       if ( rank == 0 ) then
+         call magR%finalize()
          call tempR%finalize()
          if ( l_heat_3D ) close(n_heat_file)
          if ( l_mag_3D ) close(n_mag_file)
@@ -83,12 +86,15 @@ contains
       complex(cp),         intent(in) :: db_3D(lmStart:lmStop,n_r_max_3D)
       complex(cp),         intent(in) :: aj_3D(lmStart:lmStop,n_r_max_3D)
 
+      !-- Local variables
+      real(cp) :: mag_3D(n_r_max_3D)
+
       timeAvg_rad  = timeAvg_rad  + tscheme%dt(1)
       timeAvg_spec = timeAvg_spec + tscheme%dt(1)
 
       if ( l_log ) then
-         call write_time_series(time, temp_3D, b_3D, db_3D, aj_3D)
-         call get_radial_averages(timeAvg_rad, l_stop_time, temp_3D)
+         call write_time_series(time, temp_3D, b_3D, db_3D, aj_3D, mag_3D)
+         call get_radial_averages(timeAvg_rad, l_stop_time, temp_3D, mag_3D)
       end if
 
       if ( l_mag_3D ) then
@@ -106,7 +112,7 @@ contains
 
    end subroutine write_outputs_3D
 !---------------------------------------------------------------------------------
-   subroutine write_time_series(time, temp_3D, b_3D, db_3D, aj_3D)
+   subroutine write_time_series(time, temp_3D, b_3D, db_3D, aj_3D, mag_3D)
 
       !-- Input variables
       real(cp),    intent(in) :: time
@@ -114,6 +120,9 @@ contains
       complex(cp), intent(in) :: b_3D(lmStart:lmStop,n_r_max_3D)
       complex(cp), intent(in) :: db_3D(lmStart:lmStop,n_r_max_3D)
       complex(cp), intent(in) :: aj_3D(lmStart:lmStop,n_r_max_3D)
+
+      !-- Output variables
+      real(cp),    intent(out) :: mag_3D(n_r_max_3D)
 
       !-- Local variables
       real(cp) :: temp0(n_r_max_3D), dtemp0(n_r_max_3D)
@@ -153,7 +162,7 @@ contains
          tTop = temp0(1)
          tBot = temp0(n_r_max_3D)
 
-         write(n_heat_file, '(1P, ES20.12, 7ES16.9)') time, NuTop, NuBot,   &
+         write(n_heat_file, '(1P, ES20.12, 7ES16.8)') time, NuTop, NuBot,   &
          &                                            NuDelta, tTop, tBot,  &
          &                                            beta_t
 
@@ -166,6 +175,7 @@ contains
       E_tor_axis= 0.0_cp
       E_cmb     = 0.0_cp
       EDip      = 0.0_cp
+      mag_3D(:) = 0.0_cp
       if ( l_mag_3D ) then
          do n_r=1,n_r_max_3D
             e_pol_r(n_r)        = 0.0_cp
@@ -207,13 +217,15 @@ contains
             end do    ! do loop over lms in block
             e_pol_r(n_r)=e_pol_r(n_r)+e_pol_axis_r(n_r)
             e_tor_r(n_r)=e_tor_r(n_r)+e_tor_axis_r(n_r)
+            mag_3D(n_r) =e_pol_r(n_r)+e_tor_r(n_r)
          end do    ! radial grid points
-
+         !-- A reduction is needed here
          call reduce_radial_on_rank(e_pol_r, n_r_max_3D, 0)
          call reduce_radial_on_rank(e_tor_r, n_r_max_3D, 0)
          call reduce_radial_on_rank(e_pol_axis_r, n_r_max_3D, 0)
          call reduce_radial_on_rank(e_tor_axis_r, n_r_max_3D, 0)
          call reduce_radial_on_rank(e_dipole_axis_r, n_r_max_3D, 0)
+         call reduce_radial_on_rank(mag_3D, n_r_max_3D, 0)
 
          if ( rank == 0 ) then
             !-- Get Values at CMB: n_r=1 == n_r_cmb
@@ -295,12 +307,13 @@ contains
 
    end subroutine write_time_series
 !---------------------------------------------------------------------------------
-   subroutine get_radial_averages(timeAvg_rad, l_stop_time, temp_3D)
+   subroutine get_radial_averages(timeAvg_rad, l_stop_time, temp_3D, mag_3D)
 
       !-- Input variables
       real(cp),    intent(in) :: timeAvg_rad
       logical,     intent(in) :: l_stop_time
       complex(cp), intent(in) :: temp_3D(lmStart:lmStop,n_r_max_3D)
+      real(cp),    intent(in) :: mag_3D(n_r_max_3D)
 
       !-- Local variables
       real(cp) :: dtAvg, dat
@@ -317,6 +330,11 @@ contains
                call getMSD2(tempR%mean(n_r), tempR%SD(n_r), dat, &
                     &       n_calls, dtAvg, timeAvg_rad)
             end if
+            if ( l_mag_3D ) then
+               dat = mag_3D(n_r)
+               call getMSD2(magR%mean(n_r), magR%SD(n_r), dat, &
+                    &       n_calls, dtAvg, timeAvg_rad)
+            end if
          end do
          timeLast_rad = timeAvg_rad
 
@@ -326,8 +344,12 @@ contains
                if ( l_heat_3D ) then
                   tempR%SD(n_r)=sqrt(tempR%SD(n_r)/timeAvg_rad)
                end if
-               write(file_handle, '(es20.12, 2es16.8)') r_3D(n_r),        &
-               &     round_off(tempR%mean(n_r)), round_off(tempR%SD(n_r))
+               if ( l_mag_3D ) then
+                  magR%SD(n_r)=sqrt(magR%SD(n_r)/timeAvg_rad)
+               end if
+               write(file_handle, '(es20.12, 4es16.8)') r_3D(n_r),        &
+               &     round_off(tempR%mean(n_r)), round_off(tempR%SD(n_r)),&
+               &     round_off(magR%mean(n_r)), round_off(magR%SD(n_r))
             end do
             close(file_handle)
          end if

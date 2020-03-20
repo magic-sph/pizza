@@ -153,6 +153,8 @@ class PizzaTs(PizzaSetup):
             self.etor = data[:, 2]
             self.epolaxs = data[:, 3]
             self.etoraxs = data[:, 4]
+            self.emag = self.epol+self.etor
+            self.emagaxs = self.epolaxs+self.etoraxs
         elif self.field == 'heat':
             self.time = data[:, 0]
             self.topnuss = data[:, 1]
@@ -273,9 +275,11 @@ class PizzaTs(PizzaSetup):
             ax = fig.add_subplot(111)
             ax.plot(self.time, self.epol, label='E mag Poloidal')
             ax.plot(self.time, self.etor, label='E mag Toroidal')
-            ax.plot(self.time, self.epolaxs, label='E mag Axis Poloidal')
-            ax.plot(self.time, self.etoraxs, label='E mag Axis Toroidal')
-            ax.legend(loc='lower right', frameon=False)
+            ax.plot(self.time, self.epolaxs, ls='-.', label='E mag Axis Poloidal')
+            ax.plot(self.time, self.etoraxs, ls='-.', label='E mag Axis Toroidal')
+            ax.plot(self.time, self.emagaxs, ls='-.', lw=1.9, alpha=0.8, label='E mag Axis Tot')
+            ax.plot(self.time, self.emag, c='k', ls='-', lw=2.0, alpha=0.8, label='E mag Tot')
+            ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Magnetic Energy')
             fig.tight_layout()

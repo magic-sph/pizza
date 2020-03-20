@@ -122,6 +122,11 @@ class PizzaRadial(PizzaSetup):
                                         nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                 nml='log.%s' % tag)
+        if ( self.l_heat_3D or self.l_mag_3D ):
+            lenfn = len(name)+2
+            filename3D = filename[:lenfn]+'_3D'+filename[lenfn:]
+            print('reading additional %s' % filename3D)
+            data_t3D = fast_read(filename3D, skiplines=0)
 
         self.radius = data[:, 0]
         self.us2_mean = data[:, 1]
@@ -132,8 +137,14 @@ class PizzaRadial(PizzaSetup):
         self.enst_std = data[:, 6]
         self.uphi_mean = data[:, 7]
         self.uphi_std = data[:, 8]
-        self.temp_mean = data[:, 9]
-        self.temp_std = data[:, 10]
+        if ( self.l_heat_3D or self.l_mag_3D ):
+            self.temp_mean = data_t3D[:, 1]
+            self.temp_std = data_t3D[:, 2]
+            self.mag_mean = data_t3D[:, 3]
+            self.mag_std = data_t3D[:, 4]
+        else:
+            self.temp_mean = data[:, 9]
+            self.temp_std = data[:, 10]
         if data.shape[-1] == 15:
             self.xi_mean = data[:, 11]
             self.xi_std = data[:, 12]
@@ -200,6 +211,20 @@ class PizzaRadial(PizzaSetup):
         ax.set_xlim(self.radius[-1], self.radius[0])
         fig.tight_layout()
 
+        if ( self.l_mag_3D ):
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.fill_between(self.radius, self.mag_mean-self.temp_std,
+                            self.mag_mean+self.temp_std, alpha=0.1)
+            ax.plot(self.radius, self.mag_mean, label='b_pol_r**2 + b_tor_r**2')
+            ax.set_yscale('log')
+            ax.set_xlabel('Radius')
+            ax.set_ylabel('Magnetic Energy')
+            ax.set_ylim(self.mag_mean.min(), self.mag_mean.max())
+            ax.set_xlim(self.radius[-1], self.radius[0])
+            ax.legend(loc='best', frameon=False)
+            fig.tight_layout()
+
         if abs(self.uphi_mean).max() > 0.:
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -251,7 +276,7 @@ class PizzaRadial(PizzaSetup):
         fig.tight_layout()
 
         # Determine jets width and Rhines scale
-        jet_widths = np.zeros((len(idx)-1), dype=np.float64)
+        jet_widths = np.zeros((len(idx)-1), 'Float64')
         lamb_uzon = np.zeros_like(jet_widths)
         lamb_us = np.zeros_like(jet_widths)
         beta = np.zeros_like(self.radius)

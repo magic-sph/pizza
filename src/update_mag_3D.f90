@@ -8,7 +8,7 @@ module update_mag_3D_mod
    use namelists, only: kbotb, ktopb, BdiffFac
    use blocking_lm, only: st_map, lo_map, lo_sub_map, chunksize
    use blocking, only: lmStart, lmStop
-   !use horizontal, only: hdif_B   !-- WARNING:: Totally wrong -> to be modified!!
+   use horizontal, only: hdif_B
    use init_fields, only: bpeaktop, bpeakbot
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
@@ -172,11 +172,11 @@ contains
          if ( l1 > 0 ) then
             if ( .not. lBmat(l1) ) then
 #ifdef WITH_PRECOND_BJ
-               call get_bMat(tscheme,l1,one,      & !-> 'one' to fix for hdif: to be modified
+               call get_bMat(tscheme,l1,hdif_B(lm2(l1,0)),      & !-> 'one' to fix for hdif: to be modified
                     &        bMat(:,:,l1),bPivot(:,l1), bMat_fac(:,l1),&
                     &        jMat(:,:,l1),jPivot(:,l1), jMat_fac(:,l1))
 #else
-               call get_bMat(tscheme,l1,one, & !-> 'one' to fix for hdif: to be modified
+               call get_bMat(tscheme,l1,hdif_B(lm2(l1,0)), & !-> 'one' to fix for hdif: to be modified
                     &        bMat(:,:,l1),bPivot(:,l1),           &
                     &        jMat(:,:,l1),jPivot(:,l1) )
 #endif
@@ -362,9 +362,9 @@ contains
             do lm=lmStart_00,lmStop
                l1 = lm2l(lm)
                dL = real(l1*(l1+1),cp)
-               dB_imp_last(lm,n_r)=BdiffFac* (      dL * or2_3D(n_r) * (   &
+               dB_imp_last(lm,n_r)=BdiffFac* (hdif_B(lm)*dL * or2_3D(n_r) * ( &
                &             ddb_3D(lm,n_r)-dL*or2_3D(n_r)*b_3D(lm,n_r) ) )
-               dj_imp_last(lm,n_r)=BdiffFac* (      dL * or2_3D(n_r) * (   &
+               dj_imp_last(lm,n_r)=BdiffFac* (hdif_B(lm)*dL * or2_3D(n_r) * ( &
                &         work_LMloc(lm,n_r)-dL*or2_3D(n_r)*aj_3D(lm,n_r) ) )
             end do
          end do
