@@ -22,6 +22,7 @@ module time_schemes
       logical,  allocatable :: l_exp_calc(:)
       logical, allocatable :: l_imp_calc_rhs(:)
       real(cp) :: courfac ! Courant factor
+      real(cp) :: alffac  ! Courant factor for Alven waves
 
    contains 
 
@@ -40,10 +41,11 @@ module time_schemes
 
    interface
 
-      subroutine initialize_if(this, time_scheme, courfac_nml)
+      subroutine initialize_if(this, time_scheme, courfac_nml, alffac_nml)
          import
          class(type_tscheme) :: this
          real(cp),          intent(in)    :: courfac_nml
+         real(cp),          intent(in)    :: alffac_nml
          character(len=72), intent(inout) :: time_scheme
       end subroutine initialize_if
 
@@ -131,8 +133,9 @@ contains
          if ( n == 1 ) n_out=output_unit
          if ( n == 2 ) n_out=n_log_file
          write(n_out,*) ''
-         write(n_out, '('' ! Time integrator  :'',1p,A10)') this%time_scheme
-         write(n_out, '('' ! CFL value        :'',es12.4)') this%courfac
+         write(n_out, '('' ! Time integrator    :'',1p,A10)') this%time_scheme
+         write(n_out, '('' ! CFL (Flow ) value  :'',es12.4)') this%courfac
+         write(n_out, '('' ! CFL (Alfven) value :'',es12.4)') this%alffac
          write(n_out,*) ''
       end do
 

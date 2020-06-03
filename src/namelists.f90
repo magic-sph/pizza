@@ -65,7 +65,9 @@ module namelists
    real(cp), public :: dtMax        ! Maximum allowed time step
    real(cp), public :: alpha        ! Weight for implicit time step
    real(cp), public :: courfac      ! Courant factor
+   real(cp), public :: alffac       ! Courant factor for Alfven waves
    real(cp), public :: dt_fac       ! factor to control time step change
+   logical, public :: l_cour_alf_damp ! Modify Alven Courant condition based on Christensen et al., GJI, 1999 (.true. by default)
    real(cp), public :: tEND
    integer,  public :: n_time_steps
    integer :: runHours,runMinutes,runSeconds
@@ -144,13 +146,14 @@ contains
       namelist/grid/n_r_max,n_cheb_max,m_max,minc
       namelist/grid_3D/n_r_max_3D,n_cheb_max_3D,n_phi_tot_3D,minc_3D
       namelist/control/tag,n_time_steps,alpha,l_newmap,map_function,&
-      &                alph1,alph2,dtMax,courfac,tEND,runHours,     &
-      &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
-      &                n_fft_optim_lev,time_scheme,cheb_method,     &
-      &                l_rerror_fix, rerror_fac, time_scale,        &
-      &                matrix_solve,corio_term,buo_term,bc_method,  &
-      &                hdif_temp,hdif_vel,hdif_comp,hdif_mag,       &
-      &                hdif_exp,hdif_l,hdif_m
+      &                alph1,alph2,dtMax,courfac,alffac,tEND,       &
+      &                runHours,runMinutes,runSeconds,l_non_rot,    &
+      &                dt_fac,l_cour_alf_damp,n_fft_optim_lev,      &
+      &                time_scheme,cheb_method,l_rerror_fix,        &
+      &                rerror_fac,time_scale,matrix_solve,          &
+      &                corio_term,buo_term,bc_method,hdif_temp,     &
+      &                hdif_vel,hdif_comp,hdif_mag,hdif_exp,hdif_l, &
+      &                hdif_m
       !namelist/hdif/hdif_temp,hdif_vel,hdif_comp,hdif_mag,&
       !&             hdif_exp,hdif_l,hdif_m
       namelist/phys_param/ra,ek,pr,prmag,raxi,sc,radratio,g0,g1,g2,&
@@ -506,6 +509,8 @@ contains
       map_function     ='arcsin' ! By default Kosloff and Tal-Ezer mapping when l_newmap=.true.
       dtMax            =1.0e-5_cp
       courfac          =1.0e3_cp
+      l_cour_alf_damp  =.true. ! By default, use Christensen's (GJI, 1999) CFL
+      alffac           =1.0e3_cp
       dt_fac           =2.0_cp
       tEND             =0.0_cp    ! numerical time where run should end
       runHours         =0
@@ -658,6 +663,7 @@ contains
       write(n_out,'(''  alph2           ='',ES14.6,'','')') alph2
       write(n_out,'(''  dtMax           ='',ES14.6,'','')') dtMax
       write(n_out,'(''  dt_fac          ='',ES14.6,'','')') dt_fac
+      write(n_out,'(''  l_cour_alf_damp ='',l3,'','')') l_cour_alf_damp
       write(n_out,'(''  runHours        ='',i4,'','')') runHours
       write(n_out,'(''  runMinutes      ='',i4,'','')') runMinutes
       write(n_out,'(''  runSeconds      ='',i4,'','')') runSeconds

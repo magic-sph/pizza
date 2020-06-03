@@ -3,10 +3,13 @@ module courant_mod
    use parallel_mod
    use precision_mod
    use outputs, only: n_log_file
-   use namelists, only:  dt_fac, tag
-   use truncation, only: n_phi_max, n_r_max
-   use blocking, only: nRstart, nRstop
-   use radial_functions, only: delxr2, delxh2, beta
+   use namelists, only:  dt_fac, tag, l_mag_3D, l_mag_LF, &
+       &                 l_cour_alf_damp, DyMagFac, BdiffFac!=1/pm=eta/nu, 
+   use truncation, only: n_phi_max
+   use truncation_3D, only: n_theta_max, n_phi_max_3D
+   use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
+   use radial_functions, only: delxr2, delxh2, delxr2_3D, delxh2_3D, &
+       &                       beta, r_3D, or2_3D
    use useful, only: logWrite
    use constants, only: half, one, two
 
@@ -16,7 +19,7 @@ module courant_mod
 
    integer :: file_handle
 
-   public :: courant, dt_courant, initialize_courant, finalize_courant
+   public :: courant, courant_3D, dt_courant, initialize_courant, finalize_courant
 
 contains
 
@@ -53,17 +56,17 @@ contains
       real(cp), intent(in) :: up(n_phi_max)   ! azimuthal velocity
       real(cp), intent(in) :: courfac         ! Courant factor
 
-    
       !-- Output:
       real(cp), intent(out) :: dtrkc    ! Courant step (based on radial advection)
                                         ! for the range of points covered
       real(cp), intent(out) :: dthkc    ! Courant step based on horizontal advection
-    
+
+      !-- Local  variables:
       integer :: n_phi
       real(cp) :: vr2max,vh2max
       real(cp) :: vflr2,vflh2
       real(cp) :: cf2
-    
+
       vr2max=0.0_cp
       vh2max=0.0_cp
       dtrkc =1.0e10_cp
@@ -82,10 +85,104 @@ contains
     
       if ( vr2max /= 0.0_cp ) dtrkc=min(dtrkc,sqrt(delxr2(n_r)/vr2max))
       if ( vh2max /= 0.0_cp ) dthkc=min(dthkc,sqrt(delxh2(n_r)/vh2max))
-    
+
    end subroutine courant
 !------------------------------------------------------------------------------
-   subroutine dt_courant(dt_r,dt_h,l_new_dt,dt,dt_new,dtMax,dtrkc,dthkc,time)
+   subroutine courant_3D(n_r,dtrkc_3D,dthkc_3D,br,bt,bp,alffac)
+      !
+      !  courant condition check: calculates Courant  for Alfven waves                     
+      !  advection lengths in radial direction dtrkc_3D                      
+      !  and in horizontal direction dthkc_3D                                
+      !  on the local radial level n_r                                   
+      !
+      !  for the effective velocity, the abs. sum of Alfven velocity is taken
+      !
+    
+      !-- Input variable:
+      integer,  intent(in) :: n_r             ! radial level
+
+      real(cp), intent(in) :: br(n_phi_max_3D,n_theta_max)  ! radial 3D magnetic field
+      real(cp), intent(in) :: bt(n_phi_max_3D,n_theta_max)  ! longitudinal 3D magnetic field
+      real(cp), intent(in) :: bp(n_phi_max_3D,n_theta_max)  ! azimuthal 3D magnetic field
+      real(cp), intent(in) :: alffac          ! Alfven factor
+
+      !-- Output:
+      real(cp), intent(out) :: dtrkc_3D    ! Courant step (based on radial 3D advection)
+                                             ! for the range of points covered
+      real(cp), intent(out) :: dthkc_3D    ! Courant step based on horizontal 3D advection
+
+      !-- Local  variables:
+      integer :: n_theta
+      integer :: n_phi
+      real(cp) :: valr2max,valh2max
+      real(cp) :: valr,valr2
+      real(cp) :: valri2,valhi2,valh2,valh2m
+      real(cp) :: r2, o_r_2_r, o_r_4_r, r4
+      real(cp) :: af2
+
+      valr2max=0.0_cp
+      valh2max=0.0_cp
+      dtrkc_3D=1.0e10_cp
+      dthkc_3D=1.0e10_cp
+      af2=alffac*alffac
+
+      if ( l_cour_alf_damp ) then
+         valri2=(half*(one+BdiffFac))**2./delxr2_3D(n_r)
+         valhi2=(half*(one+BdiffFac))**2./delxh2_3D(n_r) 
+      else
+         valri2=0.0_cp
+         valhi2=0.0_cp
+      end if
+
+      r2 = r_3D(n_r)*r_3D(n_r)
+      r4 = r2*r2
+      o_r_2_r=or2_3D(n_r)
+      o_r_4_r=o_r_2_r*o_r_2_r
+
+      if ( l_mag_3D .and. l_mag_LF ) then
+
+         !=Reminder:: Pizza variables == X * Magic variables:
+         !-- ._r = r^2 * ._r ; ._t = r*sint * ._t ; ._p = r*sint * ._p
+         do n_theta=1,n_theta_max
+            do n_phi=1,n_phi_max_3D
+               valr =br(n_phi,n_theta)*br(n_phi,n_theta) * &
+               &     DyMagFac*r4
+               valr2=valr*valr/(valr+valri2)
+               valr2max=max(valr2max,o_r_4_r*af2*valr2)
+
+               valh2= ( bt(n_phi,n_theta)*bt(n_phi,n_theta) +  &
+               &        bp(n_phi,n_theta)*bp(n_phi,n_theta) )* &
+               &        DyMagFac*r2
+               valh2m=valh2*valh2/(valh2+valhi2)
+               valh2max=max(valh2max,o_r_2_r*af2*valh2m)
+            end do
+         end do
+
+         !print*, 'n_r; r_3D(n_r)', n_r, '; ', r_3D(n_r)
+         !print*, 'DyMagFac; valhi2', DyMagFac, '; ', valhi2
+         !print*, 'br; btheta; bphi', r2*br(1,1), '; ', bt(1,1)/(or1_3D(n_r)*osint1(1)), '; ', bp(1,1)/(or1_3D(n_r)*osint1(1))
+         !print*, 'valr2max', valr, valr2max
+         !print*, 'valh2max', valh2, valh2max
+         !if (n_r == 2) stop
+
+         if ( valr2max /= 0.0_cp ) dtrkc_3D = min(dtrkc_3D,sqrt(delxr2_3D(n_r)/valr2max))
+         if ( valh2max /= 0.0_cp ) dthkc_3D = min(dthkc_3D,sqrt(delxh2_3D(n_r)/valh2max))
+
+      else
+
+         dtrkc_3D=min(dtrkc_3D,sqrt(delxr2_3D(n_r)/af2))
+         dthkc_3D=min(dthkc_3D,sqrt(delxr2_3D(n_r)/af2))
+
+      end if   ! Magnetic field ?
+
+      !print*, 'dtrkc_R', dtrkc_3D
+      !print*, 'dthkc_H', dthkc_3D
+      !if (n_r == 2) stop
+
+   end subroutine courant_3D
+!------------------------------------------------------------------------------
+   subroutine dt_courant(dt_r,dt_h,l_new_dt,dt,dt_new,dtMax,dtrkc,dthkc, &
+              &          dtrkc_3D,dthkc_3D,time)
       !
       ! Check if Courant criterion based on combined
       ! fluid velocity is satisfied
@@ -107,6 +204,8 @@ contains
       real(cp), intent(in) :: dtMax
       real(cp), intent(in) :: dtrkc(nRstart:nRstop)
       real(cp), intent(in) :: dthkc(nRstart:nRstop)
+      real(cp), intent(in) :: dtrkc_3D(nRstart3D:nRstop3D)
+      real(cp), intent(in) :: dthkc_3D(nRstart3D:nRstop3D)
       real(cp), intent(in) :: time
     
       !-- Output variables:
@@ -125,6 +224,11 @@ contains
       do n_r=nRstart,nRstop
          dt_r=min(dtrkc(n_r),dt_r)
          dt_h=min(dthkc(n_r),dt_h)
+      end do
+
+      do n_r=nRstart3D,nRstop3D
+         dt_r=min(dtrkc_3D(n_r),dt_r)
+         dt_h=min(dthkc_3D(n_r),dt_h)
       end do
 
       call MPI_Allreduce(MPI_IN_PLACE,dt_r,1,MPI_DEF_REAL, &

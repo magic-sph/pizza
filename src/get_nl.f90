@@ -194,25 +194,29 @@ contains
             !$OMP PARALLEL DO default(shared) &
             !$OMP& private(n_theta, n_phi, or1sn1)
             do n_theta=1,n_theta_max
+               or1sn1=or1_3D(n_r)*osint1(n_theta)
                do n_phi=1,n_phi_max_3D
                   !---- jxBs= 1/(E*Pm) * ( curl(B)_z*B_p - curl(B)_p*B_z )
-                  !--       = sint * jxBr + cost/r_3D * jxBt
-                  jxBs(n_phi,n_theta)=sint(n_theta)*(                       &
+                  !--       = sint * jxBr + cost * jxBt
+                  jxBs(n_phi,n_theta)=sint(n_theta)*r2*(                    &!(&!
                   &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
                   &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) ) &
-                  &                  +cost(n_theta)*(  &!or1_3D(n_r)*
+                  &                  +cost(n_theta)*or1sn1*(                &!(&!
                   &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-  &
                   &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
 
                   !---- jxBp= 1/(E*Pm) * ( curl(B)_r*B_t - curl(B)_t*B_r )
-                  jxBp(n_phi,n_theta) =                                     &
+                  jxBp(n_phi,n_theta) =or1sn1*(                             &!(&!
                   &    this%curlBrc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
-                  &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta)
+                  &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
                end do
             end do   ! theta loop
             !$OMP END PARALLEL DO
          end if ! l_mag_LF?
       end if ! l_mag_3D?
+      !this%VxBr(:,:) = 0.0_cp
+      !this%VxBt(:,:) = 0.0_cp
+      !this%VxBp(:,:) = 0.0_cp
 
    end subroutine get_nl
 !----------------------------------------------------------------------------

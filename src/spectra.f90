@@ -7,11 +7,12 @@ module spectra
 
    use precision_mod
    use parallel_mod
-   use constants, only: pi, one
+   use constants, only: pi, one, half
    use mem_alloc, only: bytes_allocated
+   use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, idx2m, n_m_max, minc, m_max
    use blocking, only: nMstart, nMstop, nm_per_rank, m_balance
-   use namelists, only: tag, ra, ek, pr, ek, raxi, sc, radratio, l_2D_spectra, &
+   use namelists, only: tag, ra, ek, pr, raxi, sc, radratio, l_2D_spectra, &
        &                l_2D_SD
    use useful, only: cc2real, getMSD2, round_off
    use radial_functions, only: r, rscheme, height
@@ -153,6 +154,7 @@ contains
          call getMSD2(this%enstM%mean(n_m), this%enstM%SD(n_m), enst_m(n_m), &
               &       this%n_calls, this%dt, time)
       end do
+
       this%timeLast = time
 
       if ( l_stop_time ) call this%write_spectra_avg()
@@ -395,5 +397,5 @@ contains
       call MPI_File_close(fh, ierr)
 
    end subroutine write_2D_spectra
-!----------------------------------------------------------------------
+!------------------------------------------------------------------------------
 end module spectra

@@ -903,7 +903,7 @@ contains
            &             MPI_COMM_WORLD, ierr)
 
       if ( abs(E) > 10.0_cp*epsilon(one) ) then
-         dlekin_int = pi*E/Em
+         dlekin_int = pi*E/(Em+epsilon(one)) !-> Divide by 0 when 0 field
       else
          dlekin_int = 0.0_cp
       end if

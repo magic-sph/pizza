@@ -11,7 +11,7 @@ module init_fields
    use communications, only: transp_r2m, r2m_fields, transp_r2lm, r2lm_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta, rscheme_3D, &
        &                       r_3D, or1_3D, tcond_3D
-   use horizontal, only: theta, hdif_B
+   use horizontal, only: theta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
        &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
@@ -559,7 +559,7 @@ contains
       lm20 = lo_map%lm2(2,0)
       lm30 = lo_map%lm2(3,0)
       lm11 = lo_map%lm2(1,1)
-      lm44 = lo_map%lm2(4,4)
+      lm44 = lo_map%lm2(3,1)
 
       lm0=lm20 ! Default quadrupole field
 
@@ -675,10 +675,26 @@ contains
          if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
             do n_r=1,n_r_max_3D
                x = pi*r_3D(n_r)/r_cmb!pi*(r_3D(n_r)-r_icb+1e-4_cp)/(r_cmb-r_icb)!
-               b_LMloc(lm10,n_r)=amp_B*(sin(x)/x/x - cos(x)/x)!)!
+               b1(n_r) = (sin(x)/x)!/x - cos(x)/x)!
+               b_LMloc(lm10,n_r)=amp_B*b1(n_r)
             end do
          end if
-
+      !-- Bessel function initialization of all (l,m) modes exept (l=0,m=0):
+         do lm=max(lmStart,2),lmStop
+            l1=lo_map%lm2l(lm)
+            m1=lo_map%lm2m(lm)
+            if ( l1 > 0 ) then
+               bR=amp_B/(real(l1,cp))**8.
+               bI=amp_B/(real(l1,cp))**8.
+            else
+               bR=0.0_cp
+               bI=0.0_cp
+            end if
+            if ( m1 == 0 ) bI=0.0_cp
+            do n_r=1,n_r_max_3D
+               b_LMloc(lm,n_r)=b_LMloc(lm,n_r) + cmplx(bR*b1(n_r),bI*b1(n_r),kind=cp)
+            end do
+         end do
       end if
 
    end subroutine initB_3D

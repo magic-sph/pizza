@@ -23,7 +23,7 @@ module step_time
        &                 dBdt_3D, djdt_3D, dVxBh_3D_LMloc, dVxBh_3D_Rloc,      &
        &                 dbdt_3D_Rloc, djdt_3D_Rloc
    use courant_mod, only: dt_courant
-   use blocking, only: nRstart, nRstop
+   use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
    use constants, only: half, one
    use update_temp_3D_mod, only:  get_temp_3D_rhs_imp
    use update_mag_3D_mod, only:  get_mag_3D_rhs_imp
@@ -85,6 +85,7 @@ contains
       !-- Courant
       real(cp) :: dtr,dth,dt_new
       real(cp) :: dtr_Rloc(nRstart:nRstop), dth_Rloc(nRstart:nRstop)
+      real(cp) :: dtr_3D_Rloc(nRstart3D:nRstop3D), dth_3D_Rloc(nRstart3D:nRstop3D)
 
       !-- Timings:
       type(timers_type) :: timers
@@ -124,6 +125,11 @@ contains
       !-- Dummy initial timings
       dtr_Rloc(:) = 1e10_cp
       dth_Rloc(:) = 1e10_cp
+
+      if ( l_3D ) then
+         dtr_3D_Rloc(:)=1e10_cp
+         dth_3D_Rloc(:)=1e10_cp
+      end if
 
       !!!!! Time loop starts !!!!!!
       if ( n_time_steps == 1 ) then
@@ -273,7 +279,8 @@ contains
                        &              b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc,          &
                        &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,        &
                        &              djdt_3D_Rloc, dVxBh_3D_Rloc, dpsidt_Rloc,    &
-                       &              dVsOm_Rloc, l_frame, zinterp, timers, tscheme)
+                       &              dVsOm_Rloc, dtr_3D_Rloc, dth_3D_Rloc,        &
+                       &              l_frame, zinterp, timers, tscheme)
                end if
 
                !------------------
@@ -341,7 +348,7 @@ contains
                !------ Checking Courant criteria, l_new_dt and dt_new are output
                !-------------------
                call dt_courant(dtr,dth,l_new_dt,tscheme%dt(1),dt_new,dtMax, &
-                    &          dtr_Rloc,dth_Rloc,time)
+                    &          dtr_Rloc,dth_Rloc,dtr_3D_Rloc,dth_3D_Rloc,time)
 
                call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step,&
                     &                    l_new_dt)

@@ -9,6 +9,7 @@ module rloop_3D
    use namelists, only: BuoFac, DyMagFac, tag, l_heat_3D, l_mag_3D, l_mag_LF, r_cmb, r_icb
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max, l_max, n_r_max_3D
    use truncation, only: idx2m, n_m_max
+   use courant_mod, only: courant_3D
 #ifdef WITH_SHTNS
    use shtns, only: spat_to_SH, scal_to_spat, torpol_to_spat, &
        &            torpol_to_curl_spat, scal_axi_to_grad_spat
@@ -52,8 +53,9 @@ contains
    subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM, &
               &               b_3D, db_3D, ddb_3D, aj_3D, dj_3D,       &
               &               dbdt_3D, djdt_3D, dVxBhLM,               &
-              &               dpsidt_Rloc, dVsOm_Rloc,                 &
-              &               l_frame, zinterp, timers, tscheme )
+              &               dpsidt_Rloc, dVsOm_Rloc, dtr_3D_Rloc,    &
+              &               dth_3D_Rloc, l_frame, zinterp, timers,  &
+              &               tscheme )
 
       !-- Input variables
       complex(cp), intent(in) :: temp(lm_max, nRstart3D:nRstop3D)
@@ -78,6 +80,8 @@ contains
       complex(cp),       intent(out) :: dVxBhLM(lm_max, nRstart3D:nRstop3D)
       complex(cp),       intent(inout) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(inout) :: dVsOm_Rloc(n_m_max, nRstart:nRstop)
+      real(cp),          intent(out) :: dtr_3D_Rloc(nRstart3D:nRstop3D)
+      real(cp),          intent(out) :: dth_3D_Rloc(nRstart3D:nRstop3D)
       type(timers_type), intent(inout) :: timers
 
       !-- Local variables
@@ -85,11 +89,11 @@ contains
       real(cp) :: jxBs(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: jxBp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: runStart, runStop
+      real(cp) :: runStart, runStop!, phi!, rsint
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_tmp_Rloc(n_m_max,nRstart:nRstop)
-      integer :: n_r, n_m, m, fh_temp, info_temp
+      integer :: n_r, n_m, m, fh_temp, info_temp!, n_theta, n_phi
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
       character(len=144) :: frame_name
@@ -117,7 +121,7 @@ contains
 
       !-- Open the 3-D snapshots in physical space
       if ( l_frame .and. tscheme%istage==1 ) then
-         write(frame_name, '(A,I0,A,A)') 'frame_ur_3D_',frame_counter,'.',tag
+         write(frame_name, '(A,I0,A,A)') 'frame_ur_3D_',frame_counter,'.',tag 
          call open_snapshot_3D(frame_name, time, fh_ur, info_ur)
          write(frame_name, '(A,I0,A,A)') 'frame_ut_3D_',frame_counter,'.',tag
          call open_snapshot_3D(frame_name, time, fh_ut, info_ut)
@@ -137,13 +141,33 @@ contains
          end if
       end if
 
+      !ur(:,:,:) = 0.0_cp
+      !ut(:,:,:) = 0.0_cp
+      !up(:,:,:) = 0.0_cp
       runStart = MPI_Wtime()
       do n_r=nRstart3D,nRstop3D
+      !if ( frame_counter == 1 ) then
+      !      do n_theta=1,n_theta_max
+      !         do n_phi=1,n_phi_max_3D
+      !            phi = (n_phi-1)*two*pi/(n_phi_max_3D)
+      !            ur(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi+pi*0.25_cp)
+      !            ut(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*cost(n_theta)
+      !            up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi)
+      !        end do
+      !      end do
+      !end if
 
          !-- Transform temperature and magnetic-field from (l,m) to (theta,phi)
          call transform_to_grid_space(temp(:,n_r), b_3D(:,n_r),      &
               &                      db_3D(:,n_r), ddb_3D(:,n_r),    &
               &                      aj_3D(:,n_r), dj_3D(:,n_r), n_r, gsa)
+
+         !-- Courant condition
+         if ( tscheme%istage == 1 ) then
+            call courant_3D(n_r, dtr_3D_Rloc(n_r), dth_3D_Rloc(n_r),  &
+                 &          gsa%Brc(:,:), gsa%Btc(:,:), gsa%Bpc(:,:), &
+                 &          tscheme%alffac)
+         end if
 
 
          !-- Construct non-linear terms in physical space
@@ -173,6 +197,15 @@ contains
          call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r),                     &
               &            dVxBhLM(:,n_r),dbdt_3D(:,n_r),djdt_3D(:,n_r), n_r )
 
+
+            !do n_theta=1,n_theta_max
+            !   do n_phi=1,n_phi_max_3D
+            !      phi = (n_phi-1)*two*pi/(n_phi_max_3D)
+            !      !jxBp(n_phi,n_theta,n_r) = sint(n_theta)*r_3D(n_r) + cost(n_theta)*cost(n_theta)
+            !      jxBp(n_phi,n_theta,n_r) =  r_3D(n_r)*cost(n_theta)*sin(pi*r_3D(n_r)*cost(n_theta))
+            !      !jxBp(n_phi,n_theta,n_r) =  exp(-r_3D(n_r)*cost(n_theta))
+            !   end do
+            !end do
       end do
 
       runStop = MPI_Wtime()
@@ -199,6 +232,7 @@ contains
 
       !-- Compute z-averaging of buoyancy and lorentz-force
       runStart = MPI_Wtime()
+      !call zinterp%compute_avg(jxBp, lfp_tmp_Rloc)
       call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
       if (  l_mag_LF ) call zinterp%compute_avg(jxBs, lfs_tmp_Rloc)
       if (  l_mag_LF ) call zinterp%compute_avg(jxBp, lfp_tmp_Rloc)
@@ -234,6 +268,11 @@ contains
            &               real(buo_tmp_Rloc(1,n_r))
          end do
          close(file_handle)
+
+         !open(newunit=file_handle, file='buo_3D', status='new', form='unformatted',&
+         !&    access='stream')
+         !write(file_handle) buo_tmp
+         !close(file_handle)
 
       end block
 #endif
@@ -273,9 +312,19 @@ contains
 
          !print*, dpsidt_hat(1,:)
 
-         open(newunit=file_handle, file='dpsidt_rloc.dat', status='new', form='unformatted',&
+         !open(newunit=file_handle, file='dpsidt_rloc.dat', status='new', form='unformatted',&
+         !&    access='stream')
+         !write(file_handle) dpsidt_Rloc!lfp_tmp_Rloc!
+         !close(file_handle)
+
+        open(newunit=file_handle, file='lfp_tmp_rloc.dat', status='new', form='unformatted',&
          &    access='stream')
-         write(file_handle) lfp_tmp_Rloc!dpsidt_Rloc
+         write(file_handle) lfp_tmp_Rloc
+         close(file_handle)
+
+        open(newunit=file_handle, file='lfs_tmp_rloc.dat', status='new', form='unformatted',&
+         &    access='stream')
+         write(file_handle) lfs_tmp_Rloc
          close(file_handle)
       end block
 

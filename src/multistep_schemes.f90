@@ -33,16 +33,18 @@ module multistep_schemes
 
 contains
 
-   subroutine initialize(this, time_scheme, courfac_nml)
+   subroutine initialize(this, time_scheme, courfac_nml, alffac_nml)
 
       class(type_multistep) :: this
 
       !-- Input/output variables
       real(cp),          intent(in) :: courfac_nml
+      real(cp),          intent(in) :: alffac_nml
       character(len=72), intent(inout) :: time_scheme
 
       !-- Local variables
       real(cp) :: courfac_loc
+      real(cp) :: alffac_loc
 
       !-- Number of stages per iteration is always one in this case
       this%nstages = 1
@@ -61,18 +63,21 @@ contains
          this%norder_imp = 2
          this%norder_exp = 2
          courfac_loc = 3.0_cp
+         alffac_loc = 1.2_cp
       else if ( index(time_scheme, 'MODCNAB') /= 0 ) then
          this%time_scheme = 'MODCNAB'
          this%norder_imp = 3
          this%norder_imp_lin = 3
          this%norder_exp = 2
          courfac_loc = 2.9_cp
+         alffac_loc = 1.1_cp
       else if ( index(time_scheme, 'CNLF') /= 0 ) then
          this%time_scheme = 'CNLF'
          this%norder_imp = 3
          this%norder_imp_lin = 3
          this%norder_exp = 2
          courfac_loc = 3.0_cp
+         alffac_loc = 1.2_cp
       else if ( index(time_scheme, 'BDF2AB2') /= 0 ) then
          this%time_scheme = 'BDF2AB2'
          this%norder_imp = 3
@@ -80,6 +85,7 @@ contains
          this%norder_exp = 2
          this%l_imp_calc_rhs(1) = .false.
          courfac_loc = 2.8_cp
+         alffac_loc = 1.0_cp
       else if ( index(time_scheme, 'BDF3AB3') /= 0 ) then
          this%time_scheme = 'BDF3AB3'
          this%norder_imp = 4
@@ -87,12 +93,14 @@ contains
          this%norder_exp = 3
          this%l_imp_calc_rhs(1) = .false.
          courfac_loc = 4.0_cp
+         alffac_loc = 1.6_cp
       else if ( index(time_scheme, 'TVB33') /= 0 ) then
          this%time_scheme = 'TVB33'
          this%norder_imp = 4
          this%norder_imp_lin = 4 ! it should be one but we need to restart
          this%norder_exp = 3
          courfac_loc = 4.0_cp
+         alffac_loc = 1.6_cp
       else if ( index(time_scheme, 'BDF4AB4') /= 0 ) then
          this%time_scheme = 'BDF4AB4'
          this%norder_imp = 5
@@ -100,12 +108,19 @@ contains
          this%norder_exp = 4
          this%l_imp_calc_rhs(1) = .false.
          courfac_loc = 5.5_cp
+         alffac_loc = 2.2_cp
       end if
 
       if ( abs(courfac_nml) >= 1.0e3_cp ) then
          this%courfac=courfac_loc
       else
          this%courfac=courfac_nml
+      end if
+
+      if ( abs(alffac_nml) >= 1.0e3_cp ) then
+         this%alffac=alffac_loc
+      else
+         this%alffac=alffac_nml
       end if
 
       allocate ( this%dt(this%norder_exp) )

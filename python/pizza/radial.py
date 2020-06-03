@@ -137,14 +137,16 @@ class PizzaRadial(PizzaSetup):
         self.enst_std = data[:, 6]
         self.uphi_mean = data[:, 7]
         self.uphi_std = data[:, 8]
-        if ( self.l_heat_3D or self.l_mag_3D ):
+        if ( self.l_heat_3D == 'T' or self.l_mag_3D == 'T' ):
+            self.radius_3D = data_t3D[:, 0]
             self.temp_mean = data_t3D[:, 1]
             self.temp_std = data_t3D[:, 2]
-            self.bpol_mean = data_t3D[:, 3]
-            self.bpol_std = data_t3D[:, 4]
-            self.btor_mean = data_t3D[:, 5]
-            self.btor_std = data_t3D[:, 6]
-            self.mag_mean = self.bpol_mean + self.btor_mean
+            if ( self.l_mag_3D == 'T' ):
+                self.bpol_mean = data_t3D[:, 3]
+                self.bpol_std = data_t3D[:, 4]
+                self.btor_mean = data_t3D[:, 5]
+                self.btor_std = data_t3D[:, 6]
+                self.mag_mean = self.bpol_mean + self.btor_mean
         else:
             self.temp_mean = data[:, 9]
             self.temp_std = data[:, 10]
@@ -205,30 +207,38 @@ class PizzaRadial(PizzaSetup):
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        ax.fill_between(self.radius, self.temp_mean-self.temp_std,
-                        self.temp_mean+self.temp_std, alpha=0.1)
-        ax.plot(self.radius, self.temp_mean)
+        if ( self.l_heat_3D == 'T' ):
+            ax.fill_between(self.radius_3D, self.temp_mean-self.temp_std,
+                            self.temp_mean+self.temp_std, alpha=0.1)
+            ax.plot(self.radius_3D, self.temp_mean)
+        else:
+            ax.fill_between(self.radius, self.temp_mean-self.temp_std,
+                            self.temp_mean+self.temp_std, alpha=0.1)
+            ax.plot(self.radius, self.temp_mean)
         ax.set_xlabel('Radius')
         ax.set_ylabel('Temperature')
         ax.set_ylim(self.temp_mean.min(), self.temp_mean.max())
-        ax.set_xlim(self.radius[-1], self.radius[0])
+        if ( self.l_heat_3D == 'T' ):
+            ax.set_xlim(self.radius_3D[-1], self.radius_3D[0])
+        else:
+            ax.set_xlim(self.radius[-1], self.radius[0])
         fig.tight_layout()
 
-        if ( self.l_mag_3D ):
+        if ( self.l_mag_3D == 'T' ):
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.fill_between(self.radius, self.bpol_mean-self.bpol_std,
+            ax.fill_between(self.radius_3D, self.bpol_mean-self.bpol_std,
                             self.bpol_mean+self.bpol_std, facecolor='blue', alpha=0.1)
-            ax.plot(self.radius, self.bpol_mean, c='b', label='b_tor_r**2')
-            ax.fill_between(self.radius, self.btor_mean-self.btor_std,
+            ax.plot(self.radius_3D, self.bpol_mean, c='b', label='b_tor_r**2')
+            ax.fill_between(self.radius_3D, self.btor_mean-self.btor_std,
                             self.btor_mean+self.btor_std, facecolor='red', alpha=0.1)
-            ax.plot(self.radius, self.btor_mean, c='r', label='b_tor_r**2')
-            ax.plot(self.radius, self.mag_mean, c='k', ls='-', lw=1.9, alpha=0.8, label='b_pol_r**2 + b_tor_r**2')
+            ax.plot(self.radius_3D, self.btor_mean, c='r', label='b_tor_r**2')
+            ax.plot(self.radius_3D, self.mag_mean, c='k', ls='-', lw=1.9, alpha=0.8, label='b_pol_r**2 + b_tor_r**2')
             ax.set_yscale('log')
             ax.set_xlabel('Radius')
             ax.set_ylabel('Magnetic Energy')
             ax.set_ylim(self.mag_mean.min(), self.mag_mean.max())
-            ax.set_xlim(self.radius[-1], self.radius[0])
+            ax.set_xlim(self.radius_3D[-1], self.radius_3D[0])
             ax.legend(loc='best', frameon=False)
             fig.tight_layout()
 

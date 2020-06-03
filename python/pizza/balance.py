@@ -38,7 +38,7 @@ def interp_dct(arr, nr_new):
     nr = arr.shape[-1]
     # Transform to Chebyshev space and renormalise for the new grid
     fhat = costf(arr)/np.sqrt((nr-1.)/(nr_new-1.))
-    fout = np.zeros((arr.shape[0], nr_new), dtype=np.float64)
+    fout = np.zeros((arr.shape[0], nr_new), 'Float64')
     # Set the first nr Cheb coefficients and then pad with zeros
     fout[:, :nr] = fhat
     # Finally bring back the array on the physical grid
@@ -229,37 +229,37 @@ class PizzaBalance(PizzaSetup):
         try:  # Old file format (with record markers)
             file = npfile(filename, endian=endian)
             self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc \
-                = file.fort_read('f8')
-            radius = file.fort_read('f8')
-            time = file.fort_read('f8')
-            vp = file.fort_read('f8')
-            dvpdt = file.fort_read('f8')
-            rey_stress = file.fort_read('f8')
-            ek_pump = file.fort_read('f8')
-            visc = file.fort_read('f8')
+                = file.fort_read('Float64')
+            radius = file.fort_read('Float64')
+            time = file.fort_read('Float64')
+            vp = file.fort_read('Float64')
+            dvpdt = file.fort_read('Float64')
+            rey_stress = file.fort_read('Float64')
+            ek_pump = file.fort_read('Float64')
+            visc = file.fort_read('Float64')
             while 1:
                 try:
-                    time = np.append(time, file.fort_read('f8'))
-                    vp = np.vstack((vp, file.fort_read('f8')))
-                    dvpdt = np.vstack((dvpdt, file.fort_read('f8')))
+                    time = np.append(time, file.fort_read('Float64'))
+                    vp = np.vstack((vp, file.fort_read('Float64')))
+                    dvpdt = np.vstack((dvpdt, file.fort_read('Float64')))
                     rey_stress = np.vstack((rey_stress,
-                                            file.fort_read('f8')))
-                    ek_pump = np.vstack((ek_pump, file.fort_read('f8')))
-                    visc = np.vstack((visc, file.fort_read('f8')))
+                                            file.fort_read('Float64')))
+                    ek_pump = np.vstack((ek_pump, file.fort_read('Float64')))
+                    visc = np.vstack((visc, file.fort_read('Float64')))
                 except TypeError:
                     break
 
             file.close()
         except:  # New file format (without record marker)
             file = open(filename, 'rb')
-            data = np.fromfile(file, dtype=np.float64)
+            data = np.fromfile(file, dtype='Float64')
             self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc = \
                 data[0:6]
             radius = data[6:7+n_r_max-1]
             data = data[7+n_r_max-1:]
             nsteps = len(data)/(5*n_r_max+1)
 
-            data = data.reshape((nsteps, 5*n_r_max+1))
+            data = data.reshape((int(nsteps), 5*n_r_max+1))
             time = data[:, 0]
             vp = data[:, 1:n_r_max+1]
             dvpdt = data[:, n_r_max+1:2*n_r_max+1]
@@ -281,14 +281,14 @@ class PizzaBalance(PizzaSetup):
 
         out = open('%s' % filename, 'wb')
         x = np.array([self.ra, self.ek, self.pr, self.radratio,
-                      self.raxi, self.sc], dtype=np.float64)
+                      self.raxi, self.sc], dtype='Float64')
         x.tofile(out)
         self.radius.tofile(out)
 
         nsteps = len(self.time)
 
         for i in range(nsteps):
-            x = np.array([self.time[i]], dtype=np.float64)
+            x = np.array([self.time[i]], dtype='Float64')
             x.tofile(out)
             self.vp[i, :].tofile(out)
             self.dvpdt[i, :].tofile(out)
@@ -500,20 +500,20 @@ class PizzaVortBalance(PizzaSetup):
         :type data: numpy.ndarray
         """
         file = open(filename, 'rb')
-        dt = np.dtype("i4, 6f8")
+        dt = np.dtype("i4, 6Float64")
         self.version, params = np.fromfile(file, dtype=dt, count=1)[0]
         self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = params
         dt = np.dtype("4i4")
         self.n_r_max, self.n_m_max, self.m_max, self.minc = \
             np.fromfile(file, dtype=dt, count=1)[0]
 
-        dt = np.dtype("%if8" % self.n_r_max)
+        dt = np.dtype("%iFloat64" % self.n_r_max)
         self.radius = np.fromfile(file, dtype=dt, count=1)[0]
         self.idx2m = np.zeros(self.n_m_max)
         for i in range(self.n_m_max):
             self.idx2m[i] = i*self.minc
 
-        dt = np.dtype("(%i,%i)f8" % (self.n_r_max, self.n_m_max))
+        dt = np.dtype("(%i,%i)Float64" % (self.n_r_max, self.n_m_max))
         if self.version == 1:
             data = np.fromfile(file,  dtype=dt, count=9)
         elif self.version == 2:

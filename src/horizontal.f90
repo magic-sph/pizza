@@ -11,7 +11,7 @@ module horizontal
    use blocking, only: nMstart, nMstop, m_balance, nm_per_rank, lmStart, lmStop
    use truncation, only: idx2m, n_m_max
    use truncation_3D, only: n_theta_max, lm_max, l_max, minc_3D, m_max_3D
-   use blocking_lm, only: lmP2l, lmP2lm, lm2l, lm2m
+   use blocking_lm, only: lmP2l, lmP2lm, lm2l, lm2m, lo_map
    use namelists, only: hdif_m, hdif_exp, hdif_vel, hdif_temp, tag,   &
        &                t_bot, t_top, xi_bot, xi_top, hdif_comp,      &
        &                l_heat, l_chem, l_3D, l_mag_3D, hdif_l, hdif_mag
@@ -313,31 +313,31 @@ contains
       if ( abs(hdif_mag) > eps ) then
          !-- Hyperdiffusion is rather defined with the local mapping
          do lm=1,lm_max
-            l=lm2l(lm)
+            l=lo_map%lm2l(lm)!lm2l(lm)
 
             !-- Hyperdiffusion
             if ( hdif_exp > 0 ) then
                if ( hdif_l >= 0 .and. l > hdif_l ) then
 
                !-- Kuang and Bloxham type:
-               !                 hdif_B(lm)=
-               !     *                   one+hdif_mag*real(l+1-hdif_l,cp)**hdif_exp
+               !                 hdif_B(lm)=&
+               !     &                   one+hdif_mag*real(l+1-hdif_l,cp)**hdif_exp
 
                !-- Old type:
                   hdif_B(lm)= one + hdif_mag * ( real(l+1-hdif_l,cp) / &
                   &                              real(l_max+1-hdif_l,cp) )**hdif_exp
 
-                else if ( hdif_l < 0 ) then
+               else if ( hdif_l < 0 ) then
 
-                !-- Grote and Busse type:
-                   hdif_B(lm)= (one+hdif_mag*real(l,cp)**hdif_exp ) / &
-                   &           (one+hdif_mag*real(-hdif_l,cp)**hdif_exp )
+               !-- Grote and Busse type:
+                  hdif_B(lm)= (one+hdif_mag*real(l,cp)**hdif_exp ) / &
+                  &           (one+hdif_mag*real(-hdif_l,cp)**hdif_exp )
 
-                end if
+               end if
             else
                if ( hdif_l >= 0 .and. l > hdif_l ) then
-                  hdif_B(lm) = hdif_mag**(real((hdif_l-l)*hdif_exp,cp))
-                end if
+                  hdif_B(lm) = (hdif_mag**(real((l-hdif_l),cp)))
+               end if
             end if
 
          end do
@@ -346,7 +346,7 @@ contains
          if ( rank== 0 ) then
             open(newunit=file_handle, file='hdif_3D.'//tag, status='new')
             do lm=1,lm_max
-               l=lm2l(lm)
+               l=lo_map%lm2l(lm)
                write(file_handle, '(1I5, 1es16.8)') l, hdif_B(lm)
             end do
             close(file_handle)

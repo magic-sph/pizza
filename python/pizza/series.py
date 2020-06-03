@@ -177,6 +177,8 @@ class PizzaTs(PizzaSetup):
             self.rey = data[:, 1]
             self.rey_zon = data[:, 2]
             self.rey_fluct = data[:, 3]
+            if ( self.l_mag_3D ):
+                self.rey_mag = self.rey * self.prmag
         elif self.field == 'power':
             self.time = data[:, 0]
             self.buoPower = data[:, 1]
@@ -247,6 +249,8 @@ class PizzaTs(PizzaSetup):
             ax.plot(self.time, self.rey, label='Re')
             ax.plot(self.time, self.rey_fluct, label='Re fluct')
             ax.plot(self.time, self.rey_zon, label='Re zon')
+            if ( self.l_mag_3D ):
+                ax.plot(self.time, self.rey_mag, ls='-.', alpha=0.6, label='Re Mag')
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Reynolds (2D)')
@@ -257,6 +261,8 @@ class PizzaTs(PizzaSetup):
             ax.plot(self.time, self.rey, label='Re_3D')
             ax.plot(self.time, self.rey_fluct, label='Re_3D fluct')
             ax.plot(self.time, self.rey_zon, label='Re_3D zon')
+            if ( self.l_mag_3D ):
+                ax.plot(self.time, self.rey_mag, ls='-.', alpha=0.6, label='Re_3D Mag')
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Reynolds (3D)')

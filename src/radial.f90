@@ -7,7 +7,7 @@ module radial_functions
    use iso_fortran_env, only: output_unit
    use blocking, only: nMstart, nMstop, lmStart, lmStop
    use truncation, only: n_r_max, n_cheb_max, m_max
-   use truncation_3D, only: n_r_max_3D, n_cheb_max_3D
+   use truncation_3D, only: n_r_max_3D, n_cheb_max_3D, l_max
    use radial_der, only: get_dr
    use constants, only: one, two, three, pi, half, third
    use namelists, only: tag, alph1, alph2, l_newmap, radratio, g0, g1, g2, &
@@ -59,6 +59,9 @@ module radial_functions
    real(cp), public, allocatable :: tcond_3D(:)
    real(cp), public, allocatable :: dtcond_3D(:)
 
+   real(cp), public, allocatable :: delxr2_3D(:) ! Auxiliary arrays containing effective Courant 3D grid intervals
+   real(cp), public, allocatable :: delxh2_3D(:) ! Auxiliary arrays containing effective Courant 3D grid intervals
+
    !-- Radial scheme
    class(type_rscheme), public, pointer :: rscheme, rscheme_3D
  
@@ -98,7 +101,8 @@ contains
       if ( l_3D ) then
          allocate( r_3D(n_r_max_3D), or1_3D(n_r_max_3D), or2_3D(n_r_max_3D) )
          allocate( rgrav_3D(n_r_max_3D) )
-         bytes_allocated = bytes_allocated+4*n_r_max_3D*SIZEOF_DEF_REAL
+         allocate( delxr2_3D(n_r_max_3D), delxh2_3D(n_r_max_3D) )
+         bytes_allocated = bytes_allocated+6*n_r_max_3D*SIZEOF_DEF_REAL
          allocate( tcond_3D(n_r_max_3D),dtcond_3D(n_r_max_3D) )
          bytes_allocated = bytes_allocated+2*n_r_max_3D*SIZEOF_DEF_REAL
 
@@ -119,6 +123,7 @@ contains
 
       if ( l_3D ) then
          deallocate( tcond_3D, dtcond_3D )
+         deallocate( delxr2_3D, delxh2_3D )
          deallocate( r_3D, or1_3D, or2_3D, rgrav_3D )
          call rscheme_3D%finalize()
       end if
@@ -225,7 +230,7 @@ contains
 
       integer :: n_r, file_handle
       character(len=100) :: file_name
-      real(cp) :: ratio1, ratio2
+      real(cp) :: ratio1, ratio2, delmin
 
       ratio1=alph1 ! To be changed to alph1_3D at some point
       ratio2=alph2
@@ -247,6 +252,17 @@ contains
 
       or1_3D(:)=one/r_3D(:)      ! 1/r_3D
       or2_3D(:)=or1_3D*or1_3D(:) ! 1/r_3D**2
+
+      !-- arrays for Courant and Alfven conditions
+      delxh2_3D(1)         =r_cmb**2/real(l_max*(l_max+1),kind=cp)
+      delxh2_3D(n_r_max_3D)=r_icb**2/real(l_max*(l_max+1),kind=cp)
+      delxr2_3D(1)         =(r_3D(1)-r_3D(2))**2
+      delxr2_3D(n_r_max_3D)=(r_3D(n_r_max_3D-1)-r_3D(n_r_max_3D))**2
+      do n_r=2,n_r_max_3D-1
+         delxh2_3D(n_r)=r_3D(n_r)**2/real(l_max*(l_max+1),kind=cp)
+         delmin=min((r_3D(n_r-1)-r_3D(n_r)),(r_3D(n_r)-r_3D(n_r+1)))
+         delxr2_3D(n_r)=delmin*delmin
+      end do
 
       !-- Conducting state
       if ( l_heat_3D ) then

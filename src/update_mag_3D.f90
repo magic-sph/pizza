@@ -5,7 +5,7 @@ module update_mag_3D_mod
    use mem_alloc, only: bytes_allocated
    use truncation_3D, only: n_r_max_3D, lm_max, l_max
    use radial_functions, only: r_3D, or1_3D, or2_3D, rscheme_3D
-   use namelists, only: kbotb, ktopb, BdiffFac
+   use namelists, only: kbotb, ktopb, BdiffFac!=1/pm=eta/nu
    use blocking_lm, only: st_map, lo_map, lo_sub_map, chunksize
    use blocking, only: lmStart, lmStop
    use horizontal, only: hdif_B

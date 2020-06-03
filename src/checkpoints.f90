@@ -13,9 +13,9 @@ module checkpoints
    use communications, only: gather_from_mloc_to_rank0, lm2r_fields,  &
        &                     scatter_from_rank0_to_mloc, transp_lm2r, &
        &                     scatter_from_rank0_to_lmloc
-   use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
+   use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m, n_cheb_max
    use truncation_3D, only: lm_max, l_max, m_max_3D, n_phi_tot_3D, n_theta_max, &
-       &                    n_r_max_3D, minc_3D
+       &                    n_r_max_3D, minc_3D, n_cheb_max_3D
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &
        &                l_bridge_step, l_cheb_coll, scale_xi, l_3D,       &
@@ -676,9 +676,23 @@ contains
             allocate( r_3D_old(n_r_max_3D_old) )
             read(n_start_file) r_3D_old
             read(n_start_file) l_heat_3D_old, l_mag_3D_old
+         else
+            lm_max_old= lm_max
+            l_max_old = l_max
+            m_max_old = m_max
+            minc_3D_old = minc_3D
+            n_r_max_3D_old = n_r_max_3D
+            n_in = n_cheb_max
+            n_in_2 = 1
+            !allocate ( type_cheb :: rscheme_3D_old )
+            call rscheme_3D_old%initialize(lmStart, lmStop, n_r_max_3D_old, n_in, &
+                 &                         n_in_2,l_cheb_coll=.true.,             &
+                 &                         no_work_array=.true.)
+            allocate( r_3D_old(n_r_max_3D_old) )
          end if
 
-         if ( l_3D_old .and. l_3D ) then
+         !if ( l_3D_old .and. l_3D ) then
+         if ( l_3D_old .or. l_3D ) then
             allocate( lm2lmo(lm_max) )
             call get_lm2lmo(lm2lmo, lm_max, l_max_old, minc_3D_old)
          else
@@ -986,8 +1000,8 @@ contains
                   end if
                end do
             end if
-         else
-            call abortRun('2-D to 3-D for 3D-Temperature-field Not implemented yet')
+         !else
+         !   call abortRun('2-D to 3-D for 3D-Temperature-field Not implemented yet')
          end if
          if ( l_mag_3D_old ) then
             !-- poloidal B field
@@ -1097,8 +1111,6 @@ contains
                   end if
                end do
             end if
-         !else
-         !   call abortRun('2-D to 3-D for 3D-Magnetic-field Not implemented yet')
          end if
       end if
 

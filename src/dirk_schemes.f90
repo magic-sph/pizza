@@ -33,16 +33,18 @@ module dirk_schemes
 
 contains
 
-   subroutine initialize(this, time_scheme, courfac_nml)
+   subroutine initialize(this, time_scheme, courfac_nml, alffac_nml)
 
       class(type_dirk) :: this
 
       !-- Input/output variables
       real(cp),          intent(in) :: courfac_nml
+      real(cp),          intent(in) :: alffac_nml
       character(len=72), intent(inout) :: time_scheme
 
       !-- Local variables
       real(cp) :: courfac_loc
+      real(cp) :: alffac_loc
 
       allocate ( this%dt(1) )
       this%dt(:)=0.0_cp
@@ -59,6 +61,7 @@ contains
          this%nstages = 2
          this%istage = 1
          courfac_loc = 1.35_cp
+         alffac_loc  = 0.54_cp
       else if ( index(time_scheme, 'LZ232') /= 0 ) then
          this%time_scheme = 'LZ232'
          this%norder_imp_lin = 3
@@ -67,6 +70,7 @@ contains
          this%nstages = 2
          this%istage = 1
          courfac_loc = 1.25_cp
+         alffac_loc  = 0.5_cp
       else if ( index(time_scheme, 'CK232') /= 0 ) then
          this%time_scheme = 'CK232'
          this%norder_imp_lin = 3
@@ -75,6 +79,7 @@ contains
          this%nstages = 2
          this%istage = 1
          courfac_loc = 1.25_cp
+         alffac_loc  = 0.5_cp
       else if ( index(time_scheme, 'ARS443') /= 0 ) then
          this%time_scheme = 'ARS443'
          this%norder_imp = 5
@@ -83,6 +88,7 @@ contains
          this%nstages = 4
          this%istage = 1
          courfac_loc = 0.9_cp
+         alffac_loc  = 0.4_cp
       else if ( index(time_scheme, 'LZ453') /= 0 ) then
          this%time_scheme = 'LZ453'
          this%norder_imp = 5
@@ -91,6 +97,7 @@ contains
          this%nstages = 4
          this%istage = 1
          courfac_loc = 1.15_cp
+         alffac_loc  = 0.45_cp
       else if ( index(time_scheme, 'BPR353') /= 0 ) then
          this%time_scheme = 'BPR353'
          this%norder_imp = 5
@@ -99,6 +106,7 @@ contains
          this%nstages = 4
          this%istage = 1
          courfac_loc = 1.0_cp
+         alffac_loc  = 0.4_cp
       else if ( index(time_scheme, 'PC2') /= 0 ) then
          this%time_scheme = 'PC2'
          this%norder_imp = 4
@@ -107,12 +115,19 @@ contains
          this%nstages = 3
          this%istage = 1
          courfac_loc = 0.8_cp
+         alffac_loc  = 0.35_cp
       end if
 
       if ( abs(courfac_nml) >= 1.0e3_cp ) then
          this%courfac=courfac_loc
       else
          this%courfac=courfac_nml
+      end if
+
+      if ( abs(alffac_nml) >= 1.0e3_cp ) then
+         this%alffac=alffac_loc
+      else
+         this%alffac=alffac_nml
       end if
 
       allocate( this%butcher_imp(this%nstages+1,this%nstages+1), &

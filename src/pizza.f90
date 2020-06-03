@@ -17,7 +17,8 @@ program pizza
    use blocking_lm, only: initialize_blocking, finalize_blocking
    use namelists, only: read_namelists, write_namelists, tag, time_scheme,    &  
        &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve,&
-       &                courfac, l_heat, l_chem, l_3D, l_heat_3D, l_mag_3D
+       &                courfac, alffac, l_heat, l_chem, l_3D, l_heat_3D,     &
+       &                l_mag_3D
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use outputs_3D, only: initialize_outputs_3D, finalize_outputs_3D
    use pre_calculations, only: preCalc
@@ -119,7 +120,7 @@ program pizza
 
 
    !-- Initialize time scheme
-   call tscheme%initialize(time_scheme, courfac)
+   call tscheme%initialize(time_scheme, courfac, alffac)
 
    !-- Initialize MPI communicators
    call initialize_communications(l_3D)

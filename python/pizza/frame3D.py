@@ -102,23 +102,24 @@ class Pizza3DFields(PizzaSetup):
         f = Frame3D(filename, endian=endian)
         self.temp = f.field
 
-        filename = self.get_filename('frame_br_3D', ivar, datadir, tag,
-                                     verbose)
-        f = Frame3D(filename, endian=endian)
-        self.br = f.field
+        try:
+            filename = self.get_filename('frame_br_3D', ivar, datadir, tag,
+                                         verbose)
+            f = Frame3D(filename, endian=endian)
+            self.br = f.field
 
-        filename = self.get_filename('frame_bt_3D', ivar, datadir, tag,
-                                     verbose)
-        f = Frame3D(filename, endian=endian)
-        self.bt = f.field
+            filename = self.get_filename('frame_bt_3D', ivar, datadir, tag,
+                                         verbose)
+            f = Frame3D(filename, endian=endian)
+            self.bt = f.field
 
-        filename = self.get_filename('frame_bp_3D', ivar, datadir, tag,
-                                     verbose)
-        f = Frame3D(filename, endian=endian)
-        self.bp = f.field
-
-        f = Frame3D(filename, endian=endian)
-        self.curlbp = f.field
+            filename = self.get_filename('frame_bp_3D', ivar, datadir, tag,
+                                         verbose)
+            f = Frame3D(filename, endian=endian)
+            self.bp = f.field
+        except TypeError:
+            print('frame_b*_3D.%s mag fields not found' % tag)
+            pass
 
     def get_filename(self, prefix, ivar, datadir, tag, verbose):
         """

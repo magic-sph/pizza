@@ -815,20 +815,20 @@ class PizzaSpectrum3D(PizzaSetup):
             if not self.ave:
                 self.bpol2l = data[:, 1]
                 self.btor2l = data[:, 2]
-                self.bpol2m = data[:, 3]
-                self.btor2m = data[:, 4]
+                #self.bpol2m = data[:, 3]
+                #self.btor2m = data[:, 4]
             else:
                 self.bpol2l_mean = data[:, 1]
                 self.bpol2l_std = data[:, 2]
                 self.btor2l_mean = data[:, 3]
                 self.btor2l_std = data[:, 4]
-                self.bpol2m_mean = data[:, 5]
-                self.bpol2m_std = data[:, 6]
-                self.btor2m_mean = data[:, 7]
-                self.btor2m_std = data[:, 8]
+                #self.bpol2m_mean = data[:, 5]
+                #self.bpol2m_std = data[:, 6]
+                #self.btor2m_mean = data[:, 7]
+                #self.btor2m_std = data[:, 8]
 
         self.emagl_mean = self.bpol2l_mean+self.btor2l_mean
-        self.emagm_mean = self.bpol2m_mean+self.btor2m_mean
+        #self.emagm_mean = self.bpol2m_mean+self.btor2m_mean
 
         if iplot:
             self.plot()
@@ -910,9 +910,9 @@ class PizzaSpectrum3D(PizzaSetup):
                 else:
                     ax.loglog(self.index[1:]+1, self.bpol2l[1:], label='b_pol_l**2')
                     ax.loglog(self.index[1:]+1, self.btor2l[1:], label='b_tor_l**2')
-                if abs(self.bpol2m[0]) > 0.:
-                    ax.loglog(self.index+1, self.bpol2m, ls='-.', label='b_pol_m**2')
-                    ax.loglog(self.index+1, self.btor2m, ls='-.', label='b_tor_m**2')
+                #if abs(self.bpol2m[0]) > 0.:
+                #    ax.loglog(self.index+1, self.bpol2m, ls='-.', label='b_pol_m**2')
+                #    ax.loglog(self.index+1, self.btor2m, ls='-.', label='b_tor_m**2')
                 ax.set_ylabel('Magnetic Energy Spectra')
                 ax.set_xlabel('l+1 (m+2)')
                 ax.set_xlim(1, self.index[-1])
@@ -945,23 +945,23 @@ class PizzaSpectrum3D(PizzaSetup):
                                     self.btor2l_mean[1:]+self.btor2l_std[1:],
                                     alpha=0.1)
                     ax.plot(self.index[1:]+1, self.btor2l_mean[1:], label='b_tor_l**2')
-                if abs(self.bpol2m_mean[0]) > 0.:
-                    ax.fill_between(self.index,
-                                    self.bpol2m_mean-self.bpol2m_std,
-                                    self.bpol2m_mean+self.bpol2m_std,
-                                    alpha=0.1)
-                    ax.plot(self.index, self.bpol2m_mean, ls='-.', label='b_pol_m**2')
+                #if abs(self.bpol2m_mean[0]) > 0.:
+                #    ax.fill_between(self.index,
+                #                    self.bpol2m_mean-self.bpol2m_std,
+                #                    self.bpol2m_mean+self.bpol2m_std,
+                #                    alpha=0.1)
+                #    ax.plot(self.index, self.bpol2m_mean, ls='-.', label='b_pol_m**2')
 
-                    ax.fill_between(self.index, self.btor2m_mean-self.btor2m_std,
-                                    self.btor2m_mean+self.btor2m_std, alpha=0.1)
-                    ax.plot(self.index, self.btor2m_mean, ls='-.', label='b_tor_m**2')
-                ax.loglog(self.index, self.emagm_mean, lw=1.8,ls='-.',alpha=0.8, label='e_mag_m**2')
+                #    ax.fill_between(self.index, self.btor2m_mean-self.btor2m_std,
+                #                    self.btor2m_mean+self.btor2m_std, alpha=0.1)
+                #    ax.plot(self.index, self.btor2m_mean, ls='-.', label='b_tor_m**2')
+                #ax.loglog(self.index, self.emagm_mean, lw=1.8,ls='-.',alpha=0.8, label='e_mag_m**2')
                 ax.loglog(self.index+1, self.emagl_mean, c='k', lw=1.9, alpha=0.8, label='e_mag_l**2')
 
                 ax.set_yscale('log')
                 ax.set_xscale('log')
                 ax.set_ylabel('Magnetic Energy Spectra')
-                ax.set_xlabel('l+1 (m+2)')
+                ax.set_xlabel('l/m+1')
                 ax.set_xlim(1, self.index[-1])
                 ax.legend(loc='best', frameon=False)
                 fig.tight_layout()
