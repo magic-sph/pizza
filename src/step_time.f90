@@ -283,10 +283,10 @@ contains
 
             lMat=lMatNext
             if ( (l_new_dt .or. lMat) .and. (tscheme%istage==1) ) then
-               !----- Calculate matricies for new time step if dt /= dtLast
+               !----- Calculate matrices for new time step if dt /= dtLast
                lMat=.true.
                if ( rank == 0 ) then
-                  write(*,'(1p,'' ! Building matricies at time step:'',   &
+                  write(*,'(1p,'' ! Building matrices at time step:'',   &
                        &              i8,ES16.6)') n_time_step,time
                end if
             end if
