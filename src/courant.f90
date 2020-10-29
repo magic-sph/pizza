@@ -3,7 +3,7 @@ module courant_mod
    use parallel_mod
    use precision_mod
    use outputs, only: n_log_file
-   use namelists, only:  dt_fac, tag, l_mag_3D, l_mag_LF, &
+   use namelists, only:  dt_fac, tag, l_3D, l_mag_3D, l_mag_LF, &
        &                 l_cour_alf_damp, DyMagFac, BdiffFac!=1/pm=eta/nu, 
    use truncation, only: n_phi_max
    use truncation_3D, only: n_theta_max, n_phi_max_3D
@@ -226,10 +226,12 @@ contains
          dt_h=min(dthkc(n_r),dt_h)
       end do
 
-      do n_r=nRstart3D,nRstop3D
-         dt_r=min(dtrkc_3D(n_r),dt_r)
-         dt_h=min(dthkc_3D(n_r),dt_h)
-      end do
+      if ( l_3D ) then
+         do n_r=nRstart3D,nRstop3D
+            dt_r=min(dtrkc_3D(n_r),dt_r)
+            dt_h=min(dthkc_3D(n_r),dt_h)
+         end do
+      end if
 
       call MPI_Allreduce(MPI_IN_PLACE,dt_r,1,MPI_DEF_REAL, &
            &             MPI_MIN,MPI_COMM_WORLD,ierr)

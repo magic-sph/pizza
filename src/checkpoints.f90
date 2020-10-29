@@ -676,6 +676,19 @@ contains
             allocate( r_3D_old(n_r_max_3D_old) )
             read(n_start_file) r_3D_old
             read(n_start_file) l_heat_3D_old, l_mag_3D_old
+         else if ( l_heat_3D .or. l_mag_3D .or. l_3D ) then
+            lm_max_old= lm_max
+            l_max_old = l_max
+            m_max_old = m_max
+            minc_3D_old = minc_3D
+            n_r_max_3D_old = n_r_max_3D
+            n_in = n_cheb_max
+            n_in_2 = 1
+            allocate ( type_cheb :: rscheme_3D_old )
+            call rscheme_3D_old%initialize(lmStart, lmStop, n_r_max_3D_old, n_in, &
+                 &                         n_in_2,l_cheb_coll=.true.,             &
+                 &                         no_work_array=.true.)
+            allocate( r_3D_old(n_r_max_3D_old) )
          else
             lm_max_old= lm_max
             l_max_old = l_max
@@ -685,10 +698,10 @@ contains
             n_in = n_cheb_max
             n_in_2 = 1
             !allocate ( type_cheb :: rscheme_3D_old )
-            call rscheme_3D_old%initialize(lmStart, lmStop, n_r_max_3D_old, n_in, &
-                 &                         n_in_2,l_cheb_coll=.true.,             &
-                 &                         no_work_array=.true.)
-            allocate( r_3D_old(n_r_max_3D_old) )
+            !call rscheme_3D_old%initialize(lmStart, lmStop, n_r_max_3D_old, n_in, &
+            !     &                         n_in_2,l_cheb_coll=.true.,             &
+            !     &                         no_work_array=.true.)
+            allocate( r_3D_old(1) )!n_r_max_3D_old) )
          end if
 
          !if ( l_3D_old .and. l_3D ) then
@@ -887,7 +900,6 @@ contains
                end do
             end if
          end if
-
       end if
 
       if ( l_chem_old ) then

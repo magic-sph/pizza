@@ -97,10 +97,14 @@ class Pizza3DFields(PizzaSetup):
         f = Frame3D(filename, endian=endian)
         self.uphi = f.field
 
-        filename = self.get_filename('frame_temp_3D', ivar, datadir, tag,
-                                     verbose)
-        f = Frame3D(filename, endian=endian)
-        self.temp = f.field
+        try:
+                filename = self.get_filename('frame_temp_3D', ivar, datadir, tag,
+                                             verbose)
+                f = Frame3D(filename, endian=endian)
+                self.temp = f.field
+        except TypeError:
+            print('frame_temp_3D.%s heat fields not found' % tag)
+            pass
 
         try:
             filename = self.get_filename('frame_br_3D', ivar, datadir, tag,

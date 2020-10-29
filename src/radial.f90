@@ -9,7 +9,7 @@ module radial_functions
    use truncation, only: n_r_max, n_cheb_max, m_max
    use truncation_3D, only: n_r_max_3D, n_cheb_max_3D, l_max
    use radial_der, only: get_dr
-   use constants, only: one, two, three, pi, half, third
+   use constants, only: one, two, three, pi, half, third, sq4pi
    use namelists, only: tag, alph1, alph2, l_newmap, radratio, g0, g1, g2, &
        &                l_non_rot, ek, l_ek_pump, l_tcond_3D, tcond_fac,   &
        &                r_cmb, r_icb, l_cheb_coll, beta_shift, xicond_fac, &
@@ -228,9 +228,12 @@ contains
       !  Calculates everything needed for 3D radial functions, transforms etc.
       !
 
-      integer :: n_r, file_handle
+      integer :: n, n_r, file_handle
       character(len=100) :: file_name
       real(cp) :: ratio1, ratio2, delmin
+      real(cp) :: tr_bot, tr_top, m_bot, l_bot, m_top, l_top
+      real(cp) :: f_bot, f_top
+      real(cp) :: epsc0
 
       ratio1=alph1 ! To be changed to alph1_3D at some point
       ratio2=alph2
@@ -264,12 +267,48 @@ contains
          delxr2_3D(n_r)=delmin*delmin
       end do
 
-      !-- Conducting state
+      !-- Get Conducting state 3D
       if ( l_heat_3D ) then
+         !-- Inhomogeneous BCs
+         f_bot=0.0_cp
+         f_top=0.0_cp
+         do n=1,size(t_bot)/4
+            l_bot =int(t_bot(4*n-3))
+            m_bot =int(t_bot(4*n-2))
+            tr_bot=t_bot(4*n-1)
+            l_top =int(t_top(4*n-3))
+            m_top =int(t_top(4*n-2))
+            tr_top=t_top(4*n-1)
+            if ( l_bot == 0 .and. m_bot == 0 .and. abs(tr_bot) > 10.0_cp*epsilon(one) ) then
+               f_bot=real(tr_bot,kind=cp)
+            end if
+            if ( l_top == 0 .and. m_top == 0 .and. abs(tr_top) > 10.0_cp*epsilon(one) ) then
+               f_top=real(tr_top,kind=cp)
+            end if
+         end do
+         !-- 3D heat sources to compensate for top/bottom fluxes
+         epsc0 = sq4pi*three*(r_icb**2*f_bot - r_cmb**2*f_top)/ &
+         &                   (r_cmb**3 - r_icb**3)
+
+         if ( rank == 0 ) write(output_unit,*) '! Top 3D Flux', f_top
+         if ( rank == 0 ) write(output_unit,*) '! Bot 3D Flux', f_bot
+
+         !-- Actual 3D Conducting state
          if ( kbott == 1 .and. ktopt == 1 ) then
             tcond_3D(:) = r_icb*r_cmb*or1_3D(:)-r_icb
             dtcond_3D(:)= -r_icb*r_cmb*or2_3D(:)
+         elseif ( ktopt==2 .and. kbott==1 ) then
+               tcond_3D(:) = one + f_top*r_cmb**2*(one/r_icb - or1_3D(:)) !&
+               !&          + (epsc0/two)*(r_icb**2 - r(n_r)**2 +          &
+               !&             two*r_cmb**3*(one/r_icb-or1_3D(:)))
+               call get_dr(tcond_3D, dtcond_3D, n_r_max_3D, rscheme_3D)
+         elseif ( ktopt==2 .and. kbott==2 ) then !testing this
+               tcond_3D(:) = 2.0_cp*r_cmb + one*r_cmb**2*or1_3D(:) !&
+               !&          - (epsc0/two)*(r(n_r)**2 +  &
+               !&             two*r_cmb**3*or1_3D(:))
+               call get_dr(tcond_3D, dtcond_3D, n_r_max_3D, rscheme_3D)
          else
+            if ( rank == 0 ) write(output_unit,*) 'Only Diff Heating and Fixed Heat flux top are supported !'
             call abortRun('tcond 3D with other BCs not done yet')
          end if
       else
@@ -298,11 +337,11 @@ contains
       real(cp), intent(inout) :: dtcond(n_r_max)
 
       !-- Local variables
-      integer :: n, n_r, m_bot, m_top
+      integer :: n, n_r, m_bot, m_top!, n_out
       real(cp) :: h(n_r_max)     ! :math:`sqrt(r_cmb^2-r^2)`
       real(cp) :: tr_bot, tr_top
       real(cp) :: f_bot, f_top
-      real(cp) :: epsc0 
+      real(cp) :: epsc0
 
       f_bot=0.0_cp
       f_top=0.0_cp
@@ -364,9 +403,9 @@ contains
             tcond(:) = cond_fac*(log(r(:)/r_cmb)/log(radratio))
             dtcond(:)= cond_fac*(or1(:)/log(radratio))
          elseif ( ktop==2 .and. kbot==1 ) then
-            tcond(:) = cond_fac*(one + f_top*r_cmb*log(r(:)/r_icb) + (epsc0/two)*  &
-            &                     (r_icb**2 - r(:)**2 + two*r_cmb**2*log(r(:)/r_icb)))
-            dtcond(:)= cond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
+            tcond(:) = cond_fac*(one + f_top*r_cmb*log(r(:)/r_icb) )!+ (epsc0/two)*  &
+            !&                     (r_icb**2 - r(:)**2 + two*r_cmb**2*log(r(:)/r_icb)))
+            dtcond(:)= cond_fac*(f_top*r_cmb*or1(:) )!+ epsc0*(r_cmb**2*or1(:) - r(:)))
          elseif( ktop==1 .and. kbot==2 ) then
             tcond(:) = cond_fac*(f_bot*r_icb*log(r(:)/r_cmb) + (epsc0/two)*        &
             &                     (r_cmb**2 - r(:)**2 + two*r_icb**2*log(r(:)/r_cmb)))
@@ -377,7 +416,18 @@ contains
             dtcond(:)= cond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
          endif
       end if
+
       !call logWrite('! Sources introduced to balance surface heat flux!')
+      !do n=1,2
+      !   if ( n == 1 ) n_out=output_unit
+      !   if ( n == 2 ) n_out=n_log_file
+      !   write(n_out,*) ''
+      !   write(n_out, '(''!      Top Flux='',ES16.6)') f_top
+      !   write(n_out, '(''!      Bot Flux='',ES16.6)') f_bot
+      !   write(n_out,*) ' ! Warning: Sources introduced to balance surface heat flux'
+      !   write(n_out, '(''!      epsc0*pr='',ES16.6)') epsc0
+      !   write(n_out,*) ''
+      !end do
       if (rank == 0) write(output_unit,*) &
       &             '! Warning: Sources introduced to balance surface heat flux'
       if (rank == 0) write(output_unit,'(''!      epsc0*pr='',ES16.6)') epsc0

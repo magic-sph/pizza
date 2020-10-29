@@ -7,7 +7,7 @@ module spectra
 
    use precision_mod
    use parallel_mod
-   use constants, only: pi, one, half
+   use constants, only: pi, one
    use mem_alloc, only: bytes_allocated
    use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, idx2m, n_m_max, minc, m_max

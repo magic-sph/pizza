@@ -7,14 +7,15 @@ module horizontal
    use precision_mod
    use parallel_mod
    use mem_alloc
-   use constants, only: zero, one, pi, two, half
+   use constants, only: zero, one, pi, two, half, sq4pi
    use blocking, only: nMstart, nMstop, m_balance, nm_per_rank, lmStart, lmStop
    use truncation, only: idx2m, n_m_max
    use truncation_3D, only: n_theta_max, lm_max, l_max, minc_3D, m_max_3D
    use blocking_lm, only: lmP2l, lmP2lm, lm2l, lm2m, lo_map
    use namelists, only: hdif_m, hdif_exp, hdif_vel, hdif_temp, tag,   &
        &                t_bot, t_top, xi_bot, xi_top, hdif_comp,      &
-       &                l_heat, l_chem, l_3D, l_mag_3D, hdif_l, hdif_mag
+       &                l_heat, l_chem, l_3D, l_heat_3D, l_mag_3D,    &
+       &                hdif_l, hdif_mag
 
    implicit none
 
@@ -25,11 +26,13 @@ module horizontal
    complex(cp), allocatable, public :: topt_Mloc(:)
    complex(cp), allocatable, public :: botxi_Mloc(:)
    complex(cp), allocatable, public :: topxi_Mloc(:)
+   complex(cp), allocatable, public :: bott_LMloc(:)
+   complex(cp), allocatable, public :: topt_LMloc(:)
 
    real(cp), public, allocatable :: hdif_V(:)
    real(cp), public, allocatable :: hdif_T(:)
    real(cp), public, allocatable :: hdif_Xi(:)
-   real(cp), public, allocatable :: hdif_B(:)   !-- WARNING:: Totally wrong -> to be modified!!
+   real(cp), public, allocatable :: hdif_B(:)
 
    !-- Arrays depending on theta (colatitude):
    real(cp), public, allocatable :: theta(:)
@@ -72,6 +75,11 @@ contains
          bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_DEF_REAL+&
          &                 2*(nMstop-nMstart+1)*SIZEOF_DEF_COMPLEX
       end if
+      if ( l_heat_3D ) then
+         allocate( bott_LMloc(lmStart:lmStop) )
+         allocate( topt_LMloc(lmStart:lmStop) )
+         bytes_allocated = bytes_allocated+2*(lmStop-lmStart+1)*SIZEOF_DEF_COMPLEX
+      end if
       if ( l_mag_3D ) then
          allocate( hdif_B(lm_max) )
          bytes_allocated = bytes_allocated+lm_max*SIZEOF_DEF_REAL
@@ -104,6 +112,7 @@ contains
       if ( l_heat ) deallocate( bott_Mloc, topt_Mloc, hdif_T )
       if ( l_chem ) deallocate( botxi_Mloc, topxi_Mloc, hdif_Xi )
       deallocate( hdif_V )
+      if ( l_heat_3D ) deallocate( bott_LMloc, topt_LMloc )
       if ( l_mag_3D ) deallocate( hdif_B )
 
       if ( l_3D ) then
@@ -242,7 +251,6 @@ contains
                end if
             end do
          end do
-
       end if
 
    end subroutine mfunctions
@@ -250,8 +258,10 @@ contains
    subroutine spherical_functions
 
       !-- Local variables
-      integer :: l, m
-      integer :: n_theta, lm, file_handle
+      integer :: lm, l, m
+      integer :: n, m_bot, l_bot, m_top, l_top
+      integer :: n_theta, file_handle
+      real(cp) :: tr_bot, ti_bot, tr_top, ti_top
       real(cp) :: clm(0:l_max+1,0:l_max+1), colat, eps
       real(cp) :: theta_ord(n_theta_max), gauss(n_theta_max)
 
@@ -310,7 +320,7 @@ contains
 
       eps = 10.0_cp*epsilon(one)
       if ( l_mag_3D ) hdif_B(:) = one
-      if ( abs(hdif_mag) > eps ) then
+      if ( abs(hdif_mag) > eps .and. l_mag_3D ) then
          !-- Hyperdiffusion is rather defined with the local mapping
          do lm=1,lm_max
             l=lo_map%lm2l(lm)!lm2l(lm)
@@ -352,6 +362,38 @@ contains
             close(file_handle)
          end if
 
+      end if
+
+      !-- Build matrices Inhomogeneous B.Cs based on MagIC
+      !-- (see 2D implementation for more details)!
+      if ( l_heat_3D ) then
+         do lm=lmStart,lmStop
+            l=lo_map%lm2l(lm)
+            m=lo_map%lm2m(lm)
+            bott_LMloc(lm)=zero
+            if ( l == 0 ) bott_LMloc(lm)=sq4pi*cmplx(1.0,0.0,kind=cp)
+            topt_LMloc(lm)=zero
+            do n=1,size(t_bot)/4
+               l_bot =int(t_bot(4*n-3))
+               m_bot =int(t_bot(4*n-2))
+               tr_bot=t_bot(4*n-1)
+               ti_bot=t_bot(4*n)
+               l_top =int(t_top(4*n-3))
+               m_top =int(t_top(4*n-2))
+               tr_top=t_top(4*n-1)
+               ti_top=t_top(4*n)
+               if ( l_bot == l .and. m_bot == m .and. &
+                   cmplx(tr_bot,ti_bot,kind=cp) /= zero ) then
+                  if ( m == 0 ) ti_bot=0.0_cp
+                  bott_LMloc(lm)=sq4pi*cmplx(tr_bot,ti_bot,kind=cp)
+               end if
+               if ( l_top == l .and. m_top == m .and. &
+                   cmplx(tr_top,ti_top,kind=cp) /= zero ) then
+                  if ( m == 0 ) ti_top=0.0_cp
+                  topt_LMloc(lm)=sq4pi*cmplx(tr_top,ti_top,kind=cp)
+               end if
+            end do
+         end do
       end if
 
    end subroutine spherical_functions

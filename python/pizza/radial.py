@@ -122,7 +122,13 @@ class PizzaRadial(PizzaSetup):
                                         nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                 nml='log.%s' % tag)
-        if ( self.l_heat_3D or self.l_mag_3D ):
+        try:
+            lhea3D = self.l_heat_3D
+            lmag3D = self.l_mag_3D
+        except AttributeError:
+            self.l_heat_3D = 'F'
+            self.l_mag_3D = 'F'
+        if ( self.l_heat_3D == 'T' or self.l_mag_3D == 'T' ):
             lenfn = len(name)+2
             filename3D = filename[:lenfn]+'_3D'+filename[lenfn:]
             print('reading additional %s' % filename3D)
@@ -139,17 +145,19 @@ class PizzaRadial(PizzaSetup):
         self.uphi_std = data[:, 8]
         if ( self.l_heat_3D == 'T' or self.l_mag_3D == 'T' ):
             self.radius_3D = data_t3D[:, 0]
+        if ( self.l_heat_3D == 'T' ):
             self.temp_mean = data_t3D[:, 1]
             self.temp_std = data_t3D[:, 2]
-            if ( self.l_mag_3D == 'T' ):
-                self.bpol_mean = data_t3D[:, 3]
-                self.bpol_std = data_t3D[:, 4]
-                self.btor_mean = data_t3D[:, 5]
-                self.btor_std = data_t3D[:, 6]
-                self.mag_mean = self.bpol_mean + self.btor_mean
         else:
             self.temp_mean = data[:, 9]
             self.temp_std = data[:, 10]
+        if ( self.l_mag_3D == 'T' ):
+            self.bpol_mean = data_t3D[:, 3]
+            self.bpol_std = data_t3D[:, 4]
+            self.btor_mean = data_t3D[:, 5]
+            self.btor_std = data_t3D[:, 6]
+            self.mag_mean = self.bpol_mean + self.btor_mean
+
         if data.shape[-1] == 15:
             self.xi_mean = data[:, 11]
             self.xi_std = data[:, 12]
