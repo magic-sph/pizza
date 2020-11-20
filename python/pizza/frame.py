@@ -33,10 +33,9 @@ class Frame:
         :param endian: endianness of the file ('B' or 'l')
         :type endian: str
         """
-
         try:
 
-            file = npfile.npfile(filename, endian=endian)
+            file = npfile(filename, endian=endian)
             self.version = file.fort_read('i4')
             self.time = file.fort_read(np.float64)
             self.ra, self.ek, self.pr, self.radratio, self.sc, \
