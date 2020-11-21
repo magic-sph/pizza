@@ -77,7 +77,7 @@ contains
       write(n_out,'(''  n_cheb_max   ='',i6)') n_cheb_max
       write(n_out,'(''  n_phi_max    ='',i6, &
            &   '' = no of azimuthal grid points'')') n_phi_max
-      write(n_out,'(''  m_max        ='',i6, '' = max oder'')') m_max
+      write(n_out,'(''  m_max        ='',i6, '' = max order'')') m_max
       write(n_out,'(''  n_m_max      ='',i6, '' = number of m s'')') n_m_max
       write(n_out,'(''  minc         ='',i6, '' = longitude symmetry wave no'')') minc
       write(n_out,*) ''

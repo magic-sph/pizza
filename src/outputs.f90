@@ -22,7 +22,7 @@ module outputs
        &               nm_per_rank, m_balance
    use integration, only: rInt_R, simps
    use useful, only: round_off, cc2real, cc22real, getMSD2, abortRun
-   use constants, only: pi, two, four, surf, vol_otc, one
+   use constants, only: pi, two, four, surf, vol_otc, one, tiny_number
    use checkpoints, only: write_checkpoint_mloc
    use output_frames, only: write_snapshot_mloc
    use time_schemes, only: type_tscheme
@@ -694,7 +694,11 @@ contains
 
          !-- Classical top and bottom Nusselt number
          NuTop = one+real(dtemp_Mloc(n_m0,1))/dtcond(1)
-         NuBot = one+real(dtemp_Mloc(n_m0,n_r_max))/dtcond(n_r_max)
+         if (abs(dtcond(n_r_max)) > tiny_number) then
+            NuBot = one+real(dtemp_Mloc(n_m0,n_r_max))/dtcond(n_r_max)
+         else
+            NuBot = one
+         end if
          !&       (dtcond(n_r_max)-tadvz_fac*beta(n_r_max)*tcond(n_r_max))
          NuTop = round_off(NuTop)
          NuBot = round_off(NuBot)

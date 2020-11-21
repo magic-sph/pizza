@@ -42,6 +42,7 @@ module namelists
    real(cp), public :: t_bot(3*n_t_bounds), xi_bot(3*n_t_bounds)
    real(cp), public :: t_top(3*n_t_bounds), xi_top(3*n_t_bounds)
    real(cp), public :: g0, g1, g2
+   real(cp), public :: h_temp, h_xi  ! Volumetric heating / volumetric chemical input
 
    !-- For the nonlinear mapping)
    real(cp), public :: alph1  ! Input parameter for non-linear map to define degree of spacing (0.0:2.0)
@@ -139,7 +140,8 @@ contains
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
       &                   l_temp_3D,tcond_fac,l_temp_advz,         &
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
-      &                   xi_bot,xi_top, l_xi_3D, xicond_fac
+      &                   xi_bot,xi_top, l_xi_3D, xicond_fac,      &
+      &                   h_temp, h_xi
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi
@@ -497,6 +499,9 @@ contains
       g0               =0.0_cp
       g1               =one
       g2               =0.0_cp
+      !----- Volumetric sources
+      h_temp           =0.0_cp
+      h_xi             =0.0_cp
       !----- Boundary conditions        
       ktopt            =1
       kbott            =1
@@ -617,6 +622,8 @@ contains
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1
       write(n_out,'(''  g2              ='',ES14.6,'','')') g2
+      write(n_out,'(''  h_temp          ='',ES14.6,'','')') h_temp
+      write(n_out,'(''  h_xi            ='',ES14.6,'','')') h_xi
       write(n_out,'(''  l_ek_pump       ='',l3,'','')') l_ek_pump
       write(n_out,'(''  l_temp_advz     ='',l3,'','')') l_temp_advz
       write(n_out,'(''  l_temp_3D       ='',l3,'','')') l_temp_3D
