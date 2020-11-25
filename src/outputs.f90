@@ -693,13 +693,17 @@ contains
          tBot = round_off(tBot)
 
          !-- Classical top and bottom Nusselt number
-         NuTop = one+real(dtemp_Mloc(n_m0,1))/dtcond(1)
+         if (abs(dtcond(1)) > tiny_number) then
+            NuTop = one+real(dtemp_Mloc(n_m0,1))/dtcond(1)
+         else
+            NuTop = one
+         end if
          if (abs(dtcond(n_r_max)) > tiny_number) then
             NuBot = one+real(dtemp_Mloc(n_m0,n_r_max))/dtcond(n_r_max)
+            !&       (dtcond(n_r_max)-tadvz_fac*beta(n_r_max)*tcond(n_r_max))
          else
             NuBot = one
          end if
-         !&       (dtcond(n_r_max)-tadvz_fac*beta(n_r_max)*tcond(n_r_max))
          NuTop = round_off(NuTop)
          NuBot = round_off(NuBot)
 

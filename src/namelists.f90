@@ -6,6 +6,7 @@ module namelists
    !
 
    use iso_c_binding
+   use iso_fortran_env, only: output_unit
    use truncation, only: n_r_max, m_max, n_cheb_max, minc
    use parallel_mod, only: rank
    use useful, only: abortRun
@@ -351,9 +352,9 @@ contains
             l_buo_imp = .false.
             buo_term = 'EXP'
             if ( rank == 0 ) then
-               write(6, &
+               write(output_unit, &
                &    '(" ! Implicit Buoyancy term not compatible with chosen time scheme")')
-               write(6, &
+               write(output_unit, &
                &    '(" ! Buoyancy term will be treated explicitly")')
             end if
          end if
@@ -363,9 +364,9 @@ contains
          l_coriolis_imp = .false.
          corio_term = 'EXP'
          if ( rank == 0 ) then
-            write(6, &
+            write(output_unit, &
             &    '(" ! Implicit Coriolis term not compatible with influence matrix method")')
-            write(6, &
+            write(output_unit, &
             &    '(" ! Coriolis term will be treated explicitly")')
          end if
       end if

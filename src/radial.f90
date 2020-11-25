@@ -4,9 +4,10 @@ module radial_functions
    ! only. This is called only once at the initialisation of the code.
    !
 
+   use iso_fortran_env, only: output_unit
    use truncation, only: n_r_max, n_cheb_max, m_max
    use radial_der, only: get_dr
-   use constants, only: one, two, three, pi, half, third
+   use constants, only: one, two, three, pi, half, third, tiny_number
    use namelists, only: tag, alph1, alph2, l_newmap, radratio, g0, g1, g2, &
        &                l_non_rot, ek, l_ek_pump, l_temp_3D, tcond_fac,    &
        &                r_cmb, r_icb, l_cheb_coll, beta_shift, xicond_fac, &
@@ -226,8 +227,19 @@ contains
             f_top=real(tr_top,kind=cp)
          end if
       end do
-      if ( rank == 0 ) write(6,*) '! Top Flux', f_top ! flux -> quantity
-      if ( rank == 0 ) write(6,*) '! Bot Flux', f_bot
+
+      if ( rank == 0 ) then
+         if ( ktopt == 1 ) then
+            write(output_unit,*) '! Top value', f_top
+         else
+            write(output_unit,*) '! Top flux', f_top
+         end if
+         if ( kbott == 1 ) then
+            write(output_unit,*) '! Bot value', f_bot
+         else
+            write(output_unit,*) '! Bot flux', f_bot
+         end if
+      end if
 
       !-- Conductive Temperature profile 2D and 3D projected onto QG
       if ( l_3D ) then
@@ -263,7 +275,7 @@ contains
          endif
          call get_dr(tcond, dtcond, n_r_max, rscheme)
       else
-      !2D-tcond profiles -- Warning! In 2D, need a geometric factor
+         !2D-tcond profiles -- Warning! In 2D, need a geometric factor
          !-- 2D heat sources to compensate for top/bottom fluxes
          if ( ktop==1 .and. kbot==1 ) then
             tcond(:) = cond_fac*(log(r(:)/r_cmb)/log(radratio))
@@ -278,19 +290,29 @@ contains
             &                    f_top)
             dtcond(:)=cond_fac*(f_bot*r_icb*or1(:)+half*epsc0*(r_icb**2*or1(:) - r(:)))
          else
-            epsc0 = two*(r_cmb*f_top - r_icb*f_bot)/ &
-            &           (r_cmb**2 - r_icb**2)
-            if ( epsc0<10.0_cp*epsilon(one) ) epsc0=0.0_cp
-            tcond(:) = cond_fac*( 0.25_cp*epsc0*( r_icb**2-r(:)**2 &
-            &                    + two*r_cmb**2*log( r(:)/r_icb ) )&
-            &                    + r_cmb *f_top * log( r(:)/r_icb ) )
-            dtcond(:)= cond_fac*(f_top*r_cmb*or1(:) + half*epsc0*(r_cmb**2*or1(:) - r(:)))
+            epsc0 = -two*(r_cmb*f_top-r_icb*f_bot)/(r_cmb**2-r_icb**2)
+            if ( abs(epsc0)<tiny_number ) epsc0=0.0_cp
+            tcond(:) = cond_fac*( half*epsc0*( r_cmb**2*log(r(:)/r_cmb)-half*(r(:)**2- &
+            &                     r_cmb**2))+r_cmb*f_top*log(r(:)/r_cmb))
+            dtcond(:)=cond_fac*(f_top*r_cmb*or1(:)+half*epsc0*(r_cmb**2*or1(:)-r(:)))
          endif
+         if (rank == 0) write(output_unit,*) &
+         &         '! Warning: Sources introduced to balance surface heat flux'
+         if (rank == 0) write(output_unit,'(''!      epsc0*pr='',ES16.6)') epsc0
       end if
-      !call logWrite('! Sources introduced to balance surface heat flux!')
-      if (rank == 0) write(6,*) '! Warning: Sources introduced to balance surface heat flux'
-      if (rank == 0) write(6,'(''!      epsc0*pr='',ES16.6)') epsc0
-      !call logWrite(message)
+
+#ifdef WITH_DEBUG
+      block
+         integer :: file_handle
+         if ( rank == 0 ) then
+            open(newunit=file_handle, file='cond')
+            do n_r=1,n_r_max
+               write(file_handle, '(3ES16.8)') r(n_r), tcond(n_r), dtcond(n_r)
+            end do
+            close(file_handle)
+         end if
+      end block
+#endif
 
    end subroutine get_conducting_state
 !------------------------------------------------------------------------------

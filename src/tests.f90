@@ -2,6 +2,7 @@ module tests
    !
    ! This module contains several testing subroutines
    !
+   use iso_fortran_env, only: output_unit
    use precision_mod
    use parallel_mod
    use galerkin
@@ -124,8 +125,8 @@ contains
             &                                   tInteg, timeLuInt,       &
             &                                   timeSolveInt, errGal,    &
             &                                   tGal, timeLuGal, timeSolveGal
-            write(6, '(i5,6es14.6)') n_r_max_loc, errColloc, tColloc,    &
-            &                        errInteg, tInteg, errGal, tGal
+            write(output_unit, '(i5,6es14.6)') n_r_max_loc, errColloc, tColloc,    &
+            &                                  errInteg, tInteg, errGal, tGal
 
 
             call finalize_der_arrays()
@@ -214,9 +215,8 @@ contains
             write(file_handle) rhs1
 
             err = sum(abs(rhs1))/n_r_max_loc
-            write(6, '(i5,5es20.12)') n_r_max_loc, err, rhs1(1), rhs1(n_r_max_loc/2)
-
-
+            write(output_unit, '(i5,5es20.12)') n_r_max_loc, err, rhs1(1), &
+            &                                   rhs1(n_r_max_loc/2)
 
             call A_mat%finalize()
             call B_mat%finalize()
@@ -319,8 +319,8 @@ contains
             &                                   tInteg, timeLuInt,       &
             &                                   timeSolveInt, errGal,    &
             &                                   tGal, timeLuGal, timeSolveGal
-            write(6, '(i5,6es14.6)') n_r_max_loc, errColloc, tColloc,    &
-            &                        errInteg, tInteg, errGal, tGal
+            write(output_unit, '(i5,6es14.6)') n_r_max_loc, errColloc, tColloc,  &
+            &                                  errInteg, tInteg, errGal, tGal
 
 
             call finalize_der_arrays()
@@ -1166,8 +1166,8 @@ contains
             err = maxval(abs(rhs1-rhs3))
             write(file_handle, '(i5,5es20.12)') n_r_max_loc, err, rhs1(5), &
             &                                   rhs3(5), rhs1(9), rhs3(9)
-            write(6, '(i5,5es20.12)') n_r_max_loc, err, rhs1(5), rhs3(5), &
-            &                         rhs1(9), rhs3(9)
+            write(output_unit, '(i5,5es20.12)') n_r_max_loc, err, rhs1(5), rhs3(5), &
+            &                                   rhs1(9), rhs3(9)
 
 
 
@@ -1392,10 +1392,10 @@ contains
             err_d2_matmul = maxval(abs(df_num_matmul(:)-d2f_theo(:)))
 
             !-- Store it in a file
-            write(file_handle, '(i5,4es20.12)') n_r_max_loc, err_d1, err_d1_matmul,&
+            write(file_handle, '(i5,4es20.12)') n_r_max_loc, err_d1, err_d1_matmul, &
             &                                   err_d2, err_d2_matmul
-            write(6, '(i5,4es20.12)') n_r_max_loc, err_d1, err_d1_matmul, err_d2, &
-            &                         err_d2_matmul
+            write(output_unit, '(i5,4es20.12)') n_r_max_loc, err_d1, err_d1_matmul, &
+            &                                   err_d2, err_d2_matmul
 
             call finalize_der_arrays()
             call rscheme%finalize()
