@@ -4,8 +4,7 @@ module step_time
    !
 
    use communications, only: transp_m2r, m2r_fields, transp_r2m, r2m_fields, &
-       &                     gather_from_mloc_to_rank0, my_reduce_mean,      &
-       &                     scatter_from_rank0_to_mloc
+       &                     gather_from_mloc_to_rank0, my_reduce_mean
    use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
        &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,    &

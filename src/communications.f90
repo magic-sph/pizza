@@ -298,6 +298,8 @@ contains
          end do
       end do
 
+      deallocate ( scounts, sdisp, rbuff, sbuff )
+
    end subroutine scatter_from_rank0_to_mloc
 !------------------------------------------------------------------------------
    subroutine reduce_radial_on_rank(arr_dist, irank)
