@@ -1,5 +1,6 @@
 module pre_calculations
 
+   use iso_fortran_env, only: output_unit
    use truncation, only: n_r_max, n_m_max, n_phi_max, minc, m_max, &
    &                     n_cheb_max
    use constants, only: one, four, third, pi, vol_oc, surf, two, vol_otc
@@ -51,7 +52,7 @@ contains
 
       !-- Write some informations
       if ( rank == 0 ) then
-         call write_info(6)
+         call write_info(output_unit)
          call write_info(n_log_file)
       end if
 

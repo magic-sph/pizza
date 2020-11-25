@@ -5,8 +5,7 @@ module checkpoints
    use constants, only: zero, two
    use char_manip, only: dble2str
    use blocking, only: nMstart,nMstop,nm_per_rank
-   use communications, only: gather_from_mloc_to_rank0, &
-       &                     scatter_from_rank0_to_mloc
+   use communications, only: scatter_from_rank0_to_mloc
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &

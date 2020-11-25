@@ -12,6 +12,7 @@ module mpi_transp
    private
 
    type, abstract, public :: type_mpitransp
+      integer :: n_fields
    contains
       procedure(create_if), deferred :: create_comm
       procedure(destroy_if), deferred :: destroy_comm
@@ -21,9 +22,10 @@ module mpi_transp
 
    interface 
 
-      subroutine create_if(this)
+      subroutine create_if(this,n_fields)
          import
          class(type_mpitransp) :: this
+         integer, intent(in) :: n_fields
       end subroutine create_if
 
       subroutine destroy_if(this)
@@ -34,15 +36,15 @@ module mpi_transp
       subroutine transp_m2r_if(this, arr_Mloc, arr_Rloc)
          import
          class(type_mpitransp) :: this
-         complex(cp), intent(in) :: arr_Mloc(nMstart:nMstop,n_r_max)
-         complex(cp), intent(out) :: arr_Rloc(n_m_max,nRstart:nRstop)
+         complex(cp), intent(in) :: arr_Mloc(nMstart:nMstop,n_r_max,*)
+         complex(cp), intent(out) :: arr_Rloc(n_m_max,nRstart:nRstop,*)
       end subroutine transp_m2r_if
 
       subroutine transp_r2m_if(this, arr_Rloc, arr_Mloc)
          import
          class(type_mpitransp) :: this
-         complex(cp), intent(in) :: arr_Rloc(n_m_max,nRstart:nRstop)
-         complex(cp), intent(out) :: arr_Mloc(nMstart:nMstop,1:n_r_max)
+         complex(cp), intent(in) :: arr_Rloc(n_m_max,nRstart:nRstop,*)
+         complex(cp), intent(out) :: arr_Mloc(nMstart:nMstop,1:n_r_max,*)
       end subroutine transp_r2m_if
 
    end interface
@@ -94,19 +96,24 @@ module  mpi_alltoall_mod
 
 contains
 
-   subroutine create_comm_alltoallv(this)
+   subroutine create_comm_alltoallv(this,n_fields)
 
       class(type_mpiatoav) :: this
 
+      !-- Input variable
+      integer, intent(in) :: n_fields
+
       !-- Local variables
       integer :: p
+
+      this%n_fields=n_fields
 
       allocate ( this%rcounts(0:n_procs-1), this%scounts(0:n_procs-1) )
       allocate ( this%rdisp(0:n_procs-1), this%sdisp(0:n_procs-1) )
 
       do p=0,n_procs-1
-         this%scounts(p)=nR_per_rank*m_balance(p)%n_per_rank
-         this%rcounts(p)=radial_balance(p)%n_per_rank*nm_per_rank
+         this%scounts(p)=nR_per_rank*m_balance(p)%n_per_rank*this%n_fields
+         this%rcounts(p)=radial_balance(p)%n_per_rank*nm_per_rank*this%n_fields
       end do
 
       this%rdisp(0)=0
@@ -123,13 +130,18 @@ contains
 
    end subroutine create_comm_alltoallv
 !----------------------------------------------------------------------------------
-   subroutine create_comm_alltoallw(this)
+   subroutine create_comm_alltoallw(this,n_fields)
 
       class(type_mpiatoaw) :: this
 
+      !-- Input variable
+      integer, intent(in) :: n_fields
+
       !-- Local variables
-      integer :: arr_size(2), arr_loc_size(2), arr_start(2)
+      integer :: arr_size(3), arr_loc_size(3), arr_start(3)
       integer :: p, my_m_counts
+
+      this%n_fields = n_fields
 
       allocate ( this%counts(0:n_procs-1), this%disp(0:n_procs-1) )
       allocate ( this%rtype(0:n_procs-1), this%stype(0:n_procs-1) )
@@ -143,22 +155,28 @@ contains
 
          arr_size(1)=n_m_max
          arr_size(2)=nR_per_rank
+         arr_size(3)=this%n_fields
          arr_loc_size(1)=my_m_counts
          arr_loc_size(2)=nR_per_rank
+         arr_loc_size(3)=this%n_fields
          arr_start(1)=m_balance(p)%nStart-1
          arr_start(2)=0
-         call MPI_Type_Create_Subarray(2, arr_size, arr_loc_size, arr_start, &
+         arr_start(3)=0
+         call MPI_Type_Create_Subarray(3, arr_size, arr_loc_size, arr_start, &
               &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,   &
               &                        this%stype(p), ierr)
          call MPI_Type_Commit(this%stype(p), ierr)
 
          arr_size(1)=nm_per_rank
          arr_size(2)=n_r_max
+         arr_size(3)=this%n_fields
          arr_loc_size(1)=nm_per_rank
          arr_loc_size(2)=radial_balance(p)%n_per_rank
+         arr_loc_size(3)=this%n_fields
          arr_start(1)=0
          arr_start(2)=radial_balance(p)%nStart-1
-         call MPI_Type_Create_Subarray(2, arr_size, arr_loc_size, arr_start, &
+         arr_start(3)=0
+         call MPI_Type_Create_Subarray(3, arr_size, arr_loc_size, arr_start, &
               &                        MPI_ORDER_FORTRAN, MPI_DEF_COMPLEX,   &
               &                        this%rtype(p), ierr)
          call MPI_Type_Commit(this%rtype(p), ierr)
@@ -193,21 +211,23 @@ contains
       class(type_mpiatoav) :: this
 
       !-- Input variables
-      complex(cp), intent(in) :: arr_Mloc(nMstart:nMstop,1:n_r_max)
+      complex(cp), intent(in) :: arr_Mloc(nMstart:nMstop,1:n_r_max,*)
 
       !-- Output variable
-      complex(cp), intent(out) :: arr_Rloc(1:n_m_max,nRstart:nRstop)
+      complex(cp), intent(out) :: arr_Rloc(1:n_m_max,nRstart:nRstop,*)
 
       !-- Local variables
       complex(cp) :: sbuff(1:this%max_send),rbuff(1:this%max_recv)
-      integer :: p, ii, n_r, n_m
+      integer :: p, ii, n_r, n_m, n_f
 
       do p = 0, n_procs-1
          ii = this%rdisp(p)+1
-         do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
-            do n_m=nMstart,nMstop
-               rbuff(ii)=arr_Mloc(n_m,n_r)
-               ii = ii+1
+         do n_f=1,this%n_fields
+            do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
+               do n_m=nMstart,nMstop
+                  rbuff(ii)=arr_Mloc(n_m,n_r,n_f)
+                  ii = ii+1
+               end do
             end do
          end do
       end do
@@ -218,10 +238,12 @@ contains
 
       do p = 0, n_procs-1
          ii = this%sdisp(p)+1
-         do n_r=nRstart,nRstop
-            do n_m=m_balance(p)%nStart,m_balance(p)%nStop
-               arr_Rloc(n_m,n_r)=sbuff(ii)
-               ii=ii+1
+         do n_f=1,this%n_fields
+            do n_r=nRstart,nRstop
+               do n_m=m_balance(p)%nStart,m_balance(p)%nStop
+                  arr_Rloc(n_m,n_r,n_f)=sbuff(ii)
+                  ii=ii+1
+               end do
             end do
          end do
       end do
@@ -231,8 +253,8 @@ contains
    subroutine transp_m2r_alltoallw(this, arr_Mloc, arr_Rloc)
 
       class(type_mpiatoaw) :: this
-      complex(cp), intent(in) :: arr_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: arr_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp), intent(in) :: arr_Mloc(nMstart:nMstop,n_r_max,*)
+      complex(cp), intent(out) :: arr_Rloc(n_m_max,nRstart:nRstop,*)
 
       call MPI_Alltoallw(arr_Mloc, this%counts, this%disp, this%rtype, &
            &             arr_Rloc, this%counts, this%disp, this%stype, &
@@ -244,21 +266,23 @@ contains
 
       !-- Input variables
       class(type_mpiatoav) :: this
-      complex(cp),       intent(in) :: arr_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp), intent(in) :: arr_Rloc(n_m_max,nRstart:nRstop,*)
 
       !-- Output variable
-      complex(cp), intent(out) :: arr_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: arr_Mloc(nMstart:nMstop,n_r_max,*)
 
       !-- Local variables
       complex(cp) :: sbuff(1:this%max_send),rbuff(1:this%max_recv)
-      integer :: p, ii, n_r, n_m
+      integer :: p, ii, n_r, n_m,n_f
 
       do p = 0, n_procs-1
          ii = this%sdisp(p)+1
-         do n_r=nRstart,nRstop
-            do n_m=m_balance(p)%nStart,m_balance(p)%nStop
-               sbuff(ii)=arr_Rloc(n_m,n_r)
-               ii = ii +1
+         do n_f=1,this%n_fields
+            do n_r=nRstart,nRstop
+               do n_m=m_balance(p)%nStart,m_balance(p)%nStop
+                  sbuff(ii)=arr_Rloc(n_m,n_r,n_f)
+                  ii = ii +1
+               end do
             end do
          end do
       end do
@@ -269,10 +293,12 @@ contains
 
       do p = 0, n_procs-1
          ii = this%rdisp(p)+1
-         do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
-            do n_m=nMstart,nMstop
-               arr_Mloc(n_m,n_r)=rbuff(ii)
-               ii=ii+1
+         do n_f=1,this%n_fields
+            do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
+               do n_m=nMstart,nMstop
+                  arr_Mloc(n_m,n_r,n_f)=rbuff(ii)
+                  ii=ii+1
+               end do
             end do
          end do
       end do
@@ -282,8 +308,8 @@ contains
    subroutine transp_r2m_alltoallw(this, arr_Rloc, arr_Mloc)
 
       class(type_mpiatoaw) :: this
-      complex(cp), intent(in) :: arr_Rloc(n_m_max,nRstart:nRstop)
-      complex(cp), intent(out) :: arr_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: arr_Rloc(n_m_max,nRstart:nRstop,*)
+      complex(cp), intent(out) :: arr_Mloc(nMstart:nMstop,n_r_max,*)
 
       call MPI_Alltoallw(arr_Rloc, this%counts, this%disp, this%stype, &
            &             arr_Mloc, this%counts, this%disp, this%rtype, &

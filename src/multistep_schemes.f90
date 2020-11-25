@@ -2,7 +2,7 @@ module multistep_schemes
 
    use precision_mod
    use parallel_mod
-   use namelists, only: alpha, l_cheb_coll
+   use namelists, only: alpha
    use constants, only: one, half, two, ci, zero
    use mem_alloc, only: bytes_allocated
    use useful, only: abortRun

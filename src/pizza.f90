@@ -124,7 +124,7 @@ program pizza
 
 
    if ( rank == 0 ) then
-      call write_namelists(6)
+      call write_namelists(output_unit)
       call write_namelists(n_log_file)
       call tscheme%print_info(n_log_file)
    end if

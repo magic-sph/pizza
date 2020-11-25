@@ -14,25 +14,26 @@ module fieldsLast
 
    private
 
-   complex(cp), public, allocatable :: dVsT_Mloc(:,:)
-   complex(cp), public, allocatable :: dVsXi_Mloc(:,:)
-   complex(cp), public, allocatable :: dVsOm_Mloc(:,:)
+   complex(cp), allocatable, target, public :: dt_fields_Rloc_container(:,:,:)
+   complex(cp), allocatable, target, public :: dt_fields_Mloc_container(:,:,:,:)
+   complex(cp), pointer, public :: dVsT_Mloc(:,:,:)
+   complex(cp), pointer, public :: dVsXi_Mloc(:,:,:)
+   complex(cp), pointer, public :: dVsOm_Mloc(:,:,:)
    complex(cp), public, allocatable :: buo_Mloc(:,:)
-   complex(cp), public, allocatable :: dpsidt_Rloc(:,:)
-   complex(cp), public, allocatable :: dtempdt_Rloc(:,:)
-   complex(cp), public, allocatable :: dxidt_Rloc(:,:)
-   complex(cp), public, allocatable :: dVsT_Rloc(:,:)
-   complex(cp), public, allocatable :: dVsXi_Rloc(:,:)
-   complex(cp), public, allocatable :: dVsOm_Rloc(:,:)
-   type(type_tarray), public :: dpsidt
-   type(type_tarray), public :: dTdt, dXidt
+   complex(cp), pointer, public :: dpsidt_Rloc(:,:)
+   complex(cp), pointer, public :: dtempdt_Rloc(:,:)
+   complex(cp), pointer, public :: dxidt_Rloc(:,:)
+   complex(cp), pointer, public :: dVsT_Rloc(:,:)
+   complex(cp), pointer, public :: dVsXi_Rloc(:,:)
+   complex(cp), pointer, public :: dVsOm_Rloc(:,:)
+   type(type_tarray), public :: dpsidt, dTdt, dXidt
 
    public :: initialize_fieldsLast, finalize_fieldsLast
 
 contains
 
    subroutine initialize_fieldsLast(nMstart,nMstop,n_m_max,nRstart,nRstop,n_r_max,&
-              &                     norder_imp, norder_exp, norder_imp_lin)
+              &                     norder_imp, nexp, norder_imp_lin)
 
       !-- Input variables
       integer, intent(in) :: nMstart
@@ -42,93 +43,109 @@ contains
       integer, intent(in) :: nRstop
       integer, intent(in) :: n_r_max
       integer, intent(in) :: norder_imp
-      integer, intent(in) :: norder_exp
+      integer, intent(in) :: nexp
       integer, intent(in) :: norder_imp_lin
 
       !-- Local variables
       integer :: n_mloc_fields, n_rloc_fields
 
 
-      call dpsidt%initialize(nMstart, nMstop, n_r_max, norder_imp, norder_exp, &
+      call dpsidt%initialize(nMstart, nMstop, n_r_max, norder_imp, nexp, &
            &                 norder_imp_lin)
       if ( l_heat ) then
-         call dTdt%initialize(nMstart, nMstop, n_r_max, norder_imp, norder_exp, &
+         call dTdt%initialize(nMstart, nMstop, n_r_max, norder_imp, nexp, &
               &               norder_imp_lin)
       end if
       if ( l_chem ) then
-         call dxidt%initialize(nMstart, nMstop, n_r_max, norder_imp, norder_exp, &
+         call dxidt%initialize(nMstart, nMstop, n_r_max, norder_imp, nexp, &
               &                norder_imp_lin)
       end if
 
       allocate( buo_Mloc(nMStart:nMstop,n_r_max) )
-      n_mloc_fields = 1
+      bytes_allocated = bytes_allocated+n_r_max*(nMstop-nMstart+1)*SIZEOF_DEF_COMPLEX
+      n_mloc_fields = 0
       if ( l_heat ) then
-         allocate( dVsT_Mloc(nMStart:nMstop,n_r_max) )
          n_mloc_fields = n_mloc_fields + 1
       else
-         allocate( dVsT_Mloc(0,0) )
+         allocate( dVsT_Mloc(0,0,0) )
       end if
       if ( l_chem ) then
-         allocate( dVsXi_Mloc(nMStart:nMstop,n_r_max) )
          n_mloc_fields = n_mloc_fields + 1
       else
-         allocate( dVsXi_Mloc(0,0) )
+         allocate( dVsXi_Mloc(0,0,0) )
       end if
-      allocate( dVsOm_Mloc(nMStart:nMstop,n_r_max) )
-      n_mloc_fields = n_mloc_fields + 1
-      bytes_allocated = bytes_allocated + n_mloc_fields*(nMstop-nMStart+1)* &
+      allocate(dt_fields_Mloc_container(nMStart:nMstop,n_r_max,2+2*n_mloc_fields,1:nexp))
+      dpsidt%expl(nMstart:,1:,1:) => dt_fields_Mloc_container(nMstart:nMstop,1:n_r_max,1,&
+      &                                                       1:nexp)
+      dVsOm_Mloc(nMstart:,1:,1:) => dt_fields_Mloc_container(nMstart:nMstop,1:n_r_max,2, &
+      &                                                      1:nexp)
+      if ( l_heat ) then
+         dTdt%expl(nMstart:,1:,1:) => dt_fields_Mloc_container(nMstart:nMstop,1:n_r_max, &
+         &                                                     3,1:nexp)
+         dVsT_Mloc(nMstart:,1:,1:) => dt_fields_Mloc_container(nMstart:nMstop,1:n_r_max, &
+         &                                                     4,1:nexp)
+         if ( l_chem ) then
+            dxidt%expl(nMstart:,1:,1:) => dt_fields_Mloc_container(nMstart:nMstop, &
+            &                                                     1:n_r_max,5,1:nexp)
+            dVsXi_Mloc(nMstart:,1:,1:) => dt_fields_Mloc_container(nMstart:nMstop, &
+            &                                                      1:n_r_max,6,1:nexp)
+         end if
+      else
+         if ( l_chem ) then
+            dxidt%expl(nMstart:,1:,1:) => dt_fields_Mloc_container(nMstart:nMstop, &
+            &                                                     1:n_r_max,3,1:nexp)
+            dVsXi_Mloc(nMstart:,1:,1:) => dt_fields_Mloc_container(nMstart:nMstop, &
+            &                                                      1:n_r_max,4,1:nexp)
+         end if
+      end if
+
+      bytes_allocated = bytes_allocated + (2*n_mloc_fields+2)*nexp*(nMstop-nMStart+1)* &
       &                 n_r_max*SIZEOF_DEF_COMPLEX
 
-      buo_Mloc(:,:)  =zero
-      dVsOm_Mloc(:,:)=zero
-      if ( l_heat ) dVsT_Mloc(:,:)=zero
-      if ( l_chem ) dVsXi_Mloc(:,:)=zero
+      buo_Mloc(:,:)=zero
+      dt_fields_Mloc_container(:,:,:,:)=zero
 
-      allocate( dpsidt_Rloc(n_m_max,nRstart:nRstop) )
-      allocate( dVsOm_Rloc(n_m_max,nRstart:nRstop) )
       n_rloc_fields = 2
       if ( l_heat ) then
-         allocate( dtempdt_Rloc(n_m_max,nRstart:nRstop) )
-         allocate( dVsT_Rloc(n_m_max,nRstart:nRstop) )
          n_rloc_fields = n_rloc_fields+2
       else
          allocate( dtempdt_Rloc(0,0), dVsT_Rloc(0,0) )
       end if
       if ( l_chem ) then
-         allocate( dxidt_Rloc(n_m_max,nRstart:nRstop) )
-         allocate( dVsXi_Rloc(n_m_max,nRstart:nRstop) )
          n_rloc_fields = n_rloc_fields+2
       else
          allocate( dxidt_Rloc(0,0), dVsXi_Rloc(0,0) )
       end if
+      allocate( dt_fields_Rloc_container(n_m_max,nRstart:nRstop,n_rloc_fields) )
+      dpsidt_Rloc(1:,nRstart:) => dt_fields_Rloc_container(1:n_m_max,nRstart:nRstop,1)
+      dVsOm_Rloc(1:,nRstart:) => dt_fields_Rloc_container(1:n_m_max,nRstart:nRstop,2)
+      if ( l_heat ) then
+         dtempdt_Rloc(1:,nRstart:) => dt_fields_Rloc_container(1:n_m_max,nRstart:nRstop,3)
+         dVsT_Rloc(1:,nRstart:) => dt_fields_Rloc_container(1:n_m_max,nRstart:nRstop,4)
+         if ( l_chem ) then
+            dxidt_Rloc(1:,nRstart:) => dt_fields_Rloc_container(1:n_m_max,nRstart:nRstop,5)
+            dVsXi_Rloc(1:,nRstart:) => dt_fields_Rloc_container(1:n_m_max,nRstart:nRstop,6)
+         end if
+      else
+         if ( l_chem ) then
+            dxidt_Rloc(1:,nRstart:) => dt_fields_Rloc_container(1:n_m_max,nRstart:nRstop,3)
+            dVsXi_Rloc(1:,nRstart:) => dt_fields_Rloc_container(1:n_m_max,nRstart:nRstop,4)
+         end if
+      end if
       bytes_allocated = bytes_allocated + n_rloc_fields*(nRstop-nRStart+1)* &
       &                 n_m_max*SIZEOF_DEF_COMPLEX
 
-      dpsidt_Rloc(:,:)=zero
-      dVsOm_Rloc(:,:) =zero
-      if ( l_heat ) then
-         dVsT_Rloc(:,:)   =zero
-         dtempdt_Rloc(:,:)=zero
-      end if
-      if ( l_chem ) then
-         dVsXi_Rloc(:,:)=zero
-         dxidt_Rloc(:,:)=zero
-      end if
+      dt_fields_Rloc_container(:,:,:)=zero
 
    end subroutine initialize_fieldsLast
 !-------------------------------------------------------------------------------
    subroutine finalize_fieldsLast
 
-      if ( l_heat ) then
-         call dTdt%finalize()
-         deallocate( dVsT_Mloc, dVsT_Rloc, dtempdt_Rloc )
-      end if
-      if ( l_chem ) then
-         call dxidt%finalize()
-         deallocate( dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc )
-      end if
+      deallocate( dt_fields_Rloc_container, dt_fields_Mloc_container )
+      if ( l_heat ) call dTdt%finalize()
+      if ( l_chem ) call dxidt%finalize()
       call dpsidt%finalize()
-      deallocate( dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt_Rloc )
+      deallocate( buo_Mloc )
 
    end subroutine finalize_fieldsLast
 !-------------------------------------------------------------------------------

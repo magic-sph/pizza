@@ -3,14 +3,17 @@ module step_time
    ! This module controls the time advance of the code
    !
 
-   use communications, only: m2r_fields, r2m_fields
-   use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
-       &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
-       &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,    &
-       &             xi_Rloc, dxi_Mloc, xi_hat_Mloc
+   use iso_fortran_env, only: output_unit
+   use communications, only: m2r_fields, r2m_fields, r2m_single, m2r_single
+   use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,         &
+       &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc,     &
+       &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,        &
+       &             xi_Rloc, dxi_Mloc, xi_hat_Mloc, fields_Mloc_container, &
+       &             fields_Rloc_container
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
        &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,  &
-       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc
+       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,       &
+       &                 dt_fields_Rloc_container, dt_fields_Mloc_container
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
    use constants, only: half, one
@@ -29,7 +32,7 @@ module step_time
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance,      &
-       &                l_heat, l_chem
+       &                l_heat, l_chem, l_packed_transp
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
@@ -196,17 +199,7 @@ contains
                !-------------------
                !-- MPI transpositions from m-distributed to r-distributed
                !-------------------
-               runStart = MPI_Wtime()
-               call m2r_fields%transp_m2r(us_Mloc, us_Rloc)
-               call m2r_fields%transp_m2r(up_Mloc, up_Rloc)
-               call m2r_fields%transp_m2r(om_Mloc, om_Rloc)
-               if ( l_heat ) call m2r_fields%transp_m2r(temp_Mloc, temp_Rloc)
-               if ( l_chem ) call m2r_fields%transp_m2r(xi_Mloc, xi_Rloc)
-               runStop = MPI_Wtime()
-               if (runStop>runStart) then
-                  timers%n_mpi_comms=timers%n_mpi_comms+1
-                  timers%mpi_comms  =timers%mpi_comms+(runStop-runStart)
-               end if
+               call transp_Mloc_to_Rloc(timers%n_mpi_comms, timers%mpi_comms)
 
                !-------------------
                !-- Radial loop
@@ -225,21 +218,7 @@ contains
                !------------------
                !-- MPI transpositions from r-distributed to m-distributed
                !------------------
-               runStart = MPI_Wtime()
-               if ( l_heat ) then
-                  call r2m_fields%transp_r2m(dtempdt_Rloc,dTdt%expl(:,:,tscheme%istage))
-                  call r2m_fields%transp_r2m(dVsT_Rloc, dVsT_Mloc)
-               end if
-               if ( l_chem ) then
-                  call r2m_fields%transp_r2m(dxidt_Rloc,dxidt%expl(:,:,tscheme%istage))
-                  call r2m_fields%transp_r2m(dVsXi_Rloc, dVsXi_Mloc)
-               end if
-               call r2m_fields%transp_r2m(dpsidt_Rloc,dpsidt%expl(:,:,tscheme%istage))
-               call r2m_fields%transp_r2m(dVsOm_Rloc, dVsOm_Mloc)
-               runStop = MPI_Wtime()
-               if (runStop>runStart) then
-                  timers%mpi_comms=timers%mpi_comms+(runStop-runStart)
-               end if
+               call transp_Rloc_to_Mloc(tscheme%istage, timers%mpi_comms)
 
                !--------------------
                !-- Finish assembling the explicit terms
@@ -247,7 +226,9 @@ contains
                runStart = MPI_Wtime()
                call finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc,      &
                     &                        us_Mloc, up_Mloc, om_Mloc,         &
-                    &                        dVsT_Mloc, dVsXi_Mloc, dVsOm_Mloc, &
+                    &                        dVsT_Mloc(:,:,tscheme%istage),     &
+                    &                        dVsXi_Mloc(:,:,tscheme%istage),    &
+                    &                        dVsOm_Mloc(:,:,tscheme%istage),    &
                     &                        buo_Mloc, dTdt, dxidt, dpsidt,     &
                     &                        tscheme, vp_bal, vort_bal)
                runStop = MPI_Wtime()
@@ -344,7 +325,7 @@ contains
                nPercent=nPercent-1
             end if
             if ( rank == 0 ) then
-               call formatTime(6,' ! Mean wall time for time step:',  &
+               call formatTime(output_unit,' ! Mean wall time for time step:',  &
                &               run_time_passed)
                call formatTime(n_log_file,' ! Mean wall time for time step:', &
                &               run_time_passed)
@@ -359,7 +340,7 @@ contains
 
       !-- Write timers info in log file  and on display
       call timers%write_log(n_log_file)
-      call timers%write_log(6)
+      call timers%write_log(output_unit)
 
    end subroutine time_loop
 !-------------------------------------------------------------------------------
@@ -453,5 +434,70 @@ contains
       end if
 
    end subroutine check_signals
+!--------------------------------------------------------------------------------
+   subroutine transp_Mloc_to_Rloc(n_mpi_comms, mpi_comms)
+      !
+      !- MPI transposition from M-distributed to r-distributed
+      !
+
+      !-- Output variables
+      integer,  intent(inout) :: n_mpi_comms
+      real(cp), intent(inout) :: mpi_comms
+
+      !-- Local variables
+      real(cp) :: runStart, runStop
+
+      runStart = MPI_Wtime()
+      if ( l_packed_transp ) then
+         call m2r_fields%transp_m2r(fields_Mloc_container, fields_Rloc_container)
+      else
+         call m2r_single%transp_m2r(us_Mloc, us_Rloc)
+         call m2r_single%transp_m2r(up_Mloc, up_Rloc)
+         call m2r_single%transp_m2r(om_Mloc, om_Rloc)
+         if ( l_heat ) call m2r_single%transp_m2r(temp_Mloc, temp_Rloc)
+         if ( l_chem ) call m2r_single%transp_m2r(xi_Mloc, xi_Rloc)
+      end if
+      runStop = MPI_Wtime()
+      if (runStop>runStart) then
+         n_mpi_comms=n_mpi_comms+1
+         mpi_comms  =mpi_comms+runStop-runStart
+      end if
+
+   end subroutine transp_Mloc_to_Rloc
+!--------------------------------------------------------------------------------
+   subroutine transp_Rloc_to_Mloc(istage, mpi_comms)
+      !
+      !- MPI transposition from r-distributed to M-distributed
+      !
+      integer, intent(in) :: istage
+
+      !-- Output variable
+      real(cp), intent(inout) :: mpi_comms
+
+      !-- Local variables
+      real(cp) :: runStart, runStop
+
+      runStart = MPI_Wtime()
+      if ( l_packed_transp ) then
+         call r2m_fields%transp_r2m(dt_fields_Rloc_container, &
+              &                     dt_fields_Mloc_container(:,:,:,istage))
+      else
+         if ( l_heat ) then
+            call r2m_single%transp_r2m(dtempdt_Rloc,dTdt%expl(:,:,istage))
+            call r2m_single%transp_r2m(dVsT_Rloc, dVsT_Mloc(:,:,istage))
+         end if
+         if ( l_chem ) then
+            call r2m_single%transp_r2m(dxidt_Rloc,dxidt%expl(:,:,istage))
+            call r2m_single%transp_r2m(dVsXi_Rloc, dVsXi_Mloc(:,:,istage))
+         end if
+         call r2m_single%transp_r2m(dpsidt_Rloc,dpsidt%expl(:,:,istage))
+         call r2m_single%transp_r2m(dVsOm_Rloc, dVsOm_Mloc(:,:,istage))
+      end if
+      runStop = MPI_Wtime()
+      if (runStop>runStart) then
+         mpi_comms=mpi_comms+runStop-runStart
+      end if
+
+   end subroutine transp_Rloc_to_Mloc
 !--------------------------------------------------------------------------------
 end module step_time

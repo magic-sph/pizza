@@ -83,6 +83,7 @@ module namelists
    real(cp), public :: scale_u
    logical,  public :: l_start_file     ! taking fields from startfile ?
    logical,  public :: l_reset_t ! Should we reset the time stored in the startfile?
+   logical,  public :: l_packed_transp
    character(len=72), public :: start_file  ! name of start_file           
 
    integer,  public :: n_log_step
@@ -137,7 +138,7 @@ contains
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
       &                matrix_solve,corio_term,buo_term,bc_method,  &
-      &                mpi_transp
+      &                mpi_transp,l_packed_transp
       namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,      &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
@@ -476,6 +477,7 @@ contains
       buo_term         ='IMPLICIT' ! Implicit treatment of Buoyancy
       time_scale       ='VISC' ! viscous units
       mpi_transp       ='AUTO'
+      l_packed_transp  =.false.
 
       !-- Hyperdiffusion
       hdif_vel         =0.0_cp
@@ -582,6 +584,7 @@ contains
       write(n_out,*) " matrix_solve    = """,matrix_solve(1:length),""","
       length=length_to_blank(mpi_transp)
       write(n_out,*) " mpi_transp      = """,mpi_transp(1:length),""","
+      write(n_out,'(''  l_packed_transp ='',l3,'','')') l_packed_transp
       length=length_to_blank(corio_term)
       write(n_out,*) " corio_term      = """,corio_term(1:length),""","
       length=length_to_blank(buo_term)

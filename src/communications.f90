@@ -6,12 +6,11 @@ module communications
    use blocking
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, n_m_max
-   use namelists, only: mpi_transp
+   use namelists, only: mpi_transp, l_packed_transp, l_heat, l_chem
    use parallel_mod, only: n_procs, rank, ierr
    use mpi_alltoall_mod, only: type_mpiatoav, type_mpiatoaw
    use mpi_transp, only: type_mpitransp
    use char_manip, only: capitalize
-
 
    implicit none
 
@@ -27,8 +26,8 @@ module communications
       integer :: max_send, max_recv
    end type
 
-   class(type_mpitransp), public, pointer :: r2m_fields
-   class(type_mpitransp), public, pointer :: m2r_fields
+   class(type_mpitransp), public, pointer :: r2m_fields, r2m_single
+   class(type_mpitransp), public, pointer :: m2r_fields, m2r_single
 
    public :: initialize_communications, &
    &         gather_from_mloc_to_rank0, scatter_from_rank0_to_mloc, &
@@ -79,21 +78,51 @@ contains
 
       if ( idx == 1 ) then
          allocate(type_mpiatoav :: r2m_fields)
+         allocate(type_mpiatoav :: r2m_single)
          allocate(type_mpiatoav :: m2r_fields)
+         allocate(type_mpiatoav :: m2r_single)
       else if (idx == 2 ) then
          allocate(type_mpiatoaw :: r2m_fields)
+         allocate(type_mpiatoaw :: r2m_single)
          allocate(type_mpiatoaw :: m2r_fields)
+         allocate(type_mpiatoav :: m2r_single)
       end if
 
-      call r2m_fields%create_comm()
-      call m2r_fields%create_comm()
+      if ( l_packed_transp ) then
+         call r2m_single%create_comm(1)
+         if ( l_heat ) then
+            if ( l_chem ) then ! Heat and composition
+               call m2r_fields%create_comm(5)
+               call r2m_fields%create_comm(6)
+            else ! Heat and no composition
+               call m2r_fields%create_comm(4)
+               call r2m_fields%create_comm(4)
+            end if
+         else
+            if ( l_chem ) then ! No heat and composition
+               call m2r_fields%create_comm(4)
+               call r2m_fields%create_comm(4)
+            else ! No heat, no composition
+               call m2r_fields%create_comm(3)
+               call r2m_fields%create_comm(2)
+            end if
+         end if
+      else
+         call m2r_single%create_comm(1)
+         call r2m_single%create_comm(1)
+      end if
 
    end subroutine initialize_communications
 !------------------------------------------------------------------------------
    subroutine finalize_communications
 
-      call r2m_fields%destroy_comm()
-      call m2r_fields%destroy_comm()
+      if ( l_packed_transp ) then
+         call r2m_fields%destroy_comm()
+         call m2r_fields%destroy_comm()
+      else
+         call m2r_single%destroy_comm()
+      end if
+      call r2m_single%destroy_comm()
 
    end subroutine finalize_communications
 !------------------------------------------------------------------------------
@@ -305,7 +334,7 @@ contains
 
       !-- Try the all-to-allv strategy (50 back and forth transposes)
       allocate( type_mpiatoav :: m2r_test )
-      call m2r_test%create_comm()
+      call m2r_test%create_comm(n_fields)
       call MPI_Barrier(MPI_COMM_WORLD, ierr)
       tStart = MPI_Wtime()
       do n_t=1,n_transp
@@ -321,7 +350,7 @@ contains
 
       !-- Try the all-to-allw strategy (50 back and forth transposes)
       allocate( type_mpiatoaw :: m2r_test )
-      call m2r_test%create_comm()
+      call m2r_test%create_comm(n_fields)
       call MPI_Barrier(MPI_COMM_WORLD, ierr)
       tStart = MPI_Wtime()
       do n_t=1,n_transp
