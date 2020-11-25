@@ -1,11 +1,17 @@
 module communications
 
+   use iso_fortran_env, only: output_unit
    use mpimod
    use precision_mod
    use blocking
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, n_m_max
+   use namelists, only: mpi_transp
    use parallel_mod, only: n_procs, rank, ierr
+   use mpi_alltoall_mod, only: type_mpiatoav, type_mpiatoaw
+   use mpi_transp, only: type_mpitransp
+   use char_manip, only: capitalize
+
 
    implicit none
 
@@ -21,178 +27,75 @@ module communications
       integer :: max_send, max_recv
    end type
 
-   type(help_transp), public :: r2m_fields
-   type(help_transp), public :: m2r_fields
+   class(type_mpitransp), public, pointer :: r2m_fields
+   class(type_mpitransp), public, pointer :: m2r_fields
 
-   public :: initialize_communications, transp_r2m, transp_m2r,     &
+   public :: initialize_communications, &
    &         gather_from_mloc_to_rank0, scatter_from_rank0_to_mloc, &
    &         finalize_communications, reduce_radial_on_rank,        &
    &         my_reduce_mean, my_allreduce_maxloc
 
 contains
 
-   subroutine initialize_communications()
+   subroutine initialize_communications(n_log_file)
 
-      call create_r2m_type(r2m_fields)
-      call create_m2r_type(m2r_fields)
+      !-- Input variable
+      integer, intent(in) :: n_log_file
+
+      !-- Local variables
+      integer :: idx, n, n_out
+
+      call capitalize(mpi_transp)
+      if ( index(mpi_transp, 'AUTO') /= 0 ) then
+         call find_faster_comm(idx,1,n_log_file)
+      else if ( index(mpi_transp, 'ATOAV') /= 0 .or. index(mpi_transp, 'A2AV') /=0&
+      &         .or. index(mpi_transp, 'ALLTOALLV') /= 0 .or. &
+      &         index(mpi_transp, 'ALL2ALLV') /= 0 .or. &
+      &         index(mpi_transp, 'ALL-TO-ALLV') /= 0 ) then
+         idx = 1
+      else if ( index(mpi_transp, 'ATOAW') /= 0 .or. index(mpi_transp, 'A2AW') /=0&
+      &         .or. index(mpi_transp, 'ALLTOALLW') /= 0 .or. &
+      &         index(mpi_transp, 'ALL2ALLW') /= 0 .or. &
+      &         index(mpi_transp, 'ALL-TO-ALLW') /= 0 ) then
+         idx = 2
+      end if
+
+      !-- Write choosen MPI communicator
+      if ( rank == 0 ) then
+         do n=1,2
+            if ( n==1 ) then
+               n_out = n_log_file
+            else
+               n_out = output_unit
+            end if
+            if ( idx == 1 ) then
+               write(n_out,*) '! -> I choose alltoallv'
+            else if ( idx == 2 ) then
+               write(n_out,*) '! -> I choose alltoallw'
+            end if
+            !write(n_out,*)
+         end do
+      end if
+
+      if ( idx == 1 ) then
+         allocate(type_mpiatoav :: r2m_fields)
+         allocate(type_mpiatoav :: m2r_fields)
+      else if (idx == 2 ) then
+         allocate(type_mpiatoaw :: r2m_fields)
+         allocate(type_mpiatoaw :: m2r_fields)
+      end if
+
+      call r2m_fields%create_comm()
+      call m2r_fields%create_comm()
 
    end subroutine initialize_communications
 !------------------------------------------------------------------------------
    subroutine finalize_communications
 
-      call destroy_communicator(m2r_fields)
-      call destroy_communicator(r2m_fields)
+      call r2m_fields%destroy_comm()
+      call m2r_fields%destroy_comm()
 
    end subroutine finalize_communications
-!------------------------------------------------------------------------------
-   subroutine create_r2m_type(self)
-
-      type(help_transp) :: self
-      integer :: p
-
-      allocate ( self%rcounts(0:n_procs-1), self%scounts(0:n_procs-1) )
-      allocate ( self%rdisp(0:n_procs-1), self%sdisp(0:n_procs-1) )
-
-      do p=0,n_procs-1
-         self%scounts(p)=nR_per_rank*m_balance(p)%n_per_rank
-         self%rcounts(p)=radial_balance(p)%n_per_rank*nm_per_rank
-      end do
-
-      self%rdisp(0)=0
-      self%sdisp(0)=0
-      do p=1,n_procs-1
-         self%sdisp(p)=self%sdisp(p-1)+self%scounts(p-1)
-         self%rdisp(p)=self%rdisp(p-1)+self%rcounts(p-1)
-      end do
-
-      self%max_send = sum(self%scounts)
-      self%max_recv = sum(self%rcounts)
-
-      bytes_allocated = bytes_allocated+4*n_procs*SIZEOF_INTEGER
-
-      allocate( self%sbuff(1:self%max_send) )
-      allocate( self%rbuff(1:self%max_recv) )
-
-      bytes_allocated = bytes_allocated+(self%max_send+self%max_recv)*&
-      &                 SIZEOF_DEF_COMPLEX
-
-   end subroutine create_r2m_type
-!------------------------------------------------------------------------------
-   subroutine destroy_communicator(self)
-
-      type(help_transp) :: self
-
-      deallocate( self%rbuff, self%sbuff )
-      deallocate( self%sdisp, self%rdisp )
-      deallocate( self%scounts, self%rcounts )
-
-   end subroutine destroy_communicator
-!------------------------------------------------------------------------------
-   subroutine create_m2r_type(self)
-
-      type(help_transp) :: self
-      integer :: p
-
-      allocate ( self%rcounts(0:n_procs-1), self%scounts(0:n_procs-1) )
-      allocate ( self%rdisp(0:n_procs-1), self%sdisp(0:n_procs-1) )
-
-      do p=0,n_procs-1
-         self%scounts(p)=radial_balance(p)%n_per_rank*nm_per_rank
-         self%rcounts(p)=nR_per_rank*m_balance(p)%n_per_rank
-      end do
-
-      self%rdisp(0)=0
-      self%sdisp(0)=0
-      do p=1,n_procs-1
-         self%sdisp(p)=self%sdisp(p-1)+self%scounts(p-1)
-         self%rdisp(p)=self%rdisp(p-1)+self%rcounts(p-1)
-      end do
-
-      self%max_send = sum(self%scounts)
-      self%max_recv = sum(self%rcounts)
-
-      bytes_allocated = bytes_allocated+4*n_procs*SIZEOF_INTEGER
-
-      allocate( self%sbuff(1:self%max_send) )
-      allocate( self%rbuff(1:self%max_recv) )
-
-   end subroutine create_m2r_type
-!------------------------------------------------------------------------------
-   subroutine transp_r2m(self, arr_Rloc, arr_Mloc)
-
-      !-- Input variables
-      type(help_transp), intent(inout) :: self
-      complex(cp),       intent(in) :: arr_Rloc(n_m_max,nRstart:nRstop)
-
-      !-- Output variable
-      complex(cp), intent(out) :: arr_Mloc(nMstart:nMstop,n_r_max)
-
-      !-- Local variables
-      integer :: p, ii, n_r, n_m
-
-      do p = 0, n_procs-1
-         ii = self%sdisp(p)+1
-         do n_r=nRstart,nRstop
-            do n_m=m_balance(p)%nStart,m_balance(p)%nStop
-               self%sbuff(ii)=arr_Rloc(n_m,n_r)
-               ii = ii +1
-            end do
-         end do
-      end do
-
-      call MPI_Alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
-           &             self%rbuff, self%rcounts, self%rdisp, MPI_DEF_COMPLEX, &
-           &             MPI_COMM_WORLD, ierr) 
-
-      do p = 0, n_procs-1
-         ii = self%rdisp(p)+1
-         do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
-            do n_m=nMstart,nMstop
-               arr_Mloc(n_m,n_r)=self%rbuff(ii)
-               ii=ii+1
-            end do
-         end do
-      end do
-
-   end subroutine transp_r2m
-!------------------------------------------------------------------------------
-   subroutine transp_m2r(self, arr_Mloc, arr_Rloc)
-
-      !-- Input variables
-      type(help_transp), intent(inout) :: self
-      complex(cp),       intent(in) :: arr_Mloc(nMstart:nMstop,n_r_max)
-
-      !-- Output variable
-      complex(cp), intent(out) :: arr_Rloc(n_m_max,nRstart:nRstop)
-
-      !-- Local variables
-      integer :: p, ii, n_r, n_m
-
-      do p = 0, n_procs-1
-         ii = self%sdisp(p)+1
-         do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
-            do n_m=nMstart,nMstop
-               self%sbuff(ii)=arr_Mloc(n_m,n_r)
-               ii = ii+1
-            end do
-         end do
-      end do
-
-      call MPI_Alltoallv(self%sbuff, self%scounts, self%sdisp, MPI_DEF_COMPLEX, &
-           &             self%rbuff, self%rcounts, self%rdisp, MPI_DEF_COMPLEX, &
-           &             MPI_COMM_WORLD, ierr) 
-
-      do p = 0, n_procs-1
-         ii = self%rdisp(p)+1
-         do n_r=nRstart,nRstop
-            do n_m=m_balance(p)%nStart,m_balance(p)%nStop
-               arr_Rloc(n_m,n_r)=self%rbuff(ii)
-               ii=ii+1
-            end do
-         end do
-      end do
-
-   end subroutine transp_m2r
 !------------------------------------------------------------------------------
    subroutine gather_from_mloc_to_rank0(arr_Mloc, arr_full)
 
@@ -366,4 +269,116 @@ contains
 
    end function my_allreduce_maxloc
 !------------------------------------------------------------------------------
+   subroutine find_faster_comm(idx,n_fields,n_log_file)
+      !
+      ! This subroutine tests two MPI transposition strategies and
+      ! selects the fastest one.
+      !
+
+      !-- Input variables
+      integer, intent(in) :: n_fields   ! number of fields
+      integer, intent(in) :: n_log_file ! log.TAG file unit
+
+      !-- Output variable:
+      integer,  intent(out) :: idx
+
+      !-- Local variables
+      class(type_mpitransp), pointer :: m2r_test
+      complex(cp) :: arr_Rloc(n_m_max,nRstart:nRstop,n_fields)
+      complex(cp) :: arr_Mloc(nMstart:nMstop,n_r_max,n_fields)
+      real(cp) :: tStart, tStop, tAlltoAllv, tAlltoAllw, minTime
+      real(cp) :: rdm_real, rdm_imag, timers(2)
+      integer :: n_f, n_r, n_m, n_t, n, n_out, ind(1)
+      integer, parameter :: n_transp=50
+      character(len=80) :: message
+
+      !-- First fill an array with random numbers
+      do n_f=1,n_fields
+         do n_r=nRstart,nRstop
+            do n_m=1,n_m_max
+               call random_number(rdm_real)
+               call random_number(rdm_imag)
+               arr_Rloc(n_m,n_r,n_f)=cmplx(rdm_real,rdm_imag,kind=cp)
+            end do
+         end do
+      end do
+
+      !-- Try the all-to-allv strategy (50 back and forth transposes)
+      allocate( type_mpiatoav :: m2r_test )
+      call m2r_test%create_comm()
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+      tStart = MPI_Wtime()
+      do n_t=1,n_transp
+         call m2r_test%transp_r2m(arr_Rloc, arr_Mloc)
+         call MPI_Barrier(MPI_COMM_WORLD, ierr)
+         call m2r_test%transp_m2r(arr_Mloc, arr_Rloc)
+         call MPI_Barrier(MPI_COMM_WORLD, ierr)
+      end do
+      tStop = MPI_Wtime()
+      tAlltoAllv = tStop-tStart
+      call m2r_test%destroy_comm()
+      deallocate( m2r_test)
+
+      !-- Try the all-to-allw strategy (50 back and forth transposes)
+      allocate( type_mpiatoaw :: m2r_test )
+      call m2r_test%create_comm()
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+      tStart = MPI_Wtime()
+      do n_t=1,n_transp
+         call m2r_test%transp_r2m(arr_Rloc, arr_Mloc)
+         call MPI_Barrier(MPI_COMM_WORLD, ierr)
+         call m2r_test%transp_m2r(arr_Mloc, arr_Rloc)
+         call MPI_Barrier(MPI_COMM_WORLD, ierr)
+      end do
+      tStop = MPI_Wtime()
+      tAlltoAllw = tStop-tStart
+      call m2r_test%destroy_comm()
+      deallocate( m2r_test)
+
+      !-- Now determine the average over the ranks and send it to rank=0
+      call MPI_Reduce(tAlltoAllv, timers(1), 1, MPI_DEF_REAL, MPI_SUM, 0, &
+           &          MPI_COMM_WORLD, ierr)
+      call MPI_Reduce(tAlltoAllw, timers(2), 1, MPI_DEF_REAL, MPI_SUM, 0, &
+           &          MPI_COMM_WORLD, ierr)
+
+      if ( rank == 0 ) then
+         !-- Average over procs and number of transposes
+         timers(:) = timers(:)/real(n_procs,cp)/real(n_transp,cp)
+
+         !-- Determine the fastest
+         ind = minloc(timers)
+         minTime = minval(timers)
+         idx = ind(1)
+
+         do n=1,2
+            if ( n==1 ) then
+               n_out = n_log_file
+            else
+               n_out = output_unit
+            end if
+            write(n_out,*)
+            if ( n_fields == 1 ) then
+               write(message,'('' ! MPI transpose strategy for '', I1,'' field'')') &
+               &     n_fields
+            else
+               write(message,'('' ! MPI transpose strategy for '', I1,'' fields'')') &
+               &     n_fields
+            end if
+            write(n_out,'(A80)') message
+            write(message,'('' ! alltoallv communicator          ='', &
+            &               ES10.3, '' s'')') timers(1)
+            write(n_out,'(A80)') message
+            write(message,'('' ! alltoallw communicator          ='', &
+            &               ES10.3, '' s'')') timers(2)
+            write(n_out,'(A80)') message
+         end do
+
+      end if
+
+      call MPI_Bcast(idx,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(minTime,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
+
+   end subroutine find_faster_comm
+!------------------------------------------------------------------------------
 end module communications
+

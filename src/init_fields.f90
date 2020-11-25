@@ -7,7 +7,7 @@ module init_fields
 
    use constants, only: zero, one, two, three, ci, pi, half
    use blocking, only: nRstart, nRstop
-   use communications, only: transp_r2m, r2m_fields
+   use communications, only: r2m_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
@@ -234,7 +234,7 @@ contains
          end do
 
          !-- MPI transpose is needed here
-         call transp_r2m(r2m_fields, temp_Rloc, work_Mloc)
+         call r2m_fields%transp_r2m(temp_Rloc, work_Mloc)
 
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop

@@ -3,8 +3,7 @@ module step_time
    ! This module controls the time advance of the code
    !
 
-   use communications, only: transp_m2r, m2r_fields, transp_r2m, r2m_fields, &
-       &                     gather_from_mloc_to_rank0, my_reduce_mean
+   use communications, only: m2r_fields, r2m_fields
    use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,     &
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc, &
        &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,    &
@@ -198,11 +197,11 @@ contains
                !-- MPI transpositions from m-distributed to r-distributed
                !-------------------
                runStart = MPI_Wtime()
-               call transp_m2r(m2r_fields, us_Mloc, us_Rloc)
-               call transp_m2r(m2r_fields, up_Mloc, up_Rloc)
-               call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
-               if ( l_heat ) call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
-               if ( l_chem ) call transp_m2r(m2r_fields, xi_Mloc, xi_Rloc)
+               call m2r_fields%transp_m2r(us_Mloc, us_Rloc)
+               call m2r_fields%transp_m2r(up_Mloc, up_Rloc)
+               call m2r_fields%transp_m2r(om_Mloc, om_Rloc)
+               if ( l_heat ) call m2r_fields%transp_m2r(temp_Mloc, temp_Rloc)
+               if ( l_chem ) call m2r_fields%transp_m2r(xi_Mloc, xi_Rloc)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%n_mpi_comms=timers%n_mpi_comms+1
@@ -228,18 +227,15 @@ contains
                !------------------
                runStart = MPI_Wtime()
                if ( l_heat ) then
-                  call transp_r2m(r2m_fields, dtempdt_Rloc, &
-                       &          dTdt%expl(:,:,tscheme%istage))
-                  call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
+                  call r2m_fields%transp_r2m(dtempdt_Rloc,dTdt%expl(:,:,tscheme%istage))
+                  call r2m_fields%transp_r2m(dVsT_Rloc, dVsT_Mloc)
                end if
                if ( l_chem ) then
-                  call transp_r2m(r2m_fields, dxidt_Rloc, &
-                       &          dxidt%expl(:,:,tscheme%istage))
-                  call transp_r2m(r2m_fields, dVsXi_Rloc, dVsXi_Mloc)
+                  call r2m_fields%transp_r2m(dxidt_Rloc,dxidt%expl(:,:,tscheme%istage))
+                  call r2m_fields%transp_r2m(dVsXi_Rloc, dVsXi_Mloc)
                end if
-               call transp_r2m(r2m_fields, dpsidt_Rloc, &
-                    &          dpsidt%expl(:,:,tscheme%istage))
-               call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
+               call r2m_fields%transp_r2m(dpsidt_Rloc,dpsidt%expl(:,:,tscheme%istage))
+               call r2m_fields%transp_r2m(dVsOm_Rloc, dVsOm_Mloc)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%mpi_comms=timers%mpi_comms+(runStop-runStart)

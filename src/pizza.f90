@@ -55,16 +55,6 @@ program pizza
 
    run_start = MPI_Wtime()
 
-   !--
-   if ( rank == 0 ) then
-      write(*,*)
-      write(*,*) '!--- Program pizza  ---!'
-      call date_and_time(values=values)
-      write(date, '(i4,''/'',i0.2,''/'',i0.2,'' '', i0.2,'':'',i0.2,'':'',i0.2)') &
-      &     values(1), values(2), values(3), values(5), values(6), values(7)
-      write(output_unit, *) '!  Start time:  ', date
-   end if
-
    !-- Read input parameters
    call read_namelists()
 
@@ -93,11 +83,25 @@ program pizza
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('I/O', local_bytes_used)
 
+   !-- Write header of log file
+   if ( rank == 0 ) then
+      do n=1,2
+         if ( n==1 ) n_out=output_unit
+         if ( n==2 ) n_out=n_log_file
+         write(n_out,*)
+         write(n_out,*) '!--- Program pizza  ---!'
+         call date_and_time(values=values)
+         write(date, '(i4,''/'',i0.2,''/'',i0.2,'' '', i0.2,'':'',i0.2,'':'',i0.2)') &
+         &     values(1), values(2), values(3), values(5), values(6), values(7)
+         write(n_out, *) '!  Start time:  ', date
+      end do
+   end if
+
    !-- Initialize time scheme
    call tscheme%initialize(time_scheme, courfac)
 
    !-- Initialize MPI communicators
-   call initialize_communications()
+   call initialize_communications(n_log_file)
 
    local_bytes_used = bytes_allocated
    call initialize_fields()
@@ -159,7 +163,7 @@ program pizza
    !--- Write starting time to SDTOUT and logfile:
    if ( rank == 0 ) then
       do n=1,2
-         if ( n == 1 ) n_out=6
+         if ( n == 1 ) n_out=output_unit
          if ( n == 2 ) n_out=n_log_file
          write(n_out,'(/,'' ! Starting time integration at:'')')
          write(n_out,'(''   start_time ='',1p,ES18.10)') time
@@ -179,8 +183,8 @@ program pizza
    !--- Write stop time to SDTOUR and logfile:
    if ( rank == 0 ) then
       do n=1,2
-         if ( n == 1 ) n_out=6
-         if ( n == 2 )  n_out=n_log_file
+         if ( n == 1 ) n_out=output_unit
+         if ( n == 2 ) n_out=n_log_file
          write(n_out,'(/,'' ! Stopping time integration at:'')')
          write(n_out,'(''   stop time ='',1p,ES18.10)') time
          ! write(n_out,'(''   stop step ='',i10)') n_time_step

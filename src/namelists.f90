@@ -54,6 +54,7 @@ module namelists
    character(len=72) :: bc_method    ! Galerkin or Tau-Lanczos method for BCs
    character(len=72) :: cheb_method  ! Chebyshev method: collocation, integration
    character(len=72) :: matrix_solve ! Either direct or influence matrix
+   character(len=72), public :: mpi_transp   ! 'AUTO', 'A2AV', 'A2AW'
    character(len=72) :: corio_term   ! Implicit or explicit treatment of Coriolis force
    character(len=72) :: buo_term    ! Implicit or explicit treatment of Buoyancy
    logical, public :: l_newmap      ! Switch for non-linear mapping (see Bayliss and Turkel, 1990)
@@ -135,7 +136,8 @@ contains
       &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
-      &                matrix_solve,corio_term,buo_term,bc_method
+      &                matrix_solve,corio_term,buo_term,bc_method,  &
+      &                mpi_transp
       namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,      &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
@@ -473,6 +475,7 @@ contains
       corio_term       ='IMPLICIT' ! Implicit treatment of Coriolis term
       buo_term         ='IMPLICIT' ! Implicit treatment of Buoyancy
       time_scale       ='VISC' ! viscous units
+      mpi_transp       ='AUTO'
 
       !-- Hyperdiffusion
       hdif_vel         =0.0_cp
@@ -577,6 +580,8 @@ contains
       write(n_out,*) " bc_method       = """,bc_method(1:length),""","
       length=length_to_blank(matrix_solve)
       write(n_out,*) " matrix_solve    = """,matrix_solve(1:length),""","
+      length=length_to_blank(mpi_transp)
+      write(n_out,*) " mpi_transp      = """,mpi_transp(1:length),""","
       length=length_to_blank(corio_term)
       write(n_out,*) " corio_term      = """,corio_term(1:length),""","
       length=length_to_blank(buo_term)
