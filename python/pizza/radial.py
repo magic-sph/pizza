@@ -228,55 +228,56 @@ class PizzaRadial(PizzaSetup):
         ax.set_yscale('log')
         fig.tight_layout()
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.plot(self.radius, self.qpot)
-        ax.plot(self.radius, self.qplan)
+        if self.l_non_rot == 'F':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(self.radius, self.qpot)
+            ax.plot(self.radius, self.qplan)
 
-        # Find the zeroes of uphi
-        idx = np.array([], dtype='Int8')
-        for i in range(len(self.radius)):
-            if i > 0:
-                if self.uphi_mean[i] < 0. and self.uphi_mean[i-1] > 0.:
-                    idx = np.append(idx, i)
-                elif self.uphi_mean[i] > 0. and self.uphi_mean[i-1] < 0.:
-                    idx = np.append(idx, i)
+            # Find the zeroes of uphi
+            idx = np.array([], dtype='Int8')
+            for i in range(len(self.radius)):
+                if i > 0:
+                    if self.uphi_mean[i] < 0. and self.uphi_mean[i-1] > 0.:
+                        idx = np.append(idx, i)
+                    elif self.uphi_mean[i] > 0. and self.uphi_mean[i-1] < 0.:
+                        idx = np.append(idx, i)
 
-        plotSpan(ax, idx, self.radius)
+            plotSpan(ax, idx, self.radius)
 
-        ax.set_xlim(self.radius[-1], self.radius[0])
-        ax.set_ylim(0.95*self.qplan[-1], self.qplan[-1]*2)
-        ax.set_xlabel('Radius')
-        ax.set_ylabel('Potential vorticity')
-        fig.tight_layout()
+            ax.set_xlim(self.radius[-1], self.radius[0])
+            ax.set_ylim(0.95*self.qplan[-1], self.qplan[-1]*2)
+            ax.set_xlabel('Radius')
+            ax.set_ylabel('Potential vorticity')
+            fig.tight_layout()
 
-        # Determine jets width and Rhines scale
-        jet_widths = np.zeros((len(idx)-1), dtype=np.float64)
-        lamb_uzon = np.zeros_like(jet_widths)
-        lamb_us = np.zeros_like(jet_widths)
-        beta = np.zeros_like(self.radius)
-        coord = np.zeros_like(jet_widths)
-        beta[1:] = self.radius[1:]/(self.radius[0]**2-self.radius[1:]**2)
-        beta[0] = beta[1]
-        for k in range(len(idx)):
-            if k > 0:
-                jet_widths[k-1] = self.radius[idx[k-1]]-self.radius[idx[k]]
-                vp_loc = abs(self.uphi_mean[idx[k-1]:idx[k]+1]).mean()
-                vs_loc = np.sqrt(self.us2_mean[idx[k-1]:idx[k]+1].mean())
-                beta_loc = abs(beta[idx[k-1]:idx[k]+1]).mean()
-                lamb_uzon[k-1] = 2.*np.pi*np.sqrt(vp_loc*self.ek/beta_loc)
-                lamb_us[k-1] = 2.*np.pi*np.sqrt(vs_loc*self.ek/beta_loc)
-                coord[k-1] = self.radius[idx[k-1]:idx[k]].mean()
+            # Determine jets width and Rhines scale
+            jet_widths = np.zeros((len(idx)-1), dtype=np.float64)
+            lamb_uzon = np.zeros_like(jet_widths)
+            lamb_us = np.zeros_like(jet_widths)
+            beta = np.zeros_like(self.radius)
+            coord = np.zeros_like(jet_widths)
+            beta[1:] = self.radius[1:]/(self.radius[0]**2-self.radius[1:]**2)
+            beta[0] = beta[1]
+            for k in range(len(idx)):
+                if k > 0:
+                    jet_widths[k-1] = self.radius[idx[k-1]]-self.radius[idx[k]]
+                    vp_loc = abs(self.uphi_mean[idx[k-1]:idx[k]+1]).mean()
+                    vs_loc = np.sqrt(self.us2_mean[idx[k-1]:idx[k]+1].mean())
+                    beta_loc = abs(beta[idx[k-1]:idx[k]+1]).mean()
+                    lamb_uzon[k-1] = 2.*np.pi*np.sqrt(vp_loc*self.ek/beta_loc)
+                    lamb_us[k-1] = 2.*np.pi*np.sqrt(vs_loc*self.ek/beta_loc)
+                    coord[k-1] = self.radius[idx[k-1]:idx[k]].mean()
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.plot(coord, jet_widths, marker='o', label='Jet width')
-        ax.plot(coord, lamb_uzon, marker='s', label='Rhines scale (Uzon)')
-        ax.plot(coord, lamb_us, marker='s', label='Rhines scale (Us)')
-        plotSpan(ax, idx, self.radius)
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(coord, jet_widths, marker='o', label='Jet width')
+            ax.plot(coord, lamb_uzon, marker='s', label='Rhines scale (Uzon)')
+            ax.plot(coord, lamb_us, marker='s', label='Rhines scale (Us)')
+            plotSpan(ax, idx, self.radius)
 
-        ax.set_xlabel('Radius')
-        ax.set_ylabel('Lengthscales')
-        ax.set_xlim(self.radius[-1], self.radius[0])
-        ax.legend(loc='best')
-        fig.tight_layout()
+            ax.set_xlabel('Radius')
+            ax.set_ylabel('Lengthscales')
+            ax.set_xlim(self.radius[-1], self.radius[0])
+            ax.legend(loc='best')
+            fig.tight_layout()
