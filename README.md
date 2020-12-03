@@ -6,7 +6,7 @@
 
 * **pizza** uses either a Chebyshev collocation or a sparse Chebyshev formulation in the radial direction and a Fourier decomposition in the azimuthal direction. Several Implicit-Explicit (IMEX) time-steppers are implemented including multistep time schemes (Crank-Nicolson-Adams Bashforth, Semi-implicit Backward Difference) as well as IMEX Runge-Kutta schemes.
 
-* **pizza** is written in Fortran and designed to be used on supercomputing clusters. It requires [CMake](https://cmake.org) [MPI](http://www.open-mpi.org/), [FFTW](http://www.fftw.org) and [LAPACK](http://www.netlib.org/lapack/) to be compiled and executed. Postprocessing functions written in python (requiring [matplotlib](http://matplotlib.org/) and [scipy](http://www.scipy.org/)) are also provided to allow a useful data analysis.  
+* **pizza** is written in Fortran and designed to be used on supercomputing clusters. It requires [CMake](https://cmake.org), an [MPI](http://www.open-mpi.org/) library, [FFTW](http://www.fftw.org) and [LAPACK](http://www.netlib.org/lapack/) to be compiled and executed. Postprocessing functions written in python (requiring [matplotlib](http://matplotlib.org/) and [scipy](http://www.scipy.org/)) are also provided to allow a useful data analysis.  
 
 * **pizza** is a free software. It can be used, modified and redistributed under the terms of the [GNU GPL v3 licence](http://www.gnu.org/licenses/gpl-3.0.en.html).
 
