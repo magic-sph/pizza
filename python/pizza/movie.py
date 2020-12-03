@@ -11,7 +11,7 @@ class PizzaMovie:
 
     def __init__(self, field='up', nvar='all', datadir='.', tag=None, step=1,
                  endian='l', levels=64, cmap='seismic', deminc=True, png=False,
-                 cut=1., bgcolor=None, dpi=100, normed=False):
+                 cut=1., bgcolor=None, dpi=100, normed=False, rm_hor_avg=False):
 
         if png:
             plt.ioff()
@@ -56,6 +56,9 @@ class PizzaMovie:
             dat = spec_spat(f.field_m, f.n_phi_max)
             if deminc:
                 dat = symmetrize(dat, ms=f.minc)
+
+            if rm_hor_avg:
+                dat = dat - np.mean(dat, axis=0)
 
             if k == 0:
                 self.ra = f.ra
