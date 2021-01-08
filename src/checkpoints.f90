@@ -850,7 +850,7 @@ contains
       end if
 
       if ( l_heat_old ) then
-         print*, "INSIDE l_HEAT_OLD", l_heat_old
+         !print*, "INSIDE l_HEAT_OLD", l_heat_old
          !-- Temperature
          if ( rank == 0 ) then
             read( n_start_file ) work_old
@@ -858,15 +858,15 @@ contains
                  &         scale_t, n_m_max_old, n_r_max_old, n_r_max_max, &
                  &         lBc=.false., l_phys_space=.true.)
          end if
-         if ( l_heat_3D ) then 
-            call restart_3D_from_2D(work,temp_3D_LMloc)
-         else
+         !if ( l_heat_3D ) then 
+         !   call restart_3D_from_2D(work,temp_3D_LMloc)
+         !else
             call scatter_from_rank0_to_mloc(work, temp_Mloc)
-         end if
+         !end if
          !temp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
-         if(rank==0) print*, "work", work(:12,:1)
-         print*, ''
-         print*, "temp_3D", temp_3D_LMloc(:12,:1)
+         !if(rank==0) print*, "work", work(:12,:1)
+         !print*, ''
+         !print*, "temp_3D", temp_3D_LMloc(:12,:1)
 
          if ( tscheme_family_old == 'MULTISTEP' ) then
             !-- Explicit time step
@@ -921,7 +921,7 @@ contains
                end do
             end if
          end if
-         print*, "INSIDE l_HEAT_OLD", tscheme%norder_imp
+         !print*, "INSIDE l_HEAT_OLD", tscheme%norder_imp
       end if
 
       if ( l_chem_old ) then
@@ -1036,7 +1036,7 @@ contains
             end if
          else if( l_heat_3D ) then
             if ( l_heat_old ) then
-               print*, "INSIDE l_HEAT_3D, l_HEAT_OLD", l_heat_3D, l_heat_old, dTdt%expl(:,:,n_o)
+               !print*, "INSIDE l_HEAT_3D, l_HEAT_OLD", l_heat_3D, l_heat_old, dTdt%expl(:,:,n_o)
                !-- Temperature
 #ifdef TOTO
                if ( rank == 0 ) then
