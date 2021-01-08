@@ -34,7 +34,8 @@ module communications
    &         finalize_communications, reduce_radial_on_rank,        &
    &         my_reduce_mean, my_allreduce_maxloc, transp_lm2r,      &
    &         transp_r2lm, allgather_from_Rloc,                      &
-   &         allgather_from_Rloc_3D, scatter_from_rank0_to_lmloc
+   &         allgather_from_Rloc_3D, scatter_from_rank0_to_lmloc,   &
+   &         exchange_Nbound_from_Rloc_3D
 
 contains
 
@@ -561,6 +562,102 @@ contains
       deallocate( rbuff, sbuff, rcounts, rdisp)
 
    end subroutine allgather_from_Rloc_3D
+!------------------------------------------------------------------------------
+   subroutine exchange_Nbound_from_Rloc_3D(arr_Rloc, arr_Rext, Nbound, len_arr)
+      !
+      ! This routine exchange Nbound edge points from an 3D-R-distributed array 
+      ! to an extended 3D_Rloc array: rank N sends nRstart3D+Nbound pts to N-1
+      ! and nRstop3D-Nbound pts to N+1 resp.; and receives nRstart3D+Nbound and
+      ! nRstop3D-Nbound pts from N+1 and N-1 respectively
+      !
+
+      !-- Input variable:
+      integer,  intent(in) :: Nbound, len_arr
+      real(cp), intent(in) :: arr_Rloc(len_arr, nRstart3D:nRstop3D)
+
+      !-- Output variable:
+      real(cp), intent(out) :: arr_Rext(len_arr, nRstart3D-Nbound:nRstop3D+Nbound)
+
+      !-- Local variables:
+      real(cp), allocatable :: rbuff(:,:), sbuff(:,:)
+      integer :: to, up, from, low
+      integer :: n_m, mrank, status(MPI_STATUS_SIZE)
+
+      allocate( rbuff(len_arr,Nbound), sbuff(len_arr,Nbound) )
+
+      low=rank-1
+      up =rank+1
+      if ( low < 0 ) low=n_procs-1
+      if ( up == n_procs ) up =0
+
+      mrank = mod(rank,2)
+
+      do n_m=1,len_arr
+         arr_Rext(n_m,nRstart3D:nRstop3D) = arr_Rloc(n_m,:)
+      end do
+
+      !print*, rbuff(4,:), arr_Rext(4,:)
+      !print*, 'checking NBound', Nbound
+      !print*, arr_Rext(4,nRstart3D-Nbound:nRstart-1), " <- nRstart - ",  arr_Rext(4,nRstop3D-Nbound+1:nRstop3D), " - nRstop -> "
+      !print*, arr_Rext(4,nRstop3D+1:nRstop3D+Nbound), " <- nRstop + ",  arr_Rext(4,nRstart3D:nRstart3D+Nbound-1), " + nRstart -> "
+
+      !-- Send to up receive from low
+      from=low
+      to  =up
+
+      if ( mrank == 0 .and. rank > 0 ) then
+         call MPI_Recv(rbuff, Nbound*len_arr, MPI_DEF_REAL, &
+              &        from, MPI_ANY_TAG,                   &
+              &        MPI_COMM_WORLD, status, ierr)
+         arr_Rext(:,nRstart3D-Nbound:nRstart-1) = rbuff(:,:)
+      else if ( mrank > 0 .and. rank < n_procs-1 ) then
+         sbuff(:,:) = arr_Rext(:,nRstop3D-Nbound+1:nRstop3D)
+         call MPI_Send(sbuff, Nbound*len_arr, MPI_DEF_REAL, &
+              &        to, rank,                            &
+              &        MPI_COMM_WORLD, ierr)
+      end if
+
+      if ( mrank > 0 .and. rank > 0 ) then
+         call MPI_Recv(rbuff, Nbound*len_arr, MPI_DEF_REAL, &
+              &        from, MPI_ANY_TAG,                   &
+              &        MPI_COMM_WORLD, status, ierr)
+         arr_Rext(:,nRstart3D-Nbound:nRstart-1) = rbuff(:,:)
+      else if ( mrank == 0 .and. rank < n_procs-1 ) then
+         sbuff(:,:) = arr_Rext(:,nRstop3D-Nbound+1:nRstop3D)
+         call MPI_Send(sbuff, Nbound*len_arr, MPI_DEF_REAL, &
+              &        to, rank,                            &
+              &        MPI_COMM_WORLD, ierr)
+      end if
+
+      !-- Send to low receive from up
+      from=up
+      to  =low
+
+      if ( mrank == 0 .and. rank < n_procs-1 ) then
+         call MPI_Recv(rbuff, Nbound*len_arr, MPI_DEF_REAL, &
+              &        from, MPI_ANY_TAG,                   &
+              &        MPI_COMM_WORLD, status, ierr)
+         arr_Rext(:,nRstop3D+1:nRstop3D+Nbound) = rbuff(:,:)
+      else if ( mrank > 0 .and. rank > 0 ) then
+         sbuff(:,:) = arr_Rext(:,nRstart3D:nRstart3D+Nbound-1)
+         call MPI_Send(sbuff, Nbound*len_arr, MPI_DEF_REAL, &
+              &        to, rank,                            &
+              &        MPI_COMM_WORLD, ierr)
+      end if
+
+      if ( mrank > 0 .and. rank < n_procs-1 ) then
+         call MPI_Recv(rbuff, Nbound*len_arr, MPI_DEF_REAL, &
+              &        from, MPI_ANY_TAG,                   &
+              &        MPI_COMM_WORLD, status, ierr)
+         arr_Rext(:,nRstop3D+1:nRstop3D+Nbound) = rbuff(:,:)
+      else if ( mrank == 0 .and. rank > 0 ) then
+         sbuff(:,:) = arr_Rext(:,nRstart3D:nRstart3D+Nbound-1)
+         call MPI_Send(sbuff, Nbound*len_arr, MPI_DEF_REAL, &
+              &        to, rank,                            &
+              &        MPI_COMM_WORLD, ierr)
+      end if
+
+   end subroutine exchange_Nbound_from_Rloc_3D
 !------------------------------------------------------------------------------
    subroutine scatter_from_rank0_to_mloc(arr_full, arr_Mloc)
 

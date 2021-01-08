@@ -107,8 +107,10 @@ module namelists
    real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
    logical,  public :: l_3D            ! Require 3-D functions
    logical,  public :: l_heat_3D       ! 3-D treatment of temperature
+   logical,  public :: l_thw_3D        ! Computation of the 3D thermal wind contribution on u_phi-3D
    logical,  public :: l_mag_3D        ! Treatment of the magnetic field (3-D)
    logical,  public :: l_mag_LF        ! Treatment of the Lorentz-Force
+   logical,  public :: l_cyl           ! Accuracy of the schemes for the z-integrations
    logical,  public :: l_heat
    logical,  public :: l_chem
    logical,  public :: l_AB1
@@ -161,7 +163,7 @@ contains
       &                   l_tcond_3D,tcond_fac,l_temp_advz,        &
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
       &                   xi_bot,xi_top, ktopb,kbotb,xicond_fac,   &
-      &                   l_xi_3D,l_heat_3D,l_mag_LF
+      &                   l_xi_3D,l_heat_3D,l_thw_3D,l_mag_LF,l_cyl
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi,scale_B,init_B,amp_B
@@ -362,10 +364,12 @@ contains
       if ( l_galerkin .and. index(cheb_method, 'COLL') == 0 .and. &
       &    ( maxval(abs(t_top(:))) > 0.0_cp .or.                  &
       &      maxval(abs(xi_top(:))) > 0.0_cp) ) then
+         write(output_unit,*) '! Inhomogeneous Top BCs not compatible with galerkin yet!'
          call abortRun('! Inhomogeneous BCs not compatible with chosen chebyshev solver !')
       else if ( l_galerkin .and. index(cheb_method, 'COLL') == 0 .and. &
       &         ( maxval(abs(t_bot(:))) > 0.0_cp .or.                  &
       &           maxval(abs(xi_bot(:))) > 0.0_cp) ) then
+         write(output_unit,*) '! Inhomogeneous Bot BCs not compatible with galerkin yet!'
          call abortRun('! Inhomogeneous BCs not compatible with chosen chebyshev solver !')
       end if
 
@@ -509,7 +513,7 @@ contains
       map_function     ='arcsin' ! By default Kosloff and Tal-Ezer mapping when l_newmap=.true.
       dtMax            =1.0e-5_cp
       courfac          =1.0e3_cp
-      l_cour_alf_damp  =.true. ! By default, use Christensen's (GJI, 1999) CFL
+      l_cour_alf_damp  =.false. ! By default, use Christensen's (GJI, 1999) CFL
       alffac           =1.0e3_cp
       dt_fac           =2.0_cp
       tEND             =0.0_cp    ! numerical time where run should end
@@ -575,10 +579,14 @@ contains
          xi_top(n)=0.0_cp
       end do
 
+      l_3D = .false.
+      l_cyl= .false.
+      l_thw_3D= .true.
       !-- 3D treatment of temperature
       l_heat_3D = .false.
 
       !-- treatment of magnetic field (3D)
+      l_mag_3D = .false.
       l_mag_LF = .false.
 
       !----- Namelist start_field:
@@ -705,7 +713,11 @@ contains
       write(n_out,'(''  l_temp_advz     ='',l3,'','')') l_temp_advz
       write(n_out,'(''  l_tcond_3D      ='',l3,'','')') l_tcond_3D
       write(n_out,'(''  l_xi_3D         ='',l3,'','')') l_xi_3D
+      write(n_out,'(''  l_3D            ='',l3,'','')') l_3D
+      write(n_out,'(''  l_cyl           ='',l3,'','')') l_cyl
       write(n_out,'(''  l_heat_3D       ='',l3,'','')') l_heat_3D
+      if ( l_heat_3D ) &
+      & write(n_out,'(''  l_thw_3D        ='',l3,'','')') l_thw_3D
       write(n_out,'(''  l_mag_3D        ='',l3,'','')') l_mag_3D
       write(n_out,'(''  l_mag_LF        ='',l3,'','')') l_mag_LF
       !--- Heat boundary condition:
@@ -717,6 +729,10 @@ contains
       write(n_out,'(''  kbotv           ='',i3,'','')') kbotv
       write(n_out,'(''  ktopb           ='',i3,'','')') ktopb
       write(n_out,'(''  kbotb           ='',i3,'','')') kbotb
+      if ( t_top(2) /= 0.0 .or. t_top(3) /= 0.0 ) &
+      & write(n_out,'(''  Top Flux        ='',3ES14.6,'','')') t_top(:3)
+      if ( t_bot(2) /= 0.0 .or. t_bot(3) /= 0.0 ) &
+      & write(n_out,'(''  Bot Flux        ='',3ES14.6,'','')') t_bot(:3)
       write(n_out,*) "/"
 
       write(n_out,*) "&start_field"

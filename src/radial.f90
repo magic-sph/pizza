@@ -299,12 +299,12 @@ contains
             dtcond_3D(:)= -r_icb*r_cmb*or2_3D(:)
          elseif ( ktopt==2 .and. kbott==1 ) then
                tcond_3D(:) = one + f_top*r_cmb**2*(one/r_icb - or1_3D(:)) !&
-               !&          + (epsc0/two)*(r_icb**2 - r(n_r)**2 +          &
+               !&          + half*epsc0*(r_icb**2 - r(n_r)**2 +           &
                !&             two*r_cmb**3*(one/r_icb-or1_3D(:)))
                call get_dr(tcond_3D, dtcond_3D, n_r_max_3D, rscheme_3D)
          elseif ( ktopt==2 .and. kbott==2 ) then !testing this
                tcond_3D(:) = 2.0_cp*r_cmb + one*r_cmb**2*or1_3D(:) !&
-               !&          - (epsc0/two)*(r(n_r)**2 +  &
+               !&          - half*epsc0*(r(n_r)**2 +   &
                !&             two*r_cmb**3*or1_3D(:))
                call get_dr(tcond_3D, dtcond_3D, n_r_max_3D, rscheme_3D)
          else
@@ -376,42 +376,42 @@ contains
          elseif ( ktop==2 .and. kbot==1 ) then
             do n_r=2,n_r_max
                tcond(n_r) = one + f_top*r_cmb**2*(one/r_icb - asinh(h(n_r)/r(n_r))/h(n_r)) &
-               &          + (epsc0/two)*(r_icb**2 - r(n_r)**2 - third*h(n_r)**2 +          &
-               &             two*r_cmb**3*(one/r_icb-asinh(h(n_r)/r(n_r))/h(n_r)))
+               &          + half*epsc0*(r_icb**2 - r(n_r)**2 - third*h(n_r)**2 +           &
+               &            two*r_cmb**3*(one/r_icb-asinh(h(n_r)/r(n_r))/h(n_r)))
             end do
          elseif ( ktop==1 .and. kbot==2 ) then
             do n_r=2,n_r_max
                tcond(n_r) = f_bot*r_icb**2*(one/r_cmb - asinh(h(n_r)/r(n_r))/h(n_r)) &
-               &          + (epsc0/two)*(r_cmb**2 - r(n_r)**2 - third*h(n_r)**2 +    &
+               &          + half*epsc0*(r_cmb**2 - r(n_r)**2 - third*h(n_r)**2 +     &
                &             two*r_icb**3*(one/r_cmb-asinh(h(n_r)/r(n_r))/h(n_r)))
             enddo
          else
             do n_r=2,n_r_max
                tcond(n_r) = f_top*r_cmb - f_top*r_cmb**2*(asinh(h(n_r)/r(n_r))/h(n_r)) &
-               &          - (epsc0/two)*(r(n_r)**2 + third*h(n_r)**2 +                 &
-               &             two*r_cmb**3*(asinh(h(n_r)/r(n_r))/h(n_r)))
+               &          - half*epsc0*(r(n_r)**2 + third*h(n_r)**2 +                  &
+               &            two*r_cmb**3*(asinh(h(n_r)/r(n_r))/h(n_r)))
             enddo 
          endif
          call get_dr(tcond, dtcond, n_r_max, rscheme)
       else
       !2D-tcond profiles -- Warning! In 2D, need a geometric factor
          !-- 2D heat sources to compensate for top/bottom fluxes
-         epsc0 = two*(r_icb*f_bot - r_cmb*f_top)/ &
-         &           (r_cmb**2 - r_icb**2)
+         epsc0 = (r_icb*f_bot - r_cmb*f_top)/ &!two* !-- factor 0.5 systematic
+         &       (r_cmb**2 - r_icb**2)
          if ( abs(epsc0)<10.0_cp*epsilon(one) ) epsc0=0.0_cp
          if ( ktop==1 .and. kbot==1 ) then
             tcond(:) = cond_fac*(log(r(:)/r_cmb)/log(radratio))
             dtcond(:)= cond_fac*(or1(:)/log(radratio))
          elseif ( ktop==2 .and. kbot==1 ) then
-            tcond(:) = cond_fac*(one + f_top*r_cmb*log(r(:)/r_icb) )!+ (epsc0/two)*  &
+            tcond(:) = cond_fac*(one + f_top*r_cmb*log(r(:)/r_icb) )!+ half*epsc0*      &
             !&                     (r_icb**2 - r(:)**2 + two*r_cmb**2*log(r(:)/r_icb)))
             dtcond(:)= cond_fac*(f_top*r_cmb*or1(:) )!+ epsc0*(r_cmb**2*or1(:) - r(:)))
          elseif( ktop==1 .and. kbot==2 ) then
-            tcond(:) = cond_fac*(f_bot*r_icb*log(r(:)/r_cmb) + (epsc0/two)*        &
+            tcond(:) = cond_fac*(f_bot*r_icb*log(r(:)/r_cmb) + half*epsc0*            &
             &                     (r_cmb**2 - r(:)**2 + two*r_icb**2*log(r(:)/r_cmb)))
             dtcond(:)= cond_fac*(f_bot*r_icb*or1(:) + epsc0*(r_icb**2*or1(:) - r(:)))
          else
-            tcond(:) = cond_fac*(f_top*r_cmb + f_top*r_cmb*log(r(:)) + (epsc0/two)* &
+            tcond(:) = cond_fac*(f_top*r_cmb + f_top*r_cmb*log(r(:)) + half*epsc0* &
             &                     (two*r_cmb**2*log(r(:)) - r(:)**2))
             dtcond(:)= cond_fac*(f_top*r_cmb*or1(:) + epsc0*(r_cmb**2*or1(:) - r(:)))
          endif

@@ -55,7 +55,7 @@ contains
       !-- theta and l functions
       if ( l_3D ) then
          call spherical_functions()
-         call zinterp%fill_mat()
+         call zinterp%fill_zinterp_grid()
       end if
 
       !-- Compute some constants

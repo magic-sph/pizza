@@ -9,13 +9,13 @@ module checkpoints
    use fields, only: work_3D_Rloc
    use blocking, only: nMstart, nMstop, nm_per_rank, nRstart3D, nRstop3D, &
        &               nR_per_rank_3D, lmStart, lmStop
-   use blocking_lm, only: st_map
+   use blocking_lm, only: st_map, lo_map
    use communications, only: gather_from_mloc_to_rank0, lm2r_fields,  &
        &                     scatter_from_rank0_to_mloc, transp_lm2r, &
        &                     scatter_from_rank0_to_lmloc
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m, n_cheb_max
    use truncation_3D, only: lm_max, l_max, m_max_3D, n_phi_tot_3D, n_theta_max, &
-       &                    n_r_max_3D, minc_3D, n_cheb_max_3D
+       &                    n_r_max_3D, minc_3D, n_cheb_max_3D, idx2m3D
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &
        &                l_bridge_step, l_cheb_coll, scale_xi, l_3D,       &
@@ -850,6 +850,7 @@ contains
       end if
 
       if ( l_heat_old ) then
+         print*, "INSIDE l_HEAT_OLD", l_heat_old
          !-- Temperature
          if ( rank == 0 ) then
             read( n_start_file ) work_old
@@ -857,7 +858,15 @@ contains
                  &         scale_t, n_m_max_old, n_r_max_old, n_r_max_max, &
                  &         lBc=.false., l_phys_space=.true.)
          end if
-         call scatter_from_rank0_to_mloc(work, temp_Mloc)
+         if ( l_heat_3D ) then 
+            call restart_3D_from_2D(work,temp_3D_LMloc)
+         else
+            call scatter_from_rank0_to_mloc(work, temp_Mloc)
+         end if
+         !temp_3D_LMloc(lmStart:lmStop,n_r_max_3D)
+         if(rank==0) print*, "work", work(:12,:1)
+         print*, ''
+         print*, "temp_3D", temp_3D_LMloc(:12,:1)
 
          if ( tscheme_family_old == 'MULTISTEP' ) then
             !-- Explicit time step
@@ -869,7 +878,11 @@ contains
                        &         lBc=.true., l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%norder_exp ) then
+         !if ( l_heat_3D ) then 
+         !   call restart_3D_from_2D(work,dTdt_3D%expl(:,:,n_o))
+         !else
                   call scatter_from_rank0_to_mloc(work, dTdt%expl(:,:,n_o))
+         !end if
                end if
             end do
 
@@ -882,7 +895,11 @@ contains
                        &         lBc=.true., l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%norder_imp_lin-1 ) then
+         !if ( l_heat_3D ) then 
+         !   call restart_3D_from_2D(work,dTdt_3D%impl(:,:,n_o))
+         !else
                   call scatter_from_rank0_to_mloc(work, dTdt%impl(:,:,n_o))
+         !end if
                end if
             end do
             if ( version > 3 ) then
@@ -895,11 +912,16 @@ contains
                           &         l_phys_space=l_coll_old)
                   end if
                   if ( n_o <= tscheme%norder_imp-1 ) then
+         !if ( l_heat_3D ) then 
+         !   call restart_3D_from_2D(work,dTdt_3D%old(:,:,n_o))
+         !else
                      call scatter_from_rank0_to_mloc(work, dTdt%old(:,:,n_o))
+         !end if
                   end if
                end do
             end if
          end if
+         print*, "INSIDE l_HEAT_OLD", tscheme%norder_imp
       end if
 
       if ( l_chem_old ) then
@@ -1012,6 +1034,63 @@ contains
                   end if
                end do
             end if
+         else if( l_heat_3D ) then
+            if ( l_heat_old ) then
+               print*, "INSIDE l_HEAT_3D, l_HEAT_OLD", l_heat_3D, l_heat_old, dTdt%expl(:,:,n_o)
+               !-- Temperature
+#ifdef TOTO
+               if ( rank == 0 ) then
+                  read( n_start_file ) work_old
+                  call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
+                       &         scale_t, n_m_max_old, n_r_max_old, n_r_max_3D_max, &
+                       &         lBc=.false., l_phys_space=.true.)
+               end if
+               call scatter_from_rank0_to_mloc(work, temp_Mloc)
+
+               if ( tscheme_family_old == 'MULTISTEP' ) then
+                  !-- Explicit time step
+                  do n_o=2,norder_exp_old
+                     if ( rank == 0 ) then
+                        read( n_start_file ) work_old
+                        call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
+                             &         scale_t, n_m_max_old, n_r_max_old, n_r_max_3D_max, &
+                             &         lBc=.true., l_phys_space=l_coll_old)
+                     end if
+                     if ( n_o <= tscheme%norder_exp ) then
+                        call scatter_from_rank0_to_mloc(work, dTdt%expl(:,:,n_o))
+                     end if
+                  end do
+
+                  !-- Implicit time step
+                  do n_o=2,norder_imp_lin_old-1
+                     if ( rank == 0 ) then
+                        read( n_start_file ) work_old
+                        call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
+                             &         scale_t, n_m_max_old, n_r_max_old, n_r_max_3D_max, &
+                             &         lBc=.true., l_phys_space=l_coll_old)
+                     end if
+                     if ( n_o <= tscheme%norder_imp_lin-1 ) then
+                        call scatter_from_rank0_to_mloc(work, dTdt%impl(:,:,n_o))
+                     end if
+                  end do
+                  if ( version > 3 ) then
+                     do n_o=2,norder_imp_old-1
+                        if ( rank == 0 ) then
+                           read( n_start_file ) work_old
+                           call map_field(work_old, work, rscheme_old, r_old, m2idx_old,&
+                                &         scale_t, n_m_max_old, n_r_max_old,            &
+                                &         n_r_max_3D_max, lBc=.true.,                      &
+                                &         l_phys_space=l_coll_old)
+                        end if
+                        if ( n_o <= tscheme%norder_imp-1 ) then
+                           call scatter_from_rank0_to_mloc(work, dTdt%old(:,:,n_o))
+                        end if
+                     end do
+                  end if
+               end if
+#endif
+            end if
+           ! call restart_3D_from_2D(temp_Mloc,temp_3D_LMloc)
          !else
          !   call abortRun('2-D to 3-D for 3D-Temperature-field Not implemented yet')
          end if
@@ -1384,5 +1463,36 @@ contains
       end if
 
    end subroutine map_field_r
+!------------------------------------------------------------------------------
+   subroutine restart_3D_from_2D(field_old_2D,field_new_3D)
+
+      !-- Input variables
+      complex(cp), intent(in) :: field_old_2D(n_m_max, n_r_max)
+
+      !-- Output data
+      complex(cp), intent(inout) :: field_new_3D(lmStart:lmStop,n_r_max_3D)
+
+      !-- Local variables
+      integer :: lm, l1, m1
+      integer :: m22D, n_r_min
+
+
+      field_new_3D(:,:) = zero
+      n_r_min=min(n_r_max_3D,n_r_max)
+      do lm=lmStart,lmStop
+         l1=lo_map%lm2l(lm)
+         m1=lo_map%lm2m(lm)
+         m22D = l1!idx2m(l1)
+         if ( m22D > n_m_max .or. m22D < 1 ) then ! a little bit weird
+            m22D = -1
+         end if
+         if ( m22D /= -1 .and. l1 == m1 ) then
+         print*, 'lm, l1, m1, n_m', lm, l1, m1, m22D
+            !- I reconstruct 3D field only with (l=m) sectorial modes
+            field_new_3D(lm,:n_r_min) = field_old_2D(m22D,:n_r_min)
+         end if
+      end do
+
+   end subroutine restart_3D_from_2D
 !------------------------------------------------------------------------------
 end module checkpoints

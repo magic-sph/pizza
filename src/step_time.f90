@@ -11,7 +11,7 @@ module step_time
    use fields, only: us_Mloc, us_Rloc, up_Mloc, up_Rloc, temp_Mloc,            &
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc,        &
        &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc, xi_Rloc,  &
-       &             dxi_Mloc, xi_hat_Mloc, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,&
+       &             dxi_Mloc, xi_hat_Mloc, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,upm3D_Rloc, uzm3D_Rloc,&
        &             temp_3D_LMloc, dtemp_3D_LMloc, temp_3D_Rloc, b_3D_LMloc,  &
        &             db_3D_LMloc, ddb_3D_LMloc, b_3D_Rloc, db_3D_Rloc,         &
        &             ddb_3D_Rloc, aj_3D_LMloc, dj_3D_LMloc, aj_3D_Rloc,        &
@@ -267,14 +267,14 @@ contains
                !-------------------
                if ( l_3D ) then
                   runStart = MPI_Wtime()
-                  call zinterp%prepare_extension(us_Rloc, up_Rloc, om_Rloc)
-                  call zinterp%extrapolate(ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc)
+                  call zinterp%prep_extension_QGto3D(us_Rloc, up_Rloc, om_Rloc)
+                  call zinterp%ext_QGto3D_vel(ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc, upm3D_Rloc, uzm3D_Rloc)
                   runStop = MPI_Wtime()
                   if ( runStop>runStart ) then
                      timers%n_interp=timers%n_interp+1
                      timers%interp  =timers%interp+(runStop-runStart)
                   end if
-                  call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,    &
+                  call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc, upm3D_Rloc, uzm3D_Rloc,    &
                        &              temp_3D_Rloc, dtempdt_3D_Rloc, dVrT_3D_Rloc, &
                        &              b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc,          &
                        &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,        &

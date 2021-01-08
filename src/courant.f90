@@ -78,7 +78,7 @@ contains
          vflr2 =ur(n_phi)*ur(n_phi)
          vr2max=max(vr2max,cf2*vflr2)
     
-         vflh2 =up(n_phi)*up(n_phi) 
+         vflh2 =up(n_phi)*up(n_phi)
          vh2max=max(vh2max,cf2*vflh2)
     
       end do

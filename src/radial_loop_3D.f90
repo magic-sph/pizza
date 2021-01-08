@@ -6,7 +6,8 @@ module rloop_3D
    use nonlinear_lm_mod, only: nonlinear_lm_t
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
-   use namelists, only: BuoFac, DyMagFac, tag, l_heat_3D, l_mag_3D, l_mag_LF, r_cmb, r_icb
+   use namelists, only: BuoFac, DyMagFac, tag, l_heat_3D, l_thw_3D, l_mag_3D, l_mag_LF, &
+   &                    r_cmb, r_icb
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max, l_max, n_r_max_3D
    use truncation, only: idx2m, n_m_max
    use courant_mod, only: courant_3D
@@ -50,7 +51,7 @@ contains
 
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
-   subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM, &
+   subroutine radial_loop_3D( time, ur, ut, up, upm, uzm, temp, dtempdt, dVrTLM, &
               &               b_3D, db_3D, ddb_3D, aj_3D, dj_3D,       &
               &               dbdt_3D, djdt_3D, dVxBhLM,               &
               &               dpsidt_Rloc, dVsOm_Rloc, dtr_3D_Rloc,    &
@@ -67,6 +68,8 @@ contains
       real(cp),    intent(inout) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: ut(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: up(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp),    intent(inout) :: upm(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp),    intent(inout) :: uzm(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       logical,     intent(in) :: l_frame
       real(cp),    intent(in) :: time
       type(zfunc_type),    intent(in) :: zinterp
@@ -109,15 +112,15 @@ contains
 #endif
 
       !-- get thermal wind
-      if ( l_heat_3D ) then
+      if ( l_heat_3D .and. l_thw_3D ) then
          do n_r=nRstart3D,nRstop3D
             !-- Take the gradient of the axisymmetric part
             call transform_axi_to_dth_grid_space(temp(1:l_max+1,n_r), dTdth(:,n_r))
          end do
-      end if
 
-      !-- Compute thermal wind --> modify up_3D_Rloc
-      call zinterp%compute_thermal_wind(dTdth, up)
+         !-- Compute thermal wind --> modify up_3D_Rloc
+         call zinterp%compute_thermal_wind(dTdth, up)
+      end if
 
       !-- Open the 3-D snapshots in physical space
       if ( l_frame .and. tscheme%istage==1 ) then
@@ -172,7 +175,7 @@ contains
 
          !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
-              &          buo_tmp(:,:,n_r),jxBs(:,:,n_r),jxBp(:,:,n_r))
+              &          buo_tmp(:,:,n_r),jxBs(:,:,n_r),jxBp(:,:,n_r),upm(:,:,n_r),uzm(:,:,n_r))
 
          !-- Write the snapshot on the grid (easier to handle)
          if ( l_frame .and. tscheme%istage==1 ) then
@@ -183,9 +186,9 @@ contains
                call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))
             end if
             if ( l_mag_3D ) then
-               call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!
-               call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))
-               call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!
+               call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!Vx!
+               call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))!Vx!
+               call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!Vx!
             end if
          end if
 
@@ -197,7 +200,7 @@ contains
          call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r),                     &
               &            dVxBhLM(:,n_r),dbdt_3D(:,n_r),djdt_3D(:,n_r), n_r )
 
-
+            !jxBp(:,:,n_r) = 0.0_cp
             !do n_theta=1,n_theta_max
             !   do n_phi=1,n_phi_max_3D
             !      phi = (n_phi-1)*two*pi/(n_phi_max_3D)
@@ -232,13 +235,15 @@ contains
 
       !-- Compute z-averaging of buoyancy and lorentz-force
       runStart = MPI_Wtime()
-      !call zinterp%compute_avg(jxBp, lfp_tmp_Rloc)
-      call zinterp%compute_avg(buo_tmp, buo_tmp_Rloc)
-      if (  l_mag_LF ) call zinterp%compute_avg(jxBs, lfs_tmp_Rloc)
-      if (  l_mag_LF ) call zinterp%compute_avg(jxBp, lfp_tmp_Rloc)
+      !call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc)
+      if (  l_heat_3D )call zinterp%compute_zavg(buo_tmp, buo_tmp_Rloc)
+      if (  l_mag_LF ) call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc)
+      if (  l_mag_LF ) call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc)
       runStop = MPI_Wtime()
       if (runStop>runStart) then
          timers%interp = timers%interp+(runStop-runStart)
+         timers%n_zavg=timers%n_zavg+1
+         timers%zavg = timers%zavg+(runStop-runStart)
       end if
 
 #ifdef aDEBUG

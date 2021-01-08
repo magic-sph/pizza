@@ -14,8 +14,9 @@ module grid_space_arrays_mod
 
    use general_arrays_mod
    use precision_mod
+   use constants, only: pi
    use mem_alloc, only: bytes_allocated
-   use namelists, only: l_heat_3D, l_mag_3D, l_mag_LF
+   use namelists, only: l_heat_3D, l_mag_3D, l_mag_LF, r_icb, r_cmb
    use blocking, only: nRstart3D, nRstop3D
    use truncation_3D, only: n_theta_max, n_phi_max_3D
    use radial_functions, only: or1_3D, r_3D, rgrav_3D
@@ -110,7 +111,7 @@ contains
 
    end subroutine finalize
 !----------------------------------------------------------------------------
-   subroutine get_nl(this, vr, vt, vp, n_r, buo, jxBs, jxBp)
+   subroutine get_nl(this, vr, vt, vp, n_r, buo, jxBs, jxBp, vpm, vzm)
       !
       !  calculates non-linear products in grid-space for radial
       !  level n_r and returns them in arrays wnlr1-3, snlr1-3, bnlr1-3
@@ -132,9 +133,12 @@ contains
       real(cp), intent(out) :: jxBs(n_phi_max_3D,n_theta_max)
       real(cp), intent(out) :: jxBp(n_phi_max_3D,n_theta_max)
 
+      real(cp), intent(in) :: vpm(n_phi_max_3D,n_theta_max)
+      real(cp), intent(in) :: vzm(n_phi_max_3D,n_theta_max)
+
       !-- Local variables:
       integer :: n_theta, n_phi
-      real(cp) :: or1sn1, r2
+      real(cp) :: or1sn1, r2!, bamp2, rfunc
 
       r2 = r_3D(n_r)*r_3D(n_r)
 
@@ -174,17 +178,39 @@ contains
          do n_theta=1,n_theta_max
             or1sn1=or1_3D(n_r)*osint1(n_theta)
             do n_phi=1,n_phi_max_3D     ! calculate V x B components
+               !bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
+               !&       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
+               !&       this%Bpc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)
+               !rfunc = sin(pi*(r_3D(n_r)-r_icb))
+               !rfunc = 4.*r_3D(n_r)*sint(n_theta) *                   &
+               !&      ( r_cmb - r_3D(n_r)*sint(n_theta) ) / r_cmb**2.
+               !rfunc = (r_3D(n_r)*sint(n_theta)* r_3D(n_r)*cost(n_theta)*   &
+               !&( ( 2.*sqrt(r_cmb**2. - (r_3D(n_r)*sint(n_theta))**2.)**2. -&
+               !&  (r_3D(n_r)*cost(n_theta))**2.) / (2.*sqrt(r_cmb**2. -     &
+               !&  (r_3D(n_r)*sint(n_theta))**2.)**3.) ) ) / r_cmb
                this%VxBr(n_phi,n_theta)=r2*(                   &
-               &    vt(n_phi,n_theta)*this%Bpc(n_phi,n_theta)- &
-               &    vp(n_phi,n_theta)*this%Btc(n_phi,n_theta) )
+               !&    vt(n_phi,n_theta)*this%Bpc(n_phi,n_theta)- &
+               !&    vp(n_phi,n_theta)*this%Btc(n_phi,n_theta) &!)!&
+               &   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Bpc(n_phi,n_theta)- &
+               &   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Btc(n_phi,n_theta) )!&&!
+               !&    + 50.0*cost(n_theta)*rfunc*this%Brc(n_phi,n_theta)/(1. + bamp2))!sin(pi*(r_3D(n_r)-r_icb))
+               !&    + vzm(n_phi,n_theta)*cost(n_theta)*this%Brc(n_phi,n_theta) )
 
                this%VxBt(n_phi,n_theta)=or1sn1*(               &
-               &    vp(n_phi,n_theta)*this%Brc(n_phi,n_theta)- &
-               &    vr(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
+               !&    vp(n_phi,n_theta)*this%Brc(n_phi,n_theta)- &
+               !&    vr(n_phi,n_theta)*this%Bpc(n_phi,n_theta) &!)!&
+               &   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Brc(n_phi,n_theta)- &
+               &   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Bpc(n_phi,n_theta) )!&&!
+               !&    + 50.0*cost(n_theta)*rfunc*this%Btc(n_phi,n_theta)/(1. + bamp2))!sin(pi*(r_3D(n_r)-r_icb))
+               !&    - vzm(n_phi,n_theta)*sint(n_theta)*this%Btc(n_phi,n_theta) )
 
                this%VxBp(n_phi,n_theta)=or1sn1*(         &
-               &    vr(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
-               &    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
+               !&    vr(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
+               !&    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) &!)!&
+               &   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Btc(n_phi,n_theta)- &
+               &   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Brc(n_phi,n_theta) )!&&!
+               !&    + 50.0*cost(n_theta)*rfunc*this%Bpc(n_phi,n_theta)/(1. + bamp2))!sin(pi*(r_3D(n_r)-r_icb))
+               !&    + vpm(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
             end do
          end do   ! theta loop
          !$OMP END PARALLEL DO
