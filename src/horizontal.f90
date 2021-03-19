@@ -12,10 +12,10 @@ module horizontal
    use truncation, only: idx2m, n_m_max
    use truncation_3D, only: n_theta_max, lm_max, l_max, minc_3D, m_max_3D
    use blocking_lm, only: lmP2l, lmP2lm, lm2l, lm2m, lo_map
-   use namelists, only: hdif_m, hdif_exp, hdif_vel, hdif_temp, tag,   &
-       &                t_bot, t_top, xi_bot, xi_top, hdif_comp,      &
-       &                l_heat, l_chem, l_3D, l_heat_3D, l_mag_3D,    &
-       &                hdif_l, hdif_mag
+   use namelists, only: hdif_m, hdif_exp, hdif_vel, hdif_temp, tag, &
+       &                ktopt, kbott, t_bot, t_top, xi_bot, xi_top, &
+       &                hdif_comp, l_heat, l_chem, l_3D, l_heat_3D, &
+       &                l_mag_3D, hdif_l, hdif_mag
 
    implicit none
 
@@ -224,6 +224,13 @@ contains
                   topt_Mloc(n_m)=cmplx(tr_top,ti_top,kind=cp)
                end if
             end do
+
+            if ( m==0 ) then
+               !-- Temperature is written in terms of a pertubation around T_cond(s)
+               !-- The BC at m = 0 should always be zero = cmplx(0,0,kind=cp)!
+               bott_Mloc(n_m) = zero
+               topt_Mloc(n_m) = zero
+            end if ! Making sure that BC at m = 0 is correct
          end do
       end if
 
@@ -250,6 +257,13 @@ contains
                   topxi_Mloc(n_m)=cmplx(tr_top,ti_top,kind=cp)
                end if
             end do
+
+            if ( m==0 ) then
+               !-- Composition is written in terms of a pertubation around Xi_cond(s)
+               !-- The BC at m = 0 should always be zero = cmplx(0,0,kind=cp)!
+               botxi_Mloc(n_m) = zero
+               topxi_Mloc(n_m) = zero
+            end if ! Making sure that BC at m = 0 is correct
          end do
       end if
 
@@ -371,7 +385,6 @@ contains
             l=lo_map%lm2l(lm)
             m=lo_map%lm2m(lm)
             bott_LMloc(lm)=zero
-            if ( l == 0 ) bott_LMloc(lm)=sq4pi*cmplx(1.0,0.0,kind=cp)
             topt_LMloc(lm)=zero
             do n=1,size(t_bot)/4
                l_bot =int(t_bot(4*n-3))
@@ -393,8 +406,25 @@ contains
                   topt_LMloc(lm)=sq4pi*cmplx(tr_top,ti_top,kind=cp)
                end if
             end do
-         end do
-      end if
+
+            if ( l==0 .and. m==0 ) then
+               if ( kbott == 1 .and. ktopt == 1 ) then
+                  if ( (real(bott_LMloc(lm))-real(topt_LMloc(lm))) /= one ) then
+                     !-- When fixed temperature contrast, DeltaT has to be 1 (T_3D = full)
+                     !-- If Te specified and =/= 0, then Ti should be modified accordingly!
+                     if ( bott_LMloc(lm) /= zero ) then
+                        topt_LMloc(lm) = bott_LMloc(lm) - sq4pi*cmplx(one,0.0,kind=cp)
+                     else if ( topt_LMloc(lm) /= zero ) then
+                        bott_LMloc(lm) = topt_LMloc(lm) + sq4pi*cmplx(one,0.0,kind=cp)
+                     else
+                        !-- Default is given by T_cmb (have to make a choice; most likely everything at zero/zero)
+                        bott_LMloc(lm) = topt_LMloc(lm) + sq4pi*cmplx(one,0.0,kind=cp)
+                     end if
+                  end if
+               end if
+            end if ! Making sure that BC at (l,m) = (0,0) is correct
+         end do ! lm_loop
+      end if ! l_heat_3D?
 
    end subroutine spherical_functions
 !--------------------------------------------------------------------------------

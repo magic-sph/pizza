@@ -29,8 +29,10 @@ module namelists
    real(cp), public :: pr            ! Prandtl number
    real(cp), public :: prmag         ! Magnetic Prandtl number
    real(cp), public :: radratio      ! Radius ratio
-   real(cp), public :: raxi          ! Compisitional Rayleigh number
+   real(cp), public :: raxi          ! Compositional Rayleigh number
    real(cp), public :: sc            ! Schmidt number
+   real(cp), public :: epsrc0        ! Internal heat sources
+   real(cp), public :: epsrc0xi      ! Internal chemical sources
    real(cp), public :: tcond_fac     ! Rescaling of the conducting temperature
    real(cp), public :: xicond_fac    ! Rescaling of the conducting composition
    real(cp), public :: beta_shift    ! Shift the upper bound of \beta
@@ -161,9 +163,10 @@ contains
       namelist/phys_param/ra,ek,pr,prmag,raxi,sc,radratio,g0,g1,g2,&
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
       &                   l_tcond_3D,tcond_fac,l_temp_advz,        &
-      &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
-      &                   xi_bot,xi_top, ktopb,kbotb,xicond_fac,   &
-      &                   l_xi_3D,l_heat_3D,l_thw_3D,l_mag_LF,l_cyl
+      &                   beta_shift,epsrc0,epsrc0xi,ktopxi,kbotxi,&
+      &                   t_bot,t_top,xi_bot,xi_top, ktopb,kbotb,  &
+      &                   xicond_fac,l_xi_3D,l_heat_3D,l_thw_3D,   &
+      &                   l_mag_LF,l_cyl
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi,scale_B,init_B,amp_B
@@ -562,7 +565,10 @@ contains
       g0               =0.0_cp
       g1               =one
       g2               =0.0_cp
-      !----- Boundary conditions        
+      !----- Heat/Chemical sources in the outer core
+      epsrc0           =0.0_cp
+      epsrc0xi         =0.0_cp
+      !----- Boundary conditions
       ktopt            =1
       kbott            =1
       ktopxi           =1
@@ -629,7 +635,7 @@ contains
       integer, intent(in) :: n_out
 
       !-- Local variables
-      integer :: length
+      integer :: length, lm
 
       write(n_out,*) " "
       write(n_out,*) "&grid"
@@ -709,13 +715,15 @@ contains
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1
       write(n_out,'(''  g2              ='',ES14.6,'','')') g2
+      write(n_out,'(''  epsrc0          ='',ES14.6,'','')') epsrc0
+      write(n_out,'(''  epsrc0xi        ='',ES14.6,'','')') epsrc0xi
       write(n_out,'(''  l_ek_pump       ='',l3,'','')') l_ek_pump
       write(n_out,'(''  l_temp_advz     ='',l3,'','')') l_temp_advz
       write(n_out,'(''  l_tcond_3D      ='',l3,'','')') l_tcond_3D
-      write(n_out,'(''  l_xi_3D         ='',l3,'','')') l_xi_3D
       write(n_out,'(''  l_3D            ='',l3,'','')') l_3D
       write(n_out,'(''  l_cyl           ='',l3,'','')') l_cyl
       write(n_out,'(''  l_heat_3D       ='',l3,'','')') l_heat_3D
+      write(n_out,'(''  l_xi_3D         ='',l3,'','')') l_xi_3D
       if ( l_heat_3D ) &
       & write(n_out,'(''  l_thw_3D        ='',l3,'','')') l_thw_3D
       write(n_out,'(''  l_mag_3D        ='',l3,'','')') l_mag_3D
@@ -729,10 +737,52 @@ contains
       write(n_out,'(''  kbotv           ='',i3,'','')') kbotv
       write(n_out,'(''  ktopb           ='',i3,'','')') ktopb
       write(n_out,'(''  kbotb           ='',i3,'','')') kbotb
-      if ( t_top(2) /= 0.0 .or. t_top(3) /= 0.0 ) &
-      & write(n_out,'(''  Top Flux        ='',3ES14.6,'','')') t_top(:3)
-      if ( t_bot(2) /= 0.0 .or. t_bot(3) /= 0.0 ) &
-      & write(n_out,'(''  Bot Flux        ='',3ES14.6,'','')') t_bot(:3)
+      if ( l_heat_3D .and. ra /= 0.0_cp ) then
+         write(n_out,'(''  Top Boundary Condition l,m,T:'')')
+         do lm=1,3*n_t_bounds,4
+            if ( t_top(lm+2) /= 0.0_cp .or. t_top(lm+3) /= 0.0_cp ) &
+            &  write(n_out,'(''     '',2i3,2ES14.6,'','')') int(t_top(lm:lm+1)), t_top(lm+2:lm+3)
+         end do
+         write(n_out,'(''  Bot Boundary Condition l,m,T:'')')
+         do lm=1,3*n_t_bounds,4
+            if ( t_bot(lm+2) /= 0.0_cp .or. t_bot(lm+3) /= 0.0_cp ) &
+            &  write(n_out,'(''     '',2i3,2ES14.6,'','')') int(t_bot(lm:lm+1)), t_bot(lm+2:lm+3)
+         end do
+      else if ( ra /= 0.0_cp ) then
+         write(n_out,'(''  Top Boundary Condition m,T:'')')
+         do lm=1,3*n_t_bounds,3
+            if ( t_top(lm+1) /= 0.0_cp .or. t_top(lm+2) /= 0.0_cp ) &
+            &  write(n_out,'(''     '',i3,2ES14.6,'','')') int(t_top(lm)), t_top(lm+1:lm+2)
+         end do
+         write(n_out,'(''  Bot Boundary Condition m,T:'')')
+         do lm=1,3*n_t_bounds,3
+            if ( t_bot(lm+1) /= 0.0_cp .or. t_bot(lm+2) /= 0.0_cp ) &
+            &  write(n_out,'(''     '',i3,2ES14.6,'','')') int(t_bot(lm)), t_bot(lm+1:lm+2)
+         end do
+      end if
+      if ( l_xi_3D .and. raxi /= 0.0_cp ) then
+         write(n_out,'(''  Top Boundary Condition l,m,Xi:'')')
+         do lm=1,3*n_t_bounds,4
+            if ( xi_top(lm+2) /= 0.0_cp .or. xi_top(lm+3) /= 0.0_cp ) &
+            &  write(n_out,'(''     '',2i3,2ES14.6,'','')') int(xi_top(lm:lm+1)), xi_top(lm+2:lm+3)
+         end do
+         write(n_out,'(''  Bot Boundary Condition l,m,Xi:'')')
+         do lm=1,3*n_t_bounds,4
+            if ( xi_bot(lm+2) /= 0.0_cp .or. xi_bot(lm+3) /= 0.0_cp ) &
+            &  write(n_out,'(''     '',2i3,2ES14.6,'','')') int(xi_bot(lm:lm+1)), xi_bot(lm+2:lm+3)
+         end do
+      else if ( raxi /= 0.0_cp ) then
+         write(n_out,'(''  Top Boundary Condition m,Xi:'')')
+         do lm=1,3*n_t_bounds,3
+            if ( xi_top(lm+1) /= 0.0_cp .or. xi_top(lm+2) /= 0.0_cp ) &
+            &  write(n_out,'(''     '',i3,2ES14.6,'','')') int(xi_top(lm)), xi_top(lm+1:lm+2)
+         end do
+         write(n_out,'(''  Bot Boundary Condition m,Xi:'')')
+         do lm=1,3*n_t_bounds,3
+            if ( xi_bot(lm+1) /= 0.0_cp .or. xi_bot(lm+2) /= 0.0_cp ) &
+            &  write(n_out,'(''     '',i3,2ES14.6,'','')') int(xi_bot(lm)), xi_bot(lm+1:lm+2)
+         end do
+      end if
       write(n_out,*) "/"
 
       write(n_out,*) "&start_field"

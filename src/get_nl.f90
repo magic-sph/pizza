@@ -19,7 +19,7 @@ module grid_space_arrays_mod
    use namelists, only: l_heat_3D, l_mag_3D, l_mag_LF, r_icb, r_cmb
    use blocking, only: nRstart3D, nRstop3D
    use truncation_3D, only: n_theta_max, n_phi_max_3D
-   use radial_functions, only: or1_3D, r_3D, rgrav_3D
+   use radial_functions, only: or1_3D, r_3D, rgrav_3D!, tcond_3D
    use horizontal, only: cost, sint, osint1
 
    implicit none
@@ -164,8 +164,8 @@ contains
          !-- Assemble g/r * T on the spherical grid
          do n_theta=1,n_theta_max
             do n_phi=1,n_phi_max_3D
-               buo(n_phi,n_theta)=this%Tc(n_phi,n_theta)*rgrav_3D(n_r)* &
-               &                  or1_3D(n_r)
+               buo(n_phi,n_theta)=this%Tc(n_phi,n_theta)*rgrav_3D(n_r)!* &
+               !&                  or1_3D(n_r)
             end do
          end do
          !$OMP END PARALLEL DO

@@ -5,6 +5,7 @@ module update_temp_3D_mod
    use mem_alloc, only: bytes_allocated
    use truncation_3D, only: n_r_max_3D, lm_max, l_max
    use radial_functions, only: or1_3D, or2_3D, rscheme_3D
+   use horizontal, only: bott_LMloc, topt_LMloc
    use namelists, only: kbott, ktopt, TdiffFac
    use blocking_lm, only: st_map, lo_map, lo_sub_map, chunksize
    use blocking, only: lmStart, lmStop
@@ -190,8 +191,11 @@ contains
                m1 =lm22m(lm,nLMB2,nLMB)
 
                if ( l1 == 0 ) then
-                  rhs(1)         =0.0_cp*sq4pi
-                  rhs(n_r_max_3D)=1.0_cp*sq4pi ! To be fixed later
+                  !-- T_3D written in Full Temperature: default should be t_{top/bot} = {0.0/1.0}_cp*sq4pi 
+                  !-- Inhomogeneous B.Cs (if not zero)
+                  rhs(1)         = real(topt_LMloc(lm1))! 0.0_cp*sq4pi !
+                  rhs(n_r_max_3D)= real(bott_LMloc(lm1))! 1.0_cp*sq4pi !
+                  print*, 'check l1==0', lm1, l1, m1, topt_LMloc(lm1)
                   do nR=2,n_r_max_3D-1
                      rhs(nR)=real(work_LMloc(lm1,nR))
                   end do
@@ -205,8 +209,9 @@ contains
                else ! l1  /=  0
                   lmB=lmB+1
 
-                  rhs1(1,lmB,threadid)         =zero
-                  rhs1(n_r_max_3D,lmB,threadid)=zero
+                  rhs1(1,lmB,threadid)         =topt_LMloc(lm1)!zero
+                  rhs1(n_r_max_3D,lmB,threadid)=bott_LMloc(lm1)!zero
+                  !print*, 'check l1<>0', lm1, l1, m1, topt_LMloc(lm1)
 #ifdef WITH_PRECOND_S
                   rhs1(1,lmB,threadid)         =TMat_fac(1,l1)*rhs1(1,lmB,threadid)
                   rhs1(n_r_max_3D,lmB,threadid)=TMat_fac(1,l1)*rhs1(n_r_max_3D,lmB,threadid)
@@ -263,11 +268,18 @@ contains
          end do
       end do
 
+      print*, ''
+      if(rank==2) print*, 'check dtemp_3D(lm=22)', dtemp_3D(lo_map%lm2(2,2),1)
+      print*, 'check dtemp_3D', real(dtemp_3D(:,1))
+      print*, ''
+
       !-- Bring temperature back to physical space
       call rscheme_3D%costf1(temp_3D, lmStart, lmStop, n_r_max_3D)
 
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dTdt_3D, lmStart, lmStop, n_r_max_3D)
+
+     !if (rank==0) print*, 'INSIDE Update_WPS OK, real(S/T(lm=0,1:2)) ::', real(temp_3D(1,1:2))
 
    end subroutine update_temp_3D
 !-------------------------------------------------------------------------------

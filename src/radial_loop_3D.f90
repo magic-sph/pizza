@@ -92,11 +92,11 @@ contains
       real(cp) :: jxBs(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: jxBp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: runStart, runStop!, phi!, rsint
+      real(cp) :: runStart, runStop, phi!, rsint
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_tmp_Rloc(n_m_max,nRstart:nRstop)
-      integer :: n_r, n_m, m, fh_temp, info_temp!, n_theta, n_phi
+      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta, n_phi
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
       character(len=144) :: frame_name
@@ -149,7 +149,7 @@ contains
       !up(:,:,:) = 0.0_cp
       runStart = MPI_Wtime()
       do n_r=nRstart3D,nRstop3D
-      !if ( frame_counter == 1 ) then
+      !!if ( frame_counter == 1 ) then
       !      do n_theta=1,n_theta_max
       !         do n_phi=1,n_phi_max_3D
       !            phi = (n_phi-1)*two*pi/(n_phi_max_3D)
@@ -158,7 +158,7 @@ contains
       !            up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi)
       !        end do
       !      end do
-      !end if
+      !!end if
 
          !-- Transform temperature and magnetic-field from (l,m) to (theta,phi)
          call transform_to_grid_space(temp(:,n_r), b_3D(:,n_r),      &
@@ -166,7 +166,7 @@ contains
               &                      aj_3D(:,n_r), dj_3D(:,n_r), n_r, gsa)
 
          !-- Courant condition
-         if ( tscheme%istage == 1 ) then
+         if ( l_mag_3D .and. tscheme%istage == 1 ) then
             call courant_3D(n_r, dtr_3D_Rloc(n_r), dth_3D_Rloc(n_r),  &
                  &          gsa%Brc(:,:), gsa%Btc(:,:), gsa%Bpc(:,:), &
                  &          tscheme%alffac)
@@ -288,7 +288,7 @@ contains
          do n_r=nRstart,nRstop
             if ( l_heat_3D ) then
                dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*m* &
-               &                    buo_tmp_Rloc(n_m,n_r)
+               &                    buo_tmp_Rloc(n_m,n_r)*or1(n_r)
             end if
             if ( l_mag_LF ) then
             !-- Finish assembling both parts of lorentz force and sum it with dpsidt and dVsOm

@@ -151,9 +151,15 @@ contains
          temp0(:) = osq4pi*real(temp_3D(1, :))
          call get_dr(temp0, dtemp0, n_r_max_3D, rscheme_3D)
 
+         !print*, 'toptemp, bottemp', temp0(1), temp0(n_r_max_3D)
+         !print*, 'topgrad, botgrad', dtemp0(1), dtemp0(n_r_max_3D)
+         !!print*, 'topdtes, botdtes',  osq4pi*real(dtemp_3D(1,1)),  osq4pi*real(dtemp_3D(1,n_r_max_3D))
+         !print*, 'topcond, botcond', dtcond_3D(1), dtcond_3D(n_r_max_3D)
+         !print*, ''
+
          !-- Nusselt at top and bottom
-         NuTop = dtemp0(1)/dtcond_3D(1)
-         NuBot = dtemp0(n_r_max_3D)/dtcond_3D(n_r_max_3D)
+         NuTop = dtemp0(1)/(dtcond_3D(1)+epsilon(1.0_cp))
+         NuBot = dtemp0(n_r_max_3D)/(dtcond_3D(n_r_max_3D)+epsilon(1.0_cp)) !-> Divide by 0 when T_cond = cste
 
          !-- Nusset based on the ratio of temperature contrast
          NuDelta = (tcond_3D(n_r_max_3D)-tcond_3D(1)) / &
@@ -166,8 +172,8 @@ contains
          tTop = temp0(1)
          tBot = temp0(n_r_max_3D)
 
-         write(n_heat_file, '(1P, ES20.12, 7ES16.8)') time, NuTop, NuBot,   &
-         &                                            NuDelta, tTop, tBot,  &
+         write(n_heat_file, '(2P, ES20.12, 7ES16.8)') time, NuBot, NuTop,   &
+         &                                            NuDelta, tBot, tTop,  &
          &                                            beta_t
 
       end if

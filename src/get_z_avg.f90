@@ -110,6 +110,12 @@ contains
 
          bytes_allocated = bytes_allocated+(2*n_size+1)*n_r_max*SIZEOF_INTEGER
          bytes_allocated = bytes_allocated+2*(10*n_size*n_r_max)*SIZEOF_DEF_REAL
+      else
+         allocate( this%nzp_zcyl(1) )
+         allocate( this%interp_zr_cyl(1,1) )
+         allocate( this%interp_zt_cyl(1,1) )
+         allocate( this%interp_wr_cyl(1,1,1) )
+         allocate( this%interp_wt_cyl(1,1,1) )
       end if
 
       !-- 2-neighbourgs zthw integration
@@ -318,7 +324,7 @@ contains
             &      2.*x_s*((1.-x_s)**2.*(1.+x_s) - (1.-x_s)*(1.+x_s)**2. ) )
             if ( s_r >= r_icb ) then !-- Outside TC
                n_r = 1
-               do while ( r(n_r) >= s_r .and. n_r < n_r_max )
+               do while ( r(n_r) >= s_r )! .and. n_r < n_r_max )
                   n_r = n_r+1
                end do
                alpha_r2 = (s_r-r(n_r))/(r(n_r-1)-r(n_r))
@@ -566,12 +572,12 @@ contains
             !-- TG I don't understand the r factor in the above equation
             !-- Th wind should be
             !-- duphi/dz = Ra/Pr  * g / r * dT/dtheta
-            !dTzdt(n_th_NHS,n_r)=thwFac*rgrav_3D(n_r)*or1_3D(n_r)* &
+            dTzdt(n_th_NHS,n_r)=thwFac*rgrav_3D(n_r)*or1_3D(n_r)* &
             !&                   cos(theta(n_th_NHS))
-            !&                   dTdth(n_th_NHS,n_r)
+            &                   dTdth(n_th_NHS,n_r)
             !&                   dTdth_Rloc(n_th_NHS,n_r)
             !dTzdt(n_th_NHS,n_r)=(-r_3D(n_r)*cost(n_th_NHS))**2.!one!r_i3D(n_r)*theta(n_theta)
-            dTzdt(n_th_NHS,n_r)=exp(r_3D(n_r)*cost(n_th_NHS))!*sin(pi*r_3D(n_r)*cost(n_th_NHS))
+            !dTzdt(n_th_NHS,n_r)=exp(r_3D(n_r)*cost(n_th_NHS))!*sin(pi*r_3D(n_r)*cost(n_th_NHS))
          end do
       end do
 
