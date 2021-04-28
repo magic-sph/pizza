@@ -138,23 +138,22 @@ contains
 
       !-- Local variables:
       integer :: n_theta, n_phi
-      real(cp) :: or1sn1, r2!, bamp2, rfunc
+      real(cp) :: r2, or1sn1
 
       r2 = r_3D(n_r)*r_3D(n_r)
 
       if ( l_heat_3D ) then
          !------ Get V T, the divergence of it is temperature advection:
          !$OMP PARALLEL DO default(shared) &
-         !$OMP& private(n_theta, n_phi, or1sn1)
+         !$OMP& private(n_theta, n_phi)
          do n_theta=1,n_theta_max
-            or1sn1=or1_3D(n_r)*osint1(n_theta)
             do n_phi=1,n_phi_max_3D     ! calculate u*T components
                this%VTr(n_phi,n_theta) = &
                &    r2*vr(n_phi,n_theta)*this%Tc(n_phi,n_theta)
                this%VTt(n_phi,n_theta) = &
-               &    or1sn1*vt(n_phi,n_theta)*this%Tc(n_phi,n_theta)
+               &    or1_3D(n_r)*vt(n_phi,n_theta)*this%Tc(n_phi,n_theta)
                this%VTp(n_phi,n_theta) = &
-               &    or1sn1*vp(n_phi,n_theta)*this%Tc(n_phi,n_theta)
+               &    or1_3D(n_r)*vp(n_phi,n_theta)*this%Tc(n_phi,n_theta)
             end do
          end do  ! theta loop
          !$OMP END PARALLEL DO

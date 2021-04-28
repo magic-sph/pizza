@@ -12,7 +12,7 @@ module rloop_3D
    use truncation, only: idx2m, n_m_max
    use courant_mod, only: courant_3D
 #ifdef WITH_SHTNS
-   use shtns, only: spat_to_SH, scal_to_spat, torpol_to_spat, &
+   use shtns, only: spat_to_SH, scal_to_spat, torpol_to_spat, spat_to_qst, &
        &            torpol_to_curl_spat, scal_axi_to_grad_spat
 #endif
    use horizontal, only: cost, sint
@@ -35,12 +35,13 @@ module rloop_3D
 
 contains
 
-   subroutine initialize_radial_loop_3D(lmP_max)
+   subroutine initialize_radial_loop_3D(lmP_max, lm_max)
 
       integer, intent(in) :: lmP_max
+      integer, intent(in) :: lm_max
 
       call gsa%initialize()
-      call nl_lm%initialize(lmP_max)
+      call nl_lm%initialize(lmP_max,lm_max)
 
    end subroutine initialize_radial_loop_3D
 !------------------------------------------------------------------------------
@@ -194,11 +195,11 @@ contains
 
 
          !-- Transform back the non-linear terms to (l,m) space
-         call transform_to_lm_space(gsa, nl_lm)
+         call transform_to_lm_space(gsa, nl_lm, dVrTLM(:,n_r))
 
          !-- Get theta and phi derivatives using recurrence relations
-         call nl_lm%get_td(dVrTLM(:,n_r), dtempdt(:,n_r),                     &
-              &            dVxBhLM(:,n_r),dbdt_3D(:,n_r),djdt_3D(:,n_r), n_r )
+         call nl_lm%get_td(dtempdt(:,n_r),dVxBhLM(:,n_r),dbdt_3D(:,n_r), &
+              &            djdt_3D(:,n_r), n_r )
 
             !jxBp(:,:,n_r) = 0.0_cp
             !do n_theta=1,n_theta_max
@@ -364,8 +365,9 @@ contains
 
    end subroutine transform_to_grid_space
 !-------------------------------------------------------------------------------
-   subroutine transform_to_lm_space(gsa, nl_lm)
+   subroutine transform_to_lm_space(gsa, nl_lm, dVrTLM)
 
+      complex(cp), intent(out) :: dVrTLM(:)
       type(grid_space_arrays_t) :: gsa
       type(nonlinear_lm_t) :: nl_lm
 
@@ -373,9 +375,11 @@ contains
       call shtns_load_cfg(1)
 
       if ( l_heat_3D ) then
-         call spat_to_SH(gsa%VTr, nl_lm%VTrLM)
-         call spat_to_SH(gsa%VTt, nl_lm%VTtLM)
-         call spat_to_SH(gsa%VTp, nl_lm%VTpLM)
+         !call spat_to_SH(gsa%VTr, nl_lm%VTrLM)
+         !call spat_to_SH(gsa%VTt, nl_lm%VTtLM)
+         !call spat_to_SH(gsa%VTp, nl_lm%VTpLM)
+         call spat_to_qst(gsa%VTr, gsa%VTt, gsa%VTp, dVrTLM, nl_lm%VTtLM, &
+              &           nl_lm%VTpLM)
       end if
 
       if ( l_mag_3D ) then

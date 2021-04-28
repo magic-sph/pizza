@@ -195,7 +195,6 @@ contains
                   !-- Inhomogeneous B.Cs (if not zero)
                   rhs(1)         = real(topt_LMloc(lm1))! 0.0_cp*sq4pi !
                   rhs(n_r_max_3D)= real(bott_LMloc(lm1))! 1.0_cp*sq4pi !
-                  print*, 'check l1==0', lm1, l1, m1, topt_LMloc(lm1)
                   do nR=2,n_r_max_3D-1
                      rhs(nR)=real(work_LMloc(lm1,nR))
                   end do
@@ -267,11 +266,6 @@ contains
             temp_3D(lm1,n_r_out)=zero
          end do
       end do
-
-      print*, ''
-      if(rank==2) print*, 'check dtemp_3D(lm=22)', dtemp_3D(lo_map%lm2(2,2),1)
-      print*, 'check dtemp_3D', real(dtemp_3D(:,1))
-      print*, ''
 
       !-- Bring temperature back to physical space
       call rscheme_3D%costf1(temp_3D, lmStart, lmStop, n_r_max_3D)

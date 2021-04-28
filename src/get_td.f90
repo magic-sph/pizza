@@ -5,7 +5,7 @@ module nonlinear_lm_mod
    use blocking_lm, only: lm2l, lm2m, lm2lmP, lmP2lmPS, lmP2lmPA, lo_map
    use truncation_3D, only: lm_max, lmP_max
    use radial_functions, only: r_3D, or2_3D
-   use horizontal, only: dTheta1S, dTheta1A, dPhi
+   use horizontal, only: dTheta1S, dTheta1A, dPhi, dLh
    use namelists, only: l_heat_3D, l_mag_3D
    use constants, only: zero
 
@@ -27,14 +27,15 @@ module nonlinear_lm_mod
 
 contains
 
-   subroutine initialize(this,lmP_max)
+   subroutine initialize(this,lmP_max,lm_max)
 
       class(nonlinear_lm_t) :: this
       integer, intent(in) :: lmP_max
+      integer, intent(in) :: lm_max
 
       if ( l_heat_3D ) then
-         allocate( this%VTrLM(lmP_max), this%VTtLM(lmP_max), this%VTpLM(lmP_max) )
-         bytes_allocated = bytes_allocated + 3*lmP_max*SIZEOF_DEF_COMPLEX
+         allocate( this%VTtLM(lm_max), this%VTpLM(lm_max) )
+         bytes_allocated = bytes_allocated + 2*lm_max*SIZEOF_DEF_COMPLEX
       endif
       if ( l_mag_3D ) then
          allocate( this%VxBrLM(lmP_max), this%VxBtLM(lmP_max), this%VxBpLM(lmP_max) )
@@ -42,7 +43,6 @@ contains
       endif
 
       if ( l_heat_3D ) then
-         this%VTrLM(:)=zero
          this%VTtLM(:)=zero
          this%VTpLM(:)=zero
       endif
@@ -58,16 +58,12 @@ contains
 
       class(nonlinear_lm_t) :: this
 
-      if ( l_heat_3D ) then
-         deallocate( this%VTrLM, this%VTtLM, this%VTpLM )
-      endif
-      if ( l_mag_3D ) then
-         deallocate( this%VxBrLM, this%VxBtLM, this%VxBpLM )
-      endif
+      if ( l_heat_3D ) deallocate( this%VTtLM, this%VTpLM )
+      if ( l_mag_3D ) deallocate( this%VxBrLM, this%VxBtLM, this%VxBpLM )
 
    end subroutine finalize
 !----------------------------------------------------------------------------
-   subroutine get_td(this,dVTrLM,dTdt,dVxBhLM,dBdt,djdt,n_r)
+   subroutine get_td(this,dTdt,dVxBhLM,dBdt,djdt,n_r)
       !
       !  Purpose of this to calculate time derivatives dTdt
       !  and auxiliary arrays dVTrLM from non-linear terms
@@ -79,48 +75,25 @@ contains
       integer, intent(in) :: n_r
 
       !-- Output of variables:
-      complex(cp), intent(out) :: dVTrLM(:)
       complex(cp), intent(out) :: dTdt(:)
       complex(cp), intent(out) :: dVxBhLM(:)
       complex(cp), intent(out) :: dBdt(:), djdt(:)
 
       !-- Local variables:
       integer :: l,m,lm,lmP,lmPS,lmPA
-      real(cp) :: dLh
-      complex(cp) :: dTdt_loc
 
       if ( l_heat_3D  ) then
          !-- Spherically-symmetric contribution:
-         dVTrLM(1)=this%VTrLM(1)
          dTdt(1)  =zero
 
-         !PERFON('td_heat')
          !$OMP PARALLEL DEFAULT(shared) &
-         !$OMP private(lm,l,m,lmP,lmPS,lmPA,dTdt_loc)
-         !LIKWID_ON('td_heat')
+         !$OMP private(lm)
          !$OMP DO
          do lm=2,lm_max
-            l   =lm2l(lm)
-            m   =lm2m(lm)
-            lmP =lm2lmP(lm)
-            lmPS=lmP2lmPS(lmP)
-            lmPA=lmP2lmPA(lmP)
-            !------ This is horizontal heat advection:
-            if ( l > m ) then
-               dTdt_loc=-dTheta1S(lm)*this%VTtLM(lmPS) &
-               &        +dTheta1A(lm)*this%VTtLM(lmPA) &
-               &            -dPhi(lm)*this%VTpLM(lmP)
-            else if ( l == m ) then
-               dTdt_loc= dTheta1A(lm)*this%VTtLM(lmPA) &
-               &         -dPhi(lm)*this%VTpLM(lmP)
-            end if
-            dVTrLM(lm)=this%VTrLM(lmP)
-            dTdt(lm)  =dTdt_loc
+            dTdt(lm)=dLh(lm)*this%VTtLM(lm)
          end do
          !$OMP end do
-         !LIKWID_OFF('td_heat')
          !$OMP END PARALLEL
-         !PERFOFF
       end if ! l_heat_3D?
 
       if ( l_mag_3D  ) then
@@ -156,7 +129,6 @@ contains
             lmP =lm2lmP(lm)
             lmPS=lmP2lmPS(lmP)
             lmPA=lmP2lmPA(lmP)
-            dLh =real(l*(l+1),kind=cp)
 
             !------- This is the radial part of the dynamo terms \curl(VxB)
             !PERFON('td_mnl1')
@@ -173,7 +145,7 @@ contains
             !------- Radial component of
             !           \curl\curl(UxB) = \grad\div(VxB) - \laplace(VxB)
             !------- This is the radial part of \laplace (VxB)
-            djdt(lm)= dLh*this%VxBrLM(lmP)*or2_3D(n_r)*or2_3D(n_r)!
+            djdt(lm)= dLh(lm)*this%VxBrLM(lmP)*or2_3D(n_r)*or2_3D(n_r)!
 
             !------- This is r^2 * horizontal divergence of (VxB)
             !        Radial derivative performed in get_dr_td

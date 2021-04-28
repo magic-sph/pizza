@@ -16,7 +16,7 @@ module shtns
    private
 
    public :: init_shtns, scal_to_spat, spat_to_SH, torpol_to_spat, &
-   &         torpol_to_curl_spat, scal_axi_to_grad_spat
+   &         torpol_to_curl_spat, scal_axi_to_grad_spat, spat_to_qst
 
 contains
 
@@ -109,10 +109,27 @@ contains
 
    end subroutine torpol_to_curl_spat
 !------------------------------------------------------------------------------
+   subroutine spat_to_qst(f, g, h, fLM, gLM, hLM)
+
+      !-- Input variable
+      real(cp), intent(in) :: f(:,:)
+      real(cp), intent(in) :: g(:,:)
+      real(cp), intent(in) :: h(:,:)
+
+      !-- Output variable
+      complex(cp), intent(out) :: fLM(:)
+      complex(cp), intent(out) :: gLM(:)
+      complex(cp), intent(out) :: hLM(:)
+
+      call shtns_load_cfg(0)
+      call shtns_spat_to_qst(f, g, h, fLM, gLM, hLM)
+
+   end subroutine spat_to_qst
+!------------------------------------------------------------------------------
    subroutine spat_to_SH(f, fLM)
 
       !-- Input variable
-      real(cp), intent(in) :: f(n_phi_max_3D, n_theta_max)
+      real(cp), intent(in) :: f(:,:)
 
       !-- Output variable
       complex(cp), intent(out) :: fLM(:)
