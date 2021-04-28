@@ -18,6 +18,7 @@ import DIRKSchemes.unitTest
 import GalerkinBases.unitTest
 import InhomogeneousHeatFlux.unitTest
 import FingConv.unitTest
+import temp3D.unitTest
 
 __version__ = '1.0'
 
@@ -226,6 +227,12 @@ def getSuite(startdir, cmd, precision, args):
                                                   '%s/GalerkinBases' % startdir, 
                                                   execCmd=cmd,
                                                   precision=precision))
+
+        # Test 3D temperature formulation
+        suite.addTest(temp3D.unitTest.Temp3D('outputFileDiff',
+                                             '%s/temp3D' % startdir, 
+                                             execCmd=cmd,
+                                             precision=precision))
 
     return suite
 
