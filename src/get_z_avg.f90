@@ -540,13 +540,13 @@ contains
 
       !-- Local arrays
       real(cp) :: dTdth(n_theta_max,n_r_max_3D)!nRstart3D:nRstop3D)!
-      real(cp) :: thw_Rloc(n_theta_max,n_r_max_3D)!nRstart3D:nRstop3D)!
-      real(cp) :: dTzdt(n_theta_max,n_r_max_3D)!nRstart3D:nRstop3D)!
+      real(cp) :: thw_Rloc(n_theta_max/2,n_r_max_3D)!nRstart3D:nRstop3D)!
+      real(cp) :: dTzdt(n_theta_max/2,n_r_max_3D)!nRstart3D:nRstop3D)!
       real(cp) :: tmp(n_theta_max,n_r_max_3D,n_z_max)!nRstart3D:nRstop3D)!
       !real(cp) :: tmp(n_theta_max/2)
       !real(cp) :: Zwb(n_theta_max/2,0:n_procs-1)
       !-- Local variables
-      integer :: n_th_NHS, n_z, n_z_r, n_z_t!, n_th_SHS
+      integer :: n_th_NHS, n_z, n_z_r, n_z_t, n_th_SHS
       integer :: n_r, n_t, n_r_r, n_t_t!, n_theta!, n_p
       real(cp) :: thwFac, thwr, thwt, coefint
       !real(cp) :: r_i(n_r_max),r_i3D(n_r_max_3D)
@@ -564,10 +564,10 @@ contains
 
       !-- Remaining term for the temperature gradient
       dTzdt(:,:)=0.0_cp
-      do n_r=2,n_r_max_3D!max(2,nRstart3D),nRstop3D
+      do n_r=1,n_r_max_3D!max(2,nRstart3D),nRstop3D
       !do n_r=max(2,nRstart3D),nRstop3D
          !do n_theta=1,n_theta_max
-         do n_th_NHS=1,n_theta_max!/2
+         do n_th_NHS=1,n_theta_max/2
             !dTzdt(n_th_NHS,n_r)=thwFac*r_3D(n_r)* dTdth(n_th_NHS,n_r)
             !-- TG I don't understand the r factor in the above equation
             !-- Th wind should be
@@ -581,190 +581,34 @@ contains
          end do
       end do
 
-   if( .false. ) then
-      !-- Compute thermal wind --> \int dTdth dz = \int dTdth costh dr - \int dTdth r sinth dth
-      thw_Rloc(:,:)=0.0_cp
-      do n_r_r=1,n_r_max_3D
-      do n_t_t=1,n_theta_max
-
-      thwr=0.0_cp
-      coefint=r_3D(n_r_r) - r_cmb!0.0_cp
-      !-- simpson integration in the r-direction
-      thwr=dTzdt(n_t_t,nRstart3D) + dTzdt(n_t_t,nRstop3D)
-      do n_r=nRstart3D+1,nRstop3D-1,2
-         thwr=thwr + four*dTzdt(n_t_t,n_r)
-      enddo
-      do n_r=nRstart3D+2,nRstop3D-2,2
-         thwr=thwr + two*dTzdt(n_t_t,n_r)
-      enddo
-      thw_Rloc(n_t_t,n_r_r) = thw_Rloc(n_t_t,n_r_r)+ thwr*cost(n_t_t)*coefint/(6.0_cp*n_r_max_3D)!
-
-      thwt=0.0_cp
-      coefint=-theta(n_t_t) + asin(r_3D(n_r_r)*sint(n_t_t)/r_cmb)!(atan(r_cmb*cost(n_t_t)/(r_cmb*sint(n_t_t))))!
-      !atan(sqrt(r_cmb**2. - (r_cmb*sint(n_t_t))**2.)/(r_cmb*sint(n_t_t))))!
-      !-- simpson integration in the theta-direction
-      thwt=dTzdt(1,n_r_r)*(-sint(1)) + dTzdt(n_theta_max,n_r_r)*(-sint(n_theta_max))
-      do n_t=2,n_theta_max-1,2
-         thwt=thwt + four*dTzdt(n_t,n_r_r)*(-sint(n_t))
-      enddo
-      do n_t=3,n_theta_max-2,2
-         thwt=thwt + two*dTzdt(n_t,n_r_r)*(-sint(n_t))
-      enddo
-      thw_Rloc(n_t_t,n_r_r) = thw_Rloc(n_t_t,n_r_r)+ r_3D(n_r_r)*thwt*coefint/(6.0_cp*n_theta_max)
-      !thw_Rloc(n_t_t,n_r_r) = r_3D(n_r_r)*cost(n_t_t) - sqrt(r_cmb**2. - r_3D(n_r_r)**2.*sint(n_t_t)**2.)
-      end do
-      end do
-      !thw_Rloc(:,:)=0.5_cp*thw_Rloc(:,:)
-   else if( .false. ) then !test!
       thw_Rloc(:,:)=0.0_cp
       do n_r=nRstart3D,nRstop3D
-         do n_th_NHS=1,n_theta_max!2,n_theta_max!/2!
-            n_r_r=0
-            thwr=0.0_cp
-            coefint=one!r_3D(n_r)*cost(n_th_NHS)-sqrt(r_cmb**2.-(r_3D(n_r)*sint(n_th_NHS))**2.)!one!
-
-            do n_z=1,this%nzp_thw(n_th_NHS,n_r)
-               thwt=0.0_cp
-               n_z_r = this%interp_zp_thw(1,n_z,n_th_NHS,n_r)
-               n_z_t = this%interp_zp_thw(2,n_z,n_th_NHS,n_r)
-               if ( n_z_t > 1 .and. n_th_NHS>1 ) then
-                  tmp(n_th_NHS,n_r,n_z)=tmp(n_th_NHS,n_r,n_z)+                 &
-                  &                     (this%interp_wt_thw(1,n_z,n_th_NHS,n_r)* &
-                  & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(2,n_z,n_th_NHS,n_r)* &
-                  & dTzdt(n_z_t-1,n_z_r))
-               else !-- When n_z_t == 1; this%interp_wt_thw(2,n_z,n_theta,n_r)=0.0
-                  tmp(n_th_NHS,n_r,n_z)=tmp(n_th_NHS,n_r,n_z)+                &
-                  &                      this%interp_wt_thw(1,n_z,n_th_NHS,n_r)* &
-                  &   dTzdt(n_z_t,n_z_r)
-               end if
-               if( n_z == 1 .or. n_z == this%nzp_thw(n_th_NHS,n_r) ) then
-                  thwr=thwr+ tmp(n_th_NHS,n_r,n_z)
-                  n_r_r=n_r_r+1
-               else if( mod(n_z,2) == 1 ) then
-                  thwr=thwr+ four*tmp(n_th_NHS,n_r,n_z)
-                  n_r_r=n_r_r+4
-               else if( mod(n_z,2) == 0 ) then
-                  thwr=thwr+ two*tmp(n_th_NHS,n_r,n_z)
-                  n_r_r=n_r_r+2
-               end if
-            end do
-            !!thwr = 3.0_cp*this%nzp_thw(n_th_NHS,n_r)
-            thw_Rloc(n_th_NHS,n_r) = thw_Rloc(n_th_NHS,n_r) + thwr*coefint/(n_r_r)!(3.0_cp*this%nzp_thw(n_th_NHS,n_r))!
+         n_th_NHS=1
+         do n_z=1,this%nzp_thw(n_th_NHS,n_r)
+            n_z_r = this%interp_zp_thw(1,n_z,n_th_NHS,n_r)
+            n_z_t = this%interp_zp_thw(2,n_z,n_th_NHS,n_r)
+            thw_Rloc(n_th_NHS,n_r)=thw_Rloc(n_th_NHS,n_r) -               &
+            &                     this%interp_wt_thw(1,n_z,n_th_NHS,n_r)* &
+            &                     dTzdt(n_z_t,n_z_r)
          end do
-      end do
-   else if( .true. ) then !NATIVE!
-      thw_Rloc(:,:)=0.0_cp
-      do n_r=nRstart3D,nRstop3D
-         !n_th_NHS=1
-         !do n_z=1,this%nzp_thw(n_th_NHS,n_r)
-         !   n_z_r = this%interp_zp_thw(1,n_z,n_th_NHS,n_r)
-         !   n_z_t = this%interp_zp_thw(2,n_z,n_th_NHS,n_r)
-         !   thw_Rloc(n_th_NHS,n_r)=thw_Rloc(n_th_NHS,n_r) -               &
-         !   &                     this%interp_wt_thw(1,n_z,n_th_NHS,n_r)* &
-         !   &                     dTzdt(n_z_t,n_z_r)
-         !end do
-         do n_th_NHS=1,n_theta_max!2,n_theta_max!/2!
+         do n_th_NHS=2,n_theta_max/2!
             do n_z=1,this%nzp_thw(n_th_NHS,n_r)
                n_z_r = this%interp_zp_thw(1,n_z,n_th_NHS,n_r)
                n_z_t = this%interp_zp_thw(2,n_z,n_th_NHS,n_r)
-               if ( n_z_t > 1 .and. n_th_NHS>1 ) then
-                  thw_Rloc(n_th_NHS,n_r)= thw_Rloc(n_th_NHS,n_r) -               &
-                  &                     (this%interp_wt_thw(1,n_z,n_th_NHS,n_r)* &
-                  & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(2,n_z,n_th_NHS,n_r)* &
-                  & dTzdt(n_z_t-1,n_z_r))
-               else !-- When n_z_t == 1; this%interp_wt_thw(2,n_z,n_theta,n_r)=0.0
-                  thw_Rloc(n_th_NHS,n_r)= thw_Rloc(n_th_NHS,n_r) -               &
-                  &                      this%interp_wt_thw(1,n_z,n_th_NHS,n_r)* &
-                  &   dTzdt(n_z_t,n_z_r)
-               end if
+               thw_Rloc(n_th_NHS,n_r)= thw_Rloc(n_th_NHS,n_r) -               &
+               &                     (this%interp_wt_thw(1,n_z,n_th_NHS,n_r)* &
+               & dTzdt(n_z_t,n_z_r) + this%interp_wt_thw(2,n_z,n_th_NHS,n_r)* &
+               & dTzdt(n_z_t-1,n_z_r))
             end do
          end do
       end do
-      !if( n_procs>1 ) then
-      !   Zwb(:,:)=0.0_cp
-      !   do n_p=0,n_procs-1
-      !      if( n_p == rank ) tmp(:) = thw_Rloc(:,nRstop3D)
-      !      call MPI_Bcast(tmp, n_theta_max/2, MPI_DEF_REAL, &
-      !      &              n_p, MPI_COMM_WORLD, ierr)
-      !      ZWb(:,n_p)=tmp(:)
-      !      call MPI_Barrier(MPI_COMM_WORLD, ierr)
-      !   end do
-      !   do n_p=0,n_procs-1
-      !      if( rank > n_p ) then
-      !         do n_r=nRstart3D,nRstop3D
-      !            n_th_NHS=1
-      !            n_z_t  =this%interp_zpb_thw(n_th_NHS,n_r,n_p)
-      !            thw_Rloc(n_th_NHS,n_r)=thw_Rloc(n_th_NHS,n_r) +               &
-      !            &                     this%interp_wtb_thw(1,n_th_NHS,n_r,n_p)*&
-      !            &                     Zwb(n_z_t,n_p)
-      !            do n_th_NHS=2,n_theta_max/2
-      !               n_z_t  =this%interp_zpb_thw(n_th_NHS,n_r,n_p)
-      !               if ( n_z_t > 1 ) then
-      !                  thw_Rloc(n_th_NHS,n_r)= thw_Rloc(n_th_NHS,n_r) +        &
-      !                  &             (this%interp_wtb_thw(1,n_th_NHS,n_r,n_p)* &
-      !                  &             Zwb(n_z_t,n_p) +                          &
-      !                  &             this%interp_wtb_thw(2,n_th_NHS,n_r,n_p)*  &
-      !                  &             Zwb(n_z_t-1,n_p))
-      !               end if
-      !            end do
-      !         end do
-      !      end if
-      !   end do
-      !end if
-   end if
-
-   !print*, this%interp_wt_cyl(:,:,:)
-
-#ifdef TOTO
-      block
-         integer :: file_handle
-
-      if( rank == 0 ) then
-         !open(newunit=file_handle, file='Cwznr.dat', status='new', form='formatted')
-         !do n_r=1,n_r_max
-         !   write(file_handle, '(35i3)') this%interp_zp_thw(1,2,:n_theta_max/2,n_r)
-         !end do
-         !close(file_handle)
-
-         !open(newunit=file_handle, file='Cwznt.dat', status='new', form='formatted')
-         !do n_r=1,n_r_max
-         !   write(file_handle, '(35i3)') this%interp_zp_thw(2,2,:n_theta_max/2,n_r)
-         !end do
-         !close(file_handle)
-
-         !open(newunit=file_handle, file='Cwzwr.dat', status='new', form='formatted')
-         !do n_r=1,n_r_max
-         !   write(file_handle, '(35es20.12)') this%interp_wt_thw(1,2,:n_theta_max/2,n_r)
-         !end do
-         !close(file_handle)
-
-         !open(newunit=file_handle, file='Cwzwt.dat', status='new', form='formatted')
-         !do n_r=1,n_r_max
-         !   write(file_handle, '(35es20.12)') this%interp_wt_thw(2,2,:n_theta_max/2,n_r)
-         !end do
-         !close(file_handle)
-
-         open(newunit=file_handle, file='thw_rloc.dat', status='new', form='formatted')
-         write(file_handle, '(129es20.12)') 78374.0, theta(:n_theta_max/2)
-         do n_r=1,n_r_max_3D
-            write(file_handle, '(129es20.12)') r_3D(n_r), thw_Rloc(:n_theta_max/2,n_r)
-         end do
-         close(file_handle)
-      end if
-      end block
-
-      print*, 'Radius OUTPUT.dat', r_3D(n_r_max_3D/2), 'Latitude OUTPUT.dat', theta(n_theta_max/4)
-      print*, 'ALL GOOD compute_thw!**'
-
-      stop
-#endif
 
       !-- Add thermal wind to u_phi
       do n_r=nRstart3D,nRstop3D
-         do n_th_NHS=1,n_theta_max!/2
-            !n_th_SHS=n_theta_max+1-n_th_NHS
+         do n_th_NHS=1,n_theta_max/2
+            n_th_SHS=n_theta_max+1-n_th_NHS
             up_Rloc(:,n_th_NHS,n_r)=up_Rloc(:,n_th_NHS,n_r) + thw_Rloc(n_th_NHS,n_r)
-            !up_Rloc(:,n_th_SHS,n_r)=up_Rloc(:,n_th_SHS,n_r) + thw_Rloc(n_th_NHS,n_r)
+            up_Rloc(:,n_th_SHS,n_r)=up_Rloc(:,n_th_SHS,n_r) + thw_Rloc(n_th_NHS,n_r)
          end do
       end do
 
