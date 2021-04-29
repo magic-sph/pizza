@@ -12,7 +12,7 @@ module rloop_3D
    use truncation, only: idx2m, n_m_max
    use courant_mod, only: courant_3D
 #ifdef WITH_SHTNS
-   use shtns, only: spat_to_SH, scal_to_spat, torpol_to_spat, spat_to_qst, &
+   use shtns, only: scal_to_SH, scal_to_spat, torpol_to_spat, spat_to_qst, &
        &            torpol_to_curl_spat, scal_axi_to_grad_spat
 #endif
    use horizontal, only: cost, sint
@@ -60,12 +60,12 @@ contains
               &               tscheme )
 
       !-- Input variables
-      complex(cp), intent(in) :: temp(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(in) :: b_3D(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(in) :: db_3D(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(in) :: ddb_3D(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(in) :: aj_3D(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(in) :: dj_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: temp(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: b_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: db_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: ddb_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: aj_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: dj_3D(lm_max, nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: ut(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: up(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
@@ -333,10 +333,10 @@ contains
 !-------------------------------------------------------------------------------
    subroutine transform_to_grid_space(temp, B, dB, ddB, aj, dj, n_r, gsa)
 
-      complex(cp), intent(in) :: temp(lm_max)
-      complex(cp), intent(in) :: B(lm_max), dB(lm_max), ddB(lm_max)
-      complex(cp), intent(in) :: aj(lm_max), dj(lm_max)
-      integer, intent(in) :: n_r
+      complex(cp), intent(inout) :: temp(lm_max)
+      complex(cp), intent(inout) :: B(lm_max), dB(lm_max), ddB(lm_max)
+      complex(cp), intent(inout) :: aj(lm_max), dj(lm_max)
+      integer,     intent(in) :: n_r
       type(grid_space_arrays_t) :: gsa
 
 #ifdef WITH_SHTNS
@@ -362,26 +362,19 @@ contains
       type(nonlinear_lm_t) :: nl_lm
 
 #ifdef WITH_SHTNS
-      call shtns_load_cfg(1)
-
       if ( l_heat_3D ) then
-         !call spat_to_SH(gsa%VTr, nl_lm%VTrLM)
-         !call spat_to_SH(gsa%VTt, nl_lm%VTtLM)
-         !call spat_to_SH(gsa%VTp, nl_lm%VTpLM)
          call spat_to_qst(gsa%VTr, gsa%VTt, gsa%VTp, dVrTLM, nl_lm%VTtLM, &
               &           nl_lm%VTpLM)
       end if
 
       if ( l_mag_3D ) then
-         call spat_to_SH(gsa%VxBr, nl_lm%VxBrLM)
-         call spat_to_SH(gsa%VxBt, nl_lm%VxBtLM)
-         call spat_to_SH(gsa%VxBp, nl_lm%VxBpLM)
+         call scal_to_SH(gsa%VxBr, nl_lm%VxBrLM)
+         call scal_to_SH(gsa%VxBt, nl_lm%VxBtLM)
+         call scal_to_SH(gsa%VxBp, nl_lm%VxBpLM)
          !-- In get_td --> ifdef SHTNS could be used instead and replace the 3 above lines by:
          !-- spat_to_qst(gsa%VxBr,gsa%VxBt, gsa%VxBp, nl_lm%VxBrLM, nl_lm%VxBtLM, nl_lm%VxBpLM)
          !-- can also be done for the temperature!
       end if
-
-      call shtns_load_cfg(0)
 #endif
 
    end subroutine transform_to_lm_space
@@ -389,7 +382,7 @@ contains
    subroutine transform_axi_to_dth_grid_space(work_l, grad_thc)
 
       !-- Input variable
-      complex(cp), intent(in) :: work_l(:)
+      complex(cp), intent(inout) :: work_l(:)
 
       !-- Output variable
       real(cp), intent(out) :: grad_thc(n_theta_max)

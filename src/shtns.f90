@@ -1,7 +1,11 @@
 module shtns
+  !
+   ! This module contains is a wrapper of the SHTns routines used in pizza
+   !
 
-   use precision_mod, only: cp
+   use iso_c_binding
    use iso_fortran_env, only: output_unit
+   use precision_mod, only: cp
    use constants, only: ci
    use truncation_3D, only: m_max_3D, l_max, n_theta_max, n_phi_max_3D, &
        &                    minc_3D, lm_max, lmP_max
@@ -11,66 +15,71 @@ module shtns
 
    implicit none
 
-   include "shtns.f"
+   include "shtns.f03"
 
    private
 
-   public :: init_shtns, scal_to_spat, spat_to_SH, torpol_to_spat, &
+   public :: init_shtns, scal_to_spat, scal_to_SH, torpol_to_spat, &
    &         torpol_to_curl_spat, scal_axi_to_grad_spat, spat_to_qst
+
+   type(c_ptr) :: sht_l, sht_lP
 
 contains
 
    subroutine init_shtns()
 
-      integer :: norm
+      integer :: norm, nthreads, layout
+      real(cp) :: eps_polar
+      type(shtns_info), pointer :: sht_info
 
       if ( rank == 0 ) then
          write(output_unit,*) ''
          call shtns_verbose(1)
       end if
 
-      call shtns_use_threads(0)
+      nthreads = shtns_use_threads(0)
 
       norm = SHT_ORTHONORMAL + SHT_NO_CS_PHASE
+      layout = SHT_QUICK_INIT+SHT_PHI_CONTIGUOUS
+      !layout = SHT_GAUSS+SHT_PHI_CONTIGUOUS
+      eps_polar = 1.e-10_cp
 
-      call shtns_set_size(l_max, m_max_3D/minc_3D, minc_3D, norm)
-      call shtns_precompute(SHT_GAUSS, SHT_PHI_CONTIGUOUS, &
-!      call shtns_precompute(SHT_QUICK_INIT, SHT_PHI_CONTIGUOUS, &
-           &                1.e-10_cp, n_theta_max, n_phi_max_3D)
-      call shtns_save_cfg(0)
+      sht_l = shtns_create(l_max, m_max_3D/minc_3D, minc_3D, norm)
+      call shtns_set_grid(sht_l, layout, eps_polar, n_theta_max, n_phi_max_3D)
+
+      call c_f_pointer(cptr=sht_l, fptr=sht_info)
 
       if ( rank == 0 ) then
          call shtns_verbose(0)
       end if
 
-      call shtns_set_size(l_max+1, m_max_3D/minc_3D, minc_3D, norm)
-      call shtns_precompute(SHT_GAUSS, SHT_PHI_CONTIGUOUS, &
-!      call shtns_precompute(SHT_QUICK_INIT, SHT_PHI_CONTIGUOUS, &
-           &                1.e-10_cp, n_theta_max, n_phi_max_3D)
-      call shtns_save_cfg(1)
-
-      call shtns_load_cfg(0)
+      sht_lP = shtns_create(l_max+1, m_max_3D/minc_3D, minc_3D, norm)
+      call shtns_set_grid(sht_lP, layout, eps_polar, n_theta_max, n_phi_max_3D)
 
    end subroutine
 !------------------------------------------------------------------------------
    subroutine scal_to_spat(Slm, fieldc)
+
       ! transform a spherical harmonic field into grid space
-      complex(cp), intent(in) :: Slm(lm_max)
+      complex(cp), intent(inout) :: Slm(lm_max)
       real(cp), intent(out) :: fieldc(n_phi_max_3D, n_theta_max)
 
-      call shtns_load_cfg(0)
-      call shtns_SH_to_spat(Slm, fieldc)
+      call SH_to_spat(sht_l, Slm, fieldc)
 
    end subroutine scal_to_spat
 !------------------------------------------------------------------------------
    subroutine torpol_to_spat(Wlm, dWlm, Zlm, n_r, fieldrc, fieldtc, fieldpc)
-      complex(cp), intent(in) :: Wlm(lm_max), dWlm(lm_max), Zlm(lm_max)
-      integer, intent(in) :: n_r
+
+      !-- Input variables
+      complex(cp), intent(inout) :: Wlm(lm_max), dWlm(lm_max), Zlm(lm_max)
+      integer,     intent(in) :: n_r
+
+      !-- Output variables
       real(cp), intent(out) :: fieldrc(n_phi_max_3D, n_theta_max)
       real(cp), intent(out) :: fieldtc(n_phi_max_3D, n_theta_max)
       real(cp), intent(out) :: fieldpc(n_phi_max_3D, n_theta_max)
 
-      !-- Local variable
+      !-- Local variables
       complex(cp) :: Qlm(lm_max)
       integer :: lm
 
@@ -78,7 +87,7 @@ contains
          Qlm(lm) = dLh(lm) * or2_3D(n_r) * Wlm(lm)
       end do
 
-      call shtns_qst_to_spat(Qlm, dWlm, Zlm, fieldrc, fieldtc, fieldpc)
+      call SHqst_to_spat(sht_l, Qlm, dWlm, Zlm, fieldrc, fieldtc, fieldpc)
 
       fieldtc(:,:) = or1_3D(n_r) * fieldtc(:,:)
       fieldpc(:,:) = or1_3D(n_r) * fieldpc(:,:)
@@ -87,14 +96,18 @@ contains
 !------------------------------------------------------------------------------
    subroutine torpol_to_curl_spat(Blm, ddBlm, Jlm, dJlm, n_r, &
               &                   curlfieldrc, curlfieldtc, curlfieldpc)
-      complex(cp), intent(in) :: Blm(lm_max), ddBlm(lm_max)
-      complex(cp), intent(in) :: Jlm(lm_max), dJlm(lm_max)
-      integer, intent(in) :: n_r
+
+      !-- Input variables
+      complex(cp), intent(inout) :: Blm(lm_max), ddBlm(lm_max)
+      complex(cp), intent(inout) :: Jlm(lm_max), dJlm(lm_max)
+      integer,     intent(in) :: n_r
+
+      !-- Output variables
       real(cp), intent(out) :: curlfieldrc(n_phi_max_3D, n_theta_max)
       real(cp), intent(out) :: curlfieldtc(n_phi_max_3D, n_theta_max)
       real(cp), intent(out) :: curlfieldpc(n_phi_max_3D, n_theta_max)
 
-      !-- Local variable
+      !-- Local variables
       complex(cp) :: Qlm(lm_max), Tlm(lm_max)
       integer :: lm
 
@@ -103,7 +116,7 @@ contains
          Tlm(lm) = or2_3D(n_r) * dLh(lm) * Blm(lm) - ddBlm(lm)
       end do
 
-      call shtns_qst_to_spat(Qlm, dJlm, Tlm, curlfieldrc, curlfieldtc, curlfieldpc)
+      call SHqst_to_spat(sht_l, Qlm, dJlm, Tlm, curlfieldrc, curlfieldtc, curlfieldpc)
 
       curlfieldtc(:,:) = or1_3D(n_r) * curlfieldtc(:,:)
       curlfieldpc(:,:) = or1_3D(n_r) * curlfieldpc(:,:)
@@ -112,25 +125,24 @@ contains
 !------------------------------------------------------------------------------
    subroutine spat_to_qst(f, g, h, fLM, gLM, hLM)
 
-      !-- Input variable
-      real(cp), intent(in) :: f(:,:)
-      real(cp), intent(in) :: g(:,:)
-      real(cp), intent(in) :: h(:,:)
+      !-- Input variables
+      real(cp), intent(inout) :: f(:,:)
+      real(cp), intent(inout) :: g(:,:)
+      real(cp), intent(inout) :: h(:,:)
 
-      !-- Output variable
+      !-- Output variables
       complex(cp), intent(out) :: fLM(:)
       complex(cp), intent(out) :: gLM(:)
       complex(cp), intent(out) :: hLM(:)
 
-      call shtns_load_cfg(0)
-      call shtns_spat_to_qst(f, g, h, fLM, gLM, hLM)
+      call spat_to_SHqst(sht_l, f, g, h, fLM, gLM, hLM)
 
    end subroutine spat_to_qst
 !------------------------------------------------------------------------------
-   subroutine spat_to_SH(f, fLM)
+   subroutine scal_to_SH(f, fLM)
 
       !-- Input variable
-      real(cp), intent(in) :: f(:,:)
+      real(cp), intent(inout) :: f(:,:)
 
       !-- Output variable
       complex(cp), intent(out) :: fLM(:)
@@ -141,21 +153,19 @@ contains
       nlm = size(fLM)
 
       if ( nlm == lmP_max ) then
-         call shtns_load_cfg(1)
+         call spat_to_SH(sht_lP, f, fLM)
       else
-         call shtns_load_cfg(0)
+         call spat_to_SH(sht_l, f, fLM)
       end if
-      call shtns_spat_to_sh(f, fLM)
-      call shtns_load_cfg(0)
 
-   end subroutine spat_to_SH
+   end subroutine scal_to_SH
 !------------------------------------------------------------------------------
    subroutine scal_axi_to_grad_spat(Saxi_l, gradtc)
       ! transform a scalar spherical harmonic field into it's gradient
       ! on the grid
 
       !-- Input variable
-      complex(cp), intent(in) :: Saxi_l(:)
+      complex(cp), intent(inout) :: Saxi_l(:)
 
       !-- Output variable
       real(cp), intent(out) :: gradtc(n_theta_max)
@@ -163,8 +173,7 @@ contains
       !-- Local variable
       complex(cp) :: tmpt(n_theta_max),tmpp(n_theta_max)
 
-      call shtns_load_cfg(0)
-      call shtns_sph_to_spat_ml(0, Saxi_l, tmpt, tmpp, l_max)
+      call SHsph_to_spat_ml(sht_l, 0, Saxi_l, tmpt, tmpp, l_max)
       gradtc(:)=real(tmpt)
 
    end subroutine scal_axi_to_grad_spat

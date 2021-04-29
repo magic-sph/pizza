@@ -34,7 +34,7 @@ module init_fields
    use fieldsLast
    use precision_mod
 #ifdef WITH_SHTNS
-   use shtns, only: spat_to_SH
+   use shtns, only: scal_to_SH
 #endif
 
    implicit none
@@ -479,7 +479,7 @@ contains
             end do
 
 #ifdef WITH_SHTNS
-            call spat_to_SH(ang_func, temp_3D_Rloc(:,n_r))
+            call scal_to_SH(ang_func, temp_3D_Rloc(:,n_r))
 #endif
          end do
 
