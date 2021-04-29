@@ -58,6 +58,7 @@ contains
       complex(cp), intent(in) :: Slm(lm_max)
       real(cp), intent(out) :: fieldc(n_phi_max_3D, n_theta_max)
 
+      call shtns_load_cfg(0)
       call shtns_SH_to_spat(Slm, fieldc)
 
    end subroutine scal_to_spat

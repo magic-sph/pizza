@@ -7,7 +7,7 @@ module update_temp_3D_mod
    use radial_functions, only: or1_3D, or2_3D, rscheme_3D
    use horizontal, only: bott_LMloc, topt_LMloc
    use namelists, only: kbott, ktopt, TdiffFac
-   use blocking_lm, only: st_map, lo_map, lo_sub_map, chunksize
+   use blocking_lm, only: lo_map, lo_sub_map, chunksize
    use blocking, only: lmStart, lmStop
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat

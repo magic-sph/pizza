@@ -102,16 +102,6 @@ contains
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
       character(len=144) :: frame_name
 
-#ifdef aDEBUG
-      block
-      use blocking_lm, only: st_map
-
-      print*, st_map%lm2(0,0)
-      print*, st_map%lm2(l_max,0)
-
-      end block
-#endif
-
       !-- get thermal wind
       if ( l_heat_3D .and. l_thw_3D ) then
          do n_r=nRstart3D,nRstop3D
