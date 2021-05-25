@@ -29,7 +29,7 @@ module update_temp_coll
    complex(cp), allocatable :: rhs(:)
 
    public :: update_temp_co, initialize_temp_coll, finalize_temp_coll, &
-   &         get_temp_rhs_imp_coll, finish_exp_temp_coll
+   &         get_temp_rhs_imp_coll, finish_exp_temp_coll, assemble_temp_coll
 
 contains
 
@@ -152,6 +152,14 @@ contains
          call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, n_r_max, rscheme)
       end if
 
+      if ( tscheme%l_assembly .and. tscheme%istage==tscheme%nstages-1) then
+         !-- Calculation of the implicit part
+         call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc,            &
+              &                     dTdt%old(:,:,tscheme%istage+1),   &
+              &                     dTdt%impl(:,:,tscheme%istage+1),  &
+              &                     .true.)
+      end if
+
    end subroutine update_temp_co
 !------------------------------------------------------------------------------
    subroutine finish_exp_temp_coll(temp_Mloc, us_Mloc, dVsT_Mloc, buo_Mloc, &
@@ -237,6 +245,62 @@ contains
       end if
 
    end subroutine get_temp_rhs_imp_coll
+!------------------------------------------------------------------------------
+   subroutine assemble_temp_coll(temp_Mloc, dtemp_Mloc, dTdt, tscheme, l_log_next)
+
+      !-- Input variables
+      class(type_tscheme), intent(in) :: tscheme
+      logical,             intent(in) :: l_log_next
+      type(type_tarray),   intent(in) :: dTdt
+
+      !-- Output variable
+      complex(cp), intent(inout) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Local variables
+      integer :: n_r, n_m, m
+
+      call tscheme%assemble_imex(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
+
+      do n_r=2,n_r_max-1
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m == 0 ) then
+               temp_Mloc(n_m,n_r) = cmplx(real(work_Mloc(n_m,n_r)), 0.0_cp, cp)
+            else
+               temp_Mloc(n_m,n_r) = work_Mloc(n_m,n_r)
+            end if
+         end do
+      end do
+
+      if ( ktopt==1 .and. kbott==1 ) then ! Dirichlet on both sides
+         do n_m=nMstart,nMstop
+            call rscheme%robin_bc(0.0_cp, one, topt_Mloc(n_m), 0.0_cp, one, &
+                 &                bott_Mloc(n_m), temp_Mloc(n_m,:))
+         end do
+      else if ( ktopt==1 .and. kbott /= 1 ) then ! Dirichlet: top and Neumann: bot
+         do n_m=nMstart,nMstop
+            call rscheme%robin_bc(0.0_cp, one, topt_Mloc(n_m), one, 0.0_cp, &
+                 &                bott_Mloc(n_m), temp_Mloc(n_m,:))
+         end do
+      else if ( kbott==1 .and. ktopt /= 1 ) then ! Dirichlet: bot and Neumann: top
+         do n_m=nMstart,nMstop
+            call rscheme%robin_bc(one, 0.0_cp, topt_Mloc(n_m), 0.0_cp, one, &
+                 &                bott_Mloc(n_m), temp_Mloc(n_m,:))
+         end do
+      else if ( kbott /= 1 .and. kbott /= 1 ) then ! Neumann on both sides
+         do n_m=nMstart,nMstop
+            call rscheme%robin_bc(one, 0.0_cp, topt_Mloc(n_m), one, 0.0_cp, &
+                 &                bott_Mloc(n_m), temp_Mloc(n_m,:))
+         end do
+      end if
+
+      !-- In case log is needed on the next iteration, recalculate dT/dr
+      if ( l_log_next ) then
+         call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, n_r_max, rscheme)
+      end if
+
+   end subroutine assemble_temp_coll
 !------------------------------------------------------------------------------
 #ifdef WITH_PRECOND_S
    subroutine get_tempMat(tscheme, m, tMat, tPivot, tMat_fac)

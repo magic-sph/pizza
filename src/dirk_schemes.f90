@@ -18,6 +18,8 @@ module dirk_schemes
    type, public, extends(type_tscheme) :: type_dirk
       real(cp), allocatable :: butcher_imp(:,:)
       real(cp), allocatable :: butcher_exp(:,:)
+      real(cp), allocatable :: butcher_ass_imp(:) ! Implicit Assembly stage
+      real(cp), allocatable :: butcher_ass_exp(:) ! Explicit Assembly stage
    contains
       procedure :: initialize
       procedure :: finalize
@@ -28,6 +30,7 @@ module dirk_schemes
       procedure :: assemble_implicit_buo
       procedure :: bridge_with_cnab2
       procedure :: start_with_ab1
+      procedure :: assemble_imex
    end type type_dirk
 
 contains
@@ -41,6 +44,7 @@ contains
       character(len=72), intent(inout) :: time_scheme
 
       !-- Local variables
+      integer :: sizet
       real(cp) :: courfac_loc
 
       allocate ( this%dt(1) )
@@ -58,6 +62,7 @@ contains
          this%nstages = 2
          this%istage = 1
          courfac_loc = 1.35_cp
+         this%l_assembly = .false. ! No assembly stage
       else if ( index(time_scheme, 'LZ232') /= 0 ) then
          this%time_scheme = 'LZ232'
          this%norder_imp_lin = 3
@@ -66,6 +71,7 @@ contains
          this%nstages = 2
          this%istage = 1
          courfac_loc = 1.25_cp
+         this%l_assembly = .false. ! No assembly stage
       else if ( index(time_scheme, 'CK232') /= 0 ) then
          this%time_scheme = 'CK232'
          this%norder_imp_lin = 3
@@ -74,6 +80,7 @@ contains
          this%nstages = 2
          this%istage = 1
          courfac_loc = 1.25_cp
+         this%l_assembly = .false. ! No assembly stage
       else if ( index(time_scheme, 'ARS443') /= 0 ) then
          this%time_scheme = 'ARS443'
          this%norder_imp = 5
@@ -82,6 +89,7 @@ contains
          this%nstages = 4
          this%istage = 1
          courfac_loc = 0.9_cp
+         this%l_assembly = .false. ! No assembly stage
       else if ( index(time_scheme, 'LZ453') /= 0 ) then
          this%time_scheme = 'LZ453'
          this%norder_imp = 5
@@ -90,6 +98,7 @@ contains
          this%nstages = 4
          this%istage = 1
          courfac_loc = 1.15_cp
+         this%l_assembly = .false. ! No assembly stage
       else if ( index(time_scheme, 'BPR353') /= 0 ) then
          this%time_scheme = 'BPR353'
          this%norder_imp = 5
@@ -98,6 +107,7 @@ contains
          this%nstages = 4
          this%istage = 1
          courfac_loc = 1.0_cp
+         this%l_assembly = .false. ! No assembly stage
       else if ( index(time_scheme, 'PC2') /= 0 ) then
          this%time_scheme = 'PC2'
          this%norder_imp = 4
@@ -106,6 +116,16 @@ contains
          this%nstages = 3
          this%istage = 1
          courfac_loc = 0.8_cp
+         this%l_assembly = .false. ! No assembly stage
+      else if ( index(time_scheme, 'ARS343' ) /= 0 ) then
+         this%time_scheme = 'ARS343'
+         this%norder_imp = 5
+         this%norder_imp_lin = 5
+         this%norder_exp = 4
+         this%nstages = 4
+         this%istage = 1
+         courfac_loc = 0.7_cp
+         this%l_assembly = .true.
       end if
 
       if ( abs(courfac_nml) >= 1.0e3_cp ) then
@@ -114,12 +134,23 @@ contains
          this%courfac=courfac_nml
       end if
 
-      allocate( this%butcher_imp(this%nstages+1,this%nstages+1), &
-      &         this%butcher_exp(this%nstages+1,this%nstages+1) )
+      if ( .not. this%l_assembly ) then
+         sizet = this%nstages+1
+      else
+         sizet = this%nstages
+      end if
+
+      allocate( this%butcher_imp(sizet,sizet), &
+      &         this%butcher_exp(sizet,sizet) )
       this%butcher_imp(:,:)=0.0_cp
       this%butcher_exp(:,:)=0.0_cp
-      bytes_allocated=bytes_allocated+2*(this%nstages+1)*(this%nstages+1)*&
-      &               SIZEOF_DEF_REAL
+      bytes_allocated=bytes_allocated+2*sizet*sizet*SIZEOF_DEF_REAL
+
+      allocate( this%butcher_ass_imp(sizet), &
+      &         this%butcher_ass_exp(sizet) )
+      this%butcher_ass_imp(:)=0.0_cp
+      this%butcher_ass_exp(:)=0.0_cp
+      bytes_allocated=bytes_allocated+2*sizet*SIZEOF_DEF_REAL
 
       allocate( this%l_exp_calc(this%nstages) )
       allocate( this%l_imp_calc_rhs(this%nstages) )
@@ -134,6 +165,7 @@ contains
       class(type_dirk) :: this
 
       deallocate( this%dt, this%wimp_lin, this%butcher_exp, this%butcher_imp )
+      deallocate( this%butcher_ass_imp, this%butcher_ass_exp )
       deallocate( this%l_exp_calc, this%l_imp_calc_rhs )
 
    end subroutine finalize
@@ -144,7 +176,7 @@ contains
       logical, intent(inout) :: lMatNext
 
       !-- Local variables
-      real(cp) :: wimp_old, del, gam
+      real(cp) :: wimp_old, del, gam, b1, b2
 
       wimp_old = this%wimp_lin(1)
 
@@ -246,11 +278,35 @@ contains
             &                                   half,   half, 0.0_cp, 0.0_cp, &
             &                                   half, 0.0_cp,   half, 0.0_cp],&
             &                               [4,4],order=[2,1])
+         case ('ARS343')
+            gam = 0.435866521508459_cp
+            b1 = -1.5_cp*gam*gam+4.0_cp*gam-0.25_cp
+            b2 = 1.5_cp*gam*gam-5.0_cp*gam+1.25_cp
+            this%wimp_lin(1) = gam
+            this%butcher_imp(:,:) = reshape([                           &
+            &                  0.0_cp,         0.0_cp, 0.0_cp,  0.0_cp, &
+            &                  0.0_cp,            gam, 0.0_cp,  0.0_cp, &
+            &                  0.0_cp, half*(one-gam),    gam,  0.0_cp, &
+            &                  0.0_cp,             b1,     b2,    gam], &
+            &                               [4,4], order=[2,1])
+            this%butcher_ass_imp(:) = [0.0_cp, b1, b2, gam]
+            this%butcher_ass_exp(:) = this%butcher_ass_imp(:)
+
+            this%butcher_exp(:,:) = reshape([                                           &
+            &                0.0_cp,               0.0_cp,               0.0_cp,0.0_cp, &
+            &                   gam,               0.0_cp,               0.0_cp,0.0_cp, &
+            & 0.3212788860286278_cp,0.3966543747256017_cp,               0.0_cp,0.0_cp, &
+            &-0.1058582960718797_cp,0.5529291480359398_cp,0.5529291480359398_cp,0.0_cp],&
+            &                               [4,4], order=[2,1])
+            this%l_imp_calc_rhs(1)=.false.
       end select
 
       this%wimp_lin(1)      = this%dt(1)*this%wimp_lin(1)
       this%butcher_imp(:,:) = this%dt(1)*this%butcher_imp(:,:)
       this%butcher_exp(:,:) = this%dt(1)*this%butcher_exp(:,:)
+
+      this%butcher_ass_imp(:) = this%dt(1)*this%butcher_ass_imp(:)
+      this%butcher_ass_exp(:) = this%dt(1)*this%butcher_ass_exp(:)
          
    end subroutine set_weights
 !------------------------------------------------------------------------------
@@ -318,9 +374,9 @@ contains
       class(type_dirk) :: this
 
       !-- Input variables:
-      integer,     intent(in) :: nMstart
-      integer,     intent(in) :: nMstop
-      integer,     intent(in) :: len_rhs
+      integer,           intent(in) :: nMstart
+      integer,           intent(in) :: nMstop
+      integer,           intent(in) :: len_rhs
       type(type_tarray), intent(in) :: dfdt
 
       !-- Output variable
@@ -380,14 +436,14 @@ contains
       class(type_dirk) :: this
 
       !-- Input variables:
-      integer,     intent(in) :: nMstart
-      integer,     intent(in) :: nMstop
-      integer,     intent(in) :: n_r_max
-      real(cp),    intent(in) :: BuoFac
-      real(cp),    intent(in) :: rgrav(n_r_max)
-      complex(cp), intent(in) :: temp(nMstart:nMstop,n_r_max)
+      integer,           intent(in) :: nMstart
+      integer,           intent(in) :: nMstop
+      integer,           intent(in) :: n_r_max
+      real(cp),          intent(in) :: BuoFac
+      real(cp),          intent(in) :: rgrav(n_r_max)
+      complex(cp),       intent(in) :: temp(nMstart:nMstop,n_r_max)
       type(type_tarray), intent(in) :: dTdt
-      logical,     intent(in) :: l_init_buo
+      logical,           intent(in) :: l_init_buo
 
       !-- Output variables:
       complex(cp), intent(out) :: buo(nMstart:nMstop,n_r_max)
@@ -440,5 +496,47 @@ contains
       class(type_dirk) :: this
 
    end subroutine start_with_ab1
+!------------------------------------------------------------------------------
+   subroutine assemble_imex(this, rhs, dfdt, nMstart, nMstop, n_r_max)
+
+      class(type_dirk) :: this
+
+      !-- Input variables
+      integer,           intent(in) :: nMstart
+      integer,           intent(in) :: nMstop
+      integer,           intent(in) :: n_r_max
+      type(type_tarray), intent(in) :: dfdt
+      
+      !-- Ouput variable
+      complex(cp), intent(out) :: rhs(nMstart:nMstop,n_r_max)
+
+      !-- Local variables
+      integer :: n_stage, n_r, n_m
+
+      do n_r=1,n_r_max
+         do n_m=nMstart,nMstop
+            rhs(n_m,n_r)=dfdt%old(n_m,n_r,1)
+         end do
+      end do
+
+      do n_stage=1,this%nstages
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_ass_exp(n_stage)* &
+               &            dfdt%expl(n_m,n_r,n_stage)
+            end do
+         end do
+      end do
+
+      do n_stage=1,this%nstages
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_ass_imp(n_stage)* &
+               &            dfdt%impl(n_m,n_r,n_stage)
+            end do
+         end do
+      end do
+
+   end subroutine assemble_imex
 !------------------------------------------------------------------------------
 end module dirk_schemes

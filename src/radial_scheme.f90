@@ -40,6 +40,7 @@ module radial_scheme
       procedure(empty_if),       deferred :: finalize
       procedure(get_der_mat_if), deferred :: get_der_mat
       procedure(get_grid_if),    deferred :: get_grid
+      procedure(robin_bc_if),    deferred :: robin_bc
       procedure :: costf1_complex_2d
       procedure :: costf1_real_1d
       generic :: costf1 => costf1_complex_2d, costf1_real_1d
@@ -91,6 +92,14 @@ module radial_scheme
          logical, intent(in) :: l_cheb_coll
 
       end subroutine get_der_mat_if
+      !------------------------------------------------------------------------
+      subroutine robin_bc_if(this,atop,btop,rhs_top,abot,bbot,rhs_bot,f)
+         import
+         class(type_rscheme) :: this
+         real(cp),    intent(in) :: atop, btop, abot, bbot
+         complex(cp), intent(in) :: rhs_bot, rhs_top
+         complex(cp), intent(inout) :: f(:)
+      end subroutine robin_bc_if
       !------------------------------------------------------------------------
    end interface
 

@@ -25,7 +25,7 @@ module step_time
    use update_psi_integ_dmat, only: get_psi_rhs_imp_int_dmat
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
    use update_psi_coll_smat, only: get_psi_rhs_imp_coll_smat
-   use mloop_mod, only: mloop, finish_explicit_assembly
+   use mloop_mod, only: mloop, finish_explicit_assembly, assemble_stage
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
@@ -275,29 +275,41 @@ contains
             !--------------------
             !-- M-loop (update routines)
             !--------------------
-            runStart = MPI_Wtime()
-            call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,   &
-                 &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,  &
-                 &     dom_Mloc, us_Mloc, up_Mloc, buo_Mloc, dTdt, dxidt,   &
-                 &     dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
-                 &     timers)
-            runStop = MPI_Wtime()
-            if ( .not. lMat ) then
-               if (runStop>runStart) then
-                  timers%n_m_loops=timers%n_m_loops+1
-                  timers%m_loop   =timers%m_loop+(runStop-runStart)
+            if ( (.not. tscheme%l_assembly) .or. (tscheme%istage/=tscheme%nstages) ) then
+               runStart = MPI_Wtime()
+               call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,   &
+                    &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,  &
+                    &     dom_Mloc, us_Mloc, up_Mloc, buo_Mloc, dTdt, dxidt,   &
+                    &     dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
+                    &     timers)
+               !print*, 'here???', tscheme%istage, tscheme%nstages!, dTdt%old(4, 10, 1)
+               runStop = MPI_Wtime()
+               if ( .not. lMat ) then
+                  if (runStop>runStart) then
+                     timers%n_m_loops=timers%n_m_loops+1
+                     timers%m_loop   =timers%m_loop+(runStop-runStart)
+                  end if
+               else
+                  if (runStop>runStart) then
+                     timers%n_m_loops_mat=timers%n_m_loops_mat+1
+                     timers%m_loop_mat   =timers%m_loop_mat+(runStop-runStart)
+                  end if
                end if
-            else
-               if (runStop>runStart) then
-                  timers%n_m_loops_mat=timers%n_m_loops_mat+1
-                  timers%m_loop_mat   =timers%m_loop_mat+(runStop-runStart)
-               end if
+
+               ! Increment current stage
+               tscheme%istage = tscheme%istage+1
             end if
 
-            ! Increment current stage
-            tscheme%istage = tscheme%istage+1
-
          end do ! Finish loop over stages
+
+         !----------------------------
+         !-- Assembly stage of IMEX-RK (if needed)
+         !----------------------------
+         if ( tscheme%l_assembly ) then
+            call assemble_stage(temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, psi_Mloc, &
+                 &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt,             &
+                 &              dpsidt, tscheme, l_log_next)
+         end if
 
          !---------------------
          !-- Timings

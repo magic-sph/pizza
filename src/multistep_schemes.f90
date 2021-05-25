@@ -28,6 +28,7 @@ module multistep_schemes
       procedure :: assemble_implicit_buo
       procedure :: bridge_with_cnab2
       procedure :: start_with_ab1
+      procedure :: assemble_imex
    end type type_multistep
 
 contains
@@ -47,6 +48,7 @@ contains
       this%nstages = 1
       this%istage = 1
       this%family = 'MULTISTEP'
+      this%l_assembly = .false. ! No assembly stage
 
       allocate( this%l_exp_calc(1) )
       allocate( this%l_imp_calc_rhs(1) )
@@ -546,5 +548,15 @@ contains
       this%wexp(2:this%norder_exp)=0.0_cp
 
    end subroutine start_with_ab1
+!------------------------------------------------------------------------------
+   subroutine assemble_imex(this, rhs, dfdt, nMstart, nMstop, n_r_max)
+
+      class(type_multistep) :: this
+      integer,           intent(in) :: nMstart
+      integer,           intent(in) :: nMstop
+      integer,           intent(in) :: n_r_max
+      type(type_tarray), intent(in) :: dfdt
+      complex(cp), intent(out) :: rhs(nMstart:nMstop,n_r_max)
+   end subroutine assemble_imex
 !------------------------------------------------------------------------------
 end module multistep_schemes

@@ -8,21 +8,23 @@ module mloop_mod
    use vort_balance, only: vort_bal_type
    use blocking, only: nMstart, nMstop
    use namelists, only: l_direct_solve, l_cheb_coll, l_chem, l_heat
-   use update_temp_coll, only: update_temp_co, finish_exp_temp_coll
-   use update_xi_coll, only: update_xi_co, finish_exp_xi_coll
+   use update_temp_coll, only: update_temp_co, finish_exp_temp_coll, assemble_temp_coll
+   use update_xi_coll, only: update_xi_co, finish_exp_xi_coll, assemble_xi_coll
    use update_temp_integ, only: update_temp_int, finish_exp_temp_int
    use update_xi_integ, only: update_xi_int, finish_exp_xi_int
    use update_psi_integ_smat, only: update_psi_int_smat, finish_exp_psi_int_smat
    use update_psi_integ_dmat, only: update_psi_int_dmat, finish_exp_psi_int_dmat
    use update_psi_coll_dmat, only: update_om_coll_dmat, finish_exp_psi_coll_dmat
-   use update_psi_coll_smat, only: update_om_coll_smat, finish_exp_psi_coll_smat
+   use update_psi_coll_smat, only: update_om_coll_smat, finish_exp_psi_coll_smat, &
+       &                           assemble_psi_coll
    use timers_mod, only: timers_type
+   use useful, only: abortRun
 
    implicit none
 
    private
 
-   public :: mloop, finish_explicit_assembly
+   public :: mloop, finish_explicit_assembly, assemble_stage
 
 contains 
 
@@ -57,7 +59,6 @@ contains
       type(type_tarray),   intent(inout) :: dxidt
       type(timers_type),   intent(inout) :: timers
 
-
      if ( l_cheb_coll ) then
          if ( l_heat ) call update_temp_co(temp_Mloc, dtemp_Mloc, buo_Mloc, &
                             &              dTdt, tscheme, lMat, l_log_next)
@@ -91,6 +92,44 @@ contains
       end if
 
    end subroutine mloop
+!------------------------------------------------------------------------------
+   subroutine assemble_stage(temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, psi_Mloc, &
+              &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt,   &
+              &              dpsidt, tscheme, l_log_next)
+
+      !-- Input variables
+      type(type_tarray),   intent(in) :: dpsidt
+      type(type_tarray),   intent(in) :: dTdt
+      type(type_tarray),   intent(in) :: dxidt
+      logical,             intent(in) :: l_log_next
+      class(type_tscheme), intent(in) :: tscheme
+
+      !-- Output variables
+      complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: dxi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: up_Mloc(nMstart:nMstop,n_r_max)
+
+      if ( l_cheb_coll ) then
+         if ( l_heat ) call assemble_temp_coll(temp_Mloc, dtemp_Mloc, dTdt, &
+                            &                  tscheme, l_log_next)
+         if ( l_chem ) call assemble_xi_coll(xi_Mloc, dxi_Mloc, dxidt, tscheme, &
+                            &                l_log_next)
+
+         if ( l_direct_solve ) then
+            call assemble_psi_coll(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, dpsidt, tscheme)
+         else
+            call abortRun('Assembly stage not implemented yet')
+         end if
+      else
+         call abortRun('Assembly stage not implemented yet')
+      end if
+
+   end subroutine assemble_stage
 !------------------------------------------------------------------------------
    subroutine finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc, us_Mloc,  &
               &                        up_Mloc, om_Mloc, dVsT_Mloc, dVsXi_Mloc,&

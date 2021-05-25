@@ -11,7 +11,7 @@ module update_psi_coll_smat
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
-   use fields, only: work_Mloc
+   use fields, only: work_Mloc, dom_Mloc
    use algebra, only: prepare_full_mat, solve_full_mat
    use time_schemes, only: type_tscheme
    use vort_balance, only: vort_bal_type
@@ -24,20 +24,23 @@ module update_psi_coll_smat
    
    private
 
-   logical,  allocatable :: lPsimat(:)
-   complex(cp), allocatable :: psiMat(:,:,:)
+   logical,  allocatable :: lPsimat(:), lAssmat(:)
+   complex(cp), allocatable :: psiMat(:,:,:), assMat(:,:,:)
    real(cp), allocatable :: uphiMat(:,:)
-   integer,  allocatable :: psiPivot(:,:)
+   integer,  allocatable :: psiPivot(:,:), assPivot(:,:)
    real(cp), allocatable :: psiMat_fac(:,:,:)
    complex(cp), allocatable :: rhs(:)
    real(cp), allocatable :: rhs_m0(:)
 
    public :: update_om_coll_smat, initialize_om_coll_smat, finalize_om_coll_smat, &
-   &         get_psi_rhs_imp_coll_smat, finish_exp_psi_coll_smat
+   &         get_psi_rhs_imp_coll_smat, finish_exp_psi_coll_smat, assemble_psi_coll
 
 contains
 
-   subroutine initialize_om_coll_smat
+   subroutine initialize_om_coll_smat(tscheme)
+
+      !-- Input variable
+      class(type_tscheme), intent(in) :: tscheme ! time scheme
 
       allocate( lPsimat(nMstart:nMstop) )
       lPsimat(:)=.false.
@@ -56,12 +59,26 @@ contains
       allocate( uphiMat(n_r_max,n_r_max) )
       bytes_allocated = bytes_allocated+n_r_max*n_r_max*SIZEOF_DEF_REAL
 
+      if ( tscheme%l_assembly ) then
+         allocate( assMat(n_r_max, n_r_max, nMstart:nMstop) )
+         allocate( assPivot(n_r_max, nMstart:nMstop) )
+         allocate( lAssmat(nMstart:nMstop) )
+         lAssmat(:)=.false.
+         bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*n_r_max*n_r_max* &
+         &                 SIZEOF_DEF_COMPLEX+n_r_max*(nMstop-nMstart+1)*      &
+         &                 SIZEOF_INTEGER
+      end if
+
    end subroutine initialize_om_coll_smat
 !------------------------------------------------------------------------------
-   subroutine finalize_om_coll_smat
+   subroutine finalize_om_coll_smat(tscheme)
+
+      !-- Input variable
+      class(type_tscheme), intent(in) :: tscheme ! time scheme
 
       deallocate( rhs_m0, rhs, psiMat_fac )
       deallocate( lPsimat, psiMat, uphiMat, psiPivot )
+      if ( tscheme%l_assembly ) deallocate( assMat, assPivot, lAssmat )
 
    end subroutine finalize_om_coll_smat
 !------------------------------------------------------------------------------
@@ -90,7 +107,6 @@ contains
       integer :: n_r, n_m, n_cheb, m
 
       if ( lMat ) lPsimat(:)=.false.
-
 
       !-- Calculation of the implicit part
       call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,    &
@@ -258,6 +274,15 @@ contains
          call vort_bal%finalize_domdt(om_Mloc, tscheme)
       end if
 
+      if ( tscheme%l_assembly .and. tscheme%istage==tscheme%nstages-1) then
+         !-- Calculation of the implicit part
+         call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,   &
+              &                         dpsidt%old(:,:,tscheme%istage+1),      &
+              &                         dpsidt%impl(:,:,tscheme%istage+1),     &
+              &                         vp_bal, vort_bal,                      &
+              &                         .true.)
+      end if
+
    end subroutine update_om_coll_smat
 !------------------------------------------------------------------------------
    subroutine finish_exp_psi_coll_smat(us_Mloc, dVsOm_Mloc, buo_Mloc, &
@@ -415,6 +440,129 @@ contains
 
    end subroutine get_psi_rhs_imp_coll_smat
 !------------------------------------------------------------------------------
+   subroutine assemble_psi_coll(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, dpsidt, tscheme)
+
+      !-- Input variables
+      class(type_tscheme), intent(in) :: tscheme
+      type(type_tarray),   intent(in) :: dpsidt
+
+      !-- Output variables
+      complex(cp), intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Local variables 
+      complex(cp) :: rhs1(n_r_max)
+      real(cp) :: uphi0(n_r_max), om0(n_r_max)
+      real(cp) :: fac_bot, fac_top, dm2
+      integer :: n_m, n_r, m, n_m0, n_cheb
+
+      call tscheme%assemble_imex(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
+
+      ! m == 0 \bar{uphi} equation:
+      if ( l_rank_has_m0 ) then
+         n_m0 = m2idx(0)
+         do n_r=2,n_r_max-1
+            up_Mloc(n_m0,n_r) = cmplx(real(work_Mloc(n_m0,n_r)), 0.0_cp, cp)
+         end do
+
+         ! m == 0 boundary values
+         if ( ktopv /= 1 .and. kbotv /= 1 ) then ! Rigid BCs
+            up_Mloc(n_m0,1)      =zero
+            up_Mloc(n_m0,n_r_max)=zero
+         else if ( ktopv == 1 .and. kbotv /= 1 ) then ! Stress-free top and rigid bottom
+            fac_top=-or1(1)
+            call rscheme%robin_bc(one, fac_top, zero, 0.0_cp, one, zero, &
+                 &                up_Mloc(n_m0,:))
+         else if ( kbotv == 1 .and. ktopv /= 1 ) then ! Stress-free bot and rigid top
+            fac_bot=-or1(n_r_max)
+            call rscheme%robin_bc(0.0_cp, one, zero, one, fac_bot, zero, &
+                 &                up_Mloc(n_m0,:))
+         else if ( ktopv == 1 .and. kbotv == 1 ) then ! Stress-free at both boundaries
+            fac_bot=-or1(n_r_max)
+            fac_top=-or1(1)
+            call rscheme%robin_bc(one, fac_top, zero, one, fac_bot, zero, &
+                 &                up_Mloc(n_m0,:))
+         end if
+      end if
+
+      !-- Now is the real deal: solve for the m/=0 matrix
+      do n_m=nMstart,nMstop
+         m = idx2m(n_m)
+         if ( m /= 0 ) then
+
+            !-- LU factorization is only required once since this is not time dependent
+            if ( .not. lAssmat(n_m) ) then
+               call get_AssMat(m, assMat(:,:,n_m), assPivot(:,n_m))
+               lAssmat(n_m)=.true.
+            end if
+
+            rhs1(1)        =zero
+            rhs1(2)        =zero
+            rhs1(n_r_max-1)=zero
+            rhs1(n_r_max)  =zero
+            do n_r=3,n_r_max-2
+               rhs1(n_r)=work_Mloc(n_m,n_r)
+            end do
+
+            call solve_full_mat(assMat(:,:,n_m), n_r_max, n_r_max, &
+                 &              assPivot(:,n_m), rhs1(:))
+
+            do n_cheb=1,rscheme%n_max
+               psi_Mloc(n_m,n_cheb)=rhs1(n_cheb)
+            end do
+
+         end if ! m /= 0
+
+      end do
+
+      !-- set cheb modes > rscheme%n_max to zero (dealiazing)
+      if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
+         do n_cheb=rscheme%n_max+1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m /= 0 ) then
+                  psi_Mloc(n_m,n_cheb)=zero
+               end if
+            end do
+         end do
+      end if
+
+      !-- Bring uphi0 to the physical space
+      if ( l_rank_has_m0 ) then
+         uphi0(:)=real(up_Mloc(n_m0,:))
+         call get_dr(uphi0, om0, n_r_max, rscheme)
+      end if
+
+      !-- Get the radial derivative of psi to calculate uphi and the second
+      !-- derivative (stored in dom_Mloc) to get omega
+      call get_ddr(psi_Mloc, work_Mloc, dom_Mloc, nMstart, nMstop, n_r_max, &
+           &       rscheme, l_dct=.false.)
+
+      !-- Bring psi to the physical space
+      call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
+
+      do n_r=1,n_r_max
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            dm2 = real(m*m,cp)
+
+            if ( m == 0 ) then
+               us_Mloc(n_m,n_r)=0.0_cp
+               om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+            else
+               us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+               up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+               om_Mloc(n_m,n_r)=-(dom_Mloc(n_m,n_r)+(or1(n_r)+beta(n_r))* &
+               &                work_Mloc(n_m,n_r)+(or1(n_r)*beta(n_r)+   &
+               &                dbeta(n_r)-dm2*or2(n_r))*psi_Mloc(n_m,n_r))
+            end if
+         end do
+      end do
+
+   end subroutine assemble_psi_coll
+!------------------------------------------------------------------------------
    subroutine get_psiMat(tscheme, m, psiMat, psiPivot, psiMat_fac, time_lu, &
               &          n_lu_calls)
 
@@ -567,6 +715,78 @@ contains
 
 
    end subroutine get_psiMat
+!------------------------------------------------------------------------------
+   subroutine get_assMat(m, assMat, assPivot)
+
+      !-- Input variables
+      integer, intent(in) :: m
+
+      !-- Output variables
+      complex(cp), intent(out) :: assMat(n_r_max,n_r_max)
+      integer,     intent(out) :: assPivot(n_r_max)
+
+      !-- Local variables
+      integer :: nR_out, nR, info, n_m
+      real(cp) :: dm2
+
+      n_m = m2idx(m)
+      dm2 = real(m,cp)*real(m,cp)
+
+      !----- Boundary conditions:
+      do nR_out=1,rscheme%n_max
+         !-- Non-penetation condition
+         assMat(1,nR_out)      =rscheme%rnorm*rscheme%rMat(1,nR_out)
+         assMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
+
+         if ( ktopv == 1 ) then ! free-slip
+            assMat(2,nR_out)=rscheme%rnorm*(                &
+            &                     rscheme%d2rMat(1,nR_out)- &
+            &               or1(1)*rscheme%drMat(1,nR_out) )
+         else
+            assMat(2,nR_out)=rscheme%rnorm*rscheme%drMat(1,nR_out)
+         end if
+         if ( kbotv == 1 ) then
+            assMat(n_r_max-1,nR_out)=rscheme%rnorm*(                 &
+            &                        rscheme%d2rMat(n_r_max,nR_out)- &
+            &            or1(n_r_max)*rscheme%drMat(n_r_max,nR_out) )
+         else
+            assMat(n_r_max-1,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+         end if
+      end do
+
+      if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
+         do nR_out=rscheme%n_max+1,n_r_max
+            assMat(1,nR_out)        =0.0_cp
+            assMat(2,nR_out)        =0.0_cp
+            assMat(n_r_max-1,nR_out)=0.0_cp
+            assMat(n_r_max,nR_out)  =0.0_cp
+         end do
+      end if
+
+      !----- Other points:
+      do nR_out=1,n_r_max
+         do nR=3,n_r_max-2
+         !do nR=2,n_r_max-1
+            assMat(nR,nR_out)= -rscheme%rnorm * (                     &
+            &                             rscheme%d2rMat(nR,nR_out) + &
+            &      (or1(nR)+beta(nR))*     rscheme%drMat(nR,nR_out) + &
+            &  (or1(nR)*beta(nR)+dbeta(nR)-dm2*or2(nR))*              &
+            &                               rscheme%rMat(nR,nR_out) )
+
+         end do
+      end do
+
+      !----- Factor for highest and lowest cheb:
+      do nR=1,n_r_max
+         assMat(nR,1)      =rscheme%boundary_fac*assMat(nR,1)
+         assMat(nR,n_r_max)=rscheme%boundary_fac*assMat(nR,n_r_max)
+      end do
+
+      !----- LU decomposition:
+      call prepare_full_mat(assMat,n_r_max,n_r_max,assPivot,info)
+      if ( info /= 0 ) call abortRun('Singular matrix assMat!')
+
+   end subroutine get_assMat
 !------------------------------------------------------------------------------
    subroutine get_uphiMat(tscheme, uphiMat, uphiPivot)
 

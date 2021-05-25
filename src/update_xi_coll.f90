@@ -3,8 +3,7 @@ module update_xi_coll
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, four, ci
-   use namelists, only: kbott, ktopt, tadvz_fac, XidiffFac, ChemFac, &
-       &                l_buo_imp, l_heat
+   use namelists, only: kbotxi, ktopxi, XidiffFac, ChemFac, l_buo_imp, l_heat
    use radial_functions, only: rscheme, or1, or2, dxicond, rgrav
    use horizontal, only: hdif_xi, botxi_Mloc, topxi_Mloc
    use blocking, only: nMstart, nMstop
@@ -29,7 +28,7 @@ module update_xi_coll
    complex(cp), allocatable :: rhs(:)
 
    public :: update_xi_co, initialize_xi_coll, finalize_xi_coll, &
-   &         get_xi_rhs_imp_coll, finish_exp_xi_coll
+   &         get_xi_rhs_imp_coll, finish_exp_xi_coll, assemble_xi_coll
 
 contains
 
@@ -158,6 +157,14 @@ contains
          call get_dr(xi_Mloc, dxi_Mloc, nMstart, nMstop, n_r_max, rscheme)
       end if
 
+      if ( tscheme%l_assembly .and. tscheme%istage==tscheme%nstages-1) then
+         !-- Calculation of the implicit part
+         call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc,                 &
+              &                   dxidt%old(:,:,tscheme%istage+1),   &
+              &                   dxidt%impl(:,:,tscheme%istage+1),  &
+              &                   .true.)
+      end if
+
    end subroutine update_xi_co
 !------------------------------------------------------------------------------
    subroutine finish_exp_xi_coll(xi_Mloc, us_Mloc, dVsT_Mloc, buo_Mloc, &
@@ -255,6 +262,57 @@ contains
 
    end subroutine get_xi_rhs_imp_coll
 !------------------------------------------------------------------------------
+   subroutine assemble_xi_coll(xi_Mloc, dxi_Mloc, dxidt, tscheme, l_log_next)
+
+      !-- Input variables
+      class(type_tscheme), intent(in) :: tscheme
+      logical,             intent(in) :: l_log_next
+      type(type_tarray),   intent(in) :: dxidt
+
+      !-- Output variable
+      complex(cp), intent(inout) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: dxi_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Local variables
+      integer :: n_r, n_m, m
+
+      call tscheme%assemble_imex(work_Mloc, dxidt, nMstart, nMstop, n_r_max)
+
+      do n_r=2,n_r_max-1
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m == 0 ) then
+               xi_Mloc(n_m,n_r) = cmplx(real(work_Mloc(n_m,n_r)), 0.0_cp, cp)
+            else
+               xi_Mloc(n_m,n_r) = work_Mloc(n_m,n_r)
+            end if
+         end do
+      end do
+
+      if ( ktopxi==1 .and. kbotxi==1 ) then ! Dirichlet on both sides
+         do n_m=nMstart,nMstop
+            call rscheme%robin_bc(0.0_cp, one, topxi_Mloc(n_m), 0.0_cp, one, &
+                 &                botxi_Mloc(n_m), xi_Mloc(n_m,:))
+         end do
+      else if ( ktopxi==1 .and. kbotxi /= 1 ) then ! Dirichlet: top and Neumann: bot
+         do n_m=nMstart,nMstop
+            call rscheme%robin_bc(0.0_cp, one, topxi_Mloc(n_m), one, 0.0_cp, &
+                 &                botxi_Mloc(n_m), xi_Mloc(n_m,:))
+         end do
+      else if ( kbotxi==1 .and. ktopxi /= 1 ) then ! Dirichlet: bot and Neumann: top
+         do n_m=nMstart,nMstop
+            call rscheme%robin_bc(one, 0.0_cp, topxi_Mloc(n_m), 0.0_cp, one, &
+                 &                botxi_Mloc(n_m), xi_Mloc(n_m,:))
+         end do
+      else if ( kbotxi /= 1 .and. kbotxi /= 1 ) then ! Neumann on both sides
+         do n_m=nMstart,nMstop
+            call rscheme%robin_bc(one, 0.0_cp, topxi_Mloc(n_m), one, 0.0_cp, &
+                 &                botxi_Mloc(n_m), xi_Mloc(n_m,:))
+         end do
+      end if
+
+   end subroutine assemble_xi_coll
+!------------------------------------------------------------------------------
 #ifdef WITH_PRECOND_S
    subroutine get_xiMat(tscheme, m, tMat, tPivot, tMat_fac)
 #else
@@ -281,12 +339,12 @@ contains
 
       !----- Boundary coditions:
       do nR_out=1,rscheme%n_max
-         if ( ktopt == 1 ) then
+         if ( ktopxi == 1 ) then
             tMat(1,nR_out)=rscheme%rnorm*rscheme%rMat(1,nR_out)
          else
             tMat(1,nR_out)=rscheme%rnorm*rscheme%drMat(1,nR_out)
          end if
-         if ( kbott == 1 ) then
+         if ( kbotxi == 1 ) then
             tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
          else
             tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)

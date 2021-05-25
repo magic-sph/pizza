@@ -16,6 +16,7 @@ module time_schemes
       integer :: norder_imp
       integer :: norder_imp_lin
       character(len=8) :: time_scheme
+      logical :: l_assembly
       real(cp), allocatable :: dt(:)
       real(cp), allocatable :: wimp_lin(:)
       logical,  allocatable :: l_exp_calc(:)
@@ -33,6 +34,7 @@ module time_schemes
       procedure(assemble_implicit_buo_if), deferred :: assemble_implicit_buo
       procedure(bridge_with_cnab2_if), deferred :: bridge_with_cnab2
       procedure(start_with_ab1_if), deferred :: start_with_ab1
+      procedure(assemble_imex_if), deferred :: assemble_imex
       procedure :: print_info
 
    end type type_tscheme
@@ -87,6 +89,16 @@ module time_schemes
          integer,     intent(in) :: n_r_max
          type(type_tarray), intent(inout) :: dfdt
       end subroutine rotate_imex_if
+
+      subroutine assemble_imex_if(this, rhs, dfdt, nMstart, nMstop, n_r_max)
+         import
+         class(type_tscheme) :: this
+         integer,           intent(in) :: nMstart
+         integer,           intent(in) :: nMstop
+         integer,           intent(in) :: n_r_max
+         type(type_tarray), intent(in) :: dfdt
+         complex(cp), intent(out) :: rhs(nMstart:nMstop,n_r_max)
+      end subroutine assemble_imex_if
 
       subroutine assemble_implicit_buo_if(this, buo, temp, dTdt, BuoFac, rgrav, &
                  &                     nMstart, nMstop, n_r_max, l_init_buo)

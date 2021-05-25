@@ -21,6 +21,7 @@ contains
 
       if ( (index(scheme_name, 'ARS222') /= 0) .or. &
       &    (index(scheme_name, 'ARS443') /= 0) .or. &
+      &    (index(scheme_name, 'ARS343') /= 0) .or. &
       &    (index(scheme_name, 'BPR353') /= 0) .or. &
       &    (index(scheme_name, 'PC2') /= 0)    .or. &
       &    (index(scheme_name, 'LZ453') /= 0)  .or. &
