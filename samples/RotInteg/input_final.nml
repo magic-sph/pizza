@@ -18,6 +18,7 @@ l_rerror_fix=.true.,
  runMinutes =20,
  courfac    =2.0d0,
  time_scale ="rot",
+ buo_term   ="explicit",
 /
 &phys_param
  ra         =2.0E+06,
