@@ -35,7 +35,8 @@ module update_psi_coll_smat
    real(cp), allocatable :: rhs_m0(:)
 
    public :: update_om_coll_smat, initialize_om_coll_smat, finalize_om_coll_smat, &
-   &         get_psi_rhs_imp_coll_smat, finish_exp_psi_coll_smat, assemble_psi_coll
+   &         get_psi_rhs_imp_coll_smat, finish_exp_psi_coll_smat,                 &
+   &         assemble_psi_coll_smat
 
 contains
 
@@ -509,8 +510,8 @@ contains
 
    end subroutine get_psi_rhs_imp_coll_smat
 !------------------------------------------------------------------------------
-   subroutine assemble_psi_coll(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
-              &                 xi_Mloc, dpsidt, tscheme, vp_bal, vort_bal)
+   subroutine assemble_psi_coll_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
+              &                      xi_Mloc, dpsidt, tscheme, vp_bal, vort_bal)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -635,12 +636,12 @@ contains
          end do
       end do
 
-      call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,          &
-           &                         temp_Mloc, xi_Mloc, dpsidt, 1, vp_bal,        &
-           &                         vort_bal, tscheme%l_imp_calc_rhs(1),          &
+      call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,   &
+           &                         temp_Mloc, xi_Mloc, dpsidt, 1, vp_bal, &
+           &                         vort_bal, tscheme%l_imp_calc_rhs(1),   &
            &                         l_in_cheb_space=.false.)
 
-   end subroutine assemble_psi_coll
+   end subroutine assemble_psi_coll_smat
 !------------------------------------------------------------------------------
    subroutine get_psiMat(tscheme, m, psiMat, psiPivot, psiMat_fac, time_lu, &
               &          n_lu_calls)

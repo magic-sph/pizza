@@ -139,7 +139,7 @@ program pizza
       if ( l_direct_solve ) then
          call initialize_om_coll_smat(tscheme)
       else
-         call initialize_om_coll_dmat()
+         call initialize_om_coll_dmat(tscheme)
       end if
    else
       if ( l_heat ) call initialize_temp_integ()
@@ -206,7 +206,7 @@ program pizza
       if ( l_direct_solve ) then
          call finalize_om_coll_smat(tscheme)
       else
-         call finalize_om_coll_dmat()
+         call finalize_om_coll_dmat(tscheme)
       end if
    else
       if ( l_heat ) call finalize_temp_integ()

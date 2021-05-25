@@ -14,9 +14,10 @@ module mloop_mod
    use update_xi_integ, only: update_xi_int, finish_exp_xi_int
    use update_psi_integ_smat, only: update_psi_int_smat, finish_exp_psi_int_smat
    use update_psi_integ_dmat, only: update_psi_int_dmat, finish_exp_psi_int_dmat
-   use update_psi_coll_dmat, only: update_om_coll_dmat, finish_exp_psi_coll_dmat
+   use update_psi_coll_dmat, only: update_om_coll_dmat, finish_exp_psi_coll_dmat, &
+       &                           assemble_psi_coll_dmat
    use update_psi_coll_smat, only: update_om_coll_smat, finish_exp_psi_coll_smat, &
-       &                           assemble_psi_coll
+       &                           assemble_psi_coll_smat
    use timers_mod, only: timers_type
    use useful, only: abortRun
 
@@ -120,13 +121,14 @@ contains
                             &                l_log_next)
 
          if ( l_direct_solve ) then
-            call assemble_psi_coll(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
-                 &                 xi_Mloc, dpsidt, tscheme, vp_bal, vort_bal)
+            call assemble_psi_coll_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
+                 &                      xi_Mloc, dpsidt, tscheme, vp_bal, vort_bal)
          else
-            call abortRun('Assembly stage not implemented yet')
+            call assemble_psi_coll_dmat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
+                 &                      xi_Mloc, dpsidt, tscheme, vp_bal, vort_bal)
          end if
       else
-         call abortRun('Assembly stage not implemented yet')
+         call abortRun('Assembly stage with integration method not implemented yet!')
       end if
 
    end subroutine assemble_stage
