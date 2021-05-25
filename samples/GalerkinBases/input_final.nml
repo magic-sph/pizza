@@ -16,6 +16,7 @@
    cheb_method='integ',
    bc_method  ='galerkin',
   matrix_solve='direct',
+  buo_term    ='explicit',
 /
  &phys_param
   ra          =3.0E+04,
