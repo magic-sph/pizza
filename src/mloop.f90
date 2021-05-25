@@ -30,14 +30,13 @@ contains
 
    subroutine mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc,&
               &     dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,  dom_Mloc,      &
-              &     us_Mloc, up_Mloc, buo_Mloc, dTdt, dxidt, dpsidt, vp_bal,   &
-              &     vort_bal, tscheme, lMat, l_log_next, timers)
+              &     us_Mloc, up_Mloc, dTdt, dxidt, dpsidt, vp_bal, vort_bal,   &
+              &     tscheme, lMat, l_log_next, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       logical,             intent(in) :: l_log_next
-      complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),         intent(out) :: temp_hat_Mloc(nMstart:nMstop,n_r_max)
@@ -74,20 +73,18 @@ contains
                  &                   vp_bal, vort_bal, tscheme, lMat, timers)
          end if
       else
-         if ( l_heat ) call update_temp_int(temp_hat_Mloc, temp_Mloc,    &
-                            &               dtemp_Mloc, buo_Mloc, dTdt,  &
+         if ( l_heat ) call update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt, &
                             &               tscheme, lMat, l_log_next)
-         if ( l_chem ) call update_xi_int(xi_hat_Mloc, xi_Mloc,        &
-                            &             dxi_Mloc, buo_Mloc, dxidt,   &
+         if ( l_chem ) call update_xi_int(xi_hat_Mloc, xi_Mloc, dxi_Mloc, dxidt,   &
                             &             tscheme, lMat, l_log_next)
          if ( l_direct_solve ) then
-            call update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,&
-                 &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
+            call update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,    &
+                 &                   up_Mloc, temp_Mloc, xi_Mloc, dpsidt, vp_bal, &
                  &                   vort_bal, tscheme, lMat, timers)
          else
             call update_psi_int_dmat(psi_Mloc, om_Mloc, us_Mloc, up_Mloc,     &
-                 &                   buo_Mloc, dpsidt, vp_bal, vort_bal,      &
-                 &                   tscheme, lMat, timers)
+                 &                   temp_Mloc, xi_Mloc, dpsidt, vp_bal,      &
+                 &                   vort_bal, tscheme, lMat, timers)
          end if
       end if
 
@@ -134,10 +131,10 @@ contains
 
    end subroutine assemble_stage
 !------------------------------------------------------------------------------
-   subroutine finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc, us_Mloc,  &
-              &                        up_Mloc, om_Mloc, dVsT_Mloc, dVsXi_Mloc,&
-              &                        dVsOm_Mloc, buo_Mloc, dTdt, dxidt,      &
-              &                        dpsidt, tscheme, vp_bal, vort_bal)
+   subroutine finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc, us_Mloc,    &
+              &                        up_Mloc, om_Mloc, dVsT_Mloc, dVsXi_Mloc,  &
+              &                        dVsOm_Mloc, dTdt, dxidt, dpsidt, tscheme, &
+              &                        vp_bal, vort_bal)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -152,7 +149,6 @@ contains
       complex(cp),         intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
-      complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
       type(type_tarray),   intent(inout) :: dTdt
       type(type_tarray),   intent(inout) :: dxidt
       type(type_tarray),   intent(inout) :: dpsidt
@@ -176,20 +172,18 @@ contains
                  &                        vort_bal)
          end if
       else
-         if ( l_heat ) call finish_exp_temp_int(temp_Mloc, psi_Mloc, dVsT_Mloc,&
-                            &                   buo_Mloc,                      &
+         if ( l_heat ) call finish_exp_temp_int(psi_Mloc, dVsT_Mloc,   &
                             &                   dTdt%expl(:,:,tscheme%istage))
-         if ( l_chem ) call finish_exp_xi_int(xi_Mloc, psi_Mloc, dVsXi_Mloc,  &
-                            &                 buo_Mloc,                       &
+         if ( l_chem ) call finish_exp_xi_int(psi_Mloc, dVsXi_Mloc,  &
                             &                 dxidt%expl(:,:,tscheme%istage))
          if ( l_direct_solve ) then
             call finish_exp_psi_int_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
-                 &                       dVsOm_Mloc, buo_Mloc,                &
+                 &                       dVsOm_Mloc, temp_Mloc, xi_Mloc,      &
                  &                       dpsidt%expl(:,:,tscheme%istage),     &
                  &                       vp_bal, vort_bal)
          else
             call finish_exp_psi_int_dmat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
-                 &                       dVsOm_Mloc, buo_Mloc,                &
+                 &                       dVsOm_Mloc, temp_Mloc, xi_Mloc,      &
                  &                       dpsidt%expl(:,:,tscheme%istage),     &
                  &                       vp_bal, vort_bal)
          end if

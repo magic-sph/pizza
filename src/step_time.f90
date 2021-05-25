@@ -11,8 +11,8 @@ module step_time
        &             xi_Rloc, dxi_Mloc, xi_hat_Mloc, fields_Mloc_container, &
        &             fields_Rloc_container
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
-       &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,  &
-       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,       &
+       &                 dVsOm_Rloc, dVsOm_Mloc, dpsidt, dTdt, dxidt,     &
+       &                 dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,              &
        &                 dt_fields_Rloc_container, dt_fields_Mloc_container
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop
@@ -229,8 +229,8 @@ contains
                     &                        dVsT_Mloc(:,:,tscheme%istage),     &
                     &                        dVsXi_Mloc(:,:,tscheme%istage),    &
                     &                        dVsOm_Mloc(:,:,tscheme%istage),    &
-                    &                        buo_Mloc, dTdt, dxidt, dpsidt,     &
-                    &                        tscheme, vp_bal, vort_bal)
+                    &                        dTdt, dxidt, dpsidt, tscheme,      &
+                    &                        vp_bal, vort_bal)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%m_loop=timers%m_loop+(runStop-runStart)
@@ -277,11 +277,10 @@ contains
             !--------------------
             if ( (.not. tscheme%l_assembly) .or. (tscheme%istage/=tscheme%nstages) ) then
                runStart = MPI_Wtime()
-               call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,   &
-                    &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,  &
-                    &     dom_Mloc, us_Mloc, up_Mloc, buo_Mloc, dTdt, dxidt,   &
-                    &     dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
-                    &     timers)
+               call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,       &
+                    &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,      & 
+                    &     dom_Mloc, us_Mloc, up_Mloc, dTdt, dxidt, dpsidt, vp_bal, &
+                    &     vort_bal, tscheme, lMat, l_log_next, timers)
                !print*, 'here???', tscheme%istage, tscheme%nstages!, dTdt%old(4, 10, 1)
                runStop = MPI_Wtime()
                if ( .not. lMat ) then
@@ -384,19 +383,14 @@ contains
                     &                         1, vp_bal, vort_bal, .true.)
             end if
          else
-            if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc,          &
-                          &                         dTdt%old(:,:,1),        &
-                          &                         dTdt%impl(:,:,1), .true.)
-            if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc,             &
-                          &                       dxidt%old(:,:,1),        &
-                          &                       dxidt%impl(:,:,1), .true.)
+            if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, .true.)
+            if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, .true.)
             if ( l_direct_solve ) then
-               call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc, &
-                    &                        dpsidt%old(:,:,1),    &
-                    &                        dpsidt%impl(:,:,1), vp_bal,.true.)
+               call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,temp_Mloc,psi_Mloc, &
+                    &                        dpsidt, 1, vp_bal, .true.)
             else
-               call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,dpsidt%old(:,:,1), &
-                    &                        dpsidt%impl(:,:,1), vp_bal, .true.)
+               call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,temp_Mloc,xi_Mloc,dpsidt,&
+                    &                        1, vp_bal, .true.)
             end if
          end if
 

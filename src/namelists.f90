@@ -345,25 +345,6 @@ contains
          l_buo_imp = .false.
       end if
 
-      if ( .not. l_cheb_coll ) then
-         call capitalize(time_scheme)
-         if ( time_scheme == 'CNLF'.or. time_scheme=='MODCNAB' .or.      &
-         &    time_scheme == 'ARS443' .or. time_scheme=='ARS222' .or.    &
-         &    time_scheme == 'BPR353' .or. time_scheme=='PC2' .or.       &
-         &    time_scheme == 'LZ453' .or. time_scheme=='TVB33' .or.      &
-         &    time_scheme == 'LZ232' .or. time_scheme == 'CK232' .or.    &
-         &    time_scheme == 'ARS343' ) then
-            l_buo_imp = .false.
-            buo_term = 'EXP'
-            if ( rank == 0 ) then
-               write(output_unit, &
-               &    '(" ! Implicit Buoyancy term not compatible with chosen time scheme")')
-               write(output_unit, &
-               &    '(" ! Buoyancy term will be treated explicitly")')
-            end if
-         end if
-      end if
-
       if ( .not. l_direct_solve .and. l_coriolis_imp .and. (.not. l_non_rot) ) then
          l_coriolis_imp = .false.
          corio_term = 'EXP'

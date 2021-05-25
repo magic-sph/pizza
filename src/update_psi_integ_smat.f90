@@ -6,9 +6,10 @@ module update_psi_integ_smat
    use constants, only: one, zero, ci, half
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, l_coriolis_imp, ek, l_buo_imp,    &
-       &                l_galerkin
+       &                l_galerkin, BuoFac, ChemFac, l_heat, l_chem
    use horizontal, only: hdif_V
-   use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
+   use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r, &
+       &                       rgrav
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx, n_cheb_max
    use radial_der, only: get_ddr, get_dr
@@ -197,12 +198,14 @@ contains
    end subroutine finalize_psi_integ_smat
 !------------------------------------------------------------------------------
    subroutine update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,    &
-              &                   up_Mloc, buo_Mloc, dpsidt, vp_bal, vort_bal, &
-              &                   tscheme, lMat, timers)
+              &                   up_Mloc, temp_Mloc, xi_Mloc, dpsidt, vp_bal, &
+              &                   vort_bal, tscheme, lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
+      complex(cp),         intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),         intent(out) :: psi_hat_Mloc(nMstart:nMstop,n_r_max)
@@ -213,10 +216,10 @@ contains
       type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
       type(type_tarray),   intent(inout) :: dpsidt
-      complex(cp),         intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
       type(timers_type),   intent(inout) :: timers
 
       !-- Local variables
+      complex(cp) :: buo_Mloc(nMstart:nMstop,n_r_max)
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
       real(cp) :: h2, runStart, runStop, dm2
       integer :: n_r, n_m, n_cheb, m
@@ -235,13 +238,34 @@ contains
 
       if ( l_buo_imp ) then
 
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m /= 0 ) then
+                  if ( l_heat ) then
+                     buo_Mloc(n_m,n_r)=-BuoFac*rgrav(n_r)*or1(n_r)*ci*real(m,cp)*&
+                     &                 temp_Mloc(n_m,n_r)
+                     if ( l_chem ) then
+                        buo_Mloc(n_m,n_r)=buo_Mloc(n_m,n_r)-ChemFac*rgrav(n_r)* &
+                        &                 or1(n_r)*ci*real(m,cp)*xi_Mloc(n_m,n_r)
+                     end if
+                  else
+                     if ( l_chem ) then
+                        buo_Mloc(n_m,n_r)=-ChemFac*rgrav(n_r)*or1(n_r)*ci*real(m,cp)*&
+                        &                  xi_Mloc(n_m,n_r)
+                     end if
+                  end if
+               end if
+            end do
+         end do
+
          !-- Store buoyancy for the force balance
          if ( vort_bal%l_calc .and. tscheme%istage == tscheme%nstages  ) then
             do n_r=1,n_r_max
                do n_m=nMstart,nMstop
                   m = idx2m(n_m)
                   if ( m /= 0 ) then
-                     vort_bal%buo(n_m,n_r)=buo_Mloc(n_m,n_r)/tscheme%dt(1)
+                     vort_bal%buo(n_m,n_r)=buo_Mloc(n_m,n_r)
                   end if
                end do
             end do
@@ -279,13 +303,6 @@ contains
          end do
       end if
 
-      !-- Calculation of the implicit part
-      call get_psi_rhs_imp_int_smat(psi_hat_Mloc, up_Mloc,                   &
-           &                        dpsidt%old(:,:,tscheme%istage),          &
-           &                        dpsidt%impl(:,:,tscheme%istage), vp_bal, &
-           &                        tscheme%l_imp_calc_rhs(tscheme%istage))
-
-
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
 
@@ -309,7 +326,8 @@ contains
             rhs(n_cheb)=work_Mloc(n_m,n_cheb)
             !-- Add buoyancy
             if ( l_buo_imp ) then
-               if ( m /=  0 ) rhs(n_cheb)=rhs(n_cheb)+buo_Mloc(n_m,n_cheb)
+               if ( m /=  0 ) rhs(n_cheb)=rhs(n_cheb)+tscheme%wimp_lin(1)*&
+               &                          buo_Mloc(n_m,n_cheb)
             end if
          end do
 
@@ -440,6 +458,16 @@ contains
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
 
+      !-- Compute implicit stage
+      if ( tscheme%istage == tscheme%nstages ) then
+         call get_psi_rhs_imp_int_smat(psi_hat_Mloc, up_Mloc, temp_Mloc, xi_Mloc, &
+              &                        dpsidt, 1, vp_bal, tscheme%l_imp_calc_rhs(1))
+      else
+         call get_psi_rhs_imp_int_smat(psi_hat_Mloc, up_Mloc, temp_Mloc, xi_Mloc, &
+              &                        dpsidt, tscheme%istage+1, vp_bal,          &
+              &                        tscheme%l_imp_calc_rhs(tscheme%istage+1))
+      end if
+
       !-- Finish calculation of du_\phi/dt if requested
       if ( vp_bal%l_calc .and. tscheme%istage == tscheme%nstages  ) then
          call vp_bal%finalize_dvpdt(up_Mloc, tscheme)
@@ -476,9 +504,9 @@ contains
 
    end subroutine update_psi_int_smat
 !------------------------------------------------------------------------------
-   subroutine finish_exp_psi_int_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
-              &                       dVsOm_Mloc, buo_Mloc, dpsi_exp_last, &
-              &                       vp_bal, vort_bal)
+   subroutine finish_exp_psi_int_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, dVsOm_Mloc,&
+              &                       temp_Mloc, xi_Mloc, dpsi_exp_last, vp_bal,      &
+              &                       vort_bal)
 
       !-- Input variables
       complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -486,7 +514,8 @@ contains
       complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       type(vp_bal_type),   intent(inout) :: vp_bal
@@ -544,14 +573,33 @@ contains
                if ( .not. l_buo_imp ) then 
                   !-- Store buoyancy for the force balance
                   if ( vort_bal%l_calc ) then
-                     vort_bal%buo(n_m,n_r)=buo_Mloc(n_m,n_r)
+                     if ( l_heat ) then
+                        vort_bal%buo(n_m,n_r)=-BuoFac*rgrav(n_r)*or1(n_r)*ci* &
+                        &                     real(m,cp)*temp_Mloc(n_m,n_r)
+                        if ( l_chem ) then
+                           vort_bal%buo(n_m,n_r)=vort_bal%buo(n_m,n_r)-ChemFac* &
+                           &                     rgrav(n_r)*or1(n_r)*ci*        &
+                           &                     real(m,cp)*xi_Mloc(n_m,n_r)
+                        end if
+                     else
+                        if ( l_chem ) then
+                           vort_bal%buo(n_m,n_r)=-ChemFac*rgrav(n_r)*or1(n_r)*ci* &
+                           &                     real(m,cp)*xi_Mloc(n_m,n_r)
+                        end if
+                     end if
                   end if
-                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)+&
-                  &                      r(n_r)*buo_Mloc(n_m,n_r)
-               end if
-            end if
-         end do
-      end do
+                  if ( l_heat ) then
+                     dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-BuoFac*rgrav(n_r)*&
+                     &                      ci*real(m,cp)*temp_Mloc(n_m,n_r)
+                  end if
+                  if ( l_chem ) then
+                     dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-ChemFac*rgrav(n_r)*&
+                     &                      ci*real(m,cp)*xi_Mloc(n_m,n_r)
+                  end if
+               end if ! buo imp
+            end if ! m /= 0
+         end do ! do n_m
+      end do ! do n_r
 
       if ( l_rank_has_m0 .and. vp_bal%l_calc ) then
          do n_r=1,n_r_max
@@ -625,18 +673,19 @@ contains
 
    end subroutine finish_exp_psi_int_smat
 !------------------------------------------------------------------------------
-   subroutine get_psi_rhs_imp_int_smat(psi_hat_Mloc, up_Mloc, psi_old,  &
-              &                        dpsi_imp_Mloc_last, vp_bal,      &
-              &                        l_calc_lin_rhs)
+   subroutine get_psi_rhs_imp_int_smat(psi_hat_Mloc, up_Mloc, temp_Mloc, xi_Mloc, &
+              &                        dpsidt, istage, vp_bal, l_calc_lin)
 
       !-- Input variables
-      complex(cp), intent(in) :: psi_hat_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      logical,     intent(in) :: l_calc_lin_rhs
+      complex(cp),       intent(in) :: psi_hat_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      integer,           intent(in) :: istage
+      logical,           intent(in) :: l_calc_lin
 
       !-- Output variables
-      complex(cp),       intent(inout) :: dpsi_imp_Mloc_last(nMstart:nMstop,n_r_max)
-      complex(cp),       intent(inout) :: psi_old(nMstart:nMstop,n_r_max)
+      type(type_tarray), intent(inout) :: dpsidt
       type(vp_bal_type), intent(inout) :: vp_bal
 
       !-- Local variables
@@ -652,33 +701,35 @@ contains
       end if
 
       !-- Matrix-vector multiplication by the operator -\int^4 r^4 \Delta .
-      do n_m=nMstart,nMstop
-         m = idx2m(n_m)
+      if ( istage == 1 ) then
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
 
-         if ( m == 0 ) then
+            if ( m == 0 ) then
+               do n_cheb=1,n_r_max
+                  rhs(n_cheb)=work_r(n_cheb)
+               end do
+            else
+               do n_cheb=1,n_r_max
+                  rhs(n_cheb)=psi_hat_Mloc(n_m,n_cheb)
+               end do
+            end if
+
+            call RHSI_mat(n_m)%mat_vec_mul(rhs)
+
+            rhs(1)=zero ! vphi equation has only 2 BCs
+            rhs(2)=zero
+            if ( m > 0 ) then
+               rhs(3)=zero
+               rhs(4)=zero
+            end if
+
             do n_cheb=1,n_r_max
-               rhs(n_cheb)=work_r(n_cheb)
+               dpsidt%old(n_m,n_cheb,istage)=rhs(n_cheb)
             end do
-         else
-            do n_cheb=1,n_r_max
-               rhs(n_cheb)=psi_hat_Mloc(n_m,n_cheb)
-            end do
-         end if
 
-         call RHSI_mat(n_m)%mat_vec_mul(rhs)
-
-         rhs(1)=zero ! vphi equation has only 2 BCs
-         rhs(2)=zero
-         if ( m > 0 ) then
-            rhs(3)=zero
-            rhs(4)=zero
-         end if
-
-         do n_cheb=1,n_r_max
-            psi_old(n_m,n_cheb)=rhs(n_cheb)
          end do
-
-      end do
+      end if
 
       !-- Calculate and store vphi force balance if needed
       if ( l_rank_has_m0 .and. vp_bal%l_calc ) then
@@ -694,7 +745,7 @@ contains
          end do
       end if
 
-      if ( l_calc_lin_rhs ) then
+      if ( l_calc_lin) then
 
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
@@ -723,11 +774,59 @@ contains
          !-- Finally assemble the right hand side
          do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
-               dpsi_imp_Mloc_last(n_m,n_cheb)=work_Mloc(n_m,n_cheb)
+               dpsidt%impl(n_m,n_cheb,istage)=work_Mloc(n_m,n_cheb)
             end do
          end do
 
-      end if 
+         if ( l_buo_imp ) then
+            do n_r=1,n_r_max
+               do n_m=nMstart,nMstop
+                  m = idx2m(n_m)
+                  if ( m /= 0 ) then
+                     if ( l_heat ) then
+                        work_Mloc(n_m,n_r)=-BuoFac*rgrav(n_r)*or1(n_r)*ci*real(m,cp)*&
+                        &                  temp_Mloc(n_m,n_r)
+                        if ( l_chem ) then
+                           work_Mloc(n_m,n_r)=work_Mloc(n_m,n_r)-ChemFac*rgrav(n_r)* &
+                           &                  or1(n_r)*ci*real(m,cp)*xi_Mloc(n_m,n_r)
+                        end if
+                     else
+                        if ( l_chem ) then
+                           work_Mloc(n_m,n_r)=-ChemFac*rgrav(n_r)*or1(n_r)*ci* &
+                           &                  real(m,cp)*xi_Mloc(n_m,n_r)
+                        end if
+                     end if
+                  end if ! m /= 0
+               end do
+            end do
+
+            !-- DCT of work array
+            call rscheme%costf1(work_Mloc, nMstart, nMstop, n_r_max)
+
+            !-- Matrix-vector multiplication by the operator \int\int\int\int r^4 .
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m > 0 ) then
+                  do n_cheb=1,n_r_max
+                     rhs(n_cheb)=work_Mloc(n_m,n_cheb)
+                  end do
+
+                  call RHSE_mat(2)%mat_vec_mul(rhs)
+
+                  rhs(1)=zero
+                  rhs(2)=zero
+                  rhs(3)=zero
+                  rhs(4)=zero
+                  do n_cheb=1,n_r_max
+                     dpsidt%impl(n_m,n_cheb,istage)=dpsidt%impl(n_m,n_cheb,istage)+&
+                     &                              rhs(n_cheb)
+                  end do
+               end if ! m /= 0
+            end do
+
+         end if ! buoyancy treated implicitly ???
+
+      end if  ! do we need to compute the linear terms for this stage ?
 
    end subroutine get_psi_rhs_imp_int_smat
 !------------------------------------------------------------------------------

@@ -24,9 +24,13 @@ module init_fields
    use checkpoints, only: read_checkpoint
    use time_schemes, only: type_tscheme
    use update_temp_coll, only: get_temp_rhs_imp_coll
+   use update_temp_integ, only: get_temp_rhs_imp_int
    use update_xi_coll, only: get_xi_rhs_imp_coll
+   use update_xi_integ, only: get_xi_rhs_imp_int
    use update_psi_coll_smat, only: get_psi_rhs_imp_coll_smat
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
+   use update_psi_integ_smat, only: get_psi_rhs_imp_int_smat
+   use update_psi_integ_dmat, only: get_psi_rhs_imp_int_dmat
    use fields
    use fieldsLast
    use precision_mod
@@ -153,6 +157,16 @@ contains
             call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc, temp_Mloc, &
                  &                         xi_Mloc, dpsidt, 1, vp_bal, vort_bal, .true.)
          end if
+      else
+         if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, .true.)
+         if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, .true.)
+         if ( l_direct_solve ) then
+            call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,temp_Mloc,psi_Mloc, &
+                 &                        dpsidt, 1, vp_bal, .true.)
+         else
+            call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,temp_Mloc,xi_Mloc,dpsidt,&
+                 &                        1, vp_bal, .true.)
+         end if
       end if
 
    end subroutine get_start_fields
@@ -249,12 +263,12 @@ contains
                phi_func(n_phi)=c_r*exp(-(phi-phi0)**2/0.2_cp**2)
             end do
 
-            !-- temp_Rloc is used as a work r-distributed array here
-            call fft(phi_func, temp_Rloc(:,n_r))
+            !-- us_Rloc is used as a work r-distributed array here
+            call fft(phi_func, us_Rloc(:,n_r))
          end do
 
          !-- MPI transpose is needed here
-         call r2m_single%transp_r2m(temp_Rloc, work_Mloc)
+         call r2m_single%transp_r2m(us_Rloc, work_Mloc)
 
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
@@ -298,7 +312,6 @@ contains
       do n_r=1,n_r_max
          u1(n_r)=sin(pi*(r(n_r)-r_icb))
       end do
-
 
       if ( init_u > 0 ) then
          

@@ -19,7 +19,6 @@ module fieldsLast
    complex(cp), pointer, public :: dVsT_Mloc(:,:,:)
    complex(cp), pointer, public :: dVsXi_Mloc(:,:,:)
    complex(cp), pointer, public :: dVsOm_Mloc(:,:,:)
-   complex(cp), public, allocatable :: buo_Mloc(:,:)
    complex(cp), pointer, public :: dpsidt_Rloc(:,:)
    complex(cp), pointer, public :: dtempdt_Rloc(:,:)
    complex(cp), pointer, public :: dxidt_Rloc(:,:)
@@ -61,8 +60,6 @@ contains
               &                norder_imp_lin)
       end if
 
-      allocate( buo_Mloc(nMStart:nMstop,n_r_max) )
-      bytes_allocated = bytes_allocated+n_r_max*(nMstop-nMstart+1)*SIZEOF_DEF_COMPLEX
       n_mloc_fields = 0
       if ( l_heat ) then
          n_mloc_fields = n_mloc_fields + 1
@@ -102,7 +99,6 @@ contains
       bytes_allocated = bytes_allocated + (2*n_mloc_fields+2)*nexp*(nMstop-nMStart+1)* &
       &                 n_r_max*SIZEOF_DEF_COMPLEX
 
-      buo_Mloc(:,:)=zero
       dt_fields_Mloc_container(:,:,:,:)=zero
 
       n_rloc_fields = 2
@@ -145,7 +141,6 @@ contains
       if ( l_heat ) call dTdt%finalize()
       if ( l_chem ) call dxidt%finalize()
       call dpsidt%finalize()
-      deallocate( buo_Mloc )
 
    end subroutine finalize_fieldsLast
 !-------------------------------------------------------------------------------

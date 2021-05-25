@@ -3,10 +3,10 @@ module update_temp_integ
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, one, ci, half
-   use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, &
-       &                TdiffFac, l_non_rot, l_buo_imp, l_galerkin
+   use namelists, only: kbott, ktopt, tadvz_fac, r_cmb, r_icb, &
+       &                TdiffFac, l_non_rot, l_galerkin
    use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
-   use radial_functions, only: rscheme, or1, or2, dtcond, tcond, rgrav, r
+   use radial_functions, only: rscheme, or2, dtcond, tcond, r
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, n_cheb_max, m2idx
    use radial_der, only: get_dr
@@ -125,8 +125,8 @@ contains
 
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
-   subroutine update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, buo_Mloc, &
-              &               dTdt, tscheme, lMat, l_log_next)
+   subroutine update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt,  &
+              &               tscheme, lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -138,30 +138,11 @@ contains
       complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       type(type_tarray), intent(inout) :: dTdt
-      complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m, m, n_cheb
+      integer :: n_m, m, n_cheb
 
       if ( lMat ) lTMat(:)=.false.
-
-      !-- Assemble first buoyancy part from T^{n}
-      if ( l_buo_imp ) then
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m /= 0 ) then
-                  buo_Mloc(n_m,n_r)=-tscheme%wimp_lin(2)*rgrav(n_r)*or1(n_r) &
-                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-               end if
-            end do
-         end do
-      end if
-
-      !-- Calculation of the implicit part
-      call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt%old(:,:,tscheme%istage),  &
-           &                    dTdt%impl(:,:,tscheme%istage),                &
-           &                    tscheme%l_imp_calc_rhs(tscheme%istage))
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
@@ -228,22 +209,16 @@ contains
       !-- Bring temperature back to physical space
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Finish assembling buoyancy 
-      if ( l_buo_imp ) then
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m /= 0 ) then
-                  buo_Mloc(n_m,n_r)=                    buo_Mloc(n_m,n_r)-&
-                  &               tscheme%wimp_lin(1)*rgrav(n_r)*or1(n_r) &
-                  &               *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-               end if
-            end do
-         end do
-      end if
-
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dTdt, nMstart, nMstop, n_r_max)
+
+      !-- Compute implicit state
+      if ( tscheme%istage == tscheme%nstages ) then
+         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, tscheme%l_imp_calc_rhs(1))
+      else
+         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, tscheme%istage+1,    &
+              &                    tscheme%l_imp_calc_rhs(tscheme%istage+1))
+      end if
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       !-- This is needed to estimate the heat fluxes
@@ -253,34 +228,18 @@ contains
 
    end subroutine update_temp_int
 !------------------------------------------------------------------------------
-   subroutine finish_exp_temp_int(temp_Mloc, psi_Mloc, dVsT_Mloc, buo_Mloc, &
-              &                   dtemp_exp_last)
+   subroutine finish_exp_temp_int(psi_Mloc, dVsT_Mloc, dtemp_exp_last)
 
       !-- Input variables
       complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
-      complex(cp), intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dtemp_exp_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, m, n_cheb
       real(cp) :: h2
-
-      !-- If buoyancy is treated explicitly
-      if ( .not. l_buo_imp ) then
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m /= 0 ) then
-                  buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
-                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-               end if
-            end do
-         end do
-      end if
 
       !-- Finish calculation of advection
       call rscheme%costf1(dVsT_Mloc, nMstart, nMstop, n_r_max)
@@ -348,39 +307,40 @@ contains
 
    end subroutine finish_exp_temp_int
 !------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp_int(temp_hat_Mloc, temp_old, dtemp_imp_Mloc_last, &
-              &                    l_calc_rhs_lin)
+   subroutine get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, istage, l_calc_lin)
 
       !-- Input variables
-      complex(cp), intent(in) :: temp_hat_Mloc(nMstart:nMstop,n_r_max)
-      logical,     intent(in) :: l_calc_rhs_lin
+      complex(cp),       intent(in) :: temp_hat_Mloc(nMstart:nMstop,n_r_max)
+      logical,           intent(in) :: l_calc_lin
+      integer,           intent(in) :: istage
 
       !-- Output variable
-      complex(cp), intent(out) :: temp_old(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: dtemp_imp_Mloc_last(nMstart:nMstop,n_r_max)
+      type(type_tarray), intent(inout) :: dTdt
 
       !-- Local variables
       integer :: n_m, n_cheb
 
       !-- Matrix-vector multiplication by the operator \int\int r^2 .
-      do n_m=nMstart,nMstop
+      if ( istage == 1 ) then
+         do n_m=nMstart,nMstop
 
-         do n_cheb=1,n_r_max
-            rhs(n_cheb)= temp_hat_Mloc(n_m,n_cheb)
+            do n_cheb=1,n_r_max
+               rhs(n_cheb)= temp_hat_Mloc(n_m,n_cheb)
+            end do
+
+            call RHSE_mat(2)%mat_vec_mul(rhs)
+
+            rhs(1)=zero
+            rhs(2)=zero
+
+            do n_cheb=1,n_r_max
+               dTdt%old(n_m,n_cheb,istage)=rhs(n_cheb)
+            end do
+
          end do
+      end if
 
-         call RHSE_mat(2)%mat_vec_mul(rhs)
-
-         rhs(1)=zero
-         rhs(2)=zero
-
-         do n_cheb=1,n_r_max
-            temp_old(n_m,n_cheb)=rhs(n_cheb)
-         end do
-
-      end do
-
-      if ( l_calc_rhs_lin ) then
+      if ( l_calc_lin ) then
 
          !-- Matrix-vector multiplication by the LHS operator
          do n_m=nMstart,nMstop
@@ -398,8 +358,8 @@ contains
          !-- Finally assemble the right hand side
          do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
-               dtemp_imp_Mloc_last(n_m,n_cheb)=TdiffFac*hdif_T(n_m)*&
-               &                               work_Mloc(n_m,n_cheb) 
+               dTdt%impl(n_m,n_cheb,istage)=TdiffFac*hdif_T(n_m)*&
+               &                            work_Mloc(n_m,n_cheb) 
             end do
          end do
 
