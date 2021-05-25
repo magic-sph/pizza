@@ -5,9 +5,11 @@ module update_psi_coll_smat
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use horizontal, only: hdif_V
-   use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
-       &                l_coriolis_imp, l_buo_imp, l_ek_pump, l_non_rot
-   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
+   use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, BuoFac, &
+       &                l_coriolis_imp, l_buo_imp, l_ek_pump, l_non_rot,     &
+       &                ChemFac, l_chem, l_heat
+   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight, &
+       &                       rgrav
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -83,13 +85,14 @@ contains
    end subroutine finalize_om_coll_smat
 !------------------------------------------------------------------------------
    subroutine update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc, &
-              &                   buo_Mloc, dpsidt, vp_bal, vort_bal, tscheme,   &
-              &                   lMat, timers)
+              &                   temp_Mloc, xi_Mloc, dpsidt, vp_bal, vort_bal,  &
+              &                   tscheme, lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
-      complex(cp),         intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),         intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -107,13 +110,6 @@ contains
       integer :: n_r, n_m, n_cheb, m
 
       if ( lMat ) lPsimat(:)=.false.
-
-      !-- Calculation of the implicit part
-      call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,    &
-           &                         dpsidt%old(:,:,tscheme%istage),         &
-           &                         dpsidt%impl(:,:,tscheme%istage),        &
-           &                         vp_bal, vort_bal,                       &
-           &                         tscheme%l_imp_calc_rhs(tscheme%istage))
 
       !-- Calculate first part of time-derivative of \omega if needed
       if ( vort_bal%l_calc .and. tscheme%istage == 1  ) then
@@ -168,7 +164,19 @@ contains
 
             if ( vort_bal%l_calc .and. tscheme%istage == tscheme%nstages ) then
                do n_r=1,n_r_max
-                  vort_bal%buo(n_m,n_r)=buo_Mloc(n_m,n_r)/tscheme%dt(1)
+                  if ( l_heat ) then
+                     vort_bal%buo(n_m,n_r)=-BuoFac*rgrav(n_r)*or1(n_r)*ci*real(m,cp)* &
+                     &                      temp_Mloc(n_m,n_r)
+                     if (l_chem ) then
+                        vort_bal%buo(n_m,n_r)=vort_bal%buo(n_m,n_r)-ChemFac*rgrav(n_r)*&
+                        &                     or1(n_r)*ci*real(m,cp)*xi_Mloc(n_m,n_r)
+                     end if
+                  else
+                     if (l_chem ) then
+                        vort_bal%buo(n_m,n_r)=-ChemFac*rgrav(n_r)*or1(n_r)*ci* &
+                        &                     real(m,cp)*xi_Mloc(n_m,n_r)
+                     end if
+                  end if
                end do
             end if
 
@@ -179,7 +187,19 @@ contains
             do n_r=2,n_r_max-1
                !-- Add buoyancy
                if ( l_buo_imp ) then
-                  rhs(n_r)=work_Mloc(n_m,n_r)+buo_Mloc(n_m,n_r)
+                  if ( l_heat ) then
+                     rhs(n_r)=work_Mloc(n_m,n_r)-tscheme%wimp_lin(1)*BuoFac*&
+                     &        rgrav(n_r)*or1(n_r)*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+                     if ( l_chem ) then
+                        rhs(n_r)=rhs(n_r)-tscheme%wimp_lin(1)*ChemFac*&
+                        &        rgrav(n_r)*or1(n_r)*ci*real(m,cp)*xi_Mloc(n_m,n_r)
+                     end if
+                  else
+                     if ( l_chem ) then
+                        rhs(n_r)=work_Mloc(n_m,n_r)-tscheme%wimp_lin(1)*ChemFac*&
+                        &        rgrav(n_r)*or1(n_r)*ci*real(m,cp)*xi_Mloc(n_m,n_r)
+                     end if
+                  end if
                else
                   rhs(n_r)=work_Mloc(n_m,n_r)
                end if
@@ -239,11 +259,10 @@ contains
       !-- Bring psi and omega to the physical space
       runStart = MPI_Wtime()
       call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
-      call rscheme%costf1(om_Mloc, nMstart, nMstop, n_r_max)
       runStop = MPI_Wtime()
       if ( runStop > runStart ) then
          timers%dct = timers%dct + (runStop-runStart)
-         timers%n_dct_calls = timers%n_dct_calls + 2
+         timers%n_dct_calls = timers%n_dct_calls + 1
       end if
 
       do n_r=1,n_r_max
@@ -274,24 +293,30 @@ contains
          call vort_bal%finalize_domdt(om_Mloc, tscheme)
       end if
 
-      if ( tscheme%l_assembly .and. tscheme%istage==tscheme%nstages-1) then
-         !-- Calculation of the implicit part
-         call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,   &
-              &                         dpsidt%old(:,:,tscheme%istage+1),      &
-              &                         dpsidt%impl(:,:,tscheme%istage+1),     &
-              &                         vp_bal, vort_bal,                      &
-              &                         .true.)
+      !-- Calculation of the implicit part
+      if ( tscheme%istage == tscheme%nstages ) then
+         call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,          &
+              &                         temp_Mloc, xi_Mloc, dpsidt, 1, vp_bal,        &
+              &                         vort_bal, tscheme%l_imp_calc_rhs(1),          &
+              &                         l_in_cheb_space=.true.)
+      else
+         call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,          &
+              &                         temp_Mloc, xi_Mloc, dpsidt, tscheme%istage+1, &
+              &                         vp_bal, vort_bal,                             &
+              &                         tscheme%l_imp_calc_rhs(tscheme%istage+1),     &
+              &                         l_in_cheb_space=.true.)
       end if
 
    end subroutine update_om_coll_smat
 !------------------------------------------------------------------------------
-   subroutine finish_exp_psi_coll_smat(us_Mloc, dVsOm_Mloc, buo_Mloc, &
+   subroutine finish_exp_psi_coll_smat(us_Mloc, dVsOm_Mloc, temp_Mloc, xi_Mloc, &
               &                        dpsi_exp_last, vort_bal)
 
       !-- Input variables
       complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variable
       complex(cp),         intent(inout) :: dpsi_exp_last(nMstart:nMstop,n_r_max)
@@ -325,7 +350,14 @@ contains
 
                !-- If Buoyancy is treated explicitly, add it here:
                if ( .not. l_buo_imp ) then
-                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)+buo_Mloc(n_m,n_r)
+                  if ( l_heat ) then
+                     dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-BuoFac*rgrav(n_r)*&
+                     &                      or1(n_r)*ci*real(m,cp)*temp_Mloc(n_m,n_r)
+                  end if
+                  if ( l_chem ) then
+                     dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-ChemFac*rgrav(n_r)*&
+                     &                      or1(n_r)*ci*real(m,cp)*xi_Mloc(n_m,n_r)
+                  end if
                end if
 
             end if
@@ -335,48 +367,73 @@ contains
    end subroutine finish_exp_psi_coll_smat
 !------------------------------------------------------------------------------
    subroutine get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,  &
-              &                         psi_last, dpsi_imp_Mloc_last, vp_bal, &
-              &                         vort_bal, l_calc_lin_rhs)
+              &                         temp_Mloc, xi_Mloc, dpsidt, istage,   &
+              &                         vp_bal, vort_bal, l_calc_lin,         &
+              &                         l_in_cheb_space)
 
       !-- Input variables
-      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
-      logical,     intent(in) :: l_calc_lin_rhs
+      complex(cp),       intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(inout) :: om_Mloc(nMstart:nMstop,n_r_max)
+      logical,           intent(in) :: l_calc_lin
+      integer,           intent(in) :: istage
+      logical, optional, intent(in) :: l_in_cheb_space
 
       !-- Output variables
       complex(cp),         intent(out) :: dom_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),         intent(inout) :: psi_last(nMstart:nMstop,n_r_max)
-      complex(cp),         intent(inout) :: dpsi_imp_Mloc_last(nMstart:nMstop,n_r_max)
+      type(type_tarray),   intent(inout) :: dpsidt
       type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
 
       !-- Local variables
-      real(cp) :: duphi0(n_r_max), d2uphi0(n_r_max), uphi0(n_r_max)
+      logical :: l_in_cheb
+      integer :: n_r, n_m, m, nm0
+      real(cp) :: duphi0(n_r_max), d2uphi0(n_r_max), uphi0(n_r_max), om0(n_r_max)
       real(cp) :: dm2
-      integer :: n_r, n_m, m, m0
 
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m == 0 ) then
-               psi_last(n_m,n_r)=up_Mloc(n_m,n_r)
-            else
-               psi_last(n_m,n_r)=om_Mloc(n_m,n_r)
-            end if
-         end do
-      end do
+      if ( present(l_in_cheb_space) ) then
+         l_in_cheb = l_in_cheb_space
+      else
+         l_in_cheb = .false.
+      end if
 
-      if ( l_calc_lin_rhs .or. vp_bal%l_calc .or. vort_bal%l_calc ) then
+      if ( l_rank_has_m0 ) then ! Copy m=0 vorticity to save it before DCT
+         nm0 = m2idx(0)
+         om0(:) = real(om_Mloc(nm0,:))
+      end if
 
+      if ( l_calc_lin .or. vp_bal%l_calc .or. vort_bal%l_calc ) then
          call get_ddr(om_Mloc, dom_Mloc, work_Mloc, nMstart, nMstop, &
-              &       n_r_max, rscheme)
+              &       n_r_max, rscheme, l_dct=.not.l_in_cheb)
+         if ( l_in_cheb ) call rscheme%costf1(om_Mloc, nMstart, nMstop, n_r_max)
+      else
+         if ( l_in_cheb ) call rscheme%costf1(om_Mloc, nMstart, nMstop, n_r_max)
+      end if
 
-         m0 = m2idx(0)
+      if ( l_rank_has_m0 ) then ! Copy m=0 vorticity to save it before DCT
+         om_Mloc(nm0,:)=cmplx(om0,0.0_cp,kind=cp)
+      end if
+
+      if ( istage == 1 ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m == 0 ) then
+                  dpsidt%old(n_m,n_r,istage)=up_Mloc(n_m,n_r)
+               else
+                  dpsidt%old(n_m,n_r,istage)=om_Mloc(n_m,n_r)
+               end if
+            end do
+         end do
+      end if
+
+      if ( l_calc_lin .or. vp_bal%l_calc .or. vort_bal%l_calc ) then
 
          if ( l_rank_has_m0 ) then
             do n_r=1,n_r_max
-               uphi0(n_r)=real(up_Mloc(m0, n_r),kind=cp)
+               uphi0(n_r)=real(up_Mloc(nm0, n_r),kind=cp)
             end do
             call get_ddr(uphi0, duphi0, d2uphi0, n_r_max, rscheme)
          end if
@@ -385,7 +442,7 @@ contains
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                if ( m == 0 ) then
-                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac*hdif_V(n_m)*(        &
+                  dpsidt%impl(n_m,n_r,istage)=ViscFac*hdif_V(n_m)*(        &
                   &                                      d2uphi0(n_r)+     &
                   &                        or1(n_r)*      duphi0(n_r)-     &
                   &                        or2(n_r)*       uphi0(n_r) ) -  &
@@ -400,7 +457,7 @@ contains
                   end if
                else
                   dm2 = real(m,cp)*real(m,cp)
-                  dpsi_imp_Mloc_last(n_m,n_r)=ViscFac*hdif_V(n_m)*(         &
+                  dpsidt%impl(n_m,n_r,istage)=ViscFac*hdif_V(n_m)*(         &
                   &                                    work_Mloc(n_m,n_r)   &
                   &                   +or1(n_r)*        dom_Mloc(n_m,n_r)   &
                   &                   -dm2*or2(n_r)*     om_Mloc(n_m,n_r) ) &
@@ -411,10 +468,22 @@ contains
                   &                                      us_Mloc(n_m,n_r)
 
                   if ( l_coriolis_imp ) then
-                     dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r) &
+                     dpsidt%impl(n_m,n_r,istage)=dpsidt%impl(n_m,n_r,istage) &
                      &                   + CorFac*beta(n_r)*us_Mloc(n_m,n_r)
                   end if
 
+                  if ( l_buo_imp ) then
+                     if ( l_heat ) then
+                        dpsidt%impl(n_m,n_r,istage)=dpsidt%impl(n_m,n_r,istage) &
+                        &                - rgrav(n_r)*or1(n_r)*BuoFac*ci*       &
+                        &                  real(m,cp)*temp_Mloc(n_m,n_r)
+                     end if
+                     if ( l_chem ) then
+                        dpsidt%impl(n_m,n_r,istage)=dpsidt%impl(n_m,n_r,istage) &
+                        &                - rgrav(n_r)*or1(n_r)*ChemFac*ci*      &
+                        &                  real(m,cp)*xi_Mloc(n_m,n_r)
+                     end if
+                  end if
 
                   !-- In case the force balance is requested:
                   if ( vort_bal%l_calc ) then
@@ -440,17 +509,22 @@ contains
 
    end subroutine get_psi_rhs_imp_coll_smat
 !------------------------------------------------------------------------------
-   subroutine assemble_psi_coll(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, dpsidt, tscheme)
+   subroutine assemble_psi_coll(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
+              &                 xi_Mloc, dpsidt, tscheme, vp_bal, vort_bal)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
-      type(type_tarray),   intent(in) :: dpsidt
+      type(type_tarray),   intent(inout) :: dpsidt
+      complex(cp),         intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
-      complex(cp), intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
+      type(vp_bal_type),   intent(inout) :: vp_bal
+      type(vort_bal_type), intent(inout) :: vort_bal
 
       !-- Local variables 
       complex(cp) :: rhs1(n_r_max)
@@ -560,6 +634,11 @@ contains
             end if
          end do
       end do
+
+      call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,          &
+           &                         temp_Mloc, xi_Mloc, dpsidt, 1, vp_bal,        &
+           &                         vort_bal, tscheme%l_imp_calc_rhs(1),          &
+           &                         l_in_cheb_space=.false.)
 
    end subroutine assemble_psi_coll
 !------------------------------------------------------------------------------

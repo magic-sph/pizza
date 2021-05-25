@@ -3,7 +3,7 @@ module update_temp_coll
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, four, ci
-   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac, l_buo_imp
+   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
        &                       rgrav
    use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
@@ -63,8 +63,7 @@ contains
 
    end subroutine finalize_temp_coll
 !------------------------------------------------------------------------------
-   subroutine update_temp_co(temp_Mloc, dtemp_Mloc, buo_Mloc, dTdt, &
-              &              tscheme, lMat, l_log_next)
+   subroutine update_temp_co(temp_Mloc, dtemp_Mloc, dTdt, tscheme, lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -75,18 +74,11 @@ contains
       complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
       type(type_tarray), intent(inout) :: dTdt
-      complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, n_r_out, m
 
       if ( lMat ) lTMat(:)=.false.
-
-      !-- Calculation of the implicit part
-      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc,          &
-           &                     dTdt%old(:,:,tscheme%istage),   &
-           &                     dTdt%impl(:,:,tscheme%istage),  &
-           &                     tscheme%l_imp_calc_rhs(tscheme%istage))
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
@@ -134,60 +126,39 @@ contains
          end do
       end do
 
-      !-- Bring temperature back to physical space
-      call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
-
-      !-- Assemble buoyancy in case this is treated implicitly
-      if ( l_buo_imp ) then
-         call tscheme%assemble_implicit_buo(buo_Mloc, temp_Mloc, dTdt,      &
-              &                             BuoFac, rgrav, nMstart, nMstop, &
-              &                             n_r_max, .true.)
-      end if
-
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dTdt, nMstart, nMstop, n_r_max)
+
+      !-- Calculation of the implicit part
+      if ( tscheme%istage == tscheme%nstages ) then
+         call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, 1,   &
+              &                     tscheme%l_imp_calc_rhs(1),        &
+              &                     l_in_cheb_space=.true.)
+      else
+         call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, tscheme%istage+1, &
+              &                     tscheme%l_imp_calc_rhs(tscheme%istage+1),      &
+              &                     l_in_cheb_space=.true.)
+      end if
+
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       if ( l_log_next ) then
          call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, n_r_max, rscheme)
       end if
 
-      if ( tscheme%l_assembly .and. tscheme%istage==tscheme%nstages-1) then
-         !-- Calculation of the implicit part
-         call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc,            &
-              &                     dTdt%old(:,:,tscheme%istage+1),   &
-              &                     dTdt%impl(:,:,tscheme%istage+1),  &
-              &                     .true.)
-      end if
-
    end subroutine update_temp_co
 !------------------------------------------------------------------------------
-   subroutine finish_exp_temp_coll(temp_Mloc, us_Mloc, dVsT_Mloc, buo_Mloc, &
-              &                    dtemp_exp_last)
+   subroutine finish_exp_temp_coll(us_Mloc, dVsT_Mloc, dtemp_exp_last)
 
       !-- Input variables
       complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
-      complex(cp), intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dtemp_exp_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m, m
-
-      if ( .not. l_buo_imp ) then
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m /= 0 ) then
-                  buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
-                  &                  *BuoFac*ci*real(m,cp)*temp_Mloc(n_m,n_r)
-               end if
-            end do
-         end do
-      end if
+      integer :: n_r, n_m
 
       !-- Finish calculation of advection
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
@@ -205,43 +176,57 @@ contains
 
    end subroutine finish_exp_temp_coll
 !------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, temp_last, &
-              &                     dtemp_imp_Mloc_last, l_calc_lin_rhs)
+   subroutine get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, istage, &
+              &                     l_calc_lin, l_in_cheb_space)
 
       !-- Input variables
-      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
-      logical,     intent(in) :: l_calc_lin_rhs
+      complex(cp),       intent(inout) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      integer,           intent(in) :: istage
+      logical,           intent(in) :: l_calc_lin
+      logical, optional, intent(in) :: l_in_cheb_space
 
       !-- Output variable
-      complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: temp_last(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: dtemp_imp_Mloc_last(nMstart:nMstop,n_r_max)
+      type(type_tarray), intent(inout) :: dTdt
+      complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
       integer :: n_r, n_m, m
+      logical :: l_in_cheb
       real(cp) :: dm2
 
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            temp_last(n_m,n_r)=temp_Mloc(n_m,n_r)
-         end do
-      end do
+      if ( present(l_in_cheb_space) ) then
+         l_in_cheb = l_in_cheb_space
+      else
+         l_in_cheb = .false.
+      end if
 
-      if ( l_calc_lin_rhs ) then
-
+      if ( l_calc_lin ) then
          call get_ddr(temp_Mloc, dtemp_Mloc, work_Mloc, nMstart, nMstop, &
-              &       n_r_max, rscheme)
+              &       n_r_max, rscheme, l_dct=.not. l_in_cheb)
+         if ( l_in_cheb ) call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
+      else
+         if ( l_in_cheb ) call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
+      end if
+
+      if ( istage == 1 ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               dTdt%old(n_m,n_r,istage)=temp_Mloc(n_m,n_r)
+            end do
+         end do
+      end if
+
+      if ( l_calc_lin ) then
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                dm2 = real(m,cp)*real(m,cp)
-               dtemp_imp_Mloc_last(n_m,n_r)=TdiffFac*hdif_T(n_m)* (        &
+               dTdt%impl(n_m,n_r,istage)=TdiffFac*hdif_T(n_m)* (           &
                &                                       work_Mloc(n_m,n_r)  &
                &                         +or1(n_r)*   dtemp_Mloc(n_m,n_r)  &
                &                     -dm2*or2(n_r)*    temp_Mloc(n_m,n_r) )
             end do
          end do
-
       end if
 
    end subroutine get_temp_rhs_imp_coll
@@ -251,7 +236,7 @@ contains
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: l_log_next
-      type(type_tarray),   intent(in) :: dTdt
+      type(type_tarray),   intent(inout) :: dTdt
 
       !-- Output variable
       complex(cp), intent(inout) :: temp_Mloc(nMstart:nMstop,n_r_max)
@@ -294,6 +279,12 @@ contains
                  &                bott_Mloc(n_m), temp_Mloc(n_m,:))
          end do
       end if
+
+      !-- Finally call the construction of the implicit terms for the first stage
+      !-- of next iteration
+      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, 1,   &
+           &                     tscheme%l_imp_calc_rhs(1),        &
+           &                     l_in_cheb_space=.false.)
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       if ( l_log_next ) then

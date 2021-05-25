@@ -3,7 +3,7 @@ module update_xi_coll
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, four, ci
-   use namelists, only: kbotxi, ktopxi, XidiffFac, ChemFac, l_buo_imp, l_heat
+   use namelists, only: kbotxi, ktopxi, XidiffFac, ChemFac, l_heat
    use radial_functions, only: rscheme, or1, or2, dxicond, rgrav
    use horizontal, only: hdif_xi, botxi_Mloc, topxi_Mloc
    use blocking, only: nMstart, nMstop
@@ -62,8 +62,7 @@ contains
 
    end subroutine finalize_xi_coll
 !------------------------------------------------------------------------------
-   subroutine update_xi_co(xi_Mloc, dxi_Mloc, buo_Mloc, dxidt, &
-              &              tscheme, lMat, l_log_next)
+   subroutine update_xi_co(xi_Mloc, dxi_Mloc, dxidt, tscheme, lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -74,19 +73,11 @@ contains
       complex(cp),       intent(out) :: xi_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),       intent(out) :: dxi_Mloc(nMstart:nMstop, n_r_max)
       type(type_tarray), intent(inout) :: dxidt
-      complex(cp),       intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      logical :: l_init_buo
       integer :: n_r, n_m, n_r_out, m
 
       if ( lMat ) lXiMat(:)=.false.
-
-      !-- Calculation of the implicit part
-      call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc,               &
-           &                   dxidt%old(:,:,tscheme%istage),   &
-           &                   dxidt%impl(:,:,tscheme%istage),  &
-           &                   tscheme%l_imp_calc_rhs(tscheme%istage))
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dxidt, nMstart, nMstop, n_r_max)
@@ -134,80 +125,40 @@ contains
          end do
       end do
 
-      !-- Bring composition back to physical space
-      call rscheme%costf1(xi_Mloc, nMstart, nMstop, n_r_max)
-
-      !-- Assemble buoyancy in case this is treated implicitly
-      if ( l_buo_imp ) then
-         if ( l_heat ) then
-            l_init_buo = .false.
-         else
-            l_init_buo = .true.
-         end if
-         call tscheme%assemble_implicit_buo(buo_Mloc,xi_Mloc , dxidt,        &
-              &                             ChemFac, rgrav, nMstart, nMstop, &
-              &                             n_r_max, l_init_buo)
-      end if
-
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dxidt, nMstart, nMstop, n_r_max)
+
+      !-- Calculation of the implicit part
+      if ( tscheme%istage == tscheme%nstages ) then
+         call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, 1, &
+              &                   tscheme%l_imp_calc_rhs(1), l_in_cheb_space=.true.)
+      else
+         call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, tscheme%istage+1, &
+              &                   tscheme%l_imp_calc_rhs(tscheme%istage+1),   &
+              &                   l_in_cheb_space=.true.)
+      end if
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       if ( l_log_next ) then
          call get_dr(xi_Mloc, dxi_Mloc, nMstart, nMstop, n_r_max, rscheme)
       end if
 
-      if ( tscheme%l_assembly .and. tscheme%istage==tscheme%nstages-1) then
-         !-- Calculation of the implicit part
-         call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc,                 &
-              &                   dxidt%old(:,:,tscheme%istage+1),   &
-              &                   dxidt%impl(:,:,tscheme%istage+1),  &
-              &                   .true.)
-      end if
-
    end subroutine update_xi_co
 !------------------------------------------------------------------------------
-   subroutine finish_exp_xi_coll(xi_Mloc, us_Mloc, dVsT_Mloc, buo_Mloc, &
-              &                    dxi_exp_last)
+   subroutine finish_exp_xi_coll(us_Mloc, dVsXi_Mloc, dxi_exp_last)
 
       !-- Input variables
       complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(inout) :: dVsT_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: dVsXi_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
-      complex(cp), intent(inout) :: buo_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dxi_exp_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m, m
-
-      if ( .not. l_buo_imp ) then
-         if ( l_heat ) then
-            do n_r=1,n_r_max
-               do n_m=nMstart,nMstop
-                  m = idx2m(n_m)
-                  if ( m /= 0 ) then
-                     buo_Mloc(n_m,n_r)=buo_Mloc(n_m,n_r)-rgrav(n_r)*or1(n_r) &
-                     &                 *ChemFac*ci*real(m,cp)*xi_Mloc(n_m,n_r)
-                  end if
-               end do
-            end do
-         else
-            do n_r=1,n_r_max
-               do n_m=nMstart,nMstop
-                  m = idx2m(n_m)
-                  if ( m /= 0 ) then
-                     buo_Mloc(n_m,n_r)=-rgrav(n_r)*or1(n_r) &
-                     &                  *ChemFac*ci*real(m,cp)*xi_Mloc(n_m,n_r)
-                  end if
-               end do
-            end do
-         end if
-      end if
+      integer :: n_r, n_m
 
       !-- Finish calculation of advection
-      call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
+      call get_dr( dVsXi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
            &       rscheme, nocopy=.true. )
 
       !-- Finish calculation of the explicit part for current time step
@@ -221,43 +172,57 @@ contains
 
    end subroutine finish_exp_xi_coll
 !------------------------------------------------------------------------------
-   subroutine get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, xi_last, &
-              &                   dxi_imp_Mloc_last, l_calc_lin_rhs)
+   subroutine get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, istage, l_calc_lin, &
+              &                   l_in_cheb_space)
 
       !-- Input variables
-      complex(cp), intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
-      logical,     intent(in) :: l_calc_lin_rhs
+      complex(cp),       intent(inout) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      integer,           intent(in) :: istage
+      logical,           intent(in) :: l_calc_lin
+      logical, optional, intent(in) :: l_in_cheb_space
 
       !-- Output variable
-      complex(cp), intent(out) :: dxi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: xi_last(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: dxi_imp_Mloc_last(nMstart:nMstop,n_r_max)
+      complex(cp),       intent(out) :: dxi_Mloc(nMstart:nMstop,n_r_max)
+      type(type_tarray), intent(inout) :: dxidt
 
       !-- Local variables
+      logical :: l_in_cheb
       integer :: n_r, n_m, m
       real(cp) :: dm2
 
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            xi_last(n_m,n_r)=xi_Mloc(n_m,n_r)
-         end do
-      end do
+      if ( present(l_in_cheb_space) ) then
+         l_in_cheb = l_in_cheb_space
+      else
+         l_in_cheb = .false.
+      end if
 
-      if ( l_calc_lin_rhs ) then
-
+      if ( l_calc_lin ) then
          call get_ddr(xi_Mloc, dxi_Mloc, work_Mloc, nMstart, nMstop, &
-              &       n_r_max, rscheme)
+              &       n_r_max, rscheme, l_dct=.not. l_in_cheb)
+         if ( l_in_cheb ) call rscheme%costf1(xi_Mloc, nMstart, nMstop, n_r_max)
+      else
+         if ( l_in_cheb ) call rscheme%costf1(xi_Mloc, nMstart, nMstop, n_r_max)
+      end if
+
+      if ( istage == 1 ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               dxidt%old(n_m,n_r,istage)=xi_Mloc(n_m,n_r)
+            end do
+         end do
+      end if
+
+      if ( l_calc_lin ) then
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
                dm2 = real(m,cp)*real(m,cp)
-               dxi_imp_Mloc_last(n_m,n_r)=XidiffFac*hdif_Xi(n_m)* (      &
+               dxidt%impl(n_m,n_r,istage)=XidiffFac*hdif_Xi(n_m)* (      &
                &                                     work_Mloc(n_m,n_r)  &
                &                         +or1(n_r)*   dxi_Mloc(n_m,n_r)  &
                &                     -dm2*or2(n_r)*    xi_Mloc(n_m,n_r) )
             end do
          end do
-
       end if
 
    end subroutine get_xi_rhs_imp_coll
@@ -267,7 +232,7 @@ contains
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: l_log_next
-      type(type_tarray),   intent(in) :: dxidt
+      type(type_tarray),   intent(inout) :: dxidt
 
       !-- Output variable
       complex(cp), intent(inout) :: xi_Mloc(nMstart:nMstop,n_r_max)
@@ -310,6 +275,10 @@ contains
                  &                botxi_Mloc(n_m), xi_Mloc(n_m,:))
          end do
       end if
+
+      call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, 1,   &
+           &                   tscheme%l_imp_calc_rhs(1),     &
+           &                   l_in_cheb_space=.false.)
 
    end subroutine assemble_xi_coll
 !------------------------------------------------------------------------------

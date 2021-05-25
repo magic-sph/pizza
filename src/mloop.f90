@@ -60,18 +60,18 @@ contains
       type(timers_type),   intent(inout) :: timers
 
      if ( l_cheb_coll ) then
-         if ( l_heat ) call update_temp_co(temp_Mloc, dtemp_Mloc, buo_Mloc, &
-                            &              dTdt, tscheme, lMat, l_log_next)
-         if ( l_chem ) call update_xi_co(xi_Mloc, dxi_Mloc, buo_Mloc, &
-                            &            dxidt, tscheme, lMat, l_log_next)
+         if ( l_heat ) call update_temp_co(temp_Mloc, dtemp_Mloc, dTdt, tscheme, &
+                            &              lMat, l_log_next)
+         if ( l_chem ) call update_xi_co(xi_Mloc, dxi_Mloc, dxidt, tscheme, lMat, &
+                            &            l_log_next)
          if ( l_direct_solve ) then
             call update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,    &
-                 &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   vort_bal, tscheme, lMat, timers)
+                 &                   up_Mloc, temp_Mloc, xi_Mloc, dpsidt,     &
+                 &                   vp_bal, vort_bal, tscheme, lMat, timers)
          else
             call update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc,    &
-                 &                   up_Mloc, buo_Mloc, dpsidt, vp_bal,       &
-                 &                   vort_bal, tscheme, lMat, timers)
+                 &                   up_Mloc, temp_Mloc, xi_Mloc, dpsidt,     &
+                 &                   vp_bal, vort_bal, tscheme, lMat, timers)
          end if
       else
          if ( l_heat ) call update_temp_int(temp_hat_Mloc, temp_Mloc,    &
@@ -95,24 +95,26 @@ contains
 !------------------------------------------------------------------------------
    subroutine assemble_stage(temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, psi_Mloc, &
               &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt,   &
-              &              dpsidt, tscheme, l_log_next)
+              &              dpsidt, tscheme, vp_bal, vort_bal, l_log_next)
 
       !-- Input variables
-      type(type_tarray),   intent(in) :: dpsidt
-      type(type_tarray),   intent(in) :: dTdt
-      type(type_tarray),   intent(in) :: dxidt
+      type(type_tarray),   intent(inout) :: dpsidt
+      type(type_tarray),   intent(inout) :: dTdt
+      type(type_tarray),   intent(inout) :: dxidt
       logical,             intent(in) :: l_log_next
       class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
-      complex(cp), intent(out) :: temp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: xi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: dxi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(inout) :: psi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(inout) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(inout) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: dxi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(inout) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(inout) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(inout) :: up_Mloc(nMstart:nMstop,n_r_max)
+      type(vp_bal_type),   intent(inout) :: vp_bal
+      type(vort_bal_type), intent(inout) :: vort_bal
 
       if ( l_cheb_coll ) then
          if ( l_heat ) call assemble_temp_coll(temp_Mloc, dtemp_Mloc, dTdt, &
@@ -121,7 +123,8 @@ contains
                             &                l_log_next)
 
          if ( l_direct_solve ) then
-            call assemble_psi_coll(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, dpsidt, tscheme)
+            call assemble_psi_coll(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, temp_Mloc, &
+                 &                 xi_Mloc, dpsidt, tscheme, vp_bal, vort_bal)
          else
             call abortRun('Assembly stage not implemented yet')
          end if
@@ -158,19 +161,18 @@ contains
 
 
       if ( l_cheb_coll ) then
-         if ( l_heat ) call finish_exp_temp_coll(temp_Mloc, us_Mloc,    &
-                            &                    dVsT_Mloc, buo_Mloc,   &
+         if ( l_heat ) call finish_exp_temp_coll(us_Mloc, dVsT_Mloc, &
                             &                    dTdt%expl(:,:,tscheme%istage))
-         if ( l_chem ) call finish_exp_xi_coll(xi_Mloc, us_Mloc, dVsXi_Mloc, &
-                            &                  buo_Mloc,                     &
+         if ( l_chem ) call finish_exp_xi_coll(us_Mloc, dVsXi_Mloc, &
                             &                  dxidt%expl(:,:,tscheme%istage))
          if ( l_direct_solve ) then
-            call finish_exp_psi_coll_smat(us_Mloc, dVsOm_Mloc, buo_Mloc,  &
+            call finish_exp_psi_coll_smat(us_Mloc, dVsOm_Mloc, temp_Mloc, xi_Mloc, &
                  &                        dpsidt%expl(:,:,tscheme%istage),&
                  &                        vort_bal)
          else
             call finish_exp_psi_coll_dmat(us_Mloc, up_Mloc, om_Mloc, dVsOm_Mloc, &
-                 &                      buo_Mloc,dpsidt%expl(:,:,tscheme%istage),&
+                 &                        temp_Mloc, xi_Mloc,                    &
+                 &                        dpsidt%expl(:,:,tscheme%istage),       &
                  &                        vort_bal)
          end if
       else

@@ -2,12 +2,9 @@ module dirk_schemes
 
    use precision_mod
    use parallel_mod
-   use namelists, only: alpha
-   use constants, only: one, half, two, ci, zero
+   use constants, only: one, half, two
    use mem_alloc, only: bytes_allocated
    use useful, only: abortRun
-   use truncation, only: idx2m
-   use radial_functions, only: or1
    use time_schemes, only: type_tscheme
    use time_array
 
@@ -27,7 +24,6 @@ module dirk_schemes
       procedure :: set_dt_array
       procedure :: set_imex_rhs
       procedure :: rotate_imex
-      procedure :: assemble_implicit_buo
       procedure :: bridge_with_cnab2
       procedure :: start_with_ab1
       procedure :: assemble_imex
@@ -427,63 +423,6 @@ contains
       type(type_tarray), intent(inout) :: dfdt
 
    end subroutine rotate_imex
-!------------------------------------------------------------------------------
-   subroutine assemble_implicit_buo(this, buo, temp, dTdt, BuoFac, rgrav, &
-              &                     nMstart, nMstop, n_r_max, l_init_buo)
-      !
-      ! This subroutine is used to assemble Buoyancy
-      !
-      class(type_dirk) :: this
-
-      !-- Input variables:
-      integer,           intent(in) :: nMstart
-      integer,           intent(in) :: nMstop
-      integer,           intent(in) :: n_r_max
-      real(cp),          intent(in) :: BuoFac
-      real(cp),          intent(in) :: rgrav(n_r_max)
-      complex(cp),       intent(in) :: temp(nMstart:nMstop,n_r_max)
-      type(type_tarray), intent(in) :: dTdt
-      logical,           intent(in) :: l_init_buo
-
-      !-- Output variables:
-      complex(cp), intent(out) :: buo(nMstart:nMstop,n_r_max)
-
-      !-- Local variables:
-      integer :: n_stage, n_m, n_r, m
-
-      if ( l_init_buo ) then
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               buo(n_m,n_r)=zero
-            end do
-         end do
-      end if
-
-      do n_stage=1,this%istage
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               m = idx2m(n_m)
-               if ( m /= 0 ) then
-                  buo(n_m,n_r)=buo(n_m,n_r)-                              &
-                  &            this%butcher_imp(this%istage+1,n_stage)*   &
-                  &            rgrav(n_r)*or1(n_r)*BuoFac*ci*real(m,cp)*  &
-                  &            dTdt%old(n_m,n_r,n_stage)
-               end if
-            end do
-         end do
-      end do
-
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            if ( m /= 0 ) then
-               buo(n_m,n_r)=buo(n_m,n_r)-this%wimp_lin(1)*rgrav(n_r)*  &
-               &            or1(n_r)*BuoFac*ci*real(m,cp)*temp(n_m,n_r)
-            end if
-         end do
-      end do
-
-   end subroutine assemble_implicit_buo
 !------------------------------------------------------------------------------
    subroutine bridge_with_cnab2(this)
 

@@ -11,8 +11,9 @@ module init_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
-       &                l_reset_t, l_chem, l_heat, amp_xi, init_xi
-   use outputs, only: n_log_file
+       &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
+       &                l_direct_solve
+   use outputs, only: n_log_file, vp_bal, vort_bal
    use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max
@@ -22,6 +23,10 @@ module init_fields
    use fourier, only: fft
    use checkpoints, only: read_checkpoint
    use time_schemes, only: type_tscheme
+   use update_temp_coll, only: get_temp_rhs_imp_coll
+   use update_xi_coll, only: get_xi_rhs_imp_coll
+   use update_psi_coll_smat, only: get_psi_rhs_imp_coll_smat
+   use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
    use fields
    use fieldsLast
    use precision_mod
@@ -133,6 +138,21 @@ contains
          if ( l_chem ) call rscheme%costf1(xi_hat_Mloc, nMstart, nMstop, &
                             &              n_r_max)
          call rscheme%costf1(psi_hat_Mloc, nMstart, nMstop, n_r_max)
+      end if
+
+      !-- Compute the first implicit state
+      if ( l_cheb_coll ) then
+         if ( l_heat ) call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, 1, .true.)
+         if ( l_chem ) call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, 1, .true.)
+
+         if ( l_direct_solve ) then
+            call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,   &
+                 &                         temp_Mloc, xi_Mloc, dpsidt, 1, vp_bal, &
+                 &                         vort_bal, .true.)
+         else
+            call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc, temp_Mloc, &
+                 &                         xi_Mloc, dpsidt, 1, vp_bal, vort_bal, .true.)
+         end if
       end if
 
    end subroutine get_start_fields

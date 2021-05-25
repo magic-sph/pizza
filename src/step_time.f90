@@ -307,8 +307,8 @@ contains
          !----------------------------
          if ( tscheme%l_assembly ) then
             call assemble_stage(temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, psi_Mloc, &
-                 &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt,             &
-                 &              dpsidt, tscheme, l_log_next)
+                 &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt, dpsidt,     &
+                 &              tscheme, vp_bal, vort_bal, l_log_next)
          end if
 
          !---------------------
@@ -371,21 +371,17 @@ contains
          if ( l_cheb_coll ) then
 
             if ( l_heat ) call get_temp_rhs_imp_coll(temp_Mloc,dtemp_Mloc, &
-                               &                     dTdt%old(:,:,1),      &
-                               &                     dTdt%impl(:,:,1),.true.)
-            if ( l_chem ) call get_xi_rhs_imp_coll(xi_Mloc,dxi_Mloc,      &
-                               &                   dxidt%old(:,:,1),      &
-                               &                   dxidt%impl(:,:,1),.true.)
+                               &                     dTdt, 1, .true.)
+            if ( l_chem ) call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, 1, .true.)
             if ( l_direct_solve ) then
-               call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc,   &
-                    &                         dom_Mloc, dpsidt%old(:,:,1), &
-                    &                         dpsidt%impl(:,:,1), vp_bal,  &
-                    &                         vort_bal,.true.)
+               call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc,    &
+                    &                         dom_Mloc, temp_Mloc, xi_Mloc, &
+                    &                         dpsidt, 1, vp_bal, vort_bal,  &
+                    &                         .true.)
             else
                call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc,  &
-                    &                         dpsidt%old(:,:,1),           &
-                    &                         dpsidt%impl(:,:,1), vp_bal,  &
-                    &                         vort_bal,.true.)
+                    &                         temp_Mloc, xi_Mloc, dpsidt,  &
+                    &                         1, vp_bal, vort_bal, .true.)
             end if
          else
             if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc,          &
