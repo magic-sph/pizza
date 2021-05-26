@@ -66,7 +66,7 @@ contains
          rst_file='checkpoint_t='//trim(string)//'.'//tag
       end if
 
-      version = 5
+      version = 6
 
       header_size = SIZEOF_INTEGER+SIZEOF_DEF_REAL+SIZEOF_LOGICAL+       &
       &             len(tscheme%family)+                                 &
@@ -312,7 +312,7 @@ contains
             dt_array_old(:)=0.0_cp
             read(n_start_file) dt_array_old(1:nexp_old)
             tscheme_family_old = 'MULTISTEP'
-         else if ( version == 5 ) then
+         else if ( version >= 5 ) then
             read(n_start_file) time
             read(n_start_file) l_coll_old
             read(n_start_file) tscheme_family_old
@@ -396,6 +396,13 @@ contains
 
       else
          allocate( r_old(1), work_old(1,1), work(1,1), m2idx_old(1) )
+      end if
+
+      !-- Reduce the number of implicit states for backward compatibility with
+      !-- old checkpoints
+      if ( version <= 5 ) then
+         nimp_old = nimp_old-1
+         nold_old = nold_old-1
       end if
 
       call MPI_Barrier(MPI_COMM_WORLD, ierr)
