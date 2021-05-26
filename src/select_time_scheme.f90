@@ -24,8 +24,10 @@ contains
       &    (index(scheme_name, 'ARS233') /= 0) .or. &
       &    (index(scheme_name, 'ARS443') /= 0) .or. &
       &    (index(scheme_name, 'ARS343') /= 0) .or. &
+      &    (index(scheme_name, 'MARS343') /= 0).or. &
       &    (index(scheme_name, 'KC343') /= 0)  .or. &
       &    (index(scheme_name, 'KC564') /= 0)  .or. &
+      &    (index(scheme_name, 'KC785') /= 0)  .or. &
       &    (index(scheme_name, 'DBM453') /= 0) .or. &
       &    (index(scheme_name, 'BPR353') /= 0) .or. &
       &    (index(scheme_name, 'PC2') /= 0)    .or. &
