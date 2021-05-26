@@ -126,7 +126,7 @@ contains
 
 
       integer :: argument_count, input_handle, res
-      character(len=100) :: input_filename
+      character(len=100) :: input_filename, errmess
       logical :: nml_exist
 
       !-- Namelists:
@@ -175,8 +175,9 @@ contains
          open(newunit=input_handle,file=trim(input_filename))
 
          if ( rank == 0 ) write(*,*) '!  Reading grid parameters!'
-         read(input_handle,nml=grid,iostat=res)
-         if ( res /= 0 .and. rank == 0 ) then
+         read(input_handle,nml=grid,iostat=res,iomsg=errmess)
+         if ( res > 0 .and. rank == 0 ) call abortRun(errmess)
+         if ( res < 0 .and. rank == 0 ) then
             write(*,*) '!  No grid namelist found!'
          end if
          close(input_handle)
@@ -184,8 +185,9 @@ contains
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading control parameters from namelists in STDIN:
          if ( rank == 0 ) write(*,*) '!  Reading control parameters!'
-         read(input_handle,nml=control,iostat=res)
-         if ( res /= 0 .and. rank == 0 ) then
+         read(input_handle,nml=control,iostat=res,iomsg=errmess)
+         if ( res > 0 .and. rank == 0 ) call abortRun(errmess)
+         if ( res < 0 .and. rank == 0 ) then
             write(*,*) '!  No control namelist found!'
          end if
          close(input_handle)
@@ -193,8 +195,9 @@ contains
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading control parameters from namelists in STDIN:
          if ( rank == 0 ) write(*,*) '!  Reading hdif parameters!'
-         read(input_handle,nml=hdif,iostat=res)
-         if ( res /= 0 .and. rank == 0 ) then
+         read(input_handle,nml=hdif,iostat=res,iomsg=errmess)
+         if ( res > 0 .and. rank == 0 ) call abortRun(errmess)
+         if ( res < 0 .and. rank == 0 ) then
             write(*,*) '!  No hdif namelist found!'
          end if
          close(input_handle)
@@ -202,8 +205,9 @@ contains
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading physical parameters from namelists in STDIN:
          if ( rank == 0 ) write(*,*) '!  Reading physical parameters!'
-         read(input_handle,nml=phys_param,iostat=res)
-         if ( res /= 0 .and. rank == 0 ) then
+         read(input_handle,nml=phys_param,iostat=res,iomsg=errmess)
+         if ( res > 0 .and. rank == 0 ) call abortRun(errmess)
+         if ( res < 0 .and. rank == 0 ) then
             write(*,*) '!  No phys_param namelist found!'
          end if
          close(input_handle)
@@ -211,8 +215,9 @@ contains
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading start field info from namelists in STDIN:
          if ( rank == 0 ) write(*,*) '!  Reading start information!'
-         read(input_handle,nml=start_field,iostat=res)
-         if ( res /= 0 .and. rank == 0 ) then
+         read(input_handle,nml=start_field,iostat=res,iomsg=errmess)
+         if ( res > 0 .and. rank == 0 ) call abortRun(errmess)
+         if ( res < 0 .and. rank == 0 ) then
             write(*,*) '! No start_field namelist found!'
          end if
          close(input_handle)
@@ -220,8 +225,9 @@ contains
          open(newunit=input_handle,file=trim(input_filename))
          !-- Reading start field info from namelists in STDIN:
          if ( rank == 0 ) write(*,*) '!  Reading output control information!'
-         read(input_handle,nml=output_control,iostat=res)
-         if ( res /= 0 .and. rank == 0 ) then
+         read(input_handle,nml=output_control,iostat=res,iomsg=errmess)
+         if ( res > 0 .and. rank == 0 ) call abortRun(errmess)
+         if ( res < 0 .and. rank == 0 ) then
             write(*,*) '! No output control namelist found!'
          end if
          close(input_handle)

@@ -8,10 +8,10 @@
    tag        ="fourth_continue",
    l_newmap   =.false.,
    time_scheme="PC2",
-   courfac    =1.0_cp,
- n_time_steps =200,
-   dtMax      =1d-4,
-  l_rerror_fix=.false.,
+   courfac    =1.0d0,
+ n_time_steps =100,
+   dtMax      =1d-5,
+  l_rerror_fix=.true.,
 /
  &phys_param
   ra          =6.0E+04,
