@@ -270,23 +270,23 @@ class Pizza3DFields(PizzaSetup):
         """
 
         if field in ('temperature', 'Temperature', 'temp', 'Temp', 't', 'T'):
-            data = self.temp[:, self.n_theta_max/2, :]
+            data = self.temp[:, self.n_theta_max//2, :]
         elif field in ('tfluct', 'tempfluct'):
             data = self.temp-self.temp.mean(axis=0)
-            data = data[:, self.n_theta_max/2, :]
+            data = data[:, self.n_theta_max//2, :]
         elif field in ('ur', 'Ur', 'Vr', 'vr'):
-            data = self.ur[:, self.n_theta_max/2, :]
+            data = self.ur[:, self.n_theta_max//2, :]
         elif field in ('ut', 'Ut', 'utheta', 'Utheta', 'vt', 'Vt', 'Vtheta',
                        'vtheta'):
             data = self.utheta[:, self.n_theta_max/2, :]
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
-            data = self.uphi[:, self.n_theta_max/2, :]
+            data = self.uphi[:, self.n_theta_max//2, :]
         elif field in ('br', 'Br'):
-            data = self.br[:, self.n_theta_max/2, :]
+            data = self.br[:, self.n_theta_max//2, :]
         elif field in ('bt', 'Bt', 'bth', 'Bth', 'btheta', 'Btheta'):
-            data = self.bt[:, self.n_theta_max/2, :]
+            data = self.bt[:, self.n_theta_max//2, :]
         elif field in ('bp', 'Bp', 'bph', 'Bph', 'bphi', 'Bphi'):
-            data = self.bp[:, self.n_theta_max/2, :]
+            data = self.bp[:, self.n_theta_max//2, :]
 
         if deminc:
             data = symmetrize(data, ms=self.minc_3D)
