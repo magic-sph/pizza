@@ -141,10 +141,10 @@ program pizza
          call initialize_om_coll_dmat(tscheme)
       end if
    else
-      if ( l_heat ) call initialize_temp_integ()
-      if ( l_chem ) call initialize_xi_integ()
+      if ( l_heat ) call initialize_temp_integ(tscheme)
+      if ( l_chem ) call initialize_xi_integ(tscheme)
       if ( l_direct_solve ) then
-         call initialize_psi_integ_smat()
+         call initialize_psi_integ_smat(tscheme)
       else
          call initialize_psi_integ_dmat()
       end if
@@ -208,10 +208,10 @@ program pizza
          call finalize_om_coll_dmat(tscheme)
       end if
    else
-      if ( l_heat ) call finalize_temp_integ()
-      if ( l_chem ) call finalize_xi_integ()
+      if ( l_heat ) call finalize_temp_integ(tscheme)
+      if ( l_chem ) call finalize_xi_integ(tscheme)
       if ( l_direct_solve ) then
-         call finalize_psi_integ_smat()
+         call finalize_psi_integ_smat(tscheme)
       else
          call finalize_psi_integ_dmat()
       end if

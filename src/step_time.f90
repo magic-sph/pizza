@@ -305,9 +305,10 @@ contains
          !-- Assembly stage of IMEX-RK (if needed)
          !----------------------------
          if ( tscheme%l_assembly ) then
-            call assemble_stage(temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, psi_Mloc, &
-                 &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt, dpsidt,     &
-                 &              tscheme, vp_bal, vort_bal, l_log_next)
+            call assemble_stage(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc, &
+                 &              xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc,         &
+                 &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt, dpsidt,    &
+                 &              tscheme, vp_bal, vort_bal, l_log_next, timers)
          end if
 
          !---------------------

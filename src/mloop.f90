@@ -10,9 +10,11 @@ module mloop_mod
    use namelists, only: l_direct_solve, l_cheb_coll, l_chem, l_heat
    use update_temp_coll, only: update_temp_co, finish_exp_temp_coll, assemble_temp_coll
    use update_xi_coll, only: update_xi_co, finish_exp_xi_coll, assemble_xi_coll
-   use update_temp_integ, only: update_temp_int, finish_exp_temp_int
-   use update_xi_integ, only: update_xi_int, finish_exp_xi_int
-   use update_psi_integ_smat, only: update_psi_int_smat, finish_exp_psi_int_smat
+   use update_temp_integ, only: update_temp_int, finish_exp_temp_int, &
+       &                        assemble_temp_int
+   use update_xi_integ, only: update_xi_int, finish_exp_xi_int, assemble_xi_int
+   use update_psi_integ_smat, only: update_psi_int_smat, finish_exp_psi_int_smat, &
+       &                            assemble_psi_int_smat
    use update_psi_integ_dmat, only: update_psi_int_dmat, finish_exp_psi_int_dmat
    use update_psi_coll_dmat, only: update_om_coll_dmat, finish_exp_psi_coll_dmat, &
        &                           assemble_psi_coll_dmat
@@ -91,9 +93,10 @@ contains
 
    end subroutine mloop
 !------------------------------------------------------------------------------
-   subroutine assemble_stage(temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, psi_Mloc, &
-              &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt,   &
-              &              dpsidt, tscheme, vp_bal, vort_bal, l_log_next)
+   subroutine assemble_stage(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc, &
+              &              xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc,         &
+              &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt, dpsidt,    &
+              &              tscheme, vp_bal, vort_bal, l_log_next, timers)
 
       !-- Input variables
       type(type_tarray),   intent(inout) :: dpsidt
@@ -103,6 +106,9 @@ contains
       class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
+      complex(cp),         intent(out) :: temp_hat_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: xi_hat_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: psi_hat_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(out) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(out) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(out) :: xi_Mloc(nMstart:nMstop,n_r_max)
@@ -113,6 +119,7 @@ contains
       complex(cp),         intent(inout) :: up_Mloc(nMstart:nMstop,n_r_max)
       type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
+      type(timers_type),   intent(inout) :: timers
 
       if ( l_cheb_coll ) then
          if ( l_heat ) call assemble_temp_coll(temp_Mloc, dtemp_Mloc, dTdt, &
@@ -128,7 +135,18 @@ contains
                  &                      xi_Mloc, dpsidt, tscheme, vp_bal, vort_bal)
          end if
       else
-         call abortRun('Assembly stage with integration method not implemented yet!')
+         if ( l_heat ) call assemble_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, &
+                            &                 dTdt, tscheme, l_log_next)
+         if ( l_chem) call assemble_xi_int(xi_hat_Mloc, xi_Mloc, dxi_Mloc, dxidt, &
+                           &               tscheme, l_log_next)
+
+         if ( l_direct_solve ) then
+            call assemble_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,    &
+              &                        up_Mloc, temp_Mloc, xi_Mloc, dpsidt, vp_bal, &
+              &                        vort_bal, tscheme, timers)
+         else
+            call abortRun('Assembly stage with integration method not implemented yet!')
+         end if
       end if
 
    end subroutine assemble_stage

@@ -27,22 +27,29 @@ module update_temp_integ
    integer, parameter :: klA=4
    integer, parameter :: kuA=4
 
-   logical,  allocatable :: lTmat(:)
+   logical,  allocatable :: lTmat(:), lAssmat(:)
    complex(cp), allocatable :: rhs(:)
 
    type(type_bordmat_real), allocatable :: LHS_mat_tau(:)
    type(type_bandmat_real), allocatable :: LHS_mat_gal(:)
+   type(type_bordmat_real), allocatable :: Ass_mat_tau(:)
+   type(type_bandmat_real), allocatable :: Ass_mat_gal(:)
    type(type_bandmat_real) :: RHSE_mat(2), gal_sten
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
-   real(cp), allocatable :: tempfac(:,:) ! Preconditon matrix
+   real(cp), allocatable :: tempfac(:,:) ! Precondition matrix
+   real(cp), allocatable :: assfac(:,:)
 
    public :: update_temp_int, initialize_temp_integ, finalize_temp_integ, &
-   &         get_temp_rhs_imp_int, finish_exp_temp_int
+   &         get_temp_rhs_imp_int, finish_exp_temp_int, assemble_temp_int
 
 contains
 
-   subroutine initialize_temp_integ
+   subroutine initialize_temp_integ(tscheme)
 
+      !-- Input variable
+      class(type_tscheme), intent(in) :: tscheme
+
+      !-- Local variables
       integer :: n_m, m
 
       if ( l_galerkin ) then
@@ -68,6 +75,7 @@ contains
 
       if ( l_galerkin ) then
          allocate( LHS_mat_gal(nMstart:nMstop) )
+         if ( tscheme%l_assembly ) allocate( Ass_mat_gal(nMstart:nMstop) )
          !do n_m=nMstart,nMstop
          !   call LHS_mat_gal(n_m)%initialize(klA, kuA, n_r_max, l_lhs=.true.)
          !end do
@@ -76,6 +84,12 @@ contains
          do n_m=nMstart,nMstop
             call LHS_mat_tau(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
          end do
+         if ( tscheme%l_assembly ) then
+            allocate( Ass_mat_tau(nMstart:nMstop) )
+            do n_m=nMstart,nMstop
+               call Ass_mat_tau(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
+            end do
+         end if
       end if
 
       call get_rhs_exp_mat(RHSE_mat(1),1)
@@ -89,6 +103,15 @@ contains
       lTmat(:)=.false.
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
+      if ( tscheme%l_assembly ) then
+         allocate( lAssmat(nMstart:nMstop) )
+         lAssmat(:)=.false.
+         bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
+         allocate( assfac(n_r_max, nMstart:nMstop) )
+         bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
+         &                 SIZEOF_DEF_REAL
+      end if
+
       allocate( rhs(n_r_max) )
       bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
@@ -98,7 +121,10 @@ contains
 
    end subroutine initialize_temp_integ
 !------------------------------------------------------------------------------
-   subroutine finalize_temp_integ
+   subroutine finalize_temp_integ(tscheme)
+
+      !-- Input variable
+      class(type_tscheme), intent(in) :: tscheme
 
       !-- Local variables
       integer :: n_m
@@ -109,6 +135,7 @@ contains
          call RHSI_mat(n_m)%finalize()
       end do
       deallocate( tempfac, RHSI_mat, rhs, lTmat )
+      if ( tscheme%l_assembly ) deallocate(assfac, lAssmat)
 
       if ( l_galerkin ) then
          do n_m=nMstart,nMstop
@@ -116,11 +143,23 @@ contains
          end do
          deallocate( LHS_mat_gal )
          call destroy_galerkin_stencil(gal_sten)
+         if ( tscheme%l_assembly ) then
+            do n_m=nMstart,nMstop
+               call Ass_mat_gal(n_m)%finalize()
+            end do
+            deallocate( Ass_mat_gal )
+         end if
       else
          do n_m=nMstart,nMstop
             call LHS_mat_tau(n_m)%finalize()
          end do
          deallocate( LHS_mat_tau )
+         if ( tscheme%l_assembly ) then
+            do n_m=nMstart,nMstop
+               call Ass_mat_tau(n_m)%finalize()
+            end do
+            deallocate( Ass_mat_tau )
+         end if
       end if
 
    end subroutine finalize_temp_integ
@@ -153,9 +192,11 @@ contains
          
          if ( .not. lTmat(n_m) ) then
             if ( l_galerkin ) then
-               call get_lhs_mat_gal( tscheme, LHS_mat_gal(n_m), tempfac(:,n_m), m )
+               call get_lhs_mat_gal(tscheme%wimp_lin(1), LHS_mat_gal(n_m), &
+                    &               tempfac(:,n_m), m)
             else
-               call get_lhs_mat_tau( tscheme, LHS_mat_tau(n_m), tempfac(:,n_m), m )
+               call get_lhs_mat_tau(tscheme%wimp_lin(1), LHS_mat_tau(n_m), &
+                    &               tempfac(:,n_m), m)
             end if
             lTmat(n_m)=.true.
          end if
@@ -227,6 +268,91 @@ contains
       end if
 
    end subroutine update_temp_int
+!------------------------------------------------------------------------------
+   subroutine assemble_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt,  &
+              &                 tscheme, l_log_next)
+
+      !-- Input variables
+      class(type_tscheme), intent(in) :: tscheme
+      logical,             intent(in) :: l_log_next
+
+      !-- Output variables
+      complex(cp),       intent(out) :: temp_hat_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),       intent(out) :: dtemp_Mloc(nMstart:nMstop, n_r_max)
+      type(type_tarray), intent(inout) :: dTdt
+
+      !-- Local variables
+      integer :: n_m, m, n_cheb
+
+      !-- Now assemble the right hand side and store it in work_Mloc
+      call tscheme%assemble_imex(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
+
+      do n_m=nMstart, nMstop
+
+         m = idx2m(n_m)
+         
+         if ( .not. lAssmat(n_m) ) then
+            if ( l_galerkin ) then
+               call get_lhs_mat_gal(0.0_cp, Ass_mat_gal(n_m), assfac(:,n_m), m)
+            else
+               call get_lhs_mat_tau(0.0_cp, Ass_mat_tau(n_m), assfac(:,n_m), m)
+            end if
+            lAssmat(n_m)=.true.
+         end if
+
+         do n_cheb=1,n_r_max
+            rhs(n_cheb)=work_Mloc(n_m,n_cheb)
+         end do
+         !-- Inhomogeneous heat B.Cs (if not zero or not galerkin)
+         if ( .not. l_galerkin ) then
+            rhs(1)=topt_Mloc(n_m)
+            rhs(2)=bott_Mloc(n_m)
+         endif
+
+         !-- Multiply rhs by precond matrix
+         do n_cheb=1,n_r_max
+            rhs(n_cheb)=rhs(n_cheb)*assfac(n_cheb,n_m)
+         end do
+
+         if ( l_galerkin ) then
+            call Ass_mat_gal(n_m)%solve(rhs(1+n_boundaries:n_r_max), &
+                 &                      n_r_max-n_boundaries)
+            !-- Put the two first zero lines at the end
+            rhs = cshift(rhs, n_boundaries)
+
+            !-- Transform from Galerkin space to Chebyshev space
+            call galerkin2cheb(gal_sten, rhs)
+         else
+            call Ass_mat_tau(n_m)%solve(rhs, n_r_max)
+         end if
+
+         do n_cheb=1,n_r_max
+            temp_hat_Mloc(n_m, n_cheb)=rhs(n_cheb)
+         end do
+
+      end do
+
+      !-- Copy temp_hat into temp_Mloc
+      do n_cheb=1,n_r_max
+         do n_m=nMstart,nMstop
+            temp_Mloc(n_m,n_cheb)=temp_hat_Mloc(n_m,n_cheb)
+         end do
+      end do
+
+      !-- Bring temperature back to physical space
+      call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
+
+      !-- Compute implicit stage for first state of next iteration if required
+      call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, tscheme%l_imp_calc_rhs(1))
+
+      !-- In case log is needed on the next iteration, recalculate dT/dr
+      !-- This is needed to estimate the heat fluxes
+      if ( l_log_next ) then
+         call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, n_r_max, rscheme)
+      end if
+
+   end subroutine assemble_temp_int
 !------------------------------------------------------------------------------
    subroutine finish_exp_temp_int(psi_Mloc, dVsT_Mloc, dtemp_exp_last)
 
@@ -367,11 +493,11 @@ contains
 
    end subroutine get_temp_rhs_imp_int
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat_gal(tscheme, Cmat, tempMat_fac, m)
+   subroutine get_lhs_mat_gal(wimp, Cmat, tempMat_fac, m)
 
       !-- Input variables
-      class(type_tscheme),     intent(in) :: tscheme    ! time step
-      integer,                 intent(in) :: m          ! Azimuthal wavenumber
+      real(cp), intent(in) :: wimp ! weight of time integrator
+      integer,  intent(in) :: m    ! Azimuthal wavenumber
 
       !-- Output variables
       type(type_bandmat_real), intent(out) :: Cmat
@@ -396,7 +522,7 @@ contains
 
          !-- Define the equations
          stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-      &
-         &          tscheme%wimp_lin(1)*TdiffFac*hdif_T(n_m)*   &
+         &          wimp*TdiffFac*hdif_T(n_m)*                  &
          &          intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)  
 
          !-- Roll the array for band storage
@@ -452,11 +578,11 @@ contains
 
    end subroutine get_lhs_mat_gal
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat_tau(tscheme, A_mat, tempMat_fac, m)
+   subroutine get_lhs_mat_tau(wimp, A_mat, tempMat_fac, m)
 
       !-- Input variables
-      class(type_tscheme), intent(in) :: tscheme    ! time step
-      integer,             intent(in) :: m          ! Azimuthal wavenumber
+      real(cp), intent(in) :: wimp ! weight of time integrator
+      integer,  intent(in) :: m          ! Azimuthal wavenumber
 
       !-- Output variables
       type(type_bordmat_real), intent(inout) :: A_mat
@@ -486,7 +612,7 @@ contains
 
          !-- Define the equations
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-     &
-         &           tscheme%wimp_lin(1)*TdiffFac*hdif_T(n_m)*   &
+         &           wimp*TdiffFac*hdif_T(n_m)*                  &
          &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
 
          !-- Roll the array for band storage
@@ -503,7 +629,7 @@ contains
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-    &
-         &           tscheme%wimp_lin(1)*TdiffFac*hdif_T(n_m)*  &
+         &           wimp*TdiffFac*hdif_T(n_m)*                 &
          &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
 
          !-- Only the lower bands can contribute to the matrix A3

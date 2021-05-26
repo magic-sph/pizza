@@ -35,26 +35,32 @@ module update_psi_integ_smat
    private
 
    logical,  allocatable :: lPsimat(:) ! Do we need to rebuild the matrices?
+   logical,  allocatable :: lAssmat(:) ! Do we need to rebuild the matrices?
    complex(cp), allocatable :: rhs(:)  ! Complex right-hand-side
    real(cp), allocatable :: psifac(:,:) ! Precondition matrix
+   real(cp), allocatable :: assfac(:,:) ! Precondition matrix
 
    type(type_bordmat_complex), allocatable :: LHS_mat_tau(:)
    type(type_bandmat_complex), allocatable :: LHS_mat_gal(:)
+   type(type_bordmat_complex), allocatable :: Ass_mat_tau(:)
+   type(type_bandmat_complex), allocatable :: Ass_mat_gal(:)
    type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
    type(type_bandmat_real) :: RHSE_mat(3), gal_sten(2)
 
    public :: update_psi_int_smat, initialize_psi_integ_smat,    &
    &         finalize_psi_integ_smat, get_psi_rhs_imp_int_smat, &
-   &         finish_exp_psi_int_smat
+   &         finish_exp_psi_int_smat, assemble_psi_int_smat
 
 contains
 
-   subroutine initialize_psi_integ_smat
+   subroutine initialize_psi_integ_smat(tscheme)
       !
       ! Memory allocation
       !
 
+      !-- Input variable
+      class(type_tscheme), intent(in) :: tscheme
 
       !-- Local variables
       integer :: n_m, m
@@ -87,8 +93,10 @@ contains
       allocate( RHSIL_mat(nMstart:nMstop) )
       if ( l_galerkin ) then
          allocate( LHS_mat_gal(nMstart:nMstop) )
+         if ( tscheme%l_assembly ) allocate( Ass_mat_gal(nMstart:nMstop) )
       else
          allocate( LHS_mat_tau(nMstart:nMstop) )
+         if ( tscheme%l_assembly ) allocate( Ass_mat_tau(nMstart:nMstop) )
       end if
 
       !-- Initialize matrices
@@ -101,12 +109,14 @@ contains
                call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
                if ( .not. l_galerkin ) then
                   call LHS_mat_tau(n_m)%initialize(4, 4, 2, n_r_max)
+                  if ( tscheme%l_assembly ) call Ass_mat_tau(n_m)%initialize(4, 4, 2, n_r_max)
                end if
             else
                call RHSI_mat(n_m)%initialize(6, 6, n_r_max)
                call RHSIL_mat(n_m)%initialize(4, 4, n_r_max)
                if ( .not. l_galerkin ) then
                   call LHS_mat_tau(n_m)%initialize(6, 6, 4, n_r_max)
+                  if ( tscheme%l_assembly ) call Ass_mat_tau(n_m)%initialize(6, 6, 4, n_r_max)
                end if
             end if
          end do
@@ -120,11 +130,13 @@ contains
                call RHSIL_mat(n_m)%initialize(2, 2, n_r_max)
                if ( .not. l_galerkin ) then
                   call LHS_mat_tau(n_m)%initialize(4, 4, 2, n_r_max)
+                  if ( tscheme%l_assembly ) call Ass_mat_tau(n_m)%initialize(4, 4, 2, n_r_max)
                end if
             else
                call RHSI_mat(n_m)%initialize(8, 8, n_r_max)
                if ( .not. l_galerkin ) then
                   call LHS_mat_tau(n_m)%initialize(8, 8, 4, n_r_max)
+                  if ( tscheme%l_assembly ) call Ass_mat_tau(n_m)%initialize(8, 8, 4, n_r_max)
                end if
                if ( l_coriolis_imp ) then
                   call RHSIL_mat(n_m)%initialize(8, 8, n_r_max)
@@ -140,7 +152,6 @@ contains
       call RHSE_mat(2)%initialize(8, 8, n_r_max) ! i2r4
       call RHSE_mat(3)%initialize(7, 7, n_r_max) ! i2r3
 
-
       !-- Fill matrices
       call get_rhs_exp_mat(RHSE_mat(1),1)
       call get_rhs_exp_mat(RHSE_mat(2),2)
@@ -151,13 +162,23 @@ contains
          call get_rhs_imp_lin_mat(RHSIL_mat(n_m), m)
       end do
 
-      allocate( lPsimat(nMstart:nMstop) )
-      lPsimat(:)=.false.
-      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
-
       allocate( rhs(n_r_max) )
       rhs(:)=zero
       bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
+
+      if ( tscheme%l_assembly ) then
+         allocate( lAssmat(nMstart:nMstop) )
+         lAssmat(:)=.false.
+         bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
+
+         allocate( assfac(n_r_max, nMstart:nMstop) )
+         bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
+         &                 SIZEOF_DEF_REAL
+      end if
+
+      allocate( lPsimat(nMstart:nMstop) )
+      lPsimat(:)=.false.
+      bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_LOGICAL
 
       allocate( psifac(n_r_max, nMstart:nMstop) )
       bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
@@ -165,10 +186,13 @@ contains
 
    end subroutine initialize_psi_integ_smat
 !------------------------------------------------------------------------------
-   subroutine finalize_psi_integ_smat
+   subroutine finalize_psi_integ_smat(tscheme)
       !
       ! Memory deallocation
       ! 
+
+      !-- Input variable
+      class(type_tscheme), intent(in) :: tscheme
 
       !-- Local variable
       integer :: n_m
@@ -181,19 +205,24 @@ contains
          call RHSI_mat(n_m)%finalize()
          if ( l_galerkin ) then
             call LHS_mat_gal(n_m)%finalize()
+            if ( tscheme%l_assembly ) call Ass_mat_gal(n_m)%finalize()
          else
             call LHS_mat_tau(n_m)%finalize()
+            if ( tscheme%l_assembly ) call Ass_mat_tau(n_m)%finalize()
          end if
       end do
       if ( l_galerkin ) then
          call destroy_galerkin_stencil(gal_sten(1))
          call destroy_galerkin_stencil(gal_sten(2))
          deallocate( LHS_mat_gal )
+         if ( tscheme%l_assembly ) deallocate( Ass_mat_gal )
       else
          deallocate( LHS_mat_tau )
+         if ( tscheme%l_assembly ) deallocate( Ass_mat_tau )
       end if
       deallocate( RHSIL_mat, RHSI_mat )
       deallocate( psifac, rhs, lPsimat )
+      if ( tscheme%l_assembly ) deallocate( lAssmat, assfac )
 
    end subroutine finalize_psi_integ_smat
 !------------------------------------------------------------------------------
@@ -312,11 +341,11 @@ contains
 
          if ( .not. lPsimat(n_m) ) then
             if ( l_galerkin ) then
-               call get_lhs_mat_gal(tscheme, LHS_mat_gal(n_m), psifac(:, n_m), m, &
-                    &               timers%lu, timers%n_lu_calls)
+               call get_lhs_mat_gal(tscheme%wimp_lin(1), LHS_mat_gal(n_m), &
+                    &               psifac(:, n_m), m, timers%lu, timers%n_lu_calls)
             else
-               call get_lhs_mat_tau(tscheme, LHS_mat_tau(n_m), psifac(:, n_m), m, &
-                    &               timers%lu, timers%n_lu_calls)
+               call get_lhs_mat_tau(tscheme%wimp_lin(1), LHS_mat_tau(n_m), &
+                    &               psifac(:, n_m), m, timers%lu, timers%n_lu_calls)
             end if
             lPsimat(n_m)=.true.
          end if
@@ -503,6 +532,204 @@ contains
       end if
 
    end subroutine update_psi_int_smat
+!------------------------------------------------------------------------------
+   subroutine assemble_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,    &
+              &                     up_Mloc, temp_Mloc, xi_Mloc, dpsidt, vp_bal, &
+              &                     vort_bal, tscheme, timers)
+
+      !-- Input variables
+      class(type_tscheme), intent(in) :: tscheme
+      complex(cp),         intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Output variables
+      complex(cp),         intent(out) :: psi_hat_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(out) :: up_Mloc(nMstart:nMstop,n_r_max)
+      type(vp_bal_type),   intent(inout) :: vp_bal
+      type(vort_bal_type), intent(inout) :: vort_bal
+      type(type_tarray),   intent(inout) :: dpsidt
+      type(timers_type),   intent(inout) :: timers
+
+      !-- Local variables
+      real(cp) :: uphi0(n_r_max), om0(n_r_max)
+      real(cp) :: h2, runStart, runStop, dm2
+      integer :: n_r, n_m, n_cheb, m
+
+      !-- Now assemble the right hand side and store it in work_Mloc
+      call tscheme%assemble_imex(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
+
+      do n_m=nMstart,nMstop
+
+         m = idx2m(n_m)
+
+         if ( .not. lAssmat(n_m) ) then
+            if ( l_galerkin ) then
+               call get_lhs_mat_gal(0.0_cp, Ass_mat_gal(n_m), &
+                    &               assfac(:, n_m), m, timers%lu, timers%n_lu_calls)
+            else
+               call get_lhs_mat_tau(0.0_cp, Ass_mat_tau(n_m), &
+                    &               assfac(:, n_m), m, timers%lu, timers%n_lu_calls)
+            end if
+            lAssmat(n_m)=.true.
+         end if
+
+         !-- Assemble RHS
+         do n_cheb=1,n_r_max
+            rhs(n_cheb)=work_Mloc(n_m,n_cheb)
+         end do
+
+         !-- Multiply rhs by precond matrix
+         do n_cheb=1,n_r_max
+            rhs(n_cheb)=rhs(n_cheb)*assfac(n_cheb,n_m)
+         end do
+
+         runStart = MPI_Wtime()
+         if ( l_galerkin ) then
+            if ( m == 0 ) then
+               call Ass_mat_gal(n_m)%solve(rhs(3:n_r_max), n_r_max-2)
+               !-- Put the two first zero lines at the end
+               rhs = cshift(rhs, 2)
+               !-- Transform from Galerkin space to Chebyshev space
+               call galerkin2cheb(gal_sten(1), rhs)
+            else
+               call Ass_mat_gal(n_m)%solve(rhs(5:n_r_max), n_r_max-4)
+               !-- Put the four first zero lines at the end
+               rhs = cshift(rhs, 4)
+               !-- Transform from Galerkin space to Chebyshev space
+               call galerkin2cheb(gal_sten(2), rhs)
+            end if
+         else
+            call Ass_mat_tau(n_m)%solve(rhs,n_r_max)
+         end if
+         runStop = MPI_Wtime()
+         if ( runStop > runStart ) then
+            timers%solve = timers%solve + (runStop-runStart)
+            timers%n_solve_calls = timers%n_solve_calls+1
+         end if
+
+         if ( m == 0 ) then
+            do n_cheb=1,n_r_max
+               uphi0(n_cheb)=real(rhs(n_cheb))
+            end do
+         else
+            do n_cheb=1,n_r_max
+               psi_hat_Mloc(n_m,n_cheb)=rhs(n_cheb)
+            end do
+         end if
+
+      end do
+
+      !-- Copy the solution in psi_hat_Mloc
+      do n_cheb=1,n_r_max
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            if ( m /= 0 ) then
+               psi_Mloc(n_m,n_cheb)=psi_hat_Mloc(n_m,n_cheb)
+            end if
+         end do
+      end do
+
+      !-- Bring uphi0 to the physical space
+      if ( l_rank_has_m0 ) then
+         call get_dr(uphi0, om0, n_r_max, rscheme, l_dct=.false.)
+         call rscheme%costf1(uphi0, n_r_max)
+      end if
+
+      !-- Get the radial derivative of psi to calculate uphi, us and omega
+      call get_ddr(psi_Mloc, work_Mloc, om_Mloc, nMstart, nMstop, n_r_max, &
+           &       rscheme, l_dct=.false.)
+
+      !-- Bring psi back the physical space
+      runStart = MPI_Wtime()
+      call rscheme%costf1(psi_Mloc, nMstart, nMstop, n_r_max)
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         timers%dct = timers%dct + (runStop-runStart)
+         timers%n_dct_calls = timers%n_dct_calls + 1
+      end if
+
+      if ( l_non_rot ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+
+               if ( m == 0 ) then
+                  us_Mloc(n_m,n_r)=0.0_cp
+                  up_Mloc(n_m,n_r)=uphi0(n_r)
+                  om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+               else
+                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+                  up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
+                  om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-or1(n_r)*work_Mloc(n_m,n_r)+ &
+                  &                real(m,cp)*real(m,cp)*or2(n_r)*psi_Mloc(n_m,n_r)
+               end if
+            end do
+         end do
+      else
+         do n_r=1,n_r_max
+            h2 = r_cmb*r_cmb-r(n_r)*r(n_r)
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+
+               if ( m == 0 ) then
+                  us_Mloc(n_m,n_r)=0.0_cp
+                  up_Mloc(n_m,n_r)=uphi0(n_r)
+                  om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+               else
+                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*h2*   psi_Mloc(n_m,n_r)
+                  up_Mloc(n_m,n_r)=-h2*                        work_Mloc(n_m,n_r) &
+                  &                +3.0_cp*r(n_r)*              psi_Mloc(n_m,n_r)
+                  om_Mloc(n_m,n_r)=-h2*                          om_Mloc(n_m,n_r) &
+                  &     -(r_cmb*r_cmb*or1(n_r)-6.0_cp*r(n_r))* work_Mloc(n_m,n_r) &
+                  &     +(6.0_cp+real(m,cp)*real(m,cp)*or2(n_r)*h2)*              &
+                  &                                             psi_Mloc(n_m,n_r)
+               end if
+            end do
+         end do
+      end if
+
+      !-- Compute implicit stage
+      call get_psi_rhs_imp_int_smat(psi_hat_Mloc, up_Mloc, temp_Mloc, xi_Mloc, &
+           &                        dpsidt, 1, vp_bal, tscheme%l_imp_calc_rhs(1))
+
+      !-- Finish calculation of du_\phi/dt if requested
+      if ( vp_bal%l_calc ) then
+         call vp_bal%finalize_dvpdt(up_Mloc, tscheme)
+      end if
+
+      !-- Finish calculation of d\omega/dt if requested
+      !-- Compute the viscous term and Coriolis
+      if ( vort_bal%l_calc ) then
+         call get_ddr(om_Mloc, dom_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
+              &       rscheme)
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               dm2 = real(m,cp)*real(m,cp)
+               if ( m > 0 ) then
+                  vort_bal%visc(n_m,n_r)=ViscFac*(  work_Mloc(n_m,n_r)+&
+                  &                   or1(n_r)*      dom_Mloc(n_m,n_r)-&
+                  &               dm2*or2(n_r)*       om_Mloc(n_m,n_r) )
+                  if ( .not. l_non_rot ) then
+                     vort_bal%cor(n_m,n_r) =CorFac*beta(n_r)*us_Mloc(n_m,n_r)
+                  end if
+                  if ( l_ek_pump ) then
+                     vort_bal%pump(n_m,n_r)=CorFac*ekpump(n_r)*(             &
+                     &                                     -om_Mloc(n_m,n_r) &
+                     &                    +half*beta(n_r)*  up_Mloc(n_m,n_r) &
+                     & +beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*&
+                     &                                      us_Mloc(n_m,n_r) )
+                  end if
+               end if
+            end do
+         end do
+         call vort_bal%finalize_domdt(om_Mloc, tscheme)
+      end if
+
+   end subroutine assemble_psi_int_smat
 !------------------------------------------------------------------------------
    subroutine finish_exp_psi_int_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, dVsOm_Mloc,&
               &                       temp_Mloc, xi_Mloc, dpsi_exp_last, vp_bal,      &
@@ -830,11 +1057,11 @@ contains
 
    end subroutine get_psi_rhs_imp_int_smat
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat_gal(tscheme, Cmat, psiMat_fac, m, time_lu, n_lu_calls)
+   subroutine get_lhs_mat_gal(wimp, Cmat, psiMat_fac, m, time_lu, n_lu_calls)
 
       !-- Input variables
-      class(type_tscheme), intent(in) :: tscheme    ! time step
-      integer,             intent(in) :: m          ! Azimuthal wavenumber
+      real(cp), intent(in) :: wimp ! Weight of the IMEX integrator
+      integer,  intent(in) :: m          ! Azimuthal wavenumber
 
       !-- Output variables
       type(type_bandmat_complex), intent(out) :: Cmat
@@ -890,13 +1117,13 @@ contains
 
             if ( m == 0 ) then
                stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-               &
-               &  tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)* (                   &
+               &                 wimp*ViscFac*hdif_V(n_m)* (                   &
                &                                rmult2(a,b,i_r-1,Amat%nbands)- &
                &                 3.0_cp*intcheb1rmult1(a,b,i_r-1,Amat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA = -intcheb4rmult4lapl(a,b,m,i_r-1,Amat%nbands)+  &
-               &          tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*       &
+               &                         wimp*ViscFac*hdif_V(n_m)*       &
                &          intcheb4rmult4lapl2(a,b,m,i_r-1,Amat%nbands)  
                CorSten   = 0.0_cp
             end if
@@ -905,19 +1132,18 @@ contains
 
             if ( m == 0 ) then
                stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-              &
-               &  tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                   &
+               &                 wimp*ViscFac*hdif_V(n_m)*(                   &
                &                                rmult2(a,b,i_r-1,Amat%nbands)-&
                &                 3.0_cp*intcheb1rmult1(a,b,i_r-1,Amat%nbands) )
-               CorSten   = 0.0_cp
+               CorSten  = 0.0_cp
             else
                stencilA = intcheb4rmult4laplrot(a,b,m,i_r-1,Amat%nbands)   &
-               &          -tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        &
+               &                         -wimp*ViscFac*hdif_V(n_m)*        &
                &          intcheb4rmult4laplrot2(a,b,m,i_r-1,Amat%nbands)  
                if ( l_coriolis_imp ) then
-                  CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*     &
-                  &           intcheb4rmult4(a,b,i_r-1,Amat%nbands)
+                  CorSten=wimp*CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,Amat%nbands)
                else
-                  CorSten   = 0.0_cp
+                  CorSten=0.0_cp
                end if
             end if
 
@@ -994,11 +1220,11 @@ contains
 
    end subroutine get_lhs_mat_gal
 !------------------------------------------------------------------------------
-   subroutine get_lhs_mat_tau(tscheme, A_mat, psiMat_fac, m, time_lu, n_lu_calls)
+   subroutine get_lhs_mat_tau(wimp, A_mat, psiMat_fac, m, time_lu, n_lu_calls)
 
       !-- Input variables
-      class(type_tscheme), intent(in) :: tscheme    ! time step
-      integer,             intent(in) :: m          ! Azimuthal wavenumber
+      real(cp), intent(in) :: wimp ! Weight of the IMEX integrator
+      integer,  intent(in) :: m    ! Azimuthal wavenumber
 
       !-- Output variables
       type(type_bordmat_complex), intent(inout) :: A_mat
@@ -1041,13 +1267,13 @@ contains
 
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &   tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                     &
+               &                  wimp*ViscFac*hdif_V(n_m)*(                     &
                &                                 rmult2(a,b,i_r-1,A_mat%nbands)- &
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
-               &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        &
+               &                          wimp*ViscFac*hdif_V(n_m)*        &
                &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = 0.0_cp
             end if
@@ -1056,19 +1282,18 @@ contains
 
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-              &
-               &   tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                    &
+               &                  wimp*ViscFac*hdif_V(n_m)*(                    &
                &                                 rmult2(a,b,i_r-1,A_mat%nbands)-&
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)   &
-               &           -tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*         &
+               &                          -wimp*ViscFac*hdif_V(n_m)*         &
                &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
                if ( l_coriolis_imp ) then
-                  CorSten   = tscheme%wimp_lin(1)*CorFac*real(m,cp)*     &
-                  &           intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
+                  CorSten=wimp*CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
                else
-                  CorSten   = 0.0_cp
+                  CorSten=0.0_cp
                end if
             end if
 
@@ -1094,13 +1319,13 @@ contains
 
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-               &
-               &   tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                     &
+               &                  wimp*ViscFac*hdif_V(n_m)*(                     &
                &                                 rmult2(a,b,i_r-1,A_mat%nbands)- &
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
-               &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        &
+               &                          wimp*ViscFac*hdif_V(n_m)*        &
                &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
                CorSten   = 0.0_cp
             end if
@@ -1109,19 +1334,18 @@ contains
 
             if ( m == 0 ) then
                stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-              &
-               &   tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(                    &
+               &                  wimp*ViscFac*hdif_V(n_m)*(                    &
                &                                 rmult2(a,b,i_r-1,A_mat%nbands)-&
                &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
                CorSten   = 0.0_cp
             else
                stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)   &
-               &           -tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*         &
+               &                          -wimp*ViscFac*hdif_V(n_m)*         &
                &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
                if ( l_coriolis_imp ) then
-                  CorSten = tscheme%wimp_lin(1)*CorFac*real(m,cp)*        &
-                  &         intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
+                  CorSten=wimp*CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
                else
-                  CorSten = 0.0_cp
+                  CorSten=0.0_cp
                end if
             end if
 
