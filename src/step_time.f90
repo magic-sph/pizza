@@ -364,8 +364,7 @@ contains
       !-- If the scheme is a multi-step scheme that is not Crank-Nicolson 
       !-- we have to use a different starting scheme
       if ( l_bridge_step .and. tscheme%time_scheme /= 'CNAB2' .and.  &
-           n_time_step <= tscheme%norder_imp-2 .and.                 &
-           tscheme%family=='MULTISTEP' ) then
+           n_time_step <= tscheme%nold-1 .and. tscheme%family=='MULTISTEP' ) then
 
          if ( l_cheb_coll ) then
 

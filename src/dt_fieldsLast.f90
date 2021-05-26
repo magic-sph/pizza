@@ -32,7 +32,7 @@ module fieldsLast
 contains
 
    subroutine initialize_fieldsLast(nMstart,nMstop,n_m_max,nRstart,nRstop,n_r_max,&
-              &                     norder_imp, nexp, norder_imp_lin)
+              &                     nold, nexp, nimp)
 
       !-- Input variables
       integer, intent(in) :: nMstart
@@ -41,24 +41,16 @@ contains
       integer, intent(in) :: nRstart
       integer, intent(in) :: nRstop
       integer, intent(in) :: n_r_max
-      integer, intent(in) :: norder_imp
+      integer, intent(in) :: nold
       integer, intent(in) :: nexp
-      integer, intent(in) :: norder_imp_lin
+      integer, intent(in) :: nimp
 
       !-- Local variables
       integer :: n_mloc_fields, n_rloc_fields
 
-
-      call dpsidt%initialize(nMstart, nMstop, n_r_max, norder_imp, nexp, &
-           &                 norder_imp_lin)
-      if ( l_heat ) then
-         call dTdt%initialize(nMstart, nMstop, n_r_max, norder_imp, nexp, &
-              &               norder_imp_lin)
-      end if
-      if ( l_chem ) then
-         call dxidt%initialize(nMstart, nMstop, n_r_max, norder_imp, nexp, &
-              &                norder_imp_lin)
-      end if
+      call dpsidt%initialize(nMstart, nMstop, n_r_max, nold, nexp, nimp)
+      if ( l_heat ) call dTdt%initialize(nMstart, nMstop, n_r_max, nold, nexp, nimp)
+      if ( l_chem ) call dxidt%initialize(nMstart, nMstop, n_r_max, nold, nexp, nimp)
 
       n_mloc_fields = 0
       if ( l_heat ) then

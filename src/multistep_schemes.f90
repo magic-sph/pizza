@@ -1,5 +1,6 @@
 module multistep_schemes
 
+   use iso_fortran_env, only: output_unit
    use precision_mod
    use parallel_mod
    use namelists, only: alpha
@@ -55,47 +56,47 @@ contains
 
       if ( index(time_scheme, 'CNAB2') /= 0 ) then
          this%time_scheme = 'CNAB2'
-         this%norder_imp_lin = 2
-         this%norder_imp = 2
-         this%norder_exp = 2
+         this%nimp = 1
+         this%nold = 1
+         this%nexp = 2
          courfac_loc = 3.0_cp
       else if ( index(time_scheme, 'MODCNAB') /= 0 ) then
          this%time_scheme = 'MODCNAB'
-         this%norder_imp = 3
-         this%norder_imp_lin = 3
-         this%norder_exp = 2
+         this%nold = 2
+         this%nimp = 2
+         this%nexp = 2
          courfac_loc = 2.9_cp
       else if ( index(time_scheme, 'CNLF') /= 0 ) then
          this%time_scheme = 'CNLF'
-         this%norder_imp = 3
-         this%norder_imp_lin = 3
-         this%norder_exp = 2
+         this%nold = 2
+         this%nimp = 2
+         this%nexp = 2
          courfac_loc = 3.0_cp
-      else if ( index(time_scheme, 'BDF2AB2') /= 0 ) then
-         this%time_scheme = 'BDF2AB2'
-         this%norder_imp = 3
-         this%norder_imp_lin = 2 ! it should be one but we need to restart
-         this%norder_exp = 2
+      else if ( index(time_scheme, 'BDF2AB2') /= 0 .or. index(time_scheme, 'SBDF2') /= 0 ) then
+         this%time_scheme = 'SBDF2'
+         this%nold = 2
+         this%nimp = 1 ! it should be zero but we need to restart
+         this%nexp = 2
          this%l_imp_calc_rhs(1) = .false.
          courfac_loc = 2.8_cp
-      else if ( index(time_scheme, 'BDF3AB3') /= 0 ) then
-         this%time_scheme = 'BDF3AB3'
-         this%norder_imp = 4
-         this%norder_imp_lin = 2 ! it should be one but we need to restart
-         this%norder_exp = 3
+      else if ( index(time_scheme, 'BDF3AB3') /= 0 .or. index(time_scheme, 'SBDF3') /= 0 ) then
+         this%time_scheme = 'SBDF3'
+         this%nold = 3
+         this%nimp = 1 ! it should be zero but we need to restart
+         this%nexp = 3
          this%l_imp_calc_rhs(1) = .false.
          courfac_loc = 4.0_cp
       else if ( index(time_scheme, 'TVB33') /= 0 ) then
          this%time_scheme = 'TVB33'
-         this%norder_imp = 4
-         this%norder_imp_lin = 4 ! it should be one but we need to restart
-         this%norder_exp = 3
+         this%nold = 3
+         this%nimp = 3 
+         this%nexp = 3
          courfac_loc = 4.0_cp
-      else if ( index(time_scheme, 'BDF4AB4') /= 0 ) then
-         this%time_scheme = 'BDF4AB4'
-         this%norder_imp = 5
-         this%norder_imp_lin = 2 ! it should be one but we need to restart
-         this%norder_exp = 4
+      else if ( index(time_scheme, 'BDF4AB4') /= 0 .or. index(time_scheme, 'SBDF4') /= 0 ) then
+         this%time_scheme = 'SBDF4'
+         this%nold = 4
+         this%nimp = 1 ! it should be zero but we need to restart
+         this%nexp = 4
          this%l_imp_calc_rhs(1) = .false.
          courfac_loc = 5.5_cp
       end if
@@ -106,18 +107,18 @@ contains
          this%courfac=courfac_nml
       end if
 
-      allocate ( this%dt(this%norder_exp) )
-      allocate ( this%wimp(this%norder_imp) )
-      allocate ( this%wimp_lin(this%norder_imp_lin) )
-      allocate ( this%wexp(this%norder_exp) )
+      allocate ( this%dt(this%nexp) )
+      allocate ( this%wimp(this%nold) )
+      allocate ( this%wimp_lin(this%nimp+1) )
+      allocate ( this%wexp(this%nexp) )
 
       this%dt(:)       = 0.0_cp
       this%wimp(:)     = 0.0_cp
       this%wimp_lin(:) = 0.0_cp
       this%wexp(:)     = 0.0_cp
 
-      bytes_allocated = bytes_allocated+(2*this%norder_exp+this%norder_imp+&
-      &                 this%norder_imp_lin)*SIZEOF_DEF_REAL
+      bytes_allocated = bytes_allocated+(2*this%nexp+this%nold+&
+      &                 this%nimp+1)*SIZEOF_DEF_REAL
 
    end subroutine initialize
 !------------------------------------------------------------------------------
@@ -146,7 +147,6 @@ contains
       select case ( this%time_scheme )
          case ('CNAB2') 
             this%wimp(1)    =one
-            this%wimp(2)    =one
             this%wimp_lin(1)=alpha*this%dt(1)
             this%wimp_lin(2)=(1-alpha)*this%dt(1)
 
@@ -154,9 +154,8 @@ contains
             this%wexp(2)=-half*this%dt(1)*this%dt(1)/this%dt(2)
          case ('CNLF')
             delta = this%dt(1)/this%dt(2)
-            this%wimp(1)    =one
-            this%wimp(2)    =(one-delta)*(one+delta)
-            this%wimp(3)    =delta*delta
+            this%wimp(1)    =(one-delta)*(one+delta)
+            this%wimp(2)    =delta*delta
             this%wimp_lin(1)=half*(one+delta)/delta*this%dt(1)
             this%wimp_lin(2)=half*(one+delta)*(delta-one)/delta*this%dt(1)
             this%wimp_lin(3)=half*(one+delta)*this%dt(1)
@@ -166,25 +165,23 @@ contains
          case ('MODCNAB') 
             delta = this%dt(1)/this%dt(2)
             this%wimp(1)    =one
-            this%wimp(2)    =one
-            this%wimp(3)    =0.0_cp
+            this%wimp(2)    =0.0_cp
             this%wimp_lin(1)=(half+1.0_cp/delta/16.0_cp)*this%dt(1)
             this%wimp_lin(2)=(7.0_cp/16.0_cp-1.0_cp/delta/16.0_cp)*this%dt(1)
             this%wimp_lin(3)=1.0_cp/16.0_cp*this%dt(1)
 
             this%wexp(1)=(one+half*delta)*this%dt(1)
             this%wexp(2)=-half*delta*this%dt(1)
-         case ('BDF2AB2')
+         case ('SBDF2')
             delta = this%dt(1)/this%dt(2)
             this%wimp_lin(1)=(one+delta)/(one+two*delta)*this%dt(1)
             this%wimp_lin(2)=0.0_cp
-            this%wimp(1)=one
-            this%wimp(2)=(one+delta)*(one+delta)/(one+two*delta)
-            this%wimp(3)=-delta*delta/(one+two*delta)
+            this%wimp(1)=(one+delta)*(one+delta)/(one+two*delta)
+            this%wimp(2)=-delta*delta/(one+two*delta)
 
             this%wexp(1)=(one+delta)*(one+delta)*this%dt(1)/(one+two*delta)
             this%wexp(2)=-delta*(one+delta)*this%dt(1)/(one+two*delta)
-         case ('BDF3AB3')
+         case ('SBDF3')
             delta_n   = this%dt(2)/this%dt(1)
             delta_n_1 = this%dt(3)/this%dt(1)
             a0 = one+one/(one+delta_n)+one/(one+delta_n+delta_n_1)
@@ -202,10 +199,9 @@ contains
             this%wimp_lin(1)=one/a0 * this%dt(1)
             this%wimp_lin(2)=0.0_cp
 
-            this%wimp(1)=one
-            this%wimp(2)=a1/a0
-            this%wimp(3)=a2/a0
-            this%wimp(4)=a3/a0
+            this%wimp(1)=a1/a0
+            this%wimp(2)=a2/a0
+            this%wimp(3)=a3/a0
 
             this%wexp(1)=b0/a0 * this%dt(1)
             this%wexp(2)=b1/a0 * this%dt(1)
@@ -254,16 +250,15 @@ contains
             this%wimp_lin(4)=c3/a0 * this%dt(1)
             !this%wimp_lin(5)=0.0_cp
 
-            this%wimp(1)=one
-            this%wimp(2)=-a1/a0
-            this%wimp(3)=-a2/a0
-            this%wimp(4)=-a3/a0
+            this%wimp(1)=-a1/a0
+            this%wimp(2)=-a2/a0
+            this%wimp(3)=-a3/a0
 
             this%wexp(1)=b0/a0 * this%dt(1)
             this%wexp(2)=b1/a0 * this%dt(1)
             this%wexp(3)=b2/a0 * this%dt(1)
 
-         case ('BDF4AB4')
+         case ('SBDF4')
             delta_n = this%dt(1)/this%dt(2)
             delta_n_1 = this%dt(2)/this%dt(3)
             delta_n_2 = this%dt(3)/this%dt(4)
@@ -292,11 +287,10 @@ contains
             this%wimp_lin(1)=one/a0 * this%dt(1)
             this%wimp_lin(2)=0.0_cp
 
-            this%wimp(1)=one
-            this%wimp(2)=-a1/a0
-            this%wimp(3)=-a2/a0
-            this%wimp(4)=-a3/a0
-            this%wimp(5)=-a4/a0
+            this%wimp(1)=-a1/a0
+            this%wimp(2)=-a2/a0
+            this%wimp(3)=-a3/a0
+            this%wimp(4)=-a4/a0
 
             this%wexp(1)=b0/a0 * this%dt(1)
             this%wexp(2)=b1/a0 * this%dt(1)
@@ -330,16 +324,16 @@ contains
       dt_old = this%dt(1)
 
       !-- First roll the dt array
-      this%dt   =cshift(this%dt,shift=this%norder_exp-1)
+      this%dt   =cshift(this%dt,shift=this%nexp-1)
       !-- Then overwrite the first element by the new timestep
       this%dt(1)=dt_new
 
       !----- Stop if time step has become too small:
       if ( dt_new < dt_min ) then
          if ( rank == 0 ) then
-            write(*,'(1p,/,A,ES14.4,/,A)')             &
-            &    " ! Time step too small, dt=",dt_new, &
-            &    " ! I thus stop the run !"
+            write(output_unit,'(1p,/,A,ES14.4,/,A)')    &
+            &     " ! Time step too small, dt=",dt_new, &
+            &     " ! I thus stop the run !"
             write(n_log_file,'(1p,/,A,ES14.4,/,A)')    &
             &    " ! Time step too small, dt=",dt_new, &
             &    " ! I thus stop the run !"
@@ -350,11 +344,11 @@ contains
       if ( l_new_dtNext ) then
          !------ Writing info and getting new weights:
          if ( rank == 0 ) then
-            write(*,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')  &
-            &    " ! Changing time step at time=",(time+this%dt(1)),  &
-            &    "                 time step no=",n_time_step,        &
-            &    "                      last dt=",dt_old,             &
-            &    "                       new dt=",dt_new
+            write(output_unit,'(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')  &
+            &              " ! Changing time step at time=",(time+this%dt(1)),  &
+            &              "                 time step no=",n_time_step,        &
+            &              "                      last dt=",dt_old,             &
+            &              "                       new dt=",dt_new
             write(n_log_file,                                         &
             &    '(1p,/,A,ES18.10,/,A,i9,/,A,ES15.8,/,A,ES15.8)')     &
             &    " ! Changing time step at time=",(time+this%dt(1)),  &
@@ -385,23 +379,23 @@ contains
       !-- Local variables
       integer :: n_o, n_r, n_m
 
-      do n_o=1,this%norder_imp-1
+      do n_o=1,this%nold
          if ( n_o == 1 ) then
             do n_r=1,len_rhs
                do n_m=nMstart,nMstop
-                  rhs(n_m,n_r)=this%wimp(n_o+1)*dfdt%old(n_m,n_r,n_o)
+                  rhs(n_m,n_r)=this%wimp(n_o)*dfdt%old(n_m,n_r,n_o)
                end do
             end do
          else
             do n_r=1,len_rhs
                do n_m=nMstart,nMstop
-                  rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp(n_o+1)*dfdt%old(n_m,n_r,n_o)
+                  rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp(n_o)*dfdt%old(n_m,n_r,n_o)
                end do
             end do
          end if
       end do
 
-      do n_o=1,this%norder_imp_lin-1
+      do n_o=1,this%nimp
          do n_r=1,len_rhs
             do n_m=nMstart,nMstop
                rhs(n_m,n_r)=rhs(n_m,n_r)+this%wimp_lin(n_o+1)*dfdt%impl(n_m,n_r,n_o)
@@ -409,7 +403,7 @@ contains
          end do
       end do
 
-      do n_o=1,this%norder_exp
+      do n_o=1,this%nexp
          do n_r=1,len_rhs
             do n_m=nMstart,nMstop
                rhs(n_m,n_r)=rhs(n_m,n_r)+this%wexp(n_o)*dfdt%expl(n_m,n_r,n_o)
@@ -437,7 +431,7 @@ contains
       !-- Local variables:
       integer :: n_o, n_m, n_r
 
-      do n_o=this%norder_exp,2,-1
+      do n_o=this%nexp,2,-1
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                dfdt%expl(n_m,n_r,n_o)=dfdt%expl(n_m,n_r,n_o-1)
@@ -445,7 +439,7 @@ contains
          end do
       end do
 
-      do n_o=this%norder_imp-1,2,-1
+      do n_o=this%nold,2,-1
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                dfdt%old(n_m,n_r,n_o)=dfdt%old(n_m,n_r,n_o-1)
@@ -453,7 +447,7 @@ contains
          end do
       end do
 
-      do n_o=this%norder_imp_lin-1,2,-1
+      do n_o=this%nimp,2,-1
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                dfdt%impl(n_m,n_r,n_o)=dfdt%impl(n_m,n_r,n_o-1)
@@ -472,20 +466,20 @@ contains
       character(len=8) :: old_scheme
       integer :: old_order
 
-      if (rank == 0 ) write(*,*) '! Crank-Nicolson for this time-step'
+      if (rank == 0 ) write(output_unit,*) '! Crank-Nicolson for this time-step'
 
-      old_order=this%norder_imp_lin
-      this%norder_imp_lin=2
+      old_order=this%nimp
+      this%nimp=1
 
       old_scheme         =this%time_scheme
       this%time_scheme='CNAB2'
       call this%set_weights(lMatNext)
       !-- Since CN has only two coefficients, one has to set the remainings to zero
-      this%wimp(3:size(this%wimp))=0.0_cp
+      this%wimp(2:size(this%wimp))=0.0_cp
       this%wimp_lin(3:size(this%wimp_lin))=0.0_cp
       this%wexp(3:size(this%wexp))=0.0_cp
       this%time_scheme   =old_scheme
-      this%norder_imp_lin=old_order
+      this%nimp          =old_order
 
    end subroutine bridge_with_cnab2
 !------------------------------------------------------------------------------
@@ -493,9 +487,9 @@ contains
 
       class(type_multistep) :: this
 
-      if (rank == 0 ) write(*,*) '! 1st order Adams-Bashforth for 1st time step'
+      if (rank == 0 ) write(output_unit,*) '! 1st order Adams-Bashforth for 1st time step'
       this%wexp(1)=this%dt(1) ! Instead of one
-      this%wexp(2:this%norder_exp)=0.0_cp
+      this%wexp(2:this%nexp)=0.0_cp
 
    end subroutine start_with_ab1
 !------------------------------------------------------------------------------

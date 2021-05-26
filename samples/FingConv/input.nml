@@ -12,7 +12,7 @@
    l_non_rot  =.true.,
    cheb_method="integ",
    bc_method  ="tau-lanczos",
-   time_scheme="BDF3AB3",
+   time_scheme="SBDF3",
 n_fft_optim_lev=2,
 /
  &phys_param

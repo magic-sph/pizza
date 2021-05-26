@@ -12,9 +12,9 @@ module time_schemes
       character(len=10) :: family
       integer :: nstages
       integer :: istage
-      integer :: norder_exp
-      integer :: norder_imp
-      integer :: norder_imp_lin
+      integer :: nexp
+      integer :: nold
+      integer :: nimp
       character(len=8) :: time_scheme
       logical :: l_assembly
       real(cp), allocatable :: dt(:)

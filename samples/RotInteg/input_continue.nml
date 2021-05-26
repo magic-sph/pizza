@@ -6,7 +6,7 @@
 /
 &control
  tag        ="continue",
-time_scheme ="BDF3AB3",
+time_scheme ="SBDF3",
  l_newmap   =.false.,
 n_time_steps=300,
  dtMax      =1d-1,

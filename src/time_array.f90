@@ -21,8 +21,7 @@ module time_array
 
 contains
 
-   subroutine initialize(this, nMstart, nMstop, n_r_max, norder_imp, norder_exp, &
-              &          norder_imp_lin, l_allocate_exp)
+   subroutine initialize(this, nMstart, nMstop, n_r_max, nimp, nexp, nold, l_allocate_exp)
 
       class(type_tarray) :: this
 
@@ -30,9 +29,9 @@ contains
       integer, intent(in) :: nMstart
       integer, intent(in) :: nMstop
       integer, intent(in) :: n_r_max
-      integer, intent(in) :: norder_imp
-      integer, intent(in) :: norder_exp
-      integer, intent(in) :: norder_imp_lin
+      integer, intent(in) :: nimp
+      integer, intent(in) :: nexp
+      integer, intent(in) :: nold
       logical, optional, intent(in) :: l_allocate_exp ! A boolean to specify whether the explicit state has to be allocated
 
       !-- Local variable
@@ -45,14 +44,14 @@ contains
       end if
       this%l_exp = l_allocate
 
-      allocate( this%impl(nMstart:nMstop,n_r_max,norder_imp_lin-1) )
-      allocate( this%old(nMstart:nMstop,n_r_max,norder_imp-1) )
+      allocate( this%impl(nMstart:nMstop,n_r_max,nold) )
+      allocate( this%old(nMstart:nMstop,n_r_max,nimp) )
       bytes_allocated = bytes_allocated + (nMstop-nMstart+1)*n_r_max*(  &
-      &                 norder_imp+norder_imp_lin-2)*SIZEOF_DEF_COMPLEX
+      &                 nimp+nold)*SIZEOF_DEF_COMPLEX
 
       if ( l_allocate ) then
-         allocate( this%expl(nMstart:nMstop,n_r_max,norder_exp) )
-         bytes_allocated = bytes_allocated + (nMstop-nMstart+1)*n_r_max*norder_exp &
+         allocate( this%expl(nMstart:nMstop,n_r_max,nexp) )
+         bytes_allocated = bytes_allocated + (nMstop-nMstart+1)*n_r_max*nexp &
          &                 *SIZEOF_DEF_COMPLEX
       end if
 

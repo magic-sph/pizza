@@ -7,7 +7,7 @@
 &control
    tag        ="second_continue",
    l_newmap   =.false.,
-   time_scheme="BDF2AB2",
+   time_scheme="SBDF22",
  n_time_steps =100,
    dtMax      =1d-4,
   l_rerror_fix=.false.,
