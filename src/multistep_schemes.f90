@@ -99,6 +99,8 @@ contains
          this%nexp = 4
          this%l_imp_calc_rhs(1) = .false.
          courfac_loc = 5.5_cp
+      else
+         call abortRun('! Time integrator '//trim(time_scheme)//' was not found')
       end if
 
       if ( abs(courfac_nml) >= 1.0e3_cp ) then
