@@ -437,7 +437,7 @@ contains
       real(cp) :: buo_power(n_r_max), pump(n_r_max), tmp(n_r_max)
       real(cp) :: chem_power(n_r_max), sh_vol_r(n_r_max)
       real(cp) :: theta(n_r_max), sh_cond_r(n_r_max)
-      real(cp) :: NuTop, NuBot, beta_t, Nu_vol, Nu_int, fac
+      real(cp) :: NuTop, NuBot, NuDelta, beta_t, Nu_vol, Nu_int, fac
       real(cp) :: rey_2D, rey_fluct_2D, rey_zon_2D
       real(cp) :: rey_3D, rey_fluct_3D, rey_zon_3D
 
@@ -710,6 +710,11 @@ contains
          NuTop = round_off(NuTop)
          NuBot = round_off(NuBot)
 
+         !-- Nusset based on the ratio of temperature contrast
+         NuDelta = (tcond(n_r_max)               -tcond(1)) /             &
+         &         (real(temp_Mloc(n_m0,n_r_max))-real(temp_Mloc(n_m0,1)) &
+         &          +epsilon(1.0_cp))
+
          !-- Volume-based Nusselt number
          Nu_vol = rInt_R(nu_vol_r, r, rscheme)
          nu_cond_r(:)=dtcond(:)*dtcond(:)*height(:)*r(:)
@@ -745,9 +750,9 @@ contains
          beta_t = dtcond(int(n_r_max/2))+real(dtemp_Mloc(n_m0,int(n_r_max/2)))
          beta_t = round_off(beta_t)
 
-         write(n_heat_file, '(1P, ES20.12, 7ES16.8)') time, NuTop, NuBot,   &
-         &                                            Nu_vol, Nu_int, tTop, &
-         &                                            tBot, beta_t
+         write(n_heat_file, '(1P, ES20.12, 7ES16.8)') time, NuTop, NuBot,      &
+         &                                            Nu_vol, Nu_int, NuDelta, &
+         &                                            tTop, tBot, beta_t
       end if
 
       if ( l_rank_has_m0 .and. l_chem ) then

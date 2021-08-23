@@ -112,6 +112,8 @@ module namelists
    logical,  public :: l_thw_3D        ! Computation of the 3D thermal wind contribution on u_phi-3D
    logical,  public :: l_mag_3D        ! Treatment of the magnetic field (3-D)
    logical,  public :: l_mag_LF        ! Treatment of the Lorentz-Force
+   logical,  public :: l_mag_alpha     ! With or without magnetic Alpha effect in magnetic advection
+   logical,  public :: l_mag_pump      ! With or without Magnetic pumping
    logical,  public :: l_cyl           ! Accuracy of the schemes for the z-integrations
    logical,  public :: l_heat
    logical,  public :: l_chem
@@ -166,7 +168,7 @@ contains
       &                   beta_shift,epsrc0,epsrc0xi,ktopxi,kbotxi,&
       &                   t_bot,t_top,xi_bot,xi_top, ktopb,kbotb,  &
       &                   xicond_fac,l_xi_3D,l_heat_3D,l_thw_3D,   &
-      &                   l_mag_LF,l_cyl
+      &                   l_mag_LF,l_mag_alpha,l_mag_pump,l_cyl
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi,scale_B,init_B,amp_B
@@ -301,6 +303,8 @@ contains
       if ( prmag == 0.0_cp ) then
          l_mag_3D=.false.
          l_mag_LF=.false.
+         l_mag_alpha=.false.
+         l_mag_pump=.false.
       else
          l_mag_3D=.true.
       end if
@@ -594,6 +598,8 @@ contains
       !-- treatment of magnetic field (3D)
       l_mag_3D = .false.
       l_mag_LF = .false.
+      l_mag_alpha = .false.
+      l_mag_pump = .false.
 
       !----- Namelist start_field:
       l_reset_t        =.false.
@@ -728,6 +734,8 @@ contains
       & write(n_out,'(''  l_thw_3D        ='',l3,'','')') l_thw_3D
       write(n_out,'(''  l_mag_3D        ='',l3,'','')') l_mag_3D
       write(n_out,'(''  l_mag_LF        ='',l3,'','')') l_mag_LF
+      write(n_out,'(''  l_mag_alpha     ='',l3,'','')') l_mag_alpha
+      write(n_out,'(''  l_mag_pump      ='',l3,'','')') l_mag_pump
       !--- Heat boundary condition:
       write(n_out,'(''  ktopt           ='',i3,'','')') ktopt
       write(n_out,'(''  kbott           ='',i3,'','')') kbott

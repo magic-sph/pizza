@@ -93,7 +93,7 @@ contains
       real(cp) :: jxBs(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: jxBp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: runStart, runStop, phi!, rsint
+      real(cp) :: runStart, runStop!, phi!, rsint
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_tmp_Rloc(n_m_max,nRstart:nRstop)
@@ -278,11 +278,13 @@ contains
          m = idx2m(n_m)
          do n_r=nRstart,nRstop
             if ( l_heat_3D ) then
+            !-- Finish assembly the buoyancy:: no 1/s term because a s terms arises from Vx[Tg/r(s.e_s + z.e_z)].e_z
                dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*m* &
-               &                    buo_tmp_Rloc(n_m,n_r)*or1(n_r)
+               &                    buo_tmp_Rloc(n_m,n_r)!!*or1(n_r)
             end if
             if ( l_mag_LF ) then
             !-- Finish assembling both parts of lorentz force and sum it with dpsidt and dVsOm
+            !--   --> <Vx(jxB).e_z> = (d_s (s <(jxB)_p>) - d_p <(jxB)_s>)/s
                if ( m == 0 ) then
                   dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)+DyMagFac*lfp_tmp_Rloc(n_m,n_r)
                else
@@ -355,15 +357,15 @@ contains
 
    end subroutine transform_to_grid_space
 !-------------------------------------------------------------------------------
-   subroutine transform_to_lm_space(gsa, nl_lm, dVrTLM)
+   subroutine transform_to_lm_space(gsa, nl_lm, dVrTLMR)
 
-      complex(cp), intent(out) :: dVrTLM(:)
+      complex(cp), intent(out) :: dVrTLMR(:)
       type(grid_space_arrays_t) :: gsa
       type(nonlinear_lm_t) :: nl_lm
 
 #ifdef WITH_SHTNS
       if ( l_heat_3D ) then
-         call spat_to_qst(gsa%VTr, gsa%VTt, gsa%VTp, dVrTLM, nl_lm%VTtLM, &
+         call spat_to_qst(gsa%VTr, gsa%VTt, gsa%VTp, dVrTLMR, nl_lm%VTtLM, &
               &           nl_lm%VTpLM)
       end if
 

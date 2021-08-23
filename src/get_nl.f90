@@ -16,7 +16,7 @@ module grid_space_arrays_mod
    use precision_mod
    use constants, only: pi
    use mem_alloc, only: bytes_allocated
-   use namelists, only: l_heat_3D, l_mag_3D, l_mag_LF, r_icb, r_cmb
+   use namelists, only: l_heat_3D, l_mag_3D, l_mag_LF, l_mag_alpha, r_icb, r_cmb
    use blocking, only: nRstart3D, nRstop3D
    use truncation_3D, only: n_theta_max, n_phi_max_3D
    use radial_functions, only: or1_3D, r_3D, rgrav_3D!, tcond_3D
@@ -139,6 +139,7 @@ contains
       !-- Local variables:
       integer :: n_theta, n_phi
       real(cp) :: r2, or1sn1
+      real(cp) :: bamp2, rfunc, Afunc
 
       r2 = r_3D(n_r)*r_3D(n_r)
 
@@ -160,11 +161,12 @@ contains
 
          !$OMP PARALLEL DO default(shared) &
          !$OMP& private(n_theta, n_phi)
-         !-- Assemble g/r * T on the spherical grid
+         !-- Assemble g/r * T on the spherical grid (1/r comes from the decomposition of Tg.e_r = Tg(s/r.e_s + z/r.e_z))
+         !-- and the s factor cancels afterward because of the z-compotent of the curl in cylindrical coord.
          do n_theta=1,n_theta_max
             do n_phi=1,n_phi_max_3D
-               buo(n_phi,n_theta)=this%Tc(n_phi,n_theta)*rgrav_3D(n_r)!* &
-               !&                  or1_3D(n_r)
+               buo(n_phi,n_theta)=this%Tc(n_phi,n_theta)*rgrav_3D(n_r)* &
+               &                  or1_3D(n_r)
             end do
          end do
          !$OMP END PARALLEL DO
@@ -177,45 +179,49 @@ contains
          do n_theta=1,n_theta_max
             or1sn1=or1_3D(n_r)*osint1(n_theta)
             do n_phi=1,n_phi_max_3D     ! calculate V x B components
-               !bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
-               !&       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
-               !&       this%Bpc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)
-               !rfunc = sin(pi*(r_3D(n_r)-r_icb))
-               !rfunc = 4.*r_3D(n_r)*sint(n_theta) *                   &
-               !&      ( r_cmb - r_3D(n_r)*sint(n_theta) ) / r_cmb**2.
-               !rfunc = (r_3D(n_r)*sint(n_theta)* r_3D(n_r)*cost(n_theta)*   &
-               !&( ( 2.*sqrt(r_cmb**2. - (r_3D(n_r)*sint(n_theta))**2.)**2. -&
-               !&  (r_3D(n_r)*cost(n_theta))**2.) / (2.*sqrt(r_cmb**2. -     &
-               !&  (r_3D(n_r)*sint(n_theta))**2.)**3.) ) ) / r_cmb
                this%VxBr(n_phi,n_theta)=r2*(                   &
-               !&    vt(n_phi,n_theta)*this%Bpc(n_phi,n_theta)- &
-               !&    vp(n_phi,n_theta)*this%Btc(n_phi,n_theta) &!)!&
-               &   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Bpc(n_phi,n_theta)- &
-               &   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Btc(n_phi,n_theta) )!&&!
-               !&    + 50.0*cost(n_theta)*rfunc*this%Brc(n_phi,n_theta)/(1. + bamp2))!sin(pi*(r_3D(n_r)-r_icb))
-               !&    + vzm(n_phi,n_theta)*cost(n_theta)*this%Brc(n_phi,n_theta) )
+               &    vt(n_phi,n_theta)*this%Bpc(n_phi,n_theta)- &
+               &    vp(n_phi,n_theta)*this%Btc(n_phi,n_theta) )!&&!
+               !&   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Bpc(n_phi,n_theta)- &
+               !&   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Btc(n_phi,n_theta) )!&&!
 
                this%VxBt(n_phi,n_theta)=or1sn1*(               &
-               !&    vp(n_phi,n_theta)*this%Brc(n_phi,n_theta)- &
-               !&    vr(n_phi,n_theta)*this%Bpc(n_phi,n_theta) &!)!&
-               &   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Brc(n_phi,n_theta)- &
-               &   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Bpc(n_phi,n_theta) )!&&!
-               !&    + 50.0*cost(n_theta)*rfunc*this%Btc(n_phi,n_theta)/(1. + bamp2))!sin(pi*(r_3D(n_r)-r_icb))
-               !&    - vzm(n_phi,n_theta)*sint(n_theta)*this%Btc(n_phi,n_theta) )
+               &    vp(n_phi,n_theta)*this%Brc(n_phi,n_theta)- &
+               &    vr(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )!&&!
+               !&   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Brc(n_phi,n_theta)- &
+               !&   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Bpc(n_phi,n_theta) )!&&!
 
                this%VxBp(n_phi,n_theta)=or1sn1*(         &
-               !&    vr(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
-               !&    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) &!)!&
-               &   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Btc(n_phi,n_theta)- &
-               &   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Brc(n_phi,n_theta) )!&&!
-               !&    + 50.0*cost(n_theta)*rfunc*this%Bpc(n_phi,n_theta)/(1. + bamp2))!sin(pi*(r_3D(n_r)-r_icb))
-               !&    + vpm(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
+               &    vr(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
+               &    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) )!&&!
+               !&   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Btc(n_phi,n_theta)- &
+               !&   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Brc(n_phi,n_theta) )!&&!
+               if ( l_mag_alpha ) then
+                  bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
+                  &       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
+                  &       this%Bpc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)
+                  rfunc = sin(pi*(r_3D(n_r)-r_icb))
+                  !rfunc = 4.*r_3D(n_r)*sint(n_theta) *                   &
+                  !&      ( r_cmb - r_3D(n_r)*sint(n_theta) ) / r_cmb**2.
+                  Afunc = 50.0_cp*cost(n_theta)*rfunc
+                  !Afunc = 1.0_cp*cost(n_theta)*vzm(n_phi,n_theta)
+
+                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + r2*(             &
+                  &                        Afunc*this%Brc(n_phi,n_theta)/(1. + bamp2) )
+
+                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + or1sn1*(         &
+                  &                        Afunc*this%Btc(n_phi,n_theta)/(1. + bamp2) )
+
+                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + or1sn1*(         &
+                  &                        Afunc*this%Bpc(n_phi,n_theta)/(1. + bamp2) )
+               end if
             end do
          end do   ! theta loop
          !$OMP END PARALLEL DO
 
          if ( l_mag_LF ) then
             !------ Get the Lorentz force:
+            !------ We will only need to compute the z component of Vx(jxB)
             !$OMP PARALLEL DO default(shared) &
             !$OMP& private(n_theta, n_phi, or1sn1)
             do n_theta=1,n_theta_max
