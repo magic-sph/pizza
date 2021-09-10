@@ -31,6 +31,9 @@ module namelists
    real(cp), public :: radratio      ! Radius ratio
    real(cp), public :: raxi          ! Compositional Rayleigh number
    real(cp), public :: sc            ! Schmidt number
+   real(cp), public :: alpha_fac     ! Alpha effect Amplitude control parameter
+   real(cp), public :: mag_pump_fac  ! Magnetic pumping Amplitude control parameter
+   real(cp), public :: delta_fac     ! Alpha^2 effect Amplitude control parameter (Davidson)
    real(cp), public :: epsrc0        ! Internal heat sources
    real(cp), public :: epsrc0xi      ! Internal chemical sources
    real(cp), public :: tcond_fac     ! Rescaling of the conducting temperature
@@ -105,7 +108,7 @@ module namelists
    logical,  public :: l_vort_balance    ! Calculate the vorticiy balance
    logical,  public :: l_2D_spectra      ! Calculate 2D spectra
    logical,  public :: l_2D_SD           ! Also store the standard deviation
-   logical,  public :: l_corr            ! Calculte the correlation
+   logical,  public :: l_corr            ! Calculate the correlation
    real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
    logical,  public :: l_3D            ! Require 3-D functions
    logical,  public :: l_heat_3D       ! 3-D treatment of temperature
@@ -114,6 +117,7 @@ module namelists
    logical,  public :: l_mag_LF        ! Treatment of the Lorentz-Force
    logical,  public :: l_mag_alpha     ! With or without magnetic Alpha effect in magnetic advection
    logical,  public :: l_mag_pump      ! With or without Magnetic pumping
+   logical,  public :: l_mag_inertia   ! With or without magnetic Alpha^2 effect triggered by inertia waves
    logical,  public :: l_cyl           ! Accuracy of the schemes for the z-integrations
    logical,  public :: l_heat
    logical,  public :: l_chem
@@ -123,6 +127,7 @@ module namelists
    logical,  public :: l_direct_solve  ! Direct solve or influence matrix method
    logical,  public :: l_coriolis_imp  ! Implicit treatment of Coriolis force
    logical,  public :: l_buo_imp       ! Implicit treatment of Buoyancy
+   logical,  public :: l_QG_basis      ! Switch on the extra terms from the projection on a QG basis
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb           ! Outer core radius
    real(cp), public :: r_icb           ! Inner core radius
@@ -157,9 +162,9 @@ contains
       &                dt_fac,l_cour_alf_damp,n_fft_optim_lev,      &
       &                time_scheme,cheb_method,l_rerror_fix,        &
       &                rerror_fac,time_scale,matrix_solve,          &
-      &                corio_term,buo_term,bc_method,hdif_temp,     &
-      &                hdif_vel,hdif_comp,hdif_mag,hdif_exp,hdif_l, &
-      &                hdif_m
+      &                corio_term,buo_term,bc_method,l_QG_basis,    &
+      &                hdif_temp,hdif_vel,hdif_comp,hdif_mag,       &
+      &                hdif_exp,hdif_l,hdif_m
       !namelist/hdif/hdif_temp,hdif_vel,hdif_comp,hdif_mag,&
       !&             hdif_exp,hdif_l,hdif_m
       namelist/phys_param/ra,ek,pr,prmag,raxi,sc,radratio,g0,g1,g2,&
@@ -168,7 +173,9 @@ contains
       &                   beta_shift,epsrc0,epsrc0xi,ktopxi,kbotxi,&
       &                   t_bot,t_top,xi_bot,xi_top, ktopb,kbotb,  &
       &                   xicond_fac,l_xi_3D,l_heat_3D,l_thw_3D,   &
-      &                   l_mag_LF,l_mag_alpha,l_mag_pump,l_cyl
+      &                   l_mag_LF,l_mag_alpha,l_mag_pump,l_cyl,   &
+      &                   l_mag_inertia,alpha_fac,mag_pump_fac,    &
+      &                   delta_fac
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi,scale_B,init_B,amp_B
@@ -305,9 +312,14 @@ contains
          l_mag_LF=.false.
          l_mag_alpha=.false.
          l_mag_pump=.false.
+         l_mag_inertia=.false.
       else
          l_mag_3D=.true.
       end if
+
+      if ( .not. l_mag_alpha ) alpha_fac=0.0_cp
+      if ( .not. l_mag_pump )  mag_pump_fac=0.0_cp
+      if ( .not. l_mag_inertia )  delta_fac=0.0_cp
 
       if ( l_mag_3D ) l_3D = .true.
 
@@ -342,6 +354,10 @@ contains
 
       r_cmb=one/(one-radratio)
       r_icb=r_cmb-one
+
+      !-- Control the add.terms from the projection of the vorticity eq. onto a QG basis
+      !-- Default is no additional terms l_QG_basis = .false.
+      if ( l_QG_basis ) l_cheb_coll=.true. ! Only implemented for coll. method yet
 
       !-- Determine Cheb method
       call capitalize(cheb_method)
@@ -539,6 +555,7 @@ contains
       corio_term       ='IMPLICIT' ! Implicit treatment of Coriolis term
       buo_term         ='IMPLICIT' ! Implicit treatment of Buoyancy
       time_scale       ='VISC' ! viscous units
+      l_QG_basis       =.false. ! No QG basis projection of the vorticity eq.
 
       !-- Hyperdiffusion
       hdif_vel         =0.0_cp
@@ -599,7 +616,11 @@ contains
       l_mag_3D = .false.
       l_mag_LF = .false.
       l_mag_alpha = .false.
+      alpha_fac   = 0.0_cp
       l_mag_pump = .false.
+      mag_pump_fac = 0.0_cp
+      l_mag_inertia = .false.
+      delta_fac   = 0.0_cp
 
       !----- Namelist start_field:
       l_reset_t        =.false.
@@ -692,6 +713,7 @@ contains
       write(n_out,'(''  l_rerror_fix    ='',l3,'','')') l_rerror_fix
       write(n_out,'(''  rerror_fac      ='',ES14.6,'','')') rerror_fac
       write(n_out,'(''  n_fft_optim_lev ='',i4,'','')') n_fft_optim_lev
+      write(n_out,'(''  l_QG_basis      ='',l3,'','')') l_QG_basis
       length=length_to_blank(time_scale)
       write(n_out,*) " time_scale      = """,time_scale(1:length),""","
       write(n_out,*) "/"
@@ -735,7 +757,14 @@ contains
       write(n_out,'(''  l_mag_3D        ='',l3,'','')') l_mag_3D
       write(n_out,'(''  l_mag_LF        ='',l3,'','')') l_mag_LF
       write(n_out,'(''  l_mag_alpha     ='',l3,'','')') l_mag_alpha
+      if ( l_mag_alpha ) &
+      & write(n_out,'(''  alpha_fac       ='',ES14.6,'','')') alpha_fac
       write(n_out,'(''  l_mag_pump      ='',l3,'','')') l_mag_pump
+      if ( l_mag_pump ) &
+      & write(n_out,'(''  mag_pump_fac    ='',ES14.6,'','')') mag_pump_fac
+      write(n_out,'(''  l_mag_inertia   ='',l3,'','')') l_mag_inertia
+      if ( l_mag_alpha ) &
+      & write(n_out,'(''  delta_fac       ='',ES14.6,'','')') delta_fac
       !--- Heat boundary condition:
       write(n_out,'(''  ktopt           ='',i3,'','')') ktopt
       write(n_out,'(''  kbott           ='',i3,'','')') kbott

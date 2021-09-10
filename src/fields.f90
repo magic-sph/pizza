@@ -51,9 +51,6 @@ module fields
    real(cp), allocatable, public :: ur_3D_Rloc(:,:,:)
    real(cp), allocatable, public :: ut_3D_Rloc(:,:,:)
    real(cp), allocatable, public :: up_3D_Rloc(:,:,:)
-   real(cp), allocatable, public :: upm3D_Rloc(:,:,:)
-   real(cp), allocatable, public :: uzm3D_Rloc(:,:,:)
-
  
    public :: initialize_fields, finalize_fields
 
@@ -169,16 +166,11 @@ contains
          allocate( ut_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
          allocate( up_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
 
-         allocate( upm3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
-         allocate( uzm3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
          bytes_allocated = bytes_allocated + 3*n_phi_max_3D*n_theta_max*&
          &                 (nRstop3D-nRstart3D+1)*SIZEOF_DEF_REAL
          ur_3D_Rloc(:,:,:)=0.0_cp
          ut_3D_Rloc(:,:,:)=0.0_cp
          up_3D_Rloc(:,:,:)=0.0_cp
-
-         upm3D_Rloc(:,:,:)=0.0_cp
-         uzm3D_Rloc(:,:,:)=0.0_cp
       end if 
 
       !-- 3-D temperature:
@@ -251,7 +243,6 @@ contains
       if ( l_3D ) then
          deallocate( work_3D_Rloc, work_LMloc )
          deallocate( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc )
-         deallocate( upm3D_Rloc, uzm3D_Rloc )
       end if
       if ( l_heat ) then
          deallocate( temp_Mloc, dtemp_Mloc, temp_Rloc )

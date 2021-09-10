@@ -19,7 +19,8 @@ module z_functions
    use truncation_3D, only: n_r_max_3D, n_m_max_3D, n_theta_max,   &
        &                    minc_3D, idx2m3D, n_phi_max_3D, lm_max
    use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv, CorFac, ek, ra, &
-       &                BuoFac, l_heat_3D, l_thw_3D, l_mag_pump, l_cyl
+       &                BuoFac, l_heat_3D, l_thw_3D, l_cyl, l_mag_pump, &
+       &                mag_pump_fac
    use horizontal, only: theta, cost, sint
    use radial_functions, only: r, r_3D, beta, oheight, ekpump, or1_3D, &
        &                       rgrav_3D, rscheme_3D
@@ -56,8 +57,8 @@ module z_functions
       real(cp), allocatable :: ek_phys_Rloc(:,:)
 
       !-- Magnetic pumping matrices
-      real(cp), allocatable :: upmpump_Rloc(:,:)
-      real(cp), allocatable :: uzmpump_Rloc(:,:)
+      real(cp), allocatable :: up_magpump_Rloc(:,:)
+      real(cp), allocatable :: uz_magpump_Rloc(:,:)
    contains
       procedure :: initialize
       procedure :: finalize
@@ -133,8 +134,8 @@ contains
          this%interp_wt_thw(:,:,:,:)=0.0_cp
          !this%interp_wtb_thw(:,:,:,:)=0.0_cp
 
-         bytes_allocated = bytes_allocated+(2*n_size*n_theta_max/2* &
-         &                 (nRstop-nRstart+1))*SIZEOF_INTEGER
+         bytes_allocated = bytes_allocated+(2*n_size+1)*n_theta_max/2* &
+         &                 (nRstop-nRstart+1)*SIZEOF_INTEGER
          !&                 n_r_max_3D)*SIZEOF_INTEGER
          bytes_allocated = bytes_allocated+2*(n_size*n_theta_max/2* &
          &                 (nRstop-nRstart+1))*SIZEOF_DEF_REAL
@@ -150,19 +151,28 @@ contains
       allocate( this%up_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )!n_r_max) )!
       allocate( this%ek_phys_Rloc(n_phi_max_3D,nRstart:nRstop) )!n_r_max) )!
 
-      allocate( this%upmpump_Rloc(n_phi_max_3D,nRstart:nRstop) )!n_r_max) )!
-      allocate( this%uzmpump_Rloc(n_phi_max_3D,nRstart:nRstop) )!n_r_max) )!
-
       this%us_phys_Rloc(:,:)=0.0_cp
       this%up_phys_Rloc(:,:)=0.0_cp
       this%ek_phys_Rloc(:,:)=0.0_cp
 
-      this%upmpump_Rloc(:,:)=0.0_cp
-      this%uzmpump_Rloc(:,:)=0.0_cp
-
       bytes_allocated = bytes_allocated+3*(n_phi_max_3D*      &
       &                 (nRstop-nRstart+1))*SIZEOF_DEF_REAL
       !&                 n_r_max)*SIZEOF_DEF_REAL
+
+      if ( l_mag_pump ) then
+         allocate( this%up_magpump_Rloc(n_phi_max_3D,nRstart:nRstop) )!n_r_max) )!
+         allocate( this%uz_magpump_Rloc(n_phi_max_3D,nRstart:nRstop) )!n_r_max) )!
+
+         this%up_magpump_Rloc(:,:)=0.0_cp
+         this%uz_magpump_Rloc(:,:)=0.0_cp
+
+         bytes_allocated = bytes_allocated+2*(n_phi_max_3D*      &
+         &                 (nRstop-nRstart+1))*SIZEOF_DEF_REAL
+         !&                 n_r_max)*SIZEOF_DEF_REAL
+      else
+         allocate( this%up_magpump_Rloc(1,1) )
+         allocate( this%uz_magpump_Rloc(1,1) )
+      end if
 
    end subroutine initialize
 !--------------------------------------------------------------------------------
@@ -176,7 +186,7 @@ contains
       deallocate( this%nzp_thw, this%interp_zp_thw, this%interp_wt_thw )
       !deallocate( this%interp_zpb_thw, this%interp_wtb_thw )
       deallocate( this%us_phys_Rloc, this%up_phys_Rloc, this%ek_phys_Rloc )
-      deallocate( this%upmpump_Rloc, this%uzmpump_Rloc )
+      deallocate( this%up_magpump_Rloc, this%uz_magpump_Rloc )
 
    end subroutine finalize
 !--------------------------------------------------------------------------------
@@ -194,8 +204,8 @@ contains
       complex(cp) :: upm3D_Rloc(n_m_max_3D,nRstart:nRstop)
       complex(cp) :: ekpump_m3D(n_m_max_3D,nRstart:nRstop)
 
-      complex(cp) :: upmpumpm3D(n_m_max_3D,nRstart:nRstop)
-      complex(cp) :: uzmpumpm3D(n_m_max_3D,nRstart:nRstop)
+      complex(cp) :: mag_pump_upm3D(n_m_max_3D,nRstart:nRstop)
+      complex(cp) :: mag_pump_uzm3D(n_m_max_3D,nRstart:nRstop)
 
       integer :: n_m_3D, n_m, n_r, m3D
 
@@ -227,16 +237,18 @@ contains
                end if
 
                if ( l_mag_pump ) then
-                  upmpumpm3D(n_m_3D,n_r) = us_Rloc(n_m,n_r)*r(n_r)**2.
-                  uzmpumpm3D(n_m_3D,n_r) = om_Rloc(n_m,n_r)
+                  !-- Mag_pump u_phi porportional to r^2 u_s
+                  mag_pump_upm3D(n_m_3D,n_r) = mag_pump_fac*us_Rloc(n_m,n_r)*r(n_r)**2.
+                  !-- Mag_pump u_z porportional to omega_z
+                  mag_pump_uzm3D(n_m_3D,n_r) = mag_pump_fac*om_Rloc(n_m,n_r)
                end if
             else
                usm3D_Rloc(n_m_3D,n_r) = zero
                upm3D_Rloc(n_m_3D,n_r) = zero
                ekpump_m3D(n_m_3D,n_r) = zero
 
-               upmpumpm3D(n_m_3D,n_r) = zero
-               uzmpumpm3D(n_m_3D,n_r) = zero
+               mag_pump_upm3D(n_m_3D,n_r) = zero
+               mag_pump_uzm3D(n_m_3D,n_r) = zero
             end if
          end do
       end do
@@ -264,8 +276,8 @@ contains
          if( l_ek_pump ) &
          &   call ifft(ekpump_m3D(:,n_r), this%ek_phys_Rloc(:,n_r), l_3D=.true.)
          if( l_mag_pump ) then
-            call ifft(upmpumpm3D(:,n_r), this%upmpump_Rloc(:,n_r), l_3D=.true.)
-            call ifft(uzmpumpm3D(:,n_r), this%uzmpump_Rloc(:,n_r), l_3D=.true.)
+            call ifft(mag_pump_upm3D(:,n_r), this%up_magpump_Rloc(:,n_r), l_3D=.true.)
+            call ifft(mag_pump_uzm3D(:,n_r), this%uz_magpump_Rloc(:,n_r), l_3D=.true.)
          end if
       end do
 
@@ -274,7 +286,7 @@ contains
 
    end subroutine prep_extension_QGto3D
 !--------------------------------------------------------------------------------
-   subroutine ext_QGto3D_vel(this, ur_Rloc, ut_Rloc, up_Rloc, upmRloc, uzmRloc)
+   subroutine ext_QGto3D_vel(this, ur_Rloc, ut_Rloc, up_Rloc)
 
       class(zfunc_type) :: this
 
@@ -282,9 +294,6 @@ contains
       real(cp), intent(out) :: ur_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp), intent(out) :: ut_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp), intent(out) :: up_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-
-      real(cp), intent(out) :: upmRloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp), intent(out) :: uzmRloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
 
       !-- Local arrays
       real(cp) :: usr(n_phi_max_3D,n_r_max)
@@ -305,8 +314,8 @@ contains
 
       if( l_ek_pump ) call allgather_from_rloc(this%ek_phys_Rloc,ekp,n_phi_max_3D)
       if( l_mag_pump ) then
-         call allgather_from_rloc(this%upmpump_Rloc,upm,n_phi_max_3D)
-         call allgather_from_rloc(this%uzmpump_Rloc,uzm,n_phi_max_3D)
+         call allgather_from_rloc(this%up_magpump_Rloc,upm,n_phi_max_3D)
+         call allgather_from_rloc(this%uz_magpump_Rloc,uzm,n_phi_max_3D)
       end if
 
       !do n_r=1,n_r_max
@@ -323,12 +332,15 @@ contains
             n_th_SHS=n_theta_max+1-n_th_NHS
             s_r = r_3D(n_r_r)*sint(n_th_NHS)
             z_r = r_3D(n_r_r)*cost(n_th_NHS)
-            h_s = sqrt(r_cmb**2-s_r**2)
-            x_s = z_r/h_s
-            rfunc = 4.*(r_icb-s_r)*(r_cmb - s_r)
-            rfunc2 = -(7./2.)*x_s*(1.-x_s)**2.*(1.+x_s)**2.
-            drfunc2= -(7./2.)*(1./h_s)*( (1.-x_s)**2.*(1.+x_s)**2. + &
-            &      2.*x_s*((1.-x_s)**2.*(1.+x_s) - (1.-x_s)*(1.+x_s)**2. ) )
+            if ( l_mag_pump ) then
+               !-- Following the form of (Schaeffer, Silva, Pais, 2015)
+               h_s = sqrt(r_cmb**2-s_r**2)
+               x_s = z_r/h_s
+               rfunc = 4.*(r_icb-s_r)*(r_cmb - s_r)
+               rfunc2 = -(7./2.)*x_s*(1.-x_s)**2.*(1.+x_s)**2.
+               drfunc2= -(7./2.)*(1./h_s)*( (1.-x_s)**2.*(1.+x_s)**2. + &
+               &      2.*x_s*((1.-x_s)**2.*(1.+x_s) - (1.-x_s)*(1.+x_s)**2. ) )
+            end if
             if ( s_r >= r_icb ) then !-- Outside TC
                n_r = 1
                do while ( r(n_r) >= s_r )! .and. n_r < n_r_max )
@@ -347,20 +359,34 @@ contains
                      &              alpha_r2*ekp(n_phi,n_r-1))
                   end if
                   vrr= vz*cost(n_th_NHS) + vs*sint(n_th_NHS)
-                  ur_Rloc(n_phi,n_th_NHS,n_r_r)= vrr
-                  ur_Rloc(n_phi,n_th_SHS,n_r_r)= vrr
                   vth= vs*cost(n_th_NHS) - vz*sint(n_th_NHS)
                   vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r-1)
-                  vpm= 0.0_cp!alpha_r1*upm(n_phi,n_r) + alpha_r2*upm(n_phi,n_r-1)
-                  vzm= 0.0_cp!alpha_r1*uzm(n_phi,n_r) + alpha_r2*uzm(n_phi,n_r-1)
-                  !upmRloc(n_phi,n_th_NHS,n_r_r)= 0.10_cp*rfunc*drfunc2*vpm!*drfunc2
-                  !upmRloc(n_phi,n_th_SHS,n_r_r)=-0.10_cp*rfunc*drfunc2*vpm!*drfunc2
-                  !uzmRloc(n_phi,n_th_NHS,n_r_r)= 0.10_cp*rfunc*rfunc2*vzm!*rfunc2
-                  !uzmRloc(n_phi,n_th_SHS,n_r_r)=-0.10_cp*rfunc*rfunc2*vzm!*rfunc2
-                  ut_Rloc(n_phi,n_th_NHS,n_r_r)= vth
-                  ut_Rloc(n_phi,n_th_SHS,n_r_r)=-vth
-                  up_Rloc(n_phi,n_th_NHS,n_r_r)= vph
-                  up_Rloc(n_phi,n_th_SHS,n_r_r)= vph
+                  if ( l_mag_pump ) then
+                     vpm= alpha_r1*upm(n_phi,n_r) + alpha_r2*upm(n_phi,n_r-1)
+                     vzm= alpha_r1*uzm(n_phi,n_r) + alpha_r2*uzm(n_phi,n_r-1)
+                     vpm= rfunc*drfunc2*vpm!*drfunc2
+                     vzm= rfunc* rfunc2*vzm!*rfunc2
+                     !upmRloc(n_phi,n_th_NHS,n_r_r)= rfunc*drfunc2*vpm!*drfunc2
+                     !upmRloc(n_phi,n_th_SHS,n_r_r)=-rfunc*drfunc2*vpm!*drfunc2
+                     !uzmRloc(n_phi,n_th_NHS,n_r_r)= rfunc* rfunc2*vzm!*rfunc2
+                     !uzmRloc(n_phi,n_th_SHS,n_r_r)=-rfunc* rfunc2*vzm!*rfunc2
+                  else
+                     vpm=0.0_cp
+                     vzm=0.0_cp
+                  end if
+                  !if( rank == 0 .and. (n_r_r==1 .and. n_phi==1 .and. n_th_NHS==n_theta_max/2-1) ) &
+                  !& print*, "mag_pump_ phi, z =", vpm, vzm
+                  !if( rank == 0 .and. (n_r_r==1 .and. n_phi==1 .and. n_th_NHS==n_theta_max/2-1) ) &
+                  !& print*, "UNmodified vel_ r, th, phi =", vrr, vth, vph
+                  ur_Rloc(n_phi,n_th_NHS,n_r_r)= vrr + cost(n_th_NHS)*vzm
+                  ur_Rloc(n_phi,n_th_SHS,n_r_r)= vrr - cost(n_th_NHS)*vzm
+                  ut_Rloc(n_phi,n_th_NHS,n_r_r)= vth - sint(n_th_NHS)*vzm
+                  ut_Rloc(n_phi,n_th_SHS,n_r_r)=-vth + sint(n_th_NHS)*vzm
+                  up_Rloc(n_phi,n_th_NHS,n_r_r)= vph + vpm
+                  up_Rloc(n_phi,n_th_SHS,n_r_r)= vph - vpm
+                  !if( rank == 0 .and. (n_r_r==1 .and. n_phi==1 .and. n_th_NHS==n_theta_max/2-1) ) &
+                  !& print*, "  MODified vel_ r, th, phi =", ur_Rloc(n_phi,n_th_NHS,n_r_r), &
+                  !&         ut_Rloc(n_phi,n_th_NHS,n_r_r), up_Rloc(n_phi,n_th_NHS,n_r_r)
                end do
 
             else !-- Inside the tangent cylinder
@@ -372,11 +398,6 @@ contains
                   ut_Rloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
                   up_Rloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
                   up_Rloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
-
-                  upmRloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
-                  upmRloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
-                  uzmRloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
-                  uzmRloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
                end do
 
             end if ! Inside/outside TC

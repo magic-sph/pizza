@@ -9,12 +9,12 @@ module init_fields
    use constants, only: zero, one, two, three, four, ci, pi, half, third, sq4pi
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
    use communications, only: transp_r2m, r2m_fields, transp_r2lm, r2lm_fields
-   use radial_functions, only: r, rscheme, or1, or2, beta, dbeta, rscheme_3D, &
+   use radial_functions, only: r, rscheme, or1, or2, beta, rscheme_3D, &
        &                       r_3D, or1_3D, tcond_3D
    use horizontal, only: theta
-   use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
-       &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
-       &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
+   use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u,     &
+       &                radratio, r_cmb, r_icb, l_cheb_coll, l_QG_basis,       &
+       &                l_non_rot, l_reset_t, l_chem, l_heat, amp_xi, init_xi, &
        &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac
    use outputs, only: n_log_file
    use parallel_mod, only: rank
@@ -155,6 +155,10 @@ contains
             m = idx2m(n_m)
             om_Mloc(n_m,n_r)=work_Mloc(n_m,n_r)+or1(n_r)*up_Mloc(n_m,n_r)- &
             &                     or1(n_r)*ci*real(m,cp)*us_Mloc(n_m,n_r)
+            if ( l_QG_basis .and. m>0 ) then ! No phi derivative at m=0
+               om_Mloc(n_m,n_r)=om_Mloc(n_m,n_r) + beta(n_r)*third*        &
+               &                           ci*real(m,cp)*us_Mloc(n_m,n_r)
+            end if
          end do
       end do
 

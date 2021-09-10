@@ -7,7 +7,7 @@ module rloop_3D
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
    use namelists, only: BuoFac, DyMagFac, tag, l_heat_3D, l_thw_3D, l_mag_3D, l_mag_LF, &
-   &                    r_cmb, r_icb
+   &                    l_QG_basis, r_cmb, r_icb
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max, l_max, n_r_max_3D
    use truncation, only: idx2m, n_m_max
    use courant_mod, only: courant_3D
@@ -52,11 +52,11 @@ contains
 
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
-   subroutine radial_loop_3D( time, ur, ut, up, upm, uzm, temp, dtempdt, dVrTLM, &
+   subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM, &
               &               b_3D, db_3D, ddb_3D, aj_3D, dj_3D,       &
               &               dbdt_3D, djdt_3D, dVxBhLM,               &
               &               dpsidt_Rloc, dVsOm_Rloc, dtr_3D_Rloc,    &
-              &               dth_3D_Rloc, l_frame, zinterp, timers,  &
+              &               dth_3D_Rloc, l_frame, zinterp, timers,   &
               &               tscheme )
 
       !-- Input variables
@@ -69,8 +69,6 @@ contains
       real(cp),    intent(inout) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: ut(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: up(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp),    intent(inout) :: upm(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp),    intent(inout) :: uzm(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       logical,     intent(in) :: l_frame
       real(cp),    intent(in) :: time
       type(zfunc_type),    intent(in) :: zinterp
@@ -97,7 +95,7 @@ contains
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_tmp_Rloc(n_m_max,nRstart:nRstop)
-      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta, n_phi
+      integer :: n_r, n_m, m, fh_temp, info_temp!, n_theta, n_phi
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
       character(len=144) :: frame_name
@@ -166,7 +164,7 @@ contains
 
          !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
-              &          buo_tmp(:,:,n_r),jxBs(:,:,n_r),jxBp(:,:,n_r),upm(:,:,n_r),uzm(:,:,n_r))
+              &          buo_tmp(:,:,n_r),jxBs(:,:,n_r),jxBp(:,:,n_r))
 
          !-- Write the snapshot on the grid (easier to handle)
          if ( l_frame .and. tscheme%istage==1 ) then
@@ -279,7 +277,7 @@ contains
          do n_r=nRstart,nRstop
             if ( l_heat_3D ) then
             !-- Finish assembly the buoyancy:: no 1/s term because a s terms arises from Vx[Tg/r(s.e_s + z.e_z)].e_z
-               dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*m* &
+               dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*real(m,cp)* &
                &                    buo_tmp_Rloc(n_m,n_r)!!*or1(n_r)
             end if
             if ( l_mag_LF ) then
@@ -290,8 +288,15 @@ contains
                else
                   dVsOm_Rloc(n_m,n_r)= dVsOm_Rloc(n_m,n_r)-DyMagFac*r(n_r)*&
                   &                  lfp_tmp_Rloc(n_m,n_r)
-                  dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-DyMagFac*ci*m* &
+                  dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-DyMagFac*ci*real(m,cp)* &
                   &                    lfs_tmp_Rloc(n_m,n_r)*or1(n_r)
+                  !if ( l_QG_basis ) then
+                  !!-- Finish assembling add. lorentz force from the QG basis projection
+                  !!-- --> \beta <zVx(jxB).e_s> = \beta ((d_p <z (jxB)_z>)/s - <z d_z (jxB)_p>)
+                  !!--                          = \beta ((d_p <z (jxB)_z>)/s + <(jxB)_p> - z/2h (jxB)_p)
+                  !!-- But --> \beta <z (jxB)_z> has already been added to lfs_tmp_Rloc
+                  !   dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)+ !--> need to add the rest
+                  !end if
                end if
             end if
          end do
