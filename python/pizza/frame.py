@@ -47,7 +47,7 @@ class Frame:
             self.tcond = file.fort_read(np.float64)
             self.idx2m = file.fort_read('i4')
 
-            self.field_m = file.fort_read('Complex64')
+            self.field_m = file.fort_read(np.complex128)
             self.field_m = self.field_m.reshape((self.n_r_max, self.n_m_max))
             self.field_m = self.field_m.T
             file.close()
