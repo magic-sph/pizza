@@ -395,6 +395,12 @@ contains
                      &                   + CorFac*beta(n_r)*us_Mloc(n_m,n_r)
                   end if
 
+                  if ( l_QG_basis ) then
+                  !-- Ekman Pumping should not be modified (only dependant on BCs)
+                     dpsi_imp_Mloc_last(n_m,n_r)=dpsi_imp_Mloc_last(n_m,n_r) + &
+                     &                                     CorFac*ekpump(n_r)* &
+                     &           beta(n_r)*third*ci*real(m,cp)*us_Mloc(n_m,n_r)
+                  end if
 
                   !-- In case the force balance is requested:
                   if ( vort_bal%l_calc ) then
@@ -508,6 +514,14 @@ contains
             &   +ekpump(nR)*beta(nR)*or1(nR)*( dm2+                      &
             &              5.0_cp*r_cmb*oheight(nR)*ci*real(m,cp)) )*    &
             &                                  rscheme%rMat(nR,nR_out) ) 
+
+            if ( l_QG_basis ) then
+               !-- Ekman Pumping should not be modified (only dependant on BCs)
+               psiMat(nR,nR_out_psi)= psiMat(nR,nR_out_psi) -             &
+               &  tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*rscheme%rnorm*( &
+               &  CorFac*ekpump(nR)*third*dm2*or1(nR)*                    &
+               &                                 rscheme%rMat(nR,nR_out) )
+            end if
 
             if ( l_coriolis_imp ) then
                psiMat(nR,nR_out_psi) = psiMat(nR,nR_out_psi) -        &

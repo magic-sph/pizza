@@ -763,7 +763,7 @@ contains
       if ( l_mag_pump ) &
       & write(n_out,'(''  mag_pump_fac    ='',ES14.6,'','')') mag_pump_fac
       write(n_out,'(''  l_mag_inertia   ='',l3,'','')') l_mag_inertia
-      if ( l_mag_alpha ) &
+      if ( l_mag_inertia ) &
       & write(n_out,'(''  delta_fac       ='',ES14.6,'','')') delta_fac
       !--- Heat boundary condition:
       write(n_out,'(''  ktopt           ='',i3,'','')') ktopt

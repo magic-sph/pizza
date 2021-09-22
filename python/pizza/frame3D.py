@@ -98,10 +98,10 @@ class Pizza3DFields(PizzaSetup):
         self.uphi = f.field
 
         try:
-                filename = self.get_filename('frame_temp_3D', ivar, datadir, tag,
-                                             verbose)
-                f = Frame3D(filename, endian=endian)
-                self.temp = f.field
+            filename = self.get_filename('frame_temp_3D', ivar, datadir, tag,
+                                         verbose)
+            f = Frame3D(filename, endian=endian)
+        	self.temp = f.field
         except TypeError:
             print('frame_temp_3D.%s heat fields not found' % tag)
             pass
@@ -229,6 +229,61 @@ class Pizza3DFields(PizzaSetup):
                                       vmax=vmax, vmin=vmin, cbar=cbar,
                                       tit=False)
 
+    def slice(self, p=0.0, field='up', cm='seismic', levels=65, normed=True, vmax=None,
+            vmin=None, cbar=True, label=None):
+        """
+        Display an meridional slice of a scalar quantity
+
+        :param field: the name of the input physical quantity you want to
+                      display
+        :type field: str
+        :param p: azimuth at which the cut is done
+        :type p: float
+        :param levels: the number of levels in the contour
+        :type levels: int
+        :param cm: name of the colormap ('jet', 'seismic', 'RdYlBu_r', etc.)
+        :type cm: str
+        :param cbar: display the colorbar when set to True
+        :type cbar: bool
+        :param vmax: maximum value of the contour levels
+        :type vmax: float
+        :param vmin: minimum value of the contour levels
+        :type vmin: float
+        :param normed: when set to True, the colormap is centered around zero.
+                       Default is True, except for entropy/temperature plots.
+        :type normed: bool
+        """
+
+        self.phi = np.linspace(self.theta[0]/2.,np.pi,self.n_phi_max_3D)
+        phmax = self.phi[-1]
+        pnorm = self.phi/phmax
+        pmask = np.where(abs(pnorm-p) == abs(pnorm-p).min(), 1, 0)
+        iphi = np.nonzero(pmask)[0][0]
+        if field in ('temperature', 'Temperature', 'temp', 'Temp', 't', 'T'):
+            data = self.temp[iphi, :, :]
+        elif field in ('tfluct', 'tempfluct'):
+            data = self.temp-self.temp.mean(axis=0)
+            data = data[iphi, :, :]
+        elif field in ('ur', 'Ur', 'Vr', 'vr'):
+            data = self.ur[iphi, :, :]
+        elif field in ('ut', 'Ut', 'utheta', 'Utheta', 'vt', 'Vt', 'Vtheta',
+                       'vtheta'):
+            data = self.utheta[iphi, :, :]
+        elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
+            data = self.uphi[iphi, :, :]
+        elif field in ('br', 'Br'):
+            data = self.br[iphi, :, :]
+        elif field in ('bt', 'Bt','bth', 'Bth', 'btheta', 'Btheta'):
+            data = self.bt[iphi, :, :]
+        elif field in ('bp', 'Bp', 'bph', 'Bph', 'bphi', 'Bphi'):
+            data = self.bp[iphi, :, :]
+
+        self.fig, xx, yy = merContour(data, self.radius_3D, colat=self.theta,
+                                      label=label,
+                                      levels=levels, cm=cm, normed=normed,
+                                      vmax=vmax, vmin=vmin, cbar=cbar,
+                                      tit=False)
+
     def equat(self, field='ur', cm='seismic', levels=65, deminc=True,
               normed=True, vmax=None, vmin=None, normRad=False, stream=False,
               streamNorm='vel', streamDensity=1.5, cbar=True, label=None,
@@ -270,23 +325,23 @@ class Pizza3DFields(PizzaSetup):
         """
 
         if field in ('temperature', 'Temperature', 'temp', 'Temp', 't', 'T'):
-            data = self.temp[:, self.n_theta_max//2, :]
+            data = self.temp[:, self.n_theta_max/2, :]
         elif field in ('tfluct', 'tempfluct'):
             data = self.temp-self.temp.mean(axis=0)
-            data = data[:, self.n_theta_max//2, :]
+            data = data[:, self.n_theta_max/2, :]
         elif field in ('ur', 'Ur', 'Vr', 'vr'):
-            data = self.ur[:, self.n_theta_max//2, :]
+            data = self.ur[:, self.n_theta_max/2, :]
         elif field in ('ut', 'Ut', 'utheta', 'Utheta', 'vt', 'Vt', 'Vtheta',
                        'vtheta'):
             data = self.utheta[:, self.n_theta_max/2, :]
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
-            data = self.uphi[:, self.n_theta_max//2, :]
+            data = self.uphi[:, self.n_theta_max/2, :]
         elif field in ('br', 'Br'):
-            data = self.br[:, self.n_theta_max//2, :]
+            data = self.br[:, self.n_theta_max/2, :]
         elif field in ('bt', 'Bt', 'bth', 'Bth', 'btheta', 'Btheta'):
-            data = self.bt[:, self.n_theta_max//2, :]
+            data = self.bt[:, self.n_theta_max/2, :]
         elif field in ('bp', 'Bp', 'bph', 'Bph', 'bphi', 'Bphi'):
-            data = self.bp[:, self.n_theta_max//2, :]
+            data = self.bp[:, self.n_theta_max/2, :]
 
         if deminc:
             data = symmetrize(data, ms=self.minc_3D)

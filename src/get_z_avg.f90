@@ -12,7 +12,7 @@ module z_functions
    use communications, only: allgather_from_rloc, allgather_from_rloc_3D,      &
    &                         transp_lm2r,lm2r_fields, transp_r2lm,r2lm_fields, &
    &                         exchange_Nbound_from_Rloc_3D
-   use constants, only: zero, half, one, two, four, ci, pi
+   use constants, only: zero, half, third, one, two, four, ci, pi
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D, lmStart, lmStop
    use blocking_lm, only: lm2l, lm2m, lm2lmP
    use truncation, only: n_r_max, n_z_max, n_m_max, minc, idx2m, m2idx
@@ -20,7 +20,7 @@ module z_functions
        &                    minc_3D, idx2m3D, n_phi_max_3D, lm_max
    use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv, CorFac, ek, ra, &
        &                BuoFac, l_heat_3D, l_thw_3D, l_cyl, l_mag_pump, &
-       &                mag_pump_fac
+       &                mag_pump_fac, l_QG_basis
    use horizontal, only: theta, cost, sint
    use radial_functions, only: r, r_3D, beta, oheight, ekpump, or1_3D, &
        &                       rgrav_3D, rscheme_3D
@@ -228,6 +228,12 @@ contains
                      &              +half*beta(n_r)*      up_Rloc(n_m,n_r) &
                      &   +beta(n_r)*( -ci*real(m3D,cp)+                    &
                      &    5.0_cp*r_cmb*oheight(n_r) )*    us_Rloc(n_m,n_r))
+                     if ( l_QG_basis ) then
+                     !-- Ekman Pumping should not be modified (only dependant on BCs)
+                        ekpump_m3D(n_m_3D,n_r)=ekpump_m3D(n_m_3D,n_r) + &
+                        &  ekpump(n_r)*beta(n_r)*third*ci*real(m3D,cp)* &
+                        &                               us_Rloc(n_m,n_r)
+                     end if
                   else
                      ekpump_m3D(n_m_3D,n_r)=0.0_cp
                      !ekpump_m3D(n_m_3D,n_r)=-CorFac*                &
@@ -307,7 +313,7 @@ contains
       real(cp) :: s_r, z_r, z_eta
       real(cp) :: vs, vz, vrr, vth, vph
       real(cp) :: alpha_r1, alpha_r2
-      real(cp) :: h_s, x_s, rfunc, rfunc2, drfunc2, vpm, vzm
+      real(cp) :: h_s, x_s, sfunc, hfunc, dhfunc, vpm, vzm
 
       call allgather_from_rloc(this%us_phys_Rloc,usr,n_phi_max_3D)
       call allgather_from_rloc(this%up_phys_Rloc,upp,n_phi_max_3D)
@@ -336,9 +342,9 @@ contains
                !-- Following the form of (Schaeffer, Silva, Pais, 2015)
                h_s = sqrt(r_cmb**2-s_r**2)
                x_s = z_r/h_s
-               rfunc = 4.*(r_icb-s_r)*(r_cmb - s_r)
-               rfunc2 = -(7./2.)*x_s*(1.-x_s)**2.*(1.+x_s)**2.
-               drfunc2= -(7./2.)*(1./h_s)*( (1.-x_s)**2.*(1.+x_s)**2. + &
+               sfunc = 4.*(s_r - r_icb)*(r_cmb - s_r)
+               hfunc = -(7./2.)*x_s*(1.-x_s)**2.*(1.+x_s)**2.
+               dhfunc= -(7./2.)*(1./h_s)*( (1.-x_s)**2.*(1.+x_s)**2. + &
                &      2.*x_s*((1.-x_s)**2.*(1.+x_s) - (1.-x_s)*(1.+x_s)**2. ) )
             end if
             if ( s_r >= r_icb ) then !-- Outside TC
@@ -364,12 +370,12 @@ contains
                   if ( l_mag_pump ) then
                      vpm= alpha_r1*upm(n_phi,n_r) + alpha_r2*upm(n_phi,n_r-1)
                      vzm= alpha_r1*uzm(n_phi,n_r) + alpha_r2*uzm(n_phi,n_r-1)
-                     vpm= rfunc*drfunc2*vpm!*drfunc2
-                     vzm= rfunc* rfunc2*vzm!*rfunc2
-                     !upmRloc(n_phi,n_th_NHS,n_r_r)= rfunc*drfunc2*vpm!*drfunc2
-                     !upmRloc(n_phi,n_th_SHS,n_r_r)=-rfunc*drfunc2*vpm!*drfunc2
-                     !uzmRloc(n_phi,n_th_NHS,n_r_r)= rfunc* rfunc2*vzm!*rfunc2
-                     !uzmRloc(n_phi,n_th_SHS,n_r_r)=-rfunc* rfunc2*vzm!*rfunc2
+                     vpm= sfunc*dhfunc*vpm!*dhfunc
+                     vzm= sfunc* hfunc*vzm!*hfunc
+                     !upmRloc(n_phi,n_th_NHS,n_r_r)= sfunc*dhfunc*vpm!*dhfunc
+                     !upmRloc(n_phi,n_th_SHS,n_r_r)=-sfunc*dhfunc*vpm!*dhfunc
+                     !uzmRloc(n_phi,n_th_NHS,n_r_r)= sfunc* hfunc*vzm!*hfunc
+                     !uzmRloc(n_phi,n_th_SHS,n_r_r)=-sfunc* hfunc*vzm!*hfunc
                   else
                      vpm=0.0_cp
                      vzm=0.0_cp

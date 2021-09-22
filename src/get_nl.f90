@@ -167,9 +167,9 @@ contains
                buo(n_phi,n_theta)=this%Tc(n_phi,n_theta)*rgrav_3D(n_r)* &
                &                  or1_3D(n_r)
                if ( l_QG_basis ) then
-                  !-- Additional buoyancy term from the QG basis projection: \beta/s z^2 Tg.r (.e_z part of the curl)
+                  !-- Additional buoyancy term from the QG basis projection: -\beta/s z^2 Tg.r (.e_z part of the curl)
                   !-- Can be simplified with z = cost.r , s = sint.r so that z^2/(sr) = cost^2/sint
-                  buo(n_phi,n_theta)=buo(n_phi,n_theta) + this%Tc(n_phi,n_theta)* &
+                  buo(n_phi,n_theta)=buo(n_phi,n_theta) - this%Tc(n_phi,n_theta)* &
                   &                                      rgrav_3D(n_r)*beta(n_r)* &
                   &                  cost(n_theta)*cost(n_theta)*osint1(n_theta)
                end if
@@ -224,22 +224,22 @@ contains
 
                if ( l_mag_inertia ) then
                   !-- Following (Davidson and Ranjan, 2015; eq.53)
-                  !--    <u x b>_s = \delta/Pm <u_p>.B_s  --> on VxBr and VxBt
-                  !-- &  <u x b>_p = \delta/Pm <u_s>.B_p  --> on VxBp
+                  !--    <u x b>_s = \delta/Pm <u_p^2>.B_s  --> on VxBr and VxBt
+                  !-- &  <u x b>_p = \delta/Pm <u_s^2>.B_p  --> on VxBp
                   !--              = terms coming from inertial waves
                   this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + delta_fac*   &
-                  &                              sint(n_theta)*vp(n_phi,n_theta)*( &
+                  &                        (sint(n_theta)*vp(n_phi,n_theta))**2.*( &
                   &                 or1sn1*this%Brc(n_phi,n_theta)*sint(n_theta) + &
                   &                     r2*this%Btc(n_phi,n_theta)*cost(n_theta) )
 
                   this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta) + delta_fac*   &
-                  &                              cost(n_theta)*vp(n_phi,n_theta)*( &
+                  &                        (cost(n_theta)*vp(n_phi,n_theta))**2.*( &
                   &                 or1sn1*this%Brc(n_phi,n_theta)*sint(n_theta) + &
                   &                     r2*this%Btc(n_phi,n_theta)*cost(n_theta) )
 
                   this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + delta_fac*(  &
-                  &                   ( or1sn1*vr(n_phi,n_theta)*sint(n_theta) +   &
-                  &                         r2*vt(n_phi,n_theta)*cost(n_theta) )*  &
+                  &                ( (or1sn1*vr(n_phi,n_theta)*sint(n_theta) +     &
+                  &                    r2*vt(n_phi,n_theta)*cost(n_theta))**2. )*  &
                   &                                      this%Bpc(n_phi,n_theta) )
                end if
             end do

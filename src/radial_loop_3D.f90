@@ -35,13 +35,13 @@ module rloop_3D
 
 contains
 
-   subroutine initialize_radial_loop_3D(lmP_max, lm_max)
+   subroutine initialize_radial_loop_3D(lm_max, lmP_max)
 
-      integer, intent(in) :: lmP_max
       integer, intent(in) :: lm_max
+      integer, intent(in) :: lmP_max
 
       call gsa%initialize()
-      call nl_lm%initialize(lmP_max,lm_max)
+      call nl_lm%initialize(lm_max,lmP_max)
 
    end subroutine initialize_radial_loop_3D
 !------------------------------------------------------------------------------
@@ -172,7 +172,7 @@ contains
             call write_bulk_snapshot_3D(fh_ut, ut(:,:,n_r))
             call write_bulk_snapshot_3D(fh_up, up(:,:,n_r))
             if ( l_heat_3D ) then
-               call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))
+               call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))!buo_tmp(:,:,n_r))!
             end if
             if ( l_mag_3D ) then
                call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!Vx!

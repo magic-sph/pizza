@@ -13,7 +13,7 @@ module nonlinear_lm_mod
  
    type :: nonlinear_lm_t
       !----- Nonlinear terms in lm-space: 
-      complex(cp), allocatable :: VTrLM(:),  VTtLM(:),  VTpLM(:)
+      complex(cp), allocatable :: VTtLM(:),  VTpLM(:)
       complex(cp), allocatable :: VxBrLM(:), VxBtLM(:), VxBpLM(:)
 
  
@@ -27,11 +27,10 @@ module nonlinear_lm_mod
 
 contains
 
-   subroutine initialize(this,lmP_max,lm_max)
+   subroutine initialize(this,lm_max,lmP_max)
 
       class(nonlinear_lm_t) :: this
-      integer, intent(in) :: lmP_max
-      integer, intent(in) :: lm_max
+      integer, intent(in) :: lm_max, lmP_max
 
       if ( l_heat_3D ) then
          allocate( this%VTtLM(lm_max), this%VTpLM(lm_max) )
@@ -82,7 +81,7 @@ contains
       !-- Local variables:
       integer :: l,m,lm,lmP,lmPS,lmPA
 
-      if ( l_heat_3D  ) then
+      if ( l_heat_3D ) then
          !-- Spherically-symmetric contribution:
          dTdt(1)  =zero
 
@@ -103,15 +102,14 @@ contains
          !$OMP shared(lm_max,lm2l,lm2m,lm2lmP,lmP2lmPS,lmP2lmPA) &
          !$OMP shared(dBdt,djdt,dTheta1S,dTheta1A,dPhi) &
          !$OMP shared(LF_pol,LF_tor,dVxBhLM) &
-         !$OMP shared(dLh,or2_3D,r_3D,n_r,this)
+         !$OMP shared(or2_3D,r_3D,n_r,this)
          !if ( if qst_to_spat get_nl% ) then !#ifdef SHTNS
          ! do lm=1,lm_max
          !    l   =lm2l(lm)
          !    lmP =lm2lmP(lm)
-         !    dLh =real(l*(l+1),kind=cp)
-         !    dbdt(lm)   = dLh*this%VxBpLM(lmP)
-         !    dVxBhLM(lm)=-dLh*this%VxBtLM(lmP)*r_3D(n_r)!*r_3D(n_r)
-         !    djdt(lm)   = dLh*this%VxBrLM(lmP)*or2_3D(n_r)!*or2_3D(n_r)
+         !    dbdt(lm)   = dLh(lm)*this%VxBpLM(lmP)
+         !    dVxBhLM(lm)=-dLh(lm)*this%VxBtLM(lmP)*r_3D(n_r)!*r_3D(n_r)
+         !    djdt(lm)   = dLh(lm)*this%VxBrLM(lmP)*or2_3D(n_r)!*or2_3D(n_r)
          ! end do
          !else !#endifdef SHTNS
          do lm=1,lm_max

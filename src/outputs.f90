@@ -750,7 +750,7 @@ contains
          beta_t = dtcond(int(n_r_max/2))+real(dtemp_Mloc(n_m0,int(n_r_max/2)))
          beta_t = round_off(beta_t)
 
-         write(n_heat_file, '(1P, ES20.12, 7ES16.8)') time, NuTop, NuBot,      &
+         write(n_heat_file, '(1P, ES20.12, 8ES16.8)') time, NuTop, NuBot,      &
          &                                            Nu_vol, Nu_int, NuDelta, &
          &                                            tTop, tBot, beta_t
       end if
