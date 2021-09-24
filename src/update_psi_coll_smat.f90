@@ -299,10 +299,12 @@ contains
                   &                 +CorFac*beta(n_r)*us_Mloc(n_m,n_r)
                end if
 
-               if ( l_QG_basis ) then ! Missing NL part from the horizontal adv.
-                  dpsi_exp_last(n_m,n_r)=    dpsi_exp_last(n_m,n_r) &
-                  &            +beta(n_r)*or1(n_r)*dVsOm_Mloc(n_m,n_r)
-               end if
+               !if ( l_QG_basis ) then ! Missing NL part from the horizontal adv.
+               !   dpsi_exp_last(n_m,n_r)=    dpsi_exp_last(n_m,n_r) &
+               !   &            +beta(n_r)*or1(n_r)*dVsOm_Mloc(n_m,n_r)
+               !   !-- AND WRONG!:: \beta \omega_z u_s COMES FROM the V.(u \omega_z) form
+               !   !-- WARNING!:: WHEN l_mag_LF THERE IS s-LORENTZ FORCE in dVsOm!!!
+               !end if
 
                !-- If Buoyancy is treated explicitly, add it here:
                if ( .not. l_buo_imp ) then

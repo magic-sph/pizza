@@ -64,6 +64,7 @@ module z_functions
       procedure :: finalize
       procedure :: compute_zavg
       procedure :: cyl_avg
+      procedure :: compute_zder
       procedure :: prep_extension_QGto3D
       procedure :: ext_QGto3D_vel
       procedure :: compute_thermal_wind
@@ -773,6 +774,82 @@ contains
       !&                  work(n_theta_max/2+1,1) )
 
    end subroutine cyl_avg
+!--------------------------------------------------------------------------------
+   subroutine compute_zder(this,work_Rloc,zder_Rloc)
+
+      class(zfunc_type) :: this
+
+      !-- Input variables
+      real(cp), intent(in) :: work_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+
+      !-- Output variables
+      real(cp), intent(out) :: zder_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+
+      !-- Local variables
+      integer :: n_r, n_phi, n_th
+      real(cp) :: work_Rextended(n_theta_max,nRstart3D-1:nRstop3D+1)
+
+      zder_Rloc(:,:,:)=0.0_cp
+
+      !-- z-derivation on the 3D grid
+      !-- has to use finite difference::  dz = cos(theta)*dr - sin(theta)/r_3D*dtheta
+      !--     but the precision is not a problem as zavg scheme order is =1.8
+
+      !-- r-derivation first: dz = dr
+      do n_phi=1,n_phi_max_3D
+         call exchange_Nbound_from_Rloc_3D(work_Rloc(n_phi,:,:),           &
+              &                            work_Rextended, 1, n_theta_max)
+         do n_r=nRstart3D,nRstop3D
+            if ( n_r == 1 ) then
+               zder_Rloc(n_phi,:,n_r)=(work_Rextended(:,n_r+1) -           &
+               &         work_Rextended(:,n_r))/(r_3D(n_r+1) - r_3D(n_r))
+            else
+               zder_Rloc(n_phi,:,n_r)=(work_Rextended(:,n_r) -             &
+               &         work_Rextended(:,n_r-1))/(r_3D(n_r) - r_3D(n_r-1))
+            endif
+         end do
+      end do
+
+      !-- theta-derivation then: dz = cost*dz - sint*or1*dt
+      do n_r=nRstart3D,nRstop3D
+         do n_th=1,n_theta_max
+            if ( n_th == 1 ) then
+               zder_Rloc(:,n_th,n_r)=cost(n_th)*zder_Rloc(:,n_th,n_r) - &
+               &        sint(n_th)*or1_3D(n_r)*(work_Rloc(:,n_th,n_r) - &
+               &  work_Rloc(:,n_th+1,n_r))/(theta(n_th) - theta(n_th+1))
+            else if ( n_th == n_theta_max ) then
+               zder_Rloc(:,n_th,n_r)=cost(n_th)*zder_Rloc(:,n_th,n_r) -   &
+               &        sint(n_th)*or1_3D(n_r)*(work_Rloc(:,n_th-1,n_r) - &
+               &      work_Rloc(:,n_th,n_r))/(theta(n_th-1) - theta(n_th))
+            else
+               zder_Rloc(:,n_th,n_r)=cost(n_th)*zder_Rloc(:,n_th,n_r) -   &
+               &        sint(n_th)*or1_3D(n_r)*(work_Rloc(:,n_th-1,n_r) - &
+               &  work_Rloc(:,n_th+1,n_r))/(theta(n_th-1) - theta(n_th+1))
+            endif
+         end do
+      end do
+
+#ifdef TOTO
+      block
+         integer :: n_r, file_handle
+
+      if( rank == 0 ) then
+         open(newunit=file_handle, file='zder_rloc.dat', status='new', form='formatted')
+         write(file_handle, '(257es20.12)') 78374.0, theta(:n_theta_max/2)
+         do n_r=1,n_r_max_3D
+            write(file_handle, '(257es20.12)') r_3D(n_r), zder_Rloc(1,:n_theta_max/2,n_r)
+         end do
+         close(file_handle)
+      endif
+      end block
+
+      print*, 'Radius OUTPUT.dat', r_3D(n_r_max_3D/2), 'Latitude OUTPUT.dat', theta(n_theta_max/4)
+      print*, 'ALL GOOD z_derivative!**'
+
+      stop
+#endif
+
+   end subroutine compute_zder
 !--------------------------------------------------------------------------------
    subroutine fill_zinterp_grid(this)
 

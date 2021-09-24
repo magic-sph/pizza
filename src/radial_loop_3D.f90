@@ -16,7 +16,7 @@ module rloop_3D
        &            torpol_to_curl_spat, scal_axi_to_grad_spat
 #endif
    use horizontal, only: cost, sint
-   use radial_functions, only: r, r_3D, or1
+   use radial_functions, only: r, r_3D, or1, beta
    use z_functions, only: zfunc_type
    use timers_mod, only: timers_type
    use time_schemes, only: type_tscheme
@@ -90,12 +90,14 @@ contains
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: jxBs(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: jxBp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: djxBpdz(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop!, phi!, rsint
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_tmp_Rloc(n_m_max,nRstart:nRstop)
-      integer :: n_r, n_m, m, fh_temp, info_temp!, n_theta, n_phi
+      complex(cp) :: lfz_tmp_Rloc(n_m_max,nRstart:nRstop)
+      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta, n_phi
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
       character(len=144) :: frame_name
@@ -192,7 +194,7 @@ contains
             !jxBp(:,:,n_r) = 0.0_cp
             !do n_theta=1,n_theta_max
             !   do n_phi=1,n_phi_max_3D
-            !      phi = (n_phi-1)*two*pi/(n_phi_max_3D)
+            !      !!phi = (n_phi-1)*two*pi/(n_phi_max_3D)
             !      !jxBp(n_phi,n_theta,n_r) = sint(n_theta)*r_3D(n_r) + cost(n_theta)*cost(n_theta)
             !      jxBp(n_phi,n_theta,n_r) =  r_3D(n_r)*cost(n_theta)*sin(pi*r_3D(n_r)*cost(n_theta))
             !      !jxBp(n_phi,n_theta,n_r) =  exp(-r_3D(n_r)*cost(n_theta))
@@ -222,12 +224,33 @@ contains
          frame_counter = frame_counter+1
       end if
 
+      !-- Compute z-derivative of the \phi-part of lorentz-force
+      if (  l_mag_LF .and. l_QG_basis ) then
+         runStart = MPI_Wtime()
+         call zinterp%compute_zder(jxBp, djxBpdz)
+         runStop = MPI_Wtime()
+         if (runStop>runStart) then
+            timers%interp = timers%interp+(runStop-runStart)
+            timers%n_zder=timers%n_zder+1
+            timers%zder = timers%zder+(runStop-runStart)
+         end if
+
+         do n_r=nRstart3D,nRstop3D
+            do n_theta=1,n_theta_max
+               djxBpdz(:,n_theta,n_r) = r_3D(n_r)*cost(n_theta)*djxBpdz(:,n_theta,n_r)
+            end do
+         end do
+         !if ( rank == 0 ) print*, "After z_der:djxBpdz",  djxBpdz(1,1:10,2)
+      end if
+
       !-- Compute z-averaging of buoyancy and lorentz-force
       runStart = MPI_Wtime()
       !call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc)
       if (  l_heat_3D )call zinterp%compute_zavg(buo_tmp, buo_tmp_Rloc)
       if (  l_mag_LF ) call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc)
       if (  l_mag_LF ) call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc)
+      if (  l_mag_LF .and. l_QG_basis ) &
+      &             call zinterp%compute_zavg(djxBpdz, lfz_tmp_Rloc)
       runStop = MPI_Wtime()
       if (runStop>runStart) then
          timers%interp = timers%interp+(runStop-runStart)
@@ -290,13 +313,14 @@ contains
                   &                  lfp_tmp_Rloc(n_m,n_r)
                   dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-DyMagFac*ci*real(m,cp)* &
                   &                    lfs_tmp_Rloc(n_m,n_r)*or1(n_r)
-                  !if ( l_QG_basis ) then
-                  !!-- Finish assembling add. lorentz force from the QG basis projection
-                  !!-- --> \beta <zVx(jxB).e_s> = \beta ((d_p <z (jxB)_z>)/s - <z d_z (jxB)_p>)
-                  !!--                          = \beta ((d_p <z (jxB)_z>)/s + <(jxB)_p> - z/2h (jxB)_p)
-                  !!-- But --> \beta <z (jxB)_z> has already been added to lfs_tmp_Rloc
-                  !   dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)+ !--> need to add the rest
-                  !end if
+                  if ( l_QG_basis ) then
+                  !-- Finish assembling add. lorentz force from the QG basis projection
+                  !-- --> \beta <zVx(jxB).e_s> = \beta ((d_p <z (jxB)_z>)/s - <z d_z (jxB)_p>)
+                  !-- But --> \beta <z (jxB)_z> has already been added to lfs_tmp_Rloc
+                  !--         <z d_z (jxB)_p> stored in lfz_tmp_Rloc only need * \beta
+                     dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-DyMagFac* &
+                     &                    lfz_tmp_Rloc(n_m,n_r)*beta(n_r)
+                  end if
                end if
             end if
          end do

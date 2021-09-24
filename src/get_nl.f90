@@ -268,13 +268,13 @@ contains
                   &    this%curlBrc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
                   &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
                   if ( l_QG_basis ) then
-                     !-- Additional buoyancy term from the QG basis projection: \beta/s z Vx(jxB)_s
+                     !-- Additional buoyancy term from the QG basis projection: +\beta/s z Vx(jxB)_s
                      !-- Only need to compute the s component of Vx(jxB)
                      !-- Vx(jxB)_s = 1/s \partial_p jxB_z - \partial_z jxB_p (<- computed above)
                      !-- jxBz = 1/(E*Pm) * ( curl(B)_p*B_s - curl(B)_s*B_p )
                      !--      = cost * jxBr - sint * jxBt
                      !-- Can be added to jxBs because it will get 1/s \partial_\phi later
-                     jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta) +(cost(n_theta)*r2*( &
+                     jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta) -(cost(n_theta)*r2*( &
                      &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-     &
                      &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) )    &
                      &                                -sint(n_theta)*or1sn1*(     &
