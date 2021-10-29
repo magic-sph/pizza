@@ -235,7 +235,7 @@ class PizzaRadial(PizzaSetup):
             ax.plot(self.radius, self.qplan)
 
             # Find the zeroes of uphi
-            idx = np.array([], dtype='Int8')
+            idx = np.array([], dtype=np.int8)
             for i in range(len(self.radius)):
                 if i > 0:
                     if self.uphi_mean[i] < 0. and self.uphi_mean[i-1] > 0.:
