@@ -24,6 +24,8 @@ class PizzaMovie:
             st = 'om'
         elif field in ('temperature', 'Temperature', 'temp', 'Temp', 't', 'T'):
             st = 'temp'
+        elif field in ('comp', 'Comp', 'composition', 'xi', 'Xi'):
+            st = 'xi'
         elif field in ('us', 'Us', 'ur', 'Ur', 'vs', 'Vs', 'Vr', 'vr'):
             st = 'us'
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
