@@ -123,7 +123,7 @@ contains
       end if
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, dpsidt)
 
       do n_m=nMstart,nMstop
 
@@ -282,7 +282,7 @@ contains
       end do
 
       !-- Roll the time arrays before filling again the first block
-      call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(dpsidt)
 
       !-- Finish calculation of du_\phi/dt if requested
       if ( vp_bal%l_calc .and. tscheme%istage == tscheme%nstages  ) then
@@ -533,7 +533,7 @@ contains
       real(cp) :: fac_bot, fac_top, dm2
       integer :: n_m, n_r, m, n_m0, n_cheb
 
-      call tscheme%assemble_imex(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
+      call tscheme%assemble_imex(work_Mloc, dpsidt)
 
       ! m == 0 \bar{uphi} equation:
       if ( l_rank_has_m0 ) then

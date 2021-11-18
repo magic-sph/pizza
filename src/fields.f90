@@ -5,7 +5,7 @@ module fields
    !
    use precision_mod
    use constants, only: zero
-   use namelists, only: l_cheb_coll, l_heat, l_chem
+   use namelists, only: l_cheb_coll, l_heat, l_chem,  l_finite_diff
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
    use blocking, only: nMstart, nMstop, nRstart, nRstop
@@ -18,6 +18,7 @@ module fields
    complex(cp), allocatable, public :: psi_Mloc(:,:), dtemp_Mloc(:,:)
    complex(cp), allocatable, public :: dxi_Mloc(:,:), dom_Mloc(:,:)
    complex(cp), allocatable, public :: work_Mloc(:,:)
+   complex(cp), allocatable, public :: dtemp_Rloc(:,:), dxi_Rloc(:,:)
    complex(cp), pointer, public :: temp_Mloc(:,:), om_Mloc(:,:), xi_Mloc(:,:)
    complex(cp), pointer, public :: us_Mloc(:,:), up_Mloc(:,:)
    complex(cp), allocatable, target, public :: fields_Mloc_container(:,:,:)
@@ -147,6 +148,27 @@ contains
 
       fields_Rloc_container(:,:,:)=zero
 
+      if ( l_finite_diff ) then
+         n_rloc_fields=0
+         if ( l_heat ) then
+            n_rloc_fields=n_rloc_fields+1
+            allocate( dtemp_Rloc(n_m_max,nRstart:nRstop) )
+         else
+            allocate( dtemp_Rloc(1,1) )
+         end if
+         if ( l_chem ) then
+            n_rloc_fields=n_rloc_fields+1
+            allocate( dxi_Rloc(n_m_max,nRstart:nRstop) )
+         else
+            allocate( dxi_Rloc(1,1) )
+         end if
+         bytes_allocated = bytes_allocated + n_rloc_fields* &
+         &                 n_m_max*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
+      else
+         allocate( dtemp_Rloc(1,1) )
+         allocate( dxi_Rloc(1,1) )
+      end if
+
    end subroutine initialize_fields
 !----------------------------------------------------------------------------
    subroutine finalize_fields
@@ -163,6 +185,7 @@ contains
       end if
 
       deallocate(fields_Rloc_container, fields_Mloc_container)
+      deallocate( dtemp_Rloc, dxi_Rloc )
 
    end subroutine finalize_fields
 !----------------------------------------------------------------------------

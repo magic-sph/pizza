@@ -7,24 +7,25 @@ module init_fields
 
    use constants, only: zero, one, two, three, ci, pi, half
    use blocking, only: nRstart, nRstop
-   use communications, only: r2m_fields, r2m_single
+   use communications, only: r2m_fields, r2m_single, m2r_single
    use radial_functions, only: r, rscheme, or1, or2, beta, dbeta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
        &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
-       &                l_direct_solve
+       &                l_direct_solve, l_finite_diff
    use outputs, only: n_log_file, vp_bal, vort_bal
    use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank
-   use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max
+   use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max, n_m_max
    use useful, only: logWrite, abortRun, gausslike_compact_center, &
        &             gausslike_compact_middle, gausslike_compact_edge
-   use radial_der, only: get_dr
+   use radial_der, only: get_dr, exch_ghosts, bulk_to_ghost
    use fourier, only: fft
    use checkpoints, only: read_checkpoint
    use time_schemes, only: type_tscheme
    use update_temp_coll, only: get_temp_rhs_imp_coll
    use update_temp_integ, only: get_temp_rhs_imp_int
+   use update_temp_fd_mod, only: get_temp_rhs_imp_ghost, temp_ghost, fill_ghosts_temp
    use update_xi_coll, only: get_xi_rhs_imp_coll
    use update_xi_integ, only: get_xi_rhs_imp_int
    use update_psi_coll_smat, only: get_psi_rhs_imp_coll_smat
@@ -113,59 +114,76 @@ contains
 
       if ( init_u /= 0 ) call initU(us_Mloc, up_Mloc)
 
-      !-- Reconstruct missing fields, dtemp_Mloc, om_Mloc
-      if ( l_heat ) call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, &
-                         &      n_r_max, rscheme)
-      if ( l_chem ) call get_dr(xi_Mloc, dxi_Mloc, nMstart, nMstop, &
-                         &      n_r_max, rscheme)
-      call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            m = idx2m(n_m)
-            om_Mloc(n_m,n_r)=work_Mloc(n_m,n_r)+or1(n_r)*up_Mloc(n_m,n_r)- &
-            &                     or1(n_r)*ci*real(m,cp)*us_Mloc(n_m,n_r)
-         end do
-      end do
+      if ( l_finite_diff ) then
+         if ( l_heat ) call m2r_single%transp_m2r(temp_Mloc, temp_Rloc)
+         if ( l_chem ) call m2r_single%transp_m2r(xi_Mloc, xi_Rloc)
+         call m2r_single%transp_m2r(us_Mloc, us_Rloc)
+         call m2r_single%transp_m2r(up_Mloc, up_Rloc)
 
-      !-- When not using Collocation also store temp_hat and psi_hat
-      !-- This saves 2 DCTs per iteration
-      if ( .not. l_cheb_coll ) then
+         if ( l_heat ) then
+            call bulk_to_ghost(temp_RLoc, temp_ghost, 1, nRstart, nRstop, n_m_max, &
+                 &             1, n_m_max)
+            call exch_ghosts(temp_ghost, n_m_max, nRstart, nRstop, 1)
+            call fill_ghosts_temp(temp_ghost)
+            call get_temp_rhs_imp_ghost(temp_ghost, dtemp_Rloc, dTdt, 1, .true.)
+         end if
+
+      else
+
+         !-- Reconstruct missing fields, dtemp_Mloc, om_Mloc
+         if ( l_heat ) call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, &
+                            &      n_r_max, rscheme)
+         if ( l_chem ) call get_dr(xi_Mloc, dxi_Mloc, nMstart, nMstop, &
+                            &      n_r_max, rscheme)
+         call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
-               if ( l_heat ) temp_hat_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)
-               if ( l_chem ) xi_hat_Mloc(n_m,n_r)=xi_Mloc(n_m,n_r)
-               psi_hat_Mloc(n_m,n_r) =psi_Mloc(n_m,n_r)
+               m = idx2m(n_m)
+               om_Mloc(n_m,n_r)=work_Mloc(n_m,n_r)+or1(n_r)*up_Mloc(n_m,n_r)- &
+               &                     or1(n_r)*ci*real(m,cp)*us_Mloc(n_m,n_r)
             end do
          end do
-         if ( l_heat ) call rscheme%costf1(temp_hat_Mloc, nMstart, nMstop, &
-                            &              n_r_max)
-         if ( l_chem ) call rscheme%costf1(xi_hat_Mloc, nMstart, nMstop, &
-                            &              n_r_max)
-         call rscheme%costf1(psi_hat_Mloc, nMstart, nMstop, n_r_max)
-      end if
 
-      !-- Compute the first implicit state
-      if ( l_cheb_coll ) then
-         if ( l_heat ) call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, 1, .true.)
-         if ( l_chem ) call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, 1, .true.)
-
-         if ( l_direct_solve ) then
-            call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,   &
-                 &                         temp_Mloc, xi_Mloc, dpsidt, 1, vp_bal, &
-                 &                         vort_bal, .true.)
-         else
-            call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc, temp_Mloc, &
-                 &                         xi_Mloc, dpsidt, 1, vp_bal, vort_bal, .true.)
+         !-- When not using Collocation also store temp_hat and psi_hat
+         !-- This saves 2 DCTs per iteration
+         if ( .not. l_cheb_coll ) then
+            do n_r=1,n_r_max
+               do n_m=nMstart,nMstop
+                  if ( l_heat ) temp_hat_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)
+                  if ( l_chem ) xi_hat_Mloc(n_m,n_r)=xi_Mloc(n_m,n_r)
+                  psi_hat_Mloc(n_m,n_r) =psi_Mloc(n_m,n_r)
+               end do
+            end do
+            if ( l_heat ) call rscheme%costf1(temp_hat_Mloc, nMstart, nMstop, &
+                               &              n_r_max)
+            if ( l_chem ) call rscheme%costf1(xi_hat_Mloc, nMstart, nMstop, &
+                               &              n_r_max)
+            call rscheme%costf1(psi_hat_Mloc, nMstart, nMstop, n_r_max)
          end if
-      else
-         if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, .true.)
-         if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, .true.)
-         if ( l_direct_solve ) then
-            call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,temp_Mloc,psi_Mloc, &
-                 &                        dpsidt, 1, vp_bal, .true.)
+
+         !-- Compute the first implicit state
+         if ( l_cheb_coll ) then
+            if ( l_heat ) call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, 1, .true.)
+            if ( l_chem ) call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, 1, .true.)
+
+            if ( l_direct_solve ) then
+               call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,   &
+                    &                         temp_Mloc, xi_Mloc, dpsidt, 1, vp_bal, &
+                    &                         vort_bal, .true.)
+            else
+               call get_psi_rhs_imp_coll_dmat(up_Mloc, om_Mloc, dom_Mloc, temp_Mloc, &
+                    &                         xi_Mloc, dpsidt, 1, vp_bal, vort_bal, .true.)
+            end if
          else
-            call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,temp_Mloc,xi_Mloc,dpsidt,&
-                 &                        1, vp_bal, .true.)
+            if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, .true.)
+            if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, .true.)
+            if ( l_direct_solve ) then
+               call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,temp_Mloc,psi_Mloc, &
+                    &                        dpsidt, 1, vp_bal, .true.)
+            else
+               call get_psi_rhs_imp_int_dmat(om_Mloc,up_Mloc,temp_Mloc,xi_Mloc,dpsidt,&
+                    &                        1, vp_bal, .true.)
+            end if
          end if
       end if
 

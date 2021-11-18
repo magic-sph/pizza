@@ -23,6 +23,7 @@ module dirk_schemes
       procedure :: set_weights
       procedure :: set_dt_array
       procedure :: set_imex_rhs
+      procedure :: set_imex_rhs_ghost
       procedure :: rotate_imex
       procedure :: bridge_with_cnab2
       procedure :: start_with_ab1
@@ -599,7 +600,7 @@ contains
 
    end subroutine set_dt_array
 !------------------------------------------------------------------------------
-   subroutine set_imex_rhs(this, rhs, dfdt, nMstart, nMstop, len_rhs)
+   subroutine set_imex_rhs(this, rhs, dfdt)
       !
       ! This subroutine assembles the right-hand-side of an IMEX scheme
       !
@@ -607,54 +608,89 @@ contains
       class(type_dirk) :: this
 
       !-- Input variables:
-      integer,           intent(in) :: nMstart
-      integer,           intent(in) :: nMstop
-      integer,           intent(in) :: len_rhs
       type(type_tarray), intent(in) :: dfdt
 
       !-- Output variable
-      complex(cp), intent(out) :: rhs(nMstart:nMstop,len_rhs)
+      complex(cp), intent(out) :: rhs(dfdt%lm:dfdt%um,dfdt%nRstart:dfdt%nRstop)
 
       !-- Local variables
-      integer :: n_stage, n_r, n_m
+      integer :: n_stage, n_r, start_m, stop_m
 
-      do n_r=1,len_rhs
-         do n_m=nMstart,nMstop
-            rhs(n_m,n_r)=dfdt%old(n_m,n_r,1)
+      !$omp parallel default(shared) private(start_m, stop_m)
+      start_m=dfdt%lm; stop_m=dfdt%um
+      call get_openmp_blocks(start_m,stop_m)
+
+      do n_r=dfdt%nRstart,dfdt%nRstop
+         rhs(start_m:stop_m,n_r)=dfdt%old(start_m:stop_m,n_r,1)
+      end do
+
+      do n_stage=1,this%istage
+         do n_r=dfdt%nRstart,dfdt%nRstop
+            rhs(start_m:stop_m,n_r)=rhs(start_m:stop_m,n_r) +                &
+            &                       this%butcher_exp(this%istage+1,n_stage)* &
+            &                       dfdt%expl(start_m:stop_m,n_r,n_stage)
          end do
       end do
 
       do n_stage=1,this%istage
-         do n_r=1,len_rhs
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_exp(this%istage+1,n_stage)* &
-               &            dfdt%expl(n_m,n_r,n_stage)
-            end do
+         do n_r=dfdt%nRstart,dfdt%nRstop
+            rhs(start_m:stop_m,n_r)=rhs(start_m:stop_m,n_r) +                &
+            &                       this%butcher_imp(this%istage+1,n_stage)* &
+            &                       dfdt%impl(start_m:stop_m,n_r,n_stage)
          end do
       end do
-
-      do n_stage=1,this%istage
-         do n_r=1,len_rhs
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_imp(this%istage+1,n_stage)* &
-               &                         dfdt%impl(n_m,n_r,n_stage)
-            end do
-         end do
-      end do
+      !$omp end parallel
 
    end subroutine set_imex_rhs
 !------------------------------------------------------------------------------
-   subroutine rotate_imex(this, dfdt, nMstart, nMstop, n_r_max)
+   subroutine set_imex_rhs_ghost(this, rhs, dfdt, start_m, stop_m, ng)
       !
-      ! This subroutine is used to roll the time arrays from one time step
+      ! This subroutine assembles the right-hand-side of an IMEX scheme in case
+      ! an array with ghosts zones is provided
       !
 
       class(type_dirk) :: this
 
       !-- Input variables:
-      integer,     intent(in) :: nMstart
-      integer,     intent(in) :: nMstop
-      integer,     intent(in) :: n_r_max
+      type(type_tarray), intent(in) :: dfdt
+      integer,           intent(in) :: start_m ! Starting m index
+      integer,           intent(in) :: stop_m  ! Stopping m index
+      integer,           intent(in) :: ng       ! Number of ghost zones
+
+      !-- Output variable
+      complex(cp), intent(out) :: rhs(dfdt%lm:dfdt%um,dfdt%nRstart-ng:dfdt%nRstop+ng)
+
+      !-- Local variables
+      integer :: n_stage, n_r
+
+      do n_r=dfdt%nRstart,dfdt%nRstop
+         rhs(start_m:stop_m,n_r)=dfdt%old(start_m:stop_m,n_r,1)
+      end do
+
+      do n_stage=1,this%istage
+         do n_r=dfdt%nRstart,dfdt%nRstop
+            rhs(start_m:stop_m,n_r)=rhs(start_m:stop_m,n_r) +                &
+            &                       this%butcher_exp(this%istage+1,n_stage)* &
+            &                       dfdt%expl(start_m:stop_m,n_r,n_stage)
+         end do
+      end do
+
+      do n_stage=1,this%istage
+         do n_r=dfdt%nRstart,dfdt%nRstop
+            rhs(start_m:stop_m,n_r)=rhs(start_m:stop_m,n_r) +                &
+            &                       this%butcher_imp(this%istage+1,n_stage)* &
+            &                       dfdt%impl(start_m:stop_m,n_r,n_stage)
+         end do
+      end do
+
+   end subroutine set_imex_rhs_ghost
+!------------------------------------------------------------------------------
+   subroutine rotate_imex(this, dfdt)
+      !
+      ! This subroutine is used to roll the time arrays from one time step
+      !
+
+      class(type_dirk) :: this
 
       !-- Output variables:
       type(type_tarray), intent(inout) :: dfdt
@@ -673,45 +709,44 @@ contains
 
    end subroutine start_with_ab1
 !------------------------------------------------------------------------------
-   subroutine assemble_imex(this, rhs, dfdt, nMstart, nMstop, n_r_max)
+   subroutine assemble_imex(this, rhs, dfdt)
 
       class(type_dirk) :: this
 
       !-- Input variables
-      integer,           intent(in) :: nMstart
-      integer,           intent(in) :: nMstop
-      integer,           intent(in) :: n_r_max
       type(type_tarray), intent(in) :: dfdt
       
       !-- Ouput variable
-      complex(cp), intent(out) :: rhs(nMstart:nMstop,n_r_max)
+      complex(cp), intent(out) :: rhs(dfdt%lm:dfdt%um,dfdt%nRstart:dfdt%nRstop)
 
       !-- Local variables
-      integer :: n_stage, n_r, n_m
+      integer :: n_stage, n_r, start_m, stop_m
 
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            rhs(n_m,n_r)=dfdt%old(n_m,n_r,1)
+      !$omp parallel default(shared) private(start_m,stop_m,n_r)
+      start_m=dfdt%lm; stop_m=dfdt%um
+      call get_openmp_blocks(start_m,stop_m)
+
+      do n_r=dfdt%nRstart,dfdt%nRstop
+         rhs(start_m:stop_m,n_r)=dfdt%old(start_m:stop_m,n_r,1)
+      end do
+
+      do n_stage=1,this%nstages
+         do n_r=dfdt%nRstart,dfdt%nRstop
+            rhs(start_m:stop_m,n_r)=rhs(start_m:stop_m,n_r) +        &
+            &                       this%butcher_ass_exp(n_stage)*       &
+            &                       dfdt%expl(start_m:stop_m,n_r,n_stage)
          end do
       end do
 
       do n_stage=1,this%nstages
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_ass_exp(n_stage)* &
-               &            dfdt%expl(n_m,n_r,n_stage)
-            end do
+         do n_r=dfdt%nRstart,dfdt%nRstop
+            rhs(start_m:stop_m,n_r)=rhs(start_m:stop_m,n_r) +       &
+            &                       this%butcher_ass_imp(n_stage)*      &
+            &                       dfdt%impl(start_m:stop_m,n_r,n_stage)
          end do
       end do
+      !$omp end parallel
 
-      do n_stage=1,this%nstages
-         do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               rhs(n_m,n_r)=rhs(n_m,n_r)+this%butcher_ass_imp(n_stage)* &
-               &            dfdt%impl(n_m,n_r,n_stage)
-            end do
-         end do
-      end do
 
    end subroutine assemble_imex
 !------------------------------------------------------------------------------

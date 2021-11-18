@@ -9,6 +9,10 @@ module time_array
    private
 
    type, public :: type_tarray
+      integer :: lm ! Start index of first dimension
+      integer :: um  ! Stop index of first dimension
+      integer :: nRstart ! Start index of second dimension
+      integer :: nRstop  ! Stop index of second dimension
       complex(cp), allocatable :: impl(:,:,:)
       complex(cp), pointer :: expl(:,:,:)
       complex(cp), allocatable :: old(:,:,:)
@@ -21,14 +25,16 @@ module time_array
 
 contains
 
-   subroutine initialize(this, nMstart, nMstop, n_r_max, nimp, nexp, nold, l_allocate_exp)
+   subroutine initialize(this, nMstart, nMstop, nRstart, nRstop, nimp, nexp, &
+              &          nold, l_allocate_exp)
 
       class(type_tarray) :: this
 
       !-- Input variables
       integer, intent(in) :: nMstart
       integer, intent(in) :: nMstop
-      integer, intent(in) :: n_r_max
+      integer, intent(in) :: nRstart
+      integer, intent(in) :: nRstop
       integer, intent(in) :: nimp
       integer, intent(in) :: nexp
       integer, intent(in) :: nold
@@ -42,16 +48,21 @@ contains
       else
          l_allocate = .false.
       end if
+
+      this%lm = nMstart
+      this%um = nMstop
+      this%nRstart = nRstart
+      this%nRstop = nRstop
       this%l_exp = l_allocate
 
-      allocate( this%impl(nMstart:nMstop,n_r_max,nold) )
-      allocate( this%old(nMstart:nMstop,n_r_max,nimp) )
-      bytes_allocated = bytes_allocated + (nMstop-nMstart+1)*n_r_max*(  &
+      allocate( this%impl(nMstart:nMstop,nRstart:nRstop,nold) )
+      allocate( this%old(nMstart:nMstop,nRstart:nRstop,nimp) )
+      bytes_allocated = bytes_allocated + (nMstop-nMstart+1)*(nRstop-nRstart+1)*(  &
       &                 nimp+nold)*SIZEOF_DEF_COMPLEX
 
       if ( l_allocate ) then
-         allocate( this%expl(nMstart:nMstop,n_r_max,nexp) )
-         bytes_allocated = bytes_allocated + (nMstop-nMstart+1)*n_r_max*nexp &
+         allocate( this%expl(nMstart:nMstop,nRstart:nRstop,nexp) )
+         bytes_allocated = bytes_allocated + (nMstop-nMstart+1)*(nRstop-nRstart+1)*nexp &
          &                 *SIZEOF_DEF_COMPLEX
       end if
 

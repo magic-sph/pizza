@@ -253,7 +253,7 @@ contains
       end if
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, domdt, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, domdt)
 
       do n_m=nMstart,nMstop
 
@@ -423,7 +423,7 @@ contains
       end if
 
       !-- Roll the arrays before filling again the first block
-      call tscheme%rotate_imex(domdt, nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(domdt)
 
       !-- Compute implicit stage
       if ( tscheme%istage == tscheme%nstages ) then

@@ -3,10 +3,12 @@ module radial_der
    ! Radial derivatives functions
    !
 
+   use parallel_mod
    use constants, only: zero, one, three
    use precision_mod
    use mem_alloc
    use radial_scheme, only: type_rscheme
+   use useful, only: abortRun
 
    implicit none
 
@@ -32,8 +34,8 @@ module radial_der
       module procedure get_ddr_complex_2d
    end interface get_ddr
 
-   public :: get_ddr, get_dcheb, get_dr, initialize_der_arrays, &
-   &         finalize_der_arrays
+   public :: get_ddr, get_dcheb, get_dr, initialize_der_arrays, exch_ghosts, &
+   &         finalize_der_arrays, get_ddr_ghost, get_dr_Rloc, bulk_to_ghost
 
    complex(cp), allocatable :: work(:,:)
    real(cp), allocatable :: work_1d_real(:)
@@ -693,5 +695,234 @@ contains
       end if
 
    end subroutine get_ddr_real_1d
+!------------------------------------------------------------------------------
+   subroutine get_dr_Rloc(f_Rloc, df_Rloc, n_m_max, nRstart, nRstop, n_r_max, r_scheme)
+      !
+      ! Purpose of this subroutine is to take the first radial derivative of an input
+      ! complex array distributed over radius. This can only be used with
+      ! finite differences.
+      !
+
+      !-- Input variables
+      integer,             intent(in) :: n_m_max, nRstart, nRstop, n_r_max
+      class(type_rscheme), intent(in) :: r_scheme
+      complex(cp),         intent(in) :: f_Rloc(n_m_max,nRstart:nRstop)
+
+      !-- Output variable
+      complex(cp), intent(out) ::  df_Rloc(n_m_max,nRstart:nRstop)
+
+      !-- Local variables:
+      complex(cp) :: work_ghost(n_m_max,nRstart-r_scheme%order/2:nRstop+r_scheme%order/2)
+      complex(cp) :: ftop(n_m_max,r_scheme%order_boundary+1)
+      complex(cp) :: fbot(n_m_max,n_r_max-r_scheme%order_boundary:n_r_max)
+      integer :: n_r, od, start_m, stop_m, n_m
+
+      if ( (r_scheme%order>2 .or. r_scheme%order_boundary>2) .and. &
+      &    (nRstop-nRstart+1)<r_scheme%order ) then
+         call abortRun('Distributed r-der not implemented in this case yet!')
+      end if
+
+      !$omp parallel default(shared) private(start_m,stop_m,n_m)
+      start_m=1; stop_m=n_m_max
+      call get_openmp_blocks(start_m,stop_m)
+
+      !-- Copy input array
+      work_ghost(start_m:stop_m,nRstart:nRstop)=f_Rloc(start_m:stop_m,:)
+      do n_r=1,r_scheme%order_boundary+1
+         if (n_r >= nRstart .and. n_r <= nRstop) then
+            ftop(start_m:stop_m,n_r)=f_Rloc(start_m:stop_m,n_r)
+         end if
+      end do
+
+      do n_r=n_r_max-r_scheme%order_boundary,n_r_max
+         if (n_r >= nRstart .and. n_r <= nRstop) then
+            fbot(start_m:stop_m,n_r)=f_Rloc(start_m:stop_m,n_r)
+         end if
+      end do
+
+     !-- Exchange the ghost zones
+      !$omp barrier
+      !$omp master
+      call exch_ghosts(work_ghost, n_m_max, nRstart, nRstop, r_scheme%order/2)
+      !$omp end master
+      !$omp barrier
+
+      !-- Bulk points for 1st derivative
+      do n_r=nRstart,nRstop
+         do n_m=start_m,stop_m
+            df_Rloc(n_m,n_r)=r_scheme%dr(n_r,0)*work_ghost(n_m,n_r-1)+ &
+            &                r_scheme%dr(n_r,1)*work_ghost(n_m,n_r)+   &
+            &                r_scheme%dr(n_r,2)*work_ghost(n_m,n_r+1)
+         end do
+      end do
+
+      !-- Exchange boundary values
+      !$omp barrier
+      !$omp master
+      call get_bound_vals(fbot, ftop, n_m_max, nRstart, nRstop, n_r_max, &
+           &              r_scheme%order_boundary+1)
+      !$omp end master
+      !$omp barrier
+
+      !-- Boundary points for 1st derivative
+      if ( rank == 0 ) then
+         do n_m=start_m,stop_m
+            df_Rloc(n_m,1)=zero
+            do od=0,r_scheme%order_boundary
+               df_Rloc(n_m,1)=df_Rloc(n_m,1) + r_scheme%dr_top(1,od)*ftop(n_m,od+1)
+            end do
+         end do
+      end if
+
+      if ( rank == n_procs -1 ) then
+         do n_m=start_m,stop_m
+            df_Rloc(n_m,n_r_max)=zero
+            do od=0,r_scheme%order_boundary
+               df_Rloc(n_m,n_r_max)=df_Rloc(n_m,n_r_max)+r_scheme%dr_bot(1,od)* &
+               &                    fbot(n_m,n_r_max-od)
+            end do
+         end do
+      end if
+      !$omp end parallel
+
+   end subroutine get_dr_Rloc
+!------------------------------------------------------------------------------
+   subroutine get_ddr_ghost(f_Rloc, df_Rloc, ddf_Rloc, n_m_max, start_m, stop_m, &
+              &             nRstart, nRstop, r_scheme)
+      !
+      ! Purpose of this subroutine is to take the first and second
+      ! radial derivatives of an input complex array distributed over radius that
+      ! has the ghost zones properly filled.
+      !
+
+      !-- Input variables
+      integer,             intent(in) :: n_m_max, nRstart, nRstop, start_m, stop_m
+      class(type_rscheme), intent(in) :: r_scheme
+      complex(cp),         intent(in) :: f_Rloc(n_m_max,nRstart-1:nRstop+1)
+
+      !-- Output variable
+      complex(cp), intent(out) ::  df_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp), intent(out) ::  ddf_Rloc(n_m_max,nRstart:nRstop)
+
+      !-- Local variables:
+      integer :: n_r, n_m
+
+      if ( (r_scheme%order>2 .or. r_scheme%order_boundary>2) .and. &
+      &    (nRstop-nRstart+1)<r_scheme%order ) then
+         call abortRun('Distributed r-der not implemented in this case yet!')
+      end if
+
+      !-- Bulk points for 1st and 2nd derivatives
+      do n_r=nRstart,nRstop
+         do n_m=start_m,stop_m
+            df_Rloc(n_m,n_r)=r_scheme%dr(n_r,0)*f_Rloc(n_m,n_r-1) + &
+            &                r_scheme%dr(n_r,1)*f_Rloc(n_m,n_r)   + &
+            &                r_scheme%dr(n_r,2)*f_Rloc(n_m,n_r+1)
+            ddf_Rloc(n_m,n_r)=r_scheme%ddr(n_r,0)*f_Rloc(n_m,n_r-1) + &
+            &                 r_scheme%ddr(n_r,1)*f_Rloc(n_m,n_r)   + &
+            &                 r_scheme%ddr(n_r,2)*f_Rloc(n_m,n_r+1)
+         end do
+      end do
+
+   end subroutine get_ddr_ghost
+!------------------------------------------------------------------------------
+   subroutine exch_ghosts(f, n_m_max, nRstart, nRstop, nghosts)
+
+      integer, intent(in) :: n_m_max, nRstart, nRstop, nghosts
+
+      complex(cp), intent(inout) :: f(n_m_max, nRstart-nghosts:nRstop+nghosts)
+
+      integer :: n_counts, rightProc, leftProc, st(MPI_STATUS_SIZE)
+
+      leftProc=rank-1
+      if ( leftProc < 0 ) leftProc = MPI_PROC_NULL
+      rightProc=rank+1
+      if ( rightProc >= n_procs ) rightProc = MPI_PROC_NULL
+      n_counts = n_m_max*nghosts
+
+      !-- Halo exchange in forward direction
+      call MPI_SendRecv(f(:,nRstop-nghosts+1:nRstop), n_counts, MPI_DEF_COMPLEX,    &
+           &            rightProc, 12345, f(:,nRstart-nghosts:nRstart-1), n_counts, &
+           &            MPI_DEF_COMPLEX, leftProc, 12345, MPI_COMM_WORLD, st, ierr)
+
+      !-- Halo exchange in backward direction
+      call MPI_SendRecv(f(:,nRstart:nRstart+nghosts-1), n_counts, MPI_DEF_COMPLEX, &
+           &            leftProc, 12345, f(:,nRstop+1:nRstop+nghosts), n_counts,   &
+           &            MPI_DEF_COMPLEX, rightProc, 12345, MPI_COMM_WORLD, st, ierr)
+
+   end subroutine exch_ghosts
+!------------------------------------------------------------------------------
+   subroutine get_bound_vals(fbot, ftop, n_m_max, nRstart, nRstop, n_r_max, nbounds)
+
+      !-- Input variables
+      integer, intent(in) :: n_m_max, nRstart, nRstop
+      integer, intent(in) :: nbounds, n_r_max
+
+      !-- Output boundary values
+      complex(cp), intent(inout) :: ftop(n_m_max,nbounds)
+      complex(cp), intent(inout) :: fbot(n_m_max,n_r_max-nbounds+1:n_r_max)
+
+      !-- Local variables
+      integer :: nreq, nR, tag, req(2*nbounds)
+
+      if ( nRstart > nbounds .and. nRstop < n_r_max-nbounds ) return
+
+      req(:)=MPI_REQUEST_NULL
+      nreq=0
+      do nR=1,nbounds
+         tag = 754432+nR
+         if ( rank /= 0 .and. nRstart<=nR .and. nRstop>=nR) then
+            call MPI_Send(ftop(:,nR), n_m_max, MPI_DEF_COMPLEX, 0, tag, &
+                 &        MPI_COMM_WORLD, ierr)
+         else if ( rank == 0 .and. nRstop < nR ) then
+            nreq=nreq+1
+            call MPI_IRecv(ftop(:,nR), n_m_max, MPI_DEF_COMPLEX, MPI_ANY_SOURCE, tag, &
+                 &         MPI_COMM_WORLD, req(nreq), ierr)
+         end if
+      end do
+      call MPI_Waitall(nreq, req(1:nreq), MPI_STATUSES_IGNORE, ierr)
+
+      req(:)=MPI_REQUEST_NULL
+      nreq=0
+      do nR=n_r_max-nbounds+1,n_r_max
+         tag = 92113+nR
+         if ( rank /= n_procs-1 .and. nRstart<=nR .and. nRstop>=nR) then
+            call MPI_Send(fbot(:,nR), n_m_max, MPI_DEF_COMPLEX, n_procs-1, tag, &
+                 &        MPI_COMM_WORLD, ierr)
+         else if ( rank == n_procs-1 .and. nR < nRstart ) then
+            nreq=nreq+1
+            call MPI_IRecv(fbot(:,nR), n_m_max, MPI_DEF_COMPLEX, MPI_ANY_SOURCE, tag, &
+                 &         MPI_COMM_WORLD, req(nreq), ierr)
+         end if
+      end do
+      call MPI_Waitall(nreq, req(1:nreq), MPI_STATUSES_IGNORE, ierr)
+
+   end subroutine get_bound_vals
+!------------------------------------------------------------------------------
+   subroutine bulk_to_ghost(x, x_g, ng, nRstart, nRstop, n_m_max, start_lm, stop_lm)
+      !
+      ! This subroutine is used to copy an array that is defined from nRstart to
+      ! nRstop to an array that is defined from nRstart-1 to nRstop+1
+      !
+
+      !-- Input variables
+      integer,     intent(in) :: start_lm, stop_lm, nRstart, nRstop
+      integer,     intent(in) :: n_m_max
+      integer,     intent(in) :: ng ! Number of ghost zones
+      complex(cp), intent(in) :: x(n_m_max,nRstart:nRstop)
+
+      !-- Output variable
+      complex(cp), intent(out) :: x_g(n_m_max,nRstart-ng:nRstop+ng)
+
+      !-- Local variables
+      integer :: n_r, n_m
+
+      do n_r=nRstart,nRstop
+         do n_m=start_lm,stop_lm
+            x_g(n_m,n_r)=x(n_m,n_r)
+         end do
+      end do
+
+   end subroutine bulk_to_ghost
 !------------------------------------------------------------------------------
 end module radial_der

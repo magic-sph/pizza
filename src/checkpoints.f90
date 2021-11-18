@@ -5,11 +5,11 @@ module checkpoints
    use constants, only: zero, two
    use char_manip, only: dble2str
    use blocking, only: nMstart,nMstop,nm_per_rank
-   use communications, only: scatter_from_rank0_to_mloc
+   use communications, only: scatter_from_rank0_to_mloc, r2m_single
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &
-       &                l_bridge_step, l_cheb_coll, scale_xi
+       &                l_bridge_step, l_cheb_coll, scale_xi, l_finite_diff
    use radial_scheme, only: type_rscheme
    use radial_functions, only: rscheme, r
    use chebyshev, only: type_cheb
@@ -52,6 +52,7 @@ contains
       type(type_tarray),  intent(in) :: dpsidt
 
       !-- Local variables
+      logical :: l_transp
       integer :: info, fh, filetype, n_o
       integer :: version, header_size
       integer :: istat(MPI_STATUS_SIZE)
@@ -65,6 +66,8 @@ contains
          call dble2str(time,string)
          rst_file='checkpoint_t='//trim(string)//'.'//tag
       end if
+
+      l_transp = .not. l_finite_diff
 
       version = 6
 
@@ -152,67 +155,13 @@ contains
       !-- Now finally write the fields
       call MPI_File_Write_all(fh, us_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
            &                  istat, ierr)
-      call MPI_File_Write_all(fh, up_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-           &                  istat, ierr)
-
-      if ( tscheme%family == 'MULTISTEP' ) then
-         do n_o=2,tscheme%nexp
-            call MPI_File_Write_all(fh, dpsidt%expl(:,:,n_o), nm_per_rank*n_r_max, &
-                 &                  MPI_DEF_COMPLEX, istat, ierr)
-         end do
-         do n_o=2,tscheme%nimp
-            call MPI_File_Write_all(fh, dpsidt%impl(:,:,n_o), nm_per_rank*n_r_max, &
-                 &                  MPI_DEF_COMPLEX, istat, ierr)
-         end do
-         do n_o=2,tscheme%nold
-            call MPI_File_Write_all(fh, dpsidt%old(:,:,n_o), nm_per_rank*n_r_max, &
-                 &                  MPI_DEF_COMPLEX, istat, ierr)
-         end do
-      end if
+      call write_one_field_mpi(fh, tscheme, up_Mloc, dpsidt, l_transp)
 
       !-- Temperature
-      if ( l_heat ) then
-         call MPI_File_Write_all(fh, t_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-              &                  istat, ierr)
-
-         if ( tscheme%family == 'MULTISTEP' ) then
-            do n_o=2,tscheme%nexp
-               call MPI_File_Write_all(fh, dTdt%expl(:,:,n_o), nm_per_rank*n_r_max, &
-                    &                  MPI_DEF_COMPLEX, istat, ierr)
-            end do
-            do n_o=2,tscheme%nimp
-               call MPI_File_Write_all(fh, dTdt%impl(:,:,n_o), nm_per_rank*n_r_max, &
-                    &                  MPI_DEF_COMPLEX, istat, ierr)
-            end do
-            do n_o=2,tscheme%nold
-               call MPI_File_Write_all(fh, dTdt%old(:,:,n_o), nm_per_rank*n_r_max, &
-                    &                  MPI_DEF_COMPLEX, istat, ierr)
-            end do
-         end if
-
-      end if
+      if ( l_heat ) call write_one_field_mpi(fh, tscheme, t_Mloc, dTdt, l_transp)
 
       !-- Chemical composition
-      if ( l_chem ) then
-         call MPI_File_Write_all(fh, xi_Mloc, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
-              &                  istat, ierr)
-
-         if ( tscheme%family == 'MULTISTEP' ) then
-            do n_o=2,tscheme%nexp
-               call MPI_File_Write_all(fh, dxidt%expl(:,:,n_o), nm_per_rank*n_r_max, &
-                    &                  MPI_DEF_COMPLEX, istat, ierr)
-            end do
-            do n_o=2,tscheme%nimp
-               call MPI_File_Write_all(fh, dxidt%impl(:,:,n_o), nm_per_rank*n_r_max, &
-                    &                  MPI_DEF_COMPLEX, istat, ierr)
-            end do
-            do n_o=2,tscheme%nold
-               call MPI_File_Write_all(fh, dxidt%old(:,:,n_o), nm_per_rank*n_r_max, &
-                    &                  MPI_DEF_COMPLEX, istat, ierr)
-            end do
-         end if
-
-      end if
+      if ( l_chem ) call write_one_field_mpi(fh, tscheme, xi_Mloc, dxidt, l_transp)
 
       call MPI_Info_free(info, ierr)
       call MPI_File_close(fh, ierr)
@@ -804,5 +753,63 @@ contains
       end if
 
    end subroutine map_field_r
+!------------------------------------------------------------------------------
+   subroutine write_one_field_mpi(fh, tscheme, w, dwdt, l_transp)
+      !
+      ! This subroutine is used to write one field and its associated possible
+      ! help arrays (d?dt) which are required to time advance the solution.
+      ! This is using MPI-IO with R-distributed arrays.
+      !
+
+      !-- Input variables
+      integer,             intent(in) :: fh ! file unit
+      class(type_tscheme), intent(in) :: tscheme
+      complex(cp),         intent(in) :: w(nMstart:nMstop, n_r_max) ! field
+      type(type_tarray),   intent(in) :: dwdt ! time advance arrays
+      logical,             intent(in) :: l_transp ! Do we need to transpose anything?
+
+      !-- Local variables
+      integer :: n_o
+      integer :: istat(MPI_STATUS_SIZE)
+      complex(cp) :: work(nMstart:nMstop, n_r_max)
+
+      call MPI_File_Write_all(fh, w, nm_per_rank*n_r_max, MPI_DEF_COMPLEX, &
+           &                  istat, ierr)
+
+      if ( tscheme%family == 'MULTISTEP' ) then
+         do n_o=2,tscheme%nexp
+            if ( l_transp ) then
+               call r2m_single%transp_r2m(dwdt%expl(:,:,n_o), work)
+               call MPI_File_Write_all(fh, work, nm_per_rank*n_r_max, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            else
+               call MPI_File_Write_all(fh, dwdt%expl(:,:,n_o), nm_per_rank*n_r_max, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end if
+         end do
+         do n_o=2,tscheme%nimp
+            if ( l_transp ) then
+               call r2m_single%transp_r2m(dwdt%impl(:,:,n_o), work)
+               call MPI_File_Write_all(fh, work, nm_per_rank*n_r_max, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            else
+               call MPI_File_Write_all(fh, dwdt%impl(:,:,n_o), nm_per_rank*n_r_max, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end if
+         end do
+         do n_o=2,tscheme%nold
+            if ( l_transp ) then
+               call r2m_single%transp_r2m(dwdt%old(:,:,n_o), work)
+               call MPI_File_Write_all(fh, work, nm_per_rank*n_r_max, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            else
+               call MPI_File_Write_all(fh, dwdt%old(:,:,n_o), nm_per_rank*n_r_max, &
+                    &                  MPI_DEF_COMPLEX, istat, ierr)
+            end if
+         end do
+      end if
+
+
+   end subroutine write_one_field_mpi
 !------------------------------------------------------------------------------
 end module checkpoints

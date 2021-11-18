@@ -2,7 +2,7 @@ module update_temp_coll
 
    use precision_mod
    use mem_alloc, only: bytes_allocated
-   use constants, only: one, zero, four, ci
+   use constants, only: one, zero
    use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
        &                       rgrav
@@ -81,7 +81,7 @@ contains
       if ( lMat ) lTMat(:)=.false.
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, dTdt)
 
       do n_m=nMstart, nMstop
 
@@ -127,7 +127,7 @@ contains
       end do
 
       !-- Roll the arrays before filling again the first block
-      call tscheme%rotate_imex(dTdt, nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(dTdt)
 
       !-- Calculation of the implicit part
       if ( tscheme%istage == tscheme%nstages ) then
@@ -245,7 +245,7 @@ contains
       !-- Local variables
       integer :: n_r, n_m, m
 
-      call tscheme%assemble_imex(work_Mloc, dTdt, nMstart, nMstop, n_r_max)
+      call tscheme%assemble_imex(work_Mloc, dTdt)
 
       do n_r=2,n_r_max-1
          do n_m=nMstart,nMstop

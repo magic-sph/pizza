@@ -32,6 +32,7 @@ module namelists
    real(cp), public :: tcond_fac     ! Rescaling of the conducting temperature
    real(cp), public :: xicond_fac    ! Rescaling of the conducting composition
    real(cp), public :: beta_shift    ! Shift the upper bound of \beta
+   logical,  public :: l_finite_diff ! Shift to finite differences in radius
    logical,  public :: l_non_rot     ! Switch to do a non-rotatig annulus
    logical,  public :: l_temp_3D     ! 2D or 3D temperature background
    logical,  public :: l_xi_3D       ! 2D or 3D composition background
@@ -52,6 +53,7 @@ module namelists
    character(len=72), public :: time_scale  ! Time unit
    character(len=72), public :: time_scheme ! Time scheme
    character(len=72) :: bc_method    ! Galerkin or Tau-Lanczos method for BCs
+   character(len=72) :: radial_scheme ! Chebyshev or finite differences
    character(len=72) :: cheb_method  ! Chebyshev method: collocation, integration
    character(len=72) :: matrix_solve ! Either direct or influence matrix
    character(len=72), public :: mpi_transp   ! 'AUTO', 'A2AV', 'A2AW'
@@ -66,6 +68,8 @@ module namelists
    real(cp), public :: courfac      ! Courant factor
    real(cp), public :: dt_fac       ! factor to control time step change
    real(cp), public :: tEND
+   real(cp), public :: fd_stretch
+   real(cp), public :: fd_ratio
    integer,  public :: n_time_steps
    integer :: runHours,runMinutes,runSeconds
    integer,  public :: run_time_requested
@@ -131,14 +135,14 @@ contains
 
       !-- Namelists:
 
-      namelist/grid/n_r_max,n_cheb_max,m_max,minc
+      namelist/grid/n_r_max,n_cheb_max,m_max,minc,fd_ratio,fd_stretch
       namelist/control/tag,n_time_steps,alpha,l_newmap,map_function,&
       &                alph1,alph2,dtMax,courfac,tEND,runHours,     &
       &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
       &                matrix_solve,corio_term,buo_term,bc_method,  &
-      &                mpi_transp,l_packed_transp
+      &                mpi_transp,l_packed_transp,radial_scheme
       namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,      &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
@@ -300,6 +304,14 @@ contains
       r_cmb=one/(one-radratio)
       r_icb=r_cmb-one
 
+      !-- Determine radial scheme
+      call capitalize(radial_scheme)
+      if ( index(radial_scheme, 'CHEB') /= 0 ) then
+         l_finite_diff = .false.
+      else
+         l_finite_diff = .true.
+      end if
+
       !-- Determine Cheb method
       call capitalize(cheb_method)
       if ( index(cheb_method, 'COLL') /= 0 ) then
@@ -315,6 +327,7 @@ contains
       else
          l_galerkin = .false.
       end if
+
 
       !-- Determine solver method
       call capitalize(matrix_solve)
@@ -435,6 +448,8 @@ contains
       n_cheb_max       =32
       m_max            =32
       minc             =1
+      fd_stretch       =0.3_cp
+      fd_ratio         =0.1_cp
 
       !-- Control namelist
       n_time_steps     =100
@@ -456,6 +471,7 @@ contains
                           ! 0: FFTW_ESTIMATE, 1: FFTW_MEASURE, 2: FFTW_PATIENT
                           ! 3: FFTW_EXHAUSTIVE
       time_scheme      ='CNAB2'
+      radial_scheme    ='cheb'
       cheb_method      ='colloc'
       bc_method        ='tau-lanczos'
       matrix_solve     ='DIRECT'
@@ -556,6 +572,8 @@ contains
       write(n_out,'(''  n_cheb_max      ='',i5,'','')') n_cheb_max
       write(n_out,'(''  m_max           ='',i5,'','')') m_max
       write(n_out,'(''  minc            ='',i5,'','')') minc
+      write(n_out,'(''  fd_stretch      ='',ES14.6,'','')') fd_stretch
+      write(n_out,'(''  fd_ratio        ='',ES14.6,'','')') fd_ratio
       write(n_out,*) "/"
 
       write(n_out,*) "&control"
@@ -564,6 +582,8 @@ contains
       write(n_out,'(''  n_time_steps    ='',i8,'','')') n_time_steps
       length=length_to_blank(time_scheme)
       write(n_out,*) " time_scheme     = """,time_scheme(1:length),""","
+      length=length_to_blank(radial_scheme)
+      write(n_out,*) " radial_scheme   = """,radial_scheme(1:length),""","
       length=length_to_blank(cheb_method)
       write(n_out,*) " cheb_method     = """,cheb_method(1:length),""","
       length=length_to_blank(bc_method)

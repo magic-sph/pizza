@@ -5,7 +5,8 @@ module timers_mod
    !
 
    use precision_mod
-   use parallel_mod, only : rank
+   use parallel_mod
+   use iso_fortran_env, only: output_unit
    use communications, only: my_reduce_mean
    use useful, only: formatTime
 
@@ -38,6 +39,17 @@ module timers_mod
       procedure :: finalize
       procedure :: write_log
    end type timers_type
+
+   type, public :: timer_type
+      integer :: n_counts
+      real(cp) :: tStart
+      real(cp) :: tTot
+   contains
+      procedure :: initialize => initialize_timer
+      procedure :: finalize => finalize_timer
+      procedure :: start_count
+      procedure :: stop_count
+   end type timer_type
 
 contains
 
@@ -99,13 +111,19 @@ contains
       this%mpi_comms = this%mpi_comms/this%n_mpi_comms
       call my_reduce_mean(this%mpi_comms, 0)
       this%fft = this%fft/this%n_fft_calls
-      call my_reduce_mean(this%fft, 0)
-      this%lu = this%lu/this%n_lu_calls
-      call my_reduce_mean(this%lu, 0)
-      this%solve = this%solve/this%n_solve_calls
+      if ( this%n_lu_calls /= 0 ) then
+         call my_reduce_mean(this%fft, 0)
+         this%lu = this%lu/this%n_lu_calls
+      end if
+      if ( this%n_solve_calls /= 0 ) then
+         call my_reduce_mean(this%lu, 0)
+         this%solve = this%solve/this%n_solve_calls
+      end if
       call my_reduce_mean(this%solve, 0)
-      this%dct = this%dct/this%n_dct_calls
-      call my_reduce_mean(this%dct, 0)
+      if ( this%n_dct_calls /= 0 ) then
+         this%dct = this%dct/this%n_dct_calls
+         call my_reduce_mean(this%dct, 0)
+      end if
 
    end subroutine finalize
 !------------------------------------------------------------------------------
@@ -131,8 +149,10 @@ contains
          &    '! Mean wall time for output writting        :',this%io)
          call formatTime(n, &
          &    '! Mean wall time for one single FFT (rloop) :',this%fft)
-         call formatTime(n, &
-         &    '! Mean wall time for one single 2D-DCT      :',this%dct)
+         if ( this%n_dct_calls /= 0 ) then
+            call formatTime(n, &
+            &    '! Mean wall time for one single 2D-DCT      :',this%dct)
+         end if
          call formatTime(n, &
          &    '! Mean wall time for one LU factor. (psi)   :',this%lu)
          call formatTime(n, &
@@ -143,4 +163,76 @@ contains
 
    end subroutine write_log
 !------------------------------------------------------------------------------
+   subroutine initialize_timer(this)
+
+      class(timer_type) :: this
+
+      this%n_counts=0
+      this%tStart = 0.0_cp
+      this%tTot = 0.0_cp
+
+   end subroutine initialize_timer
+!-----------------------------------------------------------------------------
+   subroutine finalize_timer(this, message, n_log_file)
+
+      class(timer_type) :: this
+
+      character(len=*), optional, intent(in) :: message
+      integer, optional,          intent(in) :: n_log_file
+
+      !-- Local variables
+      integer :: n, n_out
+
+      if ( this%n_counts > 0 ) this%tTot=this%tTot/real(this%n_counts,cp)
+
+      call MPI_AllReduce(MPI_IN_PLACE, this%tTot, 1, MPI_DEF_REAL, MPI_SUM, &
+           &             MPI_COMM_WORLD, ierr)
+      this%tTot=this%tTot/real(n_procs,cp)
+
+      if ( rank == 0 .and. present(n_log_file) .and. present(message) ) then
+         if ( this%n_counts > 0 ) then
+            do n=1,2
+               if ( n == 1 ) then
+                  n_out=n_log_file
+               else if ( n == 2 ) then
+                  n_out=output_unit
+               end if
+               call formatTime(n_out, message, this%tTot)
+            end do
+         end if
+      end if
+
+   end subroutine finalize_timer
+!-----------------------------------------------------------------------------
+   subroutine start_count(this)
+
+      class(timer_type) :: this
+
+      this%tStart = MPI_Wtime()
+
+   end subroutine start_count
+!-----------------------------------------------------------------------------
+   subroutine stop_count(this, l_increment)
+
+      class(timer_type) :: this
+      logical, optional, intent(in) :: l_increment
+
+      logical :: l_count
+      real(cp) :: tStop
+
+      if ( present(l_increment) ) then
+         l_count=l_increment
+      else
+         l_count=.true.
+      end if
+
+      tStop = MPI_Wtime()
+
+      if ( tStop > this%tStart ) then
+         this%tTot=this%tTot+(tStop-this%tStart)
+         if ( l_count ) this%n_counts=this%n_counts+1
+      end if
+
+   end subroutine stop_count
+!-----------------------------------------------------------------------------
 end module timers_mod

@@ -121,7 +121,7 @@ contains
             end if
          end do
 
-      else ! if this is rotating
+      else ! if this is rotatingnn
 
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
@@ -333,7 +333,7 @@ contains
       end if
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, dpsidt)
 
       do n_m=nMstart,nMstop
 
@@ -485,7 +485,7 @@ contains
       end if
 
       !-- Roll the arrays before filling again the first block
-      call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(dpsidt)
 
       !-- Compute implicit stage
       if ( tscheme%istage == tscheme%nstages ) then
@@ -559,7 +559,7 @@ contains
       integer :: n_r, n_m, n_cheb, m
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%assemble_imex(work_Mloc, dpsidt, nMstart, nMstop, n_r_max)
+      call tscheme%assemble_imex(work_Mloc, dpsidt)
 
       do n_m=nMstart,nMstop
 

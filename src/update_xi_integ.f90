@@ -173,7 +173,7 @@ contains
       if ( lMat ) lXimat(:)=.false.
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, dxidt, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, dxidt)
 
       do n_m=nMstart, nMstop
 
@@ -240,7 +240,7 @@ contains
       call rscheme%costf1(xi_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Roll the arrays before filling again the first block
-      call tscheme%rotate_imex(dxidt, nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(dxidt)
 
       !-- Compute implicit stage 
       if ( tscheme%istage == tscheme%nstages ) then
@@ -355,7 +355,7 @@ contains
       integer :: n_m, m, n_cheb
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%assemble_imex(work_Mloc, dxidt, nMstart, nMstop, n_r_max)
+      call tscheme%assemble_imex(work_Mloc, dxidt)
 
       do n_m=nMstart, nMstop
 

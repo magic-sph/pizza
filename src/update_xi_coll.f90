@@ -80,7 +80,7 @@ contains
       if ( lMat ) lXiMat(:)=.false.
 
       !-- Now assemble the right hand side and store it in work_Mloc
-      call tscheme%set_imex_rhs(work_Mloc, dxidt, nMstart, nMstop, n_r_max)
+      call tscheme%set_imex_rhs(work_Mloc, dxidt)
 
       do n_m=nMstart, nMstop
 
@@ -126,7 +126,7 @@ contains
       end do
 
       !-- Roll the arrays before filling again the first block
-      call tscheme%rotate_imex(dxidt, nMstart, nMstop, n_r_max)
+      call tscheme%rotate_imex(dxidt)
 
       !-- Calculation of the implicit part
       if ( tscheme%istage == tscheme%nstages ) then
@@ -241,7 +241,7 @@ contains
       !-- Local variables
       integer :: n_r, n_m, m
 
-      call tscheme%assemble_imex(work_Mloc, dxidt, nMstart, nMstop, n_r_max)
+      call tscheme%assemble_imex(work_Mloc, dxidt)
 
       do n_r=2,n_r_max-1
          do n_m=nMstart,nMstop

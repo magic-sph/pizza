@@ -30,6 +30,7 @@ module time_schemes
       procedure(set_weights_if), deferred :: set_weights
       procedure(set_dt_array_if), deferred :: set_dt_array
       procedure(set_imex_rhs_if),  deferred :: set_imex_rhs
+      procedure(set_imex_rhs_ghost_if),  deferred :: set_imex_rhs_ghost
       procedure(rotate_imex_if), deferred :: rotate_imex
       procedure(bridge_with_cnab2_if), deferred :: bridge_with_cnab2
       procedure(start_with_ab1_if), deferred :: start_with_ab1
@@ -70,33 +71,34 @@ module time_schemes
          logical,  intent(in) :: l_new_dtNext
       end subroutine set_dt_array_if
 
-      subroutine set_imex_rhs_if(this, rhs, dfdt, nMstart, nMstop, len_rhs)
+      subroutine set_imex_rhs_if(this, rhs, dfdt)
          import
          class(type_tscheme) :: this
-         integer,     intent(in) :: nMstart
-         integer,     intent(in) :: nMstop
-         integer,     intent(in) :: len_rhs
          type(type_tarray), intent(in) :: dfdt
-         complex(cp), intent(out) :: rhs(nMstart:nMstop,len_rhs)
+         complex(cp), intent(out) :: rhs(dfdt%lm:dfdt%um,dfdt%nRstart:dfdt%nRstop)
       end subroutine set_imex_rhs_if
 
-      subroutine rotate_imex_if(this, dfdt, nMstart, nMstop, n_r_max)
+      subroutine set_imex_rhs_ghost_if(this, rhs, dfdt, start_m, stop_m, ng)
          import
          class(type_tscheme) :: this
-         integer,     intent(in) :: nMstart
-         integer,     intent(in) :: nMstop
-         integer,     intent(in) :: n_r_max
+         type(type_tarray), intent(in) :: dfdt
+         integer,           intent(in) :: start_m ! Starting index
+         integer,           intent(in) :: stop_m  ! Stopping index
+         integer,           intent(in) :: ng      ! Number of ghosts zones
+         complex(cp), intent(out) :: rhs(dfdt%lm:dfdt%um,dfdt%nRstart-ng:dfdt%nRstop+ng)
+      end subroutine set_imex_rhs_ghost_if
+
+      subroutine rotate_imex_if(this, dfdt)
+         import
+         class(type_tscheme) :: this
          type(type_tarray), intent(inout) :: dfdt
       end subroutine rotate_imex_if
 
-      subroutine assemble_imex_if(this, rhs, dfdt, nMstart, nMstop, n_r_max)
+      subroutine assemble_imex_if(this, rhs, dfdt)
          import
          class(type_tscheme) :: this
-         integer,           intent(in) :: nMstart
-         integer,           intent(in) :: nMstop
-         integer,           intent(in) :: n_r_max
          type(type_tarray), intent(in) :: dfdt
-         complex(cp), intent(out) :: rhs(nMstart:nMstop,n_r_max)
+         complex(cp), intent(out) :: rhs(dfdt%lm:dfdt%um,dfdt%nRstart:dfdt%nRstop)
       end subroutine assemble_imex_if
 
       subroutine bridge_with_cnab2_if(this)

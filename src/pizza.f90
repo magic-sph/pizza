@@ -15,7 +15,8 @@ program pizza
        &               nRstart, nRstop
    use namelists, only: read_namelists, write_namelists, tag, time_scheme,    &  
        &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve,&
-       &                courfac, l_heat, l_chem
+       &                courfac, l_heat, l_chem, l_finite_diff
+   use mloop_fd_mod, only: initialize_mloop_fd, finalize_mloop_fd, test_mloop
    use outputs, only: initialize_outputs, finalize_outputs, n_log_file
    use pre_calculations, only: preCalc
    use horizontal, only: initialize_mfunctions, finalize_mfunctions
@@ -132,21 +133,26 @@ program pizza
    call preCalc()
 
    local_bytes_used = bytes_allocated
-   if ( l_cheb_coll ) then
-      if ( l_heat ) call initialize_temp_coll()
-      if ( l_chem ) call initialize_xi_coll()
-      if ( l_direct_solve ) then
-         call initialize_om_coll_smat(tscheme)
-      else
-         call initialize_om_coll_dmat(tscheme)
-      end if
+   if ( l_finite_diff ) then
+      call initialize_mloop_fd()
+      call test_mloop(tscheme) ! find faster block layout
    else
-      if ( l_heat ) call initialize_temp_integ(tscheme)
-      if ( l_chem ) call initialize_xi_integ(tscheme)
-      if ( l_direct_solve ) then
-         call initialize_psi_integ_smat(tscheme)
+      if ( l_cheb_coll ) then
+         if ( l_heat ) call initialize_temp_coll()
+         if ( l_chem ) call initialize_xi_coll()
+         if ( l_direct_solve ) then
+            call initialize_om_coll_smat(tscheme)
+         else
+            call initialize_om_coll_dmat(tscheme)
+         end if
       else
-         call initialize_psi_integ_dmat()
+         if ( l_heat ) call initialize_temp_integ(tscheme)
+         if ( l_chem ) call initialize_xi_integ(tscheme)
+         if ( l_direct_solve ) then
+            call initialize_psi_integ_smat(tscheme)
+         else
+            call initialize_psi_integ_dmat()
+         end if
       end if
    end if
    local_bytes_used = bytes_allocated-local_bytes_used
@@ -199,21 +205,25 @@ program pizza
    end if
 
    !-- Close files
-   if ( l_cheb_coll ) then
-      if ( l_heat ) call finalize_temp_coll()
-      if ( l_chem ) call finalize_xi_coll()
-      if ( l_direct_solve ) then
-         call finalize_om_coll_smat(tscheme)
-      else
-         call finalize_om_coll_dmat(tscheme)
-      end if
+   if ( l_finite_diff ) then
+      call finalize_mloop_fd()
    else
-      if ( l_heat ) call finalize_temp_integ(tscheme)
-      if ( l_chem ) call finalize_xi_integ(tscheme)
-      if ( l_direct_solve ) then
-         call finalize_psi_integ_smat(tscheme)
+      if ( l_cheb_coll ) then
+         if ( l_heat ) call finalize_temp_coll()
+         if ( l_chem ) call finalize_xi_coll()
+         if ( l_direct_solve ) then
+            call finalize_om_coll_smat(tscheme)
+         else
+            call finalize_om_coll_dmat(tscheme)
+         end if
       else
-         call finalize_psi_integ_dmat()
+         if ( l_heat ) call finalize_temp_integ(tscheme)
+         if ( l_chem ) call finalize_xi_integ(tscheme)
+         if ( l_direct_solve ) then
+            call finalize_psi_integ_smat(tscheme)
+         else
+            call finalize_psi_integ_dmat()
+         end if
       end if
    end if
    call finalize_mfunctions()

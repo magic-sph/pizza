@@ -12,10 +12,12 @@ module radial_functions
        &                l_non_rot, ek, l_ek_pump, l_temp_3D, tcond_fac,    &
        &                r_cmb, r_icb, l_cheb_coll, beta_shift, xicond_fac, &
        &                ktopt, kbott, t_bot, t_top, l_heat, l_chem, xi_bot,&
-       &                xi_top, l_xi_3D, ktopxi, kbotxi, h_temp, h_xi 
+       &                xi_top, l_xi_3D, ktopxi, kbotxi, h_temp, h_xi,     &
+       &                l_finite_diff, fd_stretch, fd_ratio
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
+   use finite_differences, only: type_fd
    use parallel_mod
    use precision_mod
 
@@ -71,16 +73,20 @@ contains
       allocate( xicond(n_r_max), dxicond(n_r_max))
       bytes_allocated = bytes_allocated+15*n_r_max*SIZEOF_DEF_REAL
 
-      allocate ( type_cheb :: rscheme )
-
-      n_in = n_cheb_max
-      if ( l_newmap ) then
-         n_in_2 = 1
+      if ( .not. l_finite_diff ) then
+         allocate ( type_cheb :: rscheme )
+         n_in = n_cheb_max
+         if ( l_newmap ) then
+            n_in_2 = 1
+         else
+            n_in_2 = 0
+         end if
+         call rscheme%initialize(n_r_max,n_in,n_in_2,l_cheb_coll)
       else
-         n_in_2 = 0
+         allocate ( type_fd :: rscheme )
+         call rscheme%initialize(n_r_max,2,2,.true.)
       end if
 
-      call rscheme%initialize(n_r_max,n_in,n_in_2,l_cheb_coll)
 
    end subroutine initialize_radial_functions
 !------------------------------------------------------------------------------
@@ -111,8 +117,13 @@ contains
          ek_pump_fac = 0.0_cp
       end if
 
-      ratio1=alph1
-      ratio2=alph2
+      if ( l_finite_diff ) then
+         ratio1=fd_stretch
+         ratio2=fd_ratio
+      else
+         ratio1=alph1
+         ratio2=alph2
+      end if
 
       call rscheme%get_grid(n_r_max, r_icb, r_cmb, ratio1, ratio2, r)
       call rscheme%get_der_mat(n_r_max, l_cheb_coll)
