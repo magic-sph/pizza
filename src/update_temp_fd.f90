@@ -23,7 +23,7 @@ module update_temp_fd_mod
 
    public :: initialize_temp_fd, finalize_temp_fd, finish_exp_temp_Rdist, &
    &         prepare_temp_fd, fill_ghosts_temp, update_temp_fd,           &
-   &         get_temp_rhs_imp_ghost
+   &         get_temp_rhs_imp_ghost, assemble_temp_Rdist
 
 contains
 

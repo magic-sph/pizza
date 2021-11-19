@@ -26,15 +26,17 @@ module mloop_fd_mod
    integer, allocatable :: array_of_requests(:)
 
    public :: finish_explicit_assembly_Rdist, mloop_Rdist, initialize_mloop_fd, &
-   &         finalize_mloop_fd, test_mloop
+   &         finalize_mloop_fd, test_mloop, assemble_stage_Rdist
 
 contains
 
-   subroutine initialize_mloop_fd
+   subroutine initialize_mloop_fd(tscheme)
+
+      class(type_tscheme), intent(in) :: tscheme
 
       n_tri=0
       n_penta=1   
-      call initialize_psi_fd()
+      call initialize_psi_fd(tscheme)
       lPsimat_FD(:)=.false.
       if ( l_heat ) then
          call initialize_temp_fd()
@@ -55,11 +57,13 @@ contains
 
    end subroutine initialize_mloop_fd
 !------------------------------------------------------------------------------------
-   subroutine finalize_mloop_fd
+   subroutine finalize_mloop_fd(tscheme)
+
+      class(type_tscheme), intent(in) :: tscheme
 
       deallocate( array_of_requests )
       if ( l_heat ) call finalize_temp_fd()
-      call finalize_psi_fd()
+      call finalize_psi_fd(tscheme)
 
    end subroutine finalize_mloop_fd
 !------------------------------------------------------------------------------------
@@ -123,8 +127,8 @@ contains
    end subroutine test_mloop
 !------------------------------------------------------------------------------------
    subroutine mloop_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, om_Rloc, &
-                    &     us_Rloc, up_Rloc, dTdt, dxidt, dpsidt, vp_bal,     &
-                    &     vort_bal, tscheme, lMat, l_log_next, timers)
+              &           us_Rloc, up_Rloc, dTdt, dxidt, dpsidt, vp_bal,     &
+              &           vort_bal, tscheme, lMat, l_log_next, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -146,6 +150,9 @@ contains
       type(type_tarray),   intent(inout) :: dxidt
       type(timers_type),   intent(inout) :: timers
 
+      !-- Local variables
+      real(cp) :: runStart, runStop
+
       if ( lMat ) then ! update matrices
          lPsimat_FD(:)=.false.
          if ( l_heat ) lTmat_FD(:)=.false.
@@ -163,9 +170,13 @@ contains
       !-----------------------------------------------------------
       !--- This is where the matrices are solved
       !-- Here comes the real deal:
-      !call solve_counter%start_count()
+      runStart=MPI_Wtime()
       call parallel_solve(block_sze)
-      !call solve_counter%stop_count()
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         timers%solve = timers%solve + (runStop-runStart)
+         timers%n_solve_calls = timers%n_solve_calls+1
+      end if
       !-----------------------------------------------------------
 
       !-- Now simply fill the ghost zones to ensure the boundary conditions
@@ -179,6 +190,34 @@ contains
            &             vort_bal)
 
    end subroutine mloop_Rdist
+!------------------------------------------------------------------------------------
+   subroutine assemble_stage_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, us_Rloc,&
+              &                    up_Rloc, om_Rloc, dTdt, dxidt, dpsidt, tscheme,   &
+              &                    vp_bal, vort_bal)
+
+      !-- Input variables
+      class(type_tscheme), intent(in) :: tscheme
+
+      !-- Output variables
+      complex(cp),         intent(out) :: temp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(out) :: dtemp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(out) :: xi_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(out) :: dxi_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(out) :: om_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(inout) :: us_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(inout) :: up_Rloc(n_m_max,nRstart:nRstop)
+      type(vp_bal_type),   intent(inout) :: vp_bal
+      type(vort_bal_type), intent(inout) :: vort_bal
+      type(type_tarray),   intent(inout) :: dpsidt
+      type(type_tarray),   intent(inout) :: dTdt
+      type(type_tarray),   intent(inout) :: dxidt
+
+      if ( l_heat ) call assemble_temp_Rdist(temp_Rloc, dtemp_Rloc, dTdt, tscheme)
+      !if ( l_chem ) call assemble_comp_Rdist(xi_Rloc, dxi_Rloc, dxidt, tscheme)
+      call assemble_psi_Rloc(block_sze, nblocks, us_Rloc, up_Rloc, om_Rloc, dpsidt, &
+           &                 tscheme, vp_bal, vort_bal)
+
+   end subroutine assemble_stage_Rdist
 !------------------------------------------------------------------------------------
    subroutine parallel_solve(block_sze)
       !

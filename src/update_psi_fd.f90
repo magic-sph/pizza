@@ -1,8 +1,9 @@
 module update_psi_fd_mod
 
    use precision_mod
+   use parallel_mod
    use mem_alloc, only: bytes_allocated
-   use parallel_mod, only: get_openmp_blocks, rank
+   use useful, only: abortRun
    use constants, only: zero, ci, one, two, three, four, half
    use truncation, only: n_m_max, n_r_max, idx2m
    use blocking, only: nRstart, nRstop
@@ -13,7 +14,8 @@ module update_psi_fd_mod
        &                l_coriolis_imp, ViscFac, r_cmb, l_ek_pump, l_non_rot
    use radial_functions, only: or1, rgrav, rscheme, beta, ekpump, or2, r, dbeta, &
        &                       d2beta, d3beta, or3, oheight
-   use radial_der, only: get_dr_Rloc, get_ddddr_ghost, get_ddr_ghost
+   use radial_der, only: get_dr_Rloc, get_ddddr_ghost, get_ddr_ghost, exch_ghosts, &
+       &                 bulk_to_ghost
    use vort_balance, only: vort_bal_type
    use vp_balance, only: vp_bal_type
 
@@ -22,17 +24,21 @@ module update_psi_fd_mod
    private
 
    type(type_penta_par), public :: psiMat_FD
-   type(type_tri_par), public :: upMat_FD
+   type(type_tri_par), public :: upMat_FD, ellMat_FD
    complex(cp), public, allocatable :: psi_ghost(:,:)
    complex(cp), public, allocatable :: up0_ghost(:)
-   logical, public, allocatable :: lPsimat_FD(:)
+   logical, public, allocatable :: lPsimat_FD(:), lEllmat_FD(:)
 
    public :: initialize_psi_fd, finalize_psi_fd, finish_exp_psi_Rdist, &
-   &         prepare_psi_fd, fill_ghosts_psi, update_psi_FD, get_psi_rhs_imp_ghost
+   &         prepare_psi_fd, fill_ghosts_psi, update_psi_FD,           &
+   &         get_psi_rhs_imp_ghost, assemble_psi_Rloc
 
 contains
 
-   subroutine initialize_psi_fd
+   subroutine initialize_psi_fd(tscheme)
+
+      !-- Input variable
+      class(type_tscheme), intent(in) :: tscheme ! time scheme
 
       call upMat_FD%initialize(1,n_r_max,1,1)
       call psiMat_FD%initialize(1,n_r_max,1,n_m_max)
@@ -43,13 +49,26 @@ contains
       up0_ghost(:)=zero
       allocate( lPsimat_FD(1:n_m_max) )
 
+      if ( tscheme%l_assembly ) then
+         call ellMat_FD%initialize(1,n_r_max,1,n_m_max)
+         allocate( lEllmat_FD(1:n_m_max) )
+         lEllmat_FD(:)=.false.
+      end if
+
    end subroutine initialize_psi_fd
 !---------------------------------------------------------------------------------
-   subroutine finalize_psi_fd
+   subroutine finalize_psi_fd(tscheme)
+
+      !-- Input variable
+      class(type_tscheme), intent(in) :: tscheme ! time scheme
 
       deallocate( lPsimat_FD, psi_ghost, up0_ghost)
       call psiMat_FD%finalize()
       call upMat_FD%finalize()
+      if ( tscheme%l_assembly ) then
+         deallocate( lEllmat_FD )
+         call ellMat_FD%finalize()
+      end if
 
    end subroutine finalize_psi_fd
 !---------------------------------------------------------------------------------
@@ -416,6 +435,143 @@ contains
 
    end subroutine finish_exp_psi_Rdist
 !---------------------------------------------------------------------------------
+   subroutine assemble_psi_Rloc(block_sze, nblocks, us_Rloc, up_Rloc, om_Rloc, &
+              &                 dpsidt, tscheme, vp_bal, vort_bal)
+
+      !-- Input variables
+      integer,             intent(in) :: block_sze
+      integer,             intent(in) :: nblocks
+      class(type_tscheme), intent(in) :: tscheme
+
+      !-- Output variables
+      type(type_tarray),   intent(inout) :: dpsidt
+      complex(cp),         intent(inout) :: us_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(inout) :: up_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(inout) :: om_Rloc(n_m_max,nRstart:nRstop)
+      type(vp_bal_type),   intent(inout) :: vp_bal
+      type(vort_bal_type), intent(inout) :: vort_bal
+
+      !-- Local variables
+      integer :: n_m_start, n_m_stop, tag, req, nm_block, n_m, nms_block, n_r
+      integer :: array_of_requests(4*nblocks)
+      real(cp) :: dr
+      complex(cp) :: up0_Rloc(nRstart:nRstop)
+      complex(cp) :: work_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp) :: work_ghost(n_m_max, nRstart-1:nRstop+1)
+
+      !-- LU factorisation if needed
+      if ( .not. lEllmat_FD(1) ) then
+         call get_elliptic_mat_Rdist(ellMat_FD)
+         lEllmat_FD(:)=.true.
+      end if
+
+      !-- First assemble IMEX to get an r.h.s. stored in work_Rloc
+      call tscheme%assemble_imex(work_Rloc, dpsidt)
+
+      !-- Handle the uphi0 part
+      up0_Rloc(:)=work_Rloc(1,:)
+
+      if ( ktopv /= 1 .and. nRstart==1 ) then
+         up0_Rloc(nRstart)=zero 
+      end if
+
+      if ( kbotv /= 1 .and. nRstop==n_r_max ) then
+         up0_Rloc(nRstop)=zero
+      end if
+      call bulk_to_ghost(up0_Rloc, up0_ghost, 1, nRstart, nRstop, 1, 1, 1)
+      call exch_ghosts(up0_ghost, 1, nRstart, nRstop, 1)
+
+      !--------------------------
+      ! Now handle the -\L \psi = \omega equation
+      !--------------------------
+      array_of_requests(:)=MPI_REQUEST_NULL
+
+      !-- Now solve to finally get psi
+      !$omp parallel default(shared) private(tag, req, n_m_start, n_m_stop)
+      n_m_start=1; n_m_stop=n_m_max
+      call get_openmp_blocks(n_m_start,n_m_stop)
+
+      !-- Non-penetration boundary condition
+      if ( nRstart==1 ) then
+         do n_m=n_m_start,n_m_stop
+            work_Rloc(n_m,1)=zero
+         end do
+      end if
+      if ( nRstop==n_r_max ) then
+         do n_m=n_m_start,n_m_stop
+            work_Rloc(n_m,n_r_max)=zero
+         end do
+      end if
+
+      !-- Now copy into an array with proper ghost zones
+      call bulk_to_ghost(work_Rloc, work_ghost, 1, nRstart, nRstop, n_m_max, n_m_start, &
+           &             n_m_stop)
+
+      tag = 0
+      req=1
+
+      do nms_block=1,n_m_max,block_sze
+         nm_block = n_m_max-nms_block+1
+         if ( nm_block > block_sze ) nm_block=block_sze
+         n_m_start=nms_block; n_m_stop=nms_block+nm_block-1
+         call get_openmp_blocks(n_m_start,n_m_stop)
+         !$omp barrier
+
+         call ellMat_FD%solver_up(work_ghost, n_m_start, n_m_stop, nRstart, nRstop, tag, &
+              &                   array_of_requests, req, nms_block, nm_block)
+         tag = tag+1
+      end do
+
+      do nms_block=1,n_m_max,block_sze
+         nm_block = n_m_max-nms_block+1
+         if ( nm_block > block_sze ) nm_block=block_sze
+         n_m_start=nms_block; n_m_stop=nms_block+nm_block-1
+         call get_openmp_blocks(n_m_start,n_m_stop)
+         !$omp barrier
+
+         call ellMat_FD%solver_dn(work_ghost, n_m_start, n_m_stop, nRstart, nRstop, tag, &
+              &                   array_of_requests, req, nms_block, nm_block)
+         tag = tag+1
+      end do
+
+      !$omp master
+      do nms_block=1,n_m_max,block_sze
+         nm_block = n_m_max-nms_block+1
+         if ( nm_block > block_sze ) nm_block=block_sze
+
+         call ellMat_FD%solver_finish(work_ghost, nms_block, nm_block, nRstart, nRstop, &
+                 &                    tag, array_of_requests, req)
+         tag = tag+1
+      end do
+
+      call MPI_Waitall(req-1, array_of_requests(1:req-1), MPI_STATUSES_IGNORE, ierr)
+      if ( ierr /= MPI_SUCCESS ) call abortRun('MPI_Waitall failed in assemble_pol_Rloc')
+      call MPI_Barrier(MPI_COMM_WORLD,ierr)
+      !$omp end master
+      !$omp barrier
+
+      n_m_start=1; n_m_stop=n_m_max
+      call get_openmp_blocks(n_m_start,n_m_stop)
+      do n_r=nRstart-1,nRstop+1
+         do n_m=n_m_start,n_m_stop
+            psi_ghost(n_m,n_r)=work_ghost(n_m,n_r)
+         end do
+      end do
+      !$omp end parallel
+
+      ! nRstart-1 and nRstop+1 are already known, only the next one is not known
+      !call exch_ghosts(w_ghost, n_m_max, nRstart-1, nRstop+1, 1)
+      ! Apparently it yields some problems, not sure why yet
+      call exch_ghosts(psi_ghost, n_m_max, nRstart, nRstop, 2)
+
+      !-- Fill ghost zones: this will ensure the second part of the psi bc
+      call fill_ghosts_psi(psi_ghost, up0_ghost)
+
+      call get_psi_rhs_imp_ghost(psi_ghost, up0_ghost, us_Rloc, up_Rloc, om_Rloc, &
+           &                     dpsidt, 1, vp_bal, vort_bal, tscheme%l_imp_calc_rhs(1))
+
+   end subroutine assemble_psi_Rloc
+!---------------------------------------------------------------------------------
    subroutine get_psimat_Rdist(tscheme, psiMat)
 
       !-- Input variables
@@ -595,5 +751,50 @@ contains
       call upMat%prepare_mat()
 
    end subroutine get_uphimat_Rdist
+!---------------------------------------------------------------------------------
+   subroutine get_elliptic_mat_Rdist(ellMat)
+      !
+      !  Purpose of this subroutine is to contruct the matrix needed
+      !  for the derivation of w for the time advance of the poloidal equation
+      !  if the double curl form is used. This is the R-dist version.
+      !
+
+      !-- Output variables:
+      type(type_tri_par), intent(inout) :: ellMat
+
+      !-- Local variables:
+      real(cp) :: dm2
+      integer :: nR, m, n_m
+
+      !----- Bulk points:
+      do nR=2,n_r_max-1
+         do n_m=1,n_m_max
+            m = idx2m(n_m)
+            if ( m == 0 ) cycle
+            dm2 = real(m*m,cp)
+            ellMat%diag(n_m,nR)=-(                   rscheme%ddr(nR,1) + &
+            &                      (beta(nR)+or1(nR))*rscheme%dr(nR,1) + &
+            &                     (dbeta(nR)+beta(nR)*or1(nR)-dm2*or2(nR)) )
+            ellMat%up(n_m,nR)  =-(                   rscheme%ddr(nR,2) + &
+            &                      (beta(nR)+or1(nR))*rscheme%dr(nR,2) )
+            ellMat%low(n_m,nR) =-(                   rscheme%ddr(nR,0) + &
+            &                      (beta(nR)+or1(nR))*rscheme%dr(nR,0) )
+         end do
+      end do
+
+      !-- Non penetrative boundary condition
+      do n_m=1,n_m_max
+         ellMat%diag(n_m,1)      =one
+         ellMat%up(n_m,1)        =0.0_cp
+         ellMat%low(n_m,1)       =0.0_cp
+         ellMat%diag(n_m,n_r_max)=one
+         ellMat%up(n_m,n_r_max)  =0.0_cp
+         ellMat%low(n_m,n_r_max) =0.0_cp
+      end do
+
+      !-- Lu factorisation
+      call ellMat%prepare_mat()
+
+   end subroutine get_elliptic_mat_Rdist
 !---------------------------------------------------------------------------------
 end module update_psi_fd_mod

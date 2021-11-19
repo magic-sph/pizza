@@ -32,7 +32,8 @@ module step_time
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
    use update_psi_coll_smat, only: get_psi_rhs_imp_coll_smat
    use mloop_mod, only: mloop, finish_explicit_assembly, assemble_stage
-   use mloop_fd_mod, only: finish_explicit_assembly_Rdist, mloop_Rdist
+   use mloop_fd_mod, only: finish_explicit_assembly_Rdist, mloop_Rdist, &
+       &                   assemble_stage_Rdist
    use rLoop, only: radial_loop
    use namelists, only: n_time_steps, alpha, dtMax, dtMin, l_bridge_step, &
        &                tEND, run_time_requested, n_log_step, n_frames,   &
@@ -334,10 +335,16 @@ contains
          !-- Assembly stage of IMEX-RK (if needed)
          !----------------------------
          if ( tscheme%l_assembly ) then
-            call assemble_stage(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc, &
-                 &              xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc,         &
-                 &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt, dpsidt,    &
-                 &              tscheme, vp_bal, vort_bal, l_log_next, timers)
+            if ( l_finite_diff ) then
+               call assemble_stage_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, &
+                    &              us_Rloc, up_Rloc, om_Rloc, dTdt, dxidt, dpsidt, &
+                    &              tscheme, vp_bal, vort_bal)
+            else
+               call assemble_stage(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc, &
+                    &              xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc,         &
+                    &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt, dpsidt,    &
+                    &              tscheme, vp_bal, vort_bal, l_log_next, timers)
+            end if
          end if
 
          !---------------------

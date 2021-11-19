@@ -134,7 +134,7 @@ program pizza
 
    local_bytes_used = bytes_allocated
    if ( l_finite_diff ) then
-      call initialize_mloop_fd()
+      call initialize_mloop_fd(tscheme)
       call test_mloop(tscheme) ! find faster block layout
    else
       if ( l_cheb_coll ) then
@@ -206,7 +206,7 @@ program pizza
 
    !-- Close files
    if ( l_finite_diff ) then
-      call finalize_mloop_fd()
+      call finalize_mloop_fd(tscheme)
    else
       if ( l_cheb_coll ) then
          if ( l_heat ) call finalize_temp_coll()
