@@ -219,7 +219,8 @@ contains
 !-------------------------------------------------------------------------------------
    subroutine solver_single(this, x, nRstart, nRstop)
       !
-      ! This routine is used to solve a solve one single linear system.
+      ! This routine is used to solve a solve one single linear system that does not
+      ! depend on lm. This is for instance used for z10 when l_z10mat is required.
       !
       class(type_tri_par) :: this
 
@@ -231,12 +232,14 @@ contains
 
       !-- Local variables
       integer :: nR0,nR
-      integer :: tag
+      integer :: tag, n_r_cmb, n_r_icb
 
+      n_r_cmb=1
+      n_r_icb=n_r_max
       tag = 53976
 
       nR0 = nRstart
-      if ( nRstart > 1 ) then ! Not the first block
+      if ( nRstart > n_r_cmb ) then ! Not the first block
          nR0 = nR0-1
          call MPI_Recv(x(nR0), 1, MPI_DEF_COMPLEX, rank-1, tag, MPI_COMM_WORLD, &
               &        MPI_STATUS_IGNORE, ierr)
@@ -248,12 +251,12 @@ contains
          x(nR)=x(nR)-this%diag(1,nR-1)*this%low(1,nR)*x(nR-1)
       end do
 
-      if ( nRstop < n_r_max ) then ! Not the last block
+      if ( nRstop < n_r_icb ) then ! Not the last block
          call MPI_SSend(x(nRstop), 1, MPI_DEF_COMPLEX, rank+1, tag, MPI_COMM_WORLD, ierr)
       end if
 
       tag = tag+1
-      if ( nRstop < n_r_max ) then ! This is not the last chunk
+      if ( nRstop < n_r_icb ) then ! This is not the last chunk
          call MPI_Recv(x(nRstop+1), 1, MPI_DEF_COMPLEX, rank+1, &
               &        tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
       end if
@@ -262,32 +265,30 @@ contains
          x(nR)=(x(nR)-this%up(1,nR)*x(nR+1))*this%diag(1,nR)
       end do
 
-      if ( nRstart > 1 ) then
+      if ( nRstart > n_r_cmb ) then
          call MPI_SSend(x(nRstart), 1, MPI_DEF_COMPLEX, rank-1, tag, MPI_COMM_WORLD, ierr)
       end if
 
       tag = tag+1
-      if ( nRstart /= 1 ) then
-         if ( nRstart == 2 ) then ! send down
+      if ( nRstart /= n_r_cmb ) then
+         if ( nRstart == n_r_cmb+1 ) then ! send down
             call MPI_Ssend(x(nRstart), 1, MPI_DEF_COMPLEX, rank-1, tag, &
                  &         MPI_COMM_WORLD, ierr)
          end if
 
-         if ( nRstop == 1 ) then ! send down
+         if ( nRstop == n_r_cmb ) then ! send down
             call MPI_Recv(x(nRstop+1), 1, MPI_DEF_COMPLEX, rank+1, tag, &
                  &        MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
-            !req = req+1
          end if
       end if
 
       tag = tag+1
-      if ( nRstart > 1 ) then ! This is not the first block
+      if ( nRstart > n_r_cmb ) then ! This is not the first block
          call MPI_Recv(x(nRstart-1), 1, MPI_DEF_COMPLEX, rank-1, &
               &         tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
-         !req = req+1
       end if
 
-      if ( nRstop < n_r_max .and. nRstop >= 1 ) then ! This is not the last block
+      if ( nRstop < n_r_icb .and. nRstop >= n_r_cmb ) then ! This is not the last block
          call MPI_Ssend(x(nRstop), 1, MPI_DEF_COMPLEX, rank+1, tag, MPI_COMM_WORLD, ierr)
       end if
 

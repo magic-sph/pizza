@@ -35,7 +35,8 @@ module radial_der
    end interface get_ddr
 
    public :: get_ddr, get_dcheb, get_dr, initialize_der_arrays, exch_ghosts, &
-   &         finalize_der_arrays, get_ddr_ghost, get_dr_Rloc, bulk_to_ghost
+   &         finalize_der_arrays, get_ddr_ghost, get_dr_Rloc, bulk_to_ghost, &
+   &         get_ddddr_ghost
 
    complex(cp), allocatable :: work(:,:)
    real(cp), allocatable :: work_1d_real(:)
@@ -826,6 +827,57 @@ contains
 
    end subroutine get_ddr_ghost
 !------------------------------------------------------------------------------
+   subroutine get_ddddr_ghost(f_Rloc, df_Rloc, ddf_Rloc, dddf_Rloc, ddddf_Rloc, &
+              &               n_m_max, start_m, stop_m, nRstart, nRstop, r_scheme)
+      !
+      ! Purpose of this subroutine is to take the first and second
+      ! radial derivatives of an input complex array distributed over radius that
+      ! has the ghost zones properly filled.
+      !
+
+      !-- Input variables
+      integer,             intent(in) :: n_m_max, nRstart, nRstop, start_m, stop_m
+      class(type_rscheme), intent(in) :: r_scheme
+      complex(cp),         intent(in) :: f_Rloc(n_m_max,nRstart-2:nRstop+2)
+
+      !-- Output variable
+      complex(cp), intent(out) ::  df_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp), intent(out) ::  ddf_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp), intent(out) ::  dddf_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp), intent(out) ::  ddddf_Rloc(n_m_max,nRstart:nRstop)
+
+      !-- Local variables:
+      integer :: n_r, lm
+
+      if ( (r_scheme%order>2 .or. r_scheme%order_boundary>2) .and. &
+      &    (nRstop-nRstart+1)<r_scheme%order ) then
+         call abortRun('Distributed r-der not implemented in this case yet!')
+      end if
+
+      !-- 1st and 2nd derivatives
+      do n_r=nRstart,nRstop
+         do lm=start_m,stop_m
+            df_Rloc(lm,n_r)=r_scheme%dr(n_r,0)*f_Rloc(lm,n_r-1) + &
+            &               r_scheme%dr(n_r,1)*f_Rloc(lm,n_r)   + &
+            &               r_scheme%dr(n_r,2)*f_Rloc(lm,n_r+1)
+            ddf_Rloc(lm,n_r)=r_scheme%ddr(n_r,0)*f_Rloc(lm,n_r-1) + &
+            &                r_scheme%ddr(n_r,1)*f_Rloc(lm,n_r)   + &
+            &                r_scheme%ddr(n_r,2)*f_Rloc(lm,n_r+1)
+            dddf_Rloc(lm,n_r)=r_scheme%dddr(n_r,0)*f_Rloc(lm,n_r-2) + &
+            &                 r_scheme%dddr(n_r,1)*f_Rloc(lm,n_r-1) + &
+            &                 r_scheme%dddr(n_r,2)*f_Rloc(lm,n_r)   + &
+            &                 r_scheme%dddr(n_r,3)*f_Rloc(lm,n_r+1) + &
+            &                 r_scheme%dddr(n_r,4)*f_Rloc(lm,n_r+2)
+            ddddf_Rloc(lm,n_r)=r_scheme%ddddr(n_r,0)*f_Rloc(lm,n_r-2) + &
+            &                  r_scheme%ddddr(n_r,1)*f_Rloc(lm,n_r-1) + &
+            &                  r_scheme%ddddr(n_r,2)*f_Rloc(lm,n_r)   + &
+            &                  r_scheme%ddddr(n_r,3)*f_Rloc(lm,n_r+1) + &
+            &                  r_scheme%ddddr(n_r,4)*f_Rloc(lm,n_r+2)
+         end do
+      end do
+
+   end subroutine get_ddddr_ghost
+!------------------------------------------------------------------------------
    subroutine exch_ghosts(f, n_m_max, nRstart, nRstop, nghosts)
 
       integer, intent(in) :: n_m_max, nRstart, nRstop, nghosts
@@ -899,14 +951,14 @@ contains
 
    end subroutine get_bound_vals
 !------------------------------------------------------------------------------
-   subroutine bulk_to_ghost(x, x_g, ng, nRstart, nRstop, n_m_max, start_lm, stop_lm)
+   subroutine bulk_to_ghost(x, x_g, ng, nRstart, nRstop, n_m_max, start_m, stop_m)
       !
       ! This subroutine is used to copy an array that is defined from nRstart to
       ! nRstop to an array that is defined from nRstart-1 to nRstop+1
       !
 
       !-- Input variables
-      integer,     intent(in) :: start_lm, stop_lm, nRstart, nRstop
+      integer,     intent(in) :: start_m, stop_m, nRstart, nRstop
       integer,     intent(in) :: n_m_max
       integer,     intent(in) :: ng ! Number of ghost zones
       complex(cp), intent(in) :: x(n_m_max,nRstart:nRstop)
@@ -918,7 +970,7 @@ contains
       integer :: n_r, n_m
 
       do n_r=nRstart,nRstop
-         do n_m=start_lm,stop_lm
+         do n_m=start_m,stop_m
             x_g(n_m,n_r)=x(n_m,n_r)
          end do
       end do

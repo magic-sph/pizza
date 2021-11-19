@@ -29,8 +29,11 @@ module radial_functions
    real(cp), public, allocatable :: r(:)         ! radii
    real(cp), public, allocatable :: or1(:)       ! :math:`1/r`
    real(cp), public, allocatable :: or2(:)       ! :math:`1/r^2`
+   real(cp), public, allocatable :: or3(:)       ! :math:`1/r^3`
    real(cp), public, allocatable :: beta(:)      ! 1/h dh/ds
    real(cp), public, allocatable :: dbeta(:)     ! Radial gradient of beta
+   real(cp), public, allocatable :: d2beta(:)    ! Radial gradient of beta
+   real(cp), public, allocatable :: d3beta(:)    ! Radial gradient of beta
    real(cp), public, allocatable :: height(:)    ! Spherical shell height
    real(cp), public, allocatable :: ekpump(:)    ! Ekman pumping function
    real(cp), public, allocatable :: oheight(:)   ! 1/h
@@ -65,13 +68,14 @@ contains
       integer :: n_in, n_in_2
 
       ! allocate the arrays
-      allocate( r(n_r_max), or1(n_r_max), or2(n_r_max) )
+      allocate( r(n_r_max), or1(n_r_max), or2(n_r_max), or3(n_r_max) )
       allocate( beta(n_r_max), dbeta(n_r_max), height(n_r_max) )
+      allocate( d2beta(n_r_max), d3beta(n_r_max) )
       allocate( rgrav(n_r_max), ekpump(n_r_max), oheight(n_r_max) )
       allocate( delxr2(n_r_max), delxh2(n_r_max) )
       allocate( tcond(n_r_max), dtcond(n_r_max))
       allocate( xicond(n_r_max), dxicond(n_r_max))
-      bytes_allocated = bytes_allocated+15*n_r_max*SIZEOF_DEF_REAL
+      bytes_allocated = bytes_allocated+18*n_r_max*SIZEOF_DEF_REAL
 
       if ( .not. l_finite_diff ) then
          allocate ( type_cheb :: rscheme )
@@ -96,8 +100,8 @@ contains
 
       deallocate( tcond, dtcond, xicond, dxicond )
       deallocate( delxr2, delxh2, rgrav )
-      deallocate( beta, dbeta, height, ekpump, oheight )
-      deallocate( r, or1, or2 )
+      deallocate( beta, dbeta, height, ekpump, oheight, d2beta, d3beta )
+      deallocate( r, or1, or2, or3 )
 
    end subroutine finalize_radial_functions
 !------------------------------------------------------------------------------
@@ -141,6 +145,7 @@ contains
 
       or1(:)=one/r(:)      ! 1/r
       or2(:)=or1*or1(:)    ! 1/r**2
+      or3(:)=or2*or1(:)    ! 1/r**3
 
       !-- arrays for Courant conditions
       c1=(two*pi/(three*real(m_max,cp)))**2
@@ -168,11 +173,15 @@ contains
          ekpump(:) =0.0_cp
          oheight(:)=1.0_cp
          height(:) =1.0_cp
+         d2beta(:) =0.0_cp
+         d3beta(:) =0.0_cp
       else ! Calculate beta only when this is rotating !
          if ( abs(beta_shift) <= 10.0_cp*epsilon(beta_shift) ) then
             height(1) = 0.0_cp
             beta(1)   = 0.0_cp
             dbeta(1)  = 0.0_cp
+            d2beta(1) = 0.0_cp
+            d3beta(1) = 0.0_cp
             ekpump(1) = ek_pump_fac*0.0e0_cp
             oheight(1)= 0.0e0_cp
             do n_r=2,n_r_max
@@ -180,6 +189,9 @@ contains
                oheight(n_r)= half/sqrt(r_cmb**2-r(n_r)**2)
                beta(n_r)   = -r(n_r)/(r_cmb**2-r(n_r)**2)
                dbeta(n_r)  = -(r_cmb**2+r(n_r)**2)/(r_cmb**2-r(n_r)**2)**2
+               d2beta(n_r) = -two*r(n_r)*(three*r_cmb**2+r(n_r)**2)/height(n_r)**6
+               d3beta(n_r) = -6.0_cp*(r_cmb**4+r(n_r)**4+6.0_cp*r(n_r)**2*r_cmb**2)/&
+               &             height(n_r)**8
                ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
                &             (r_cmb**2-r(n_r)**2)**(3.0_cp/4.0_cp)
             end do
@@ -190,6 +202,10 @@ contains
                beta(n_r)   = -r(n_r)/((r_cmb+beta_shift)**2-r(n_r)**2)
                dbeta(n_r)  = -((r_cmb+beta_shift)**2+r(n_r)**2)/   &
                &              ((r_cmb+beta_shift)**2-r(n_r)**2)**2
+               d2beta(n_r) = -two*r(n_r)*(three*(r_cmb+beta_shift)**2+r(n_r)**2)/ &
+               &              height(n_r)**6
+               d3beta(n_r) = -6.0_cp*((r_cmb+beta_shift)**4+r(n_r)**4+6.0_cp* &
+               &              r(n_r)**2*(r_cmb+beta_shift)**2)/height(n_r)**8
                ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/      &
                &             ((r_cmb+beta_shift)**2-r(n_r)**2)**(3.0_cp/4.0_cp)
             end do

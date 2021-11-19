@@ -15,6 +15,7 @@ module mloop_fd_mod
    use time_schemes, only: type_tscheme
    use timers_mod, only: timers_type, timer_type
    use update_temp_fd_mod
+   use update_psi_fd_mod
 
    implicit none
 
@@ -32,14 +33,17 @@ contains
    subroutine initialize_mloop_fd
 
       n_tri=0
-      n_penta=0   
-      !call initialize_psi_fd()
+      n_penta=1   
+      call initialize_psi_fd()
+      lPsimat_FD(:)=.false.
       if ( l_heat ) then
          call initialize_temp_fd()
          lTmat_FD(:)=.false.
          n_tri = n_tri+1
       end if
       if ( l_chem ) then
+         !call initialize_comp_fd()
+         !lXimat_FD(:)=.false.
          n_tri = n_tri+1
       end if
 
@@ -55,16 +59,19 @@ contains
 
       deallocate( array_of_requests )
       if ( l_heat ) call finalize_temp_fd()
+      call finalize_psi_fd()
 
    end subroutine finalize_mloop_fd
 !------------------------------------------------------------------------------------
-   subroutine finish_explicit_assembly_Rdist(us_Rloc,dVsT_Rloc, dVsXi_Rloc,   &
-              &                              dVsOm_Rloc, dTdt, dxidt, dpsidt, &
-              &                              tscheme, vp_bal, vort_bal)
+   subroutine finish_explicit_assembly_Rdist(us_Rloc,temp_Rloc,xi_Rloc,dVsT_Rloc,    &
+              &                              dVsXi_Rloc,dVsOm_Rloc,dTdt,dxidt,dpsidt,&
+              &                              tscheme, vort_bal)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       complex(cp),         intent(in) :: us_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: temp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: xi_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(inout) :: dVsT_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(inout) :: dVsXi_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(inout) :: dVsOm_Rloc(n_m_max,nRstart:nRstop)
@@ -73,11 +80,13 @@ contains
       type(type_tarray),   intent(inout) :: dTdt
       type(type_tarray),   intent(inout) :: dxidt
       type(type_tarray),   intent(inout) :: dpsidt
-      type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
 
+      call finish_exp_psi_Rdist(us_Rloc, dVsOm_Rloc, temp_Rloc, xi_Rloc, &
+           &                    dpsidt%expl(:,:,tscheme%istage), vort_bal)
+
       if ( l_heat ) then
-         call finish_exp_temp_Rdist(us_Rloc, dVsT_Rloc, dpsidt%expl(:,:,tscheme%istage))
+         call finish_exp_temp_Rdist(us_Rloc, dVsT_Rloc, dTdt%expl(:,:,tscheme%istage))
       end if
 
    end subroutine finish_explicit_assembly_Rdist
@@ -94,6 +103,7 @@ contains
       !-- Local variable
       type(type_tarray) :: dummy
 
+      lPsimat_FD(:)=.false.
       if ( l_heat ) lTmat_FD(:) =.false.
 
       call MPI_Barrier(MPI_COMM_WORLD,ierr)
@@ -102,7 +112,7 @@ contains
 
       if ( l_heat ) call prepare_temp_FD(tscheme, dummy)
       !if ( l_chem ) call prepareXi_FD(tscheme, dummy)
-      !call prepare_psi_FD(tscheme, dummy, .false.)
+      call prepare_psi_fd(tscheme, dummy)
 
       call find_faster_block() ! Find the fastest blocking
 
@@ -137,12 +147,18 @@ contains
       type(timers_type),   intent(inout) :: timers
 
       if ( lMat ) then ! update matrices
+         lPsimat_FD(:)=.false.
          if ( l_heat ) lTmat_FD(:)=.false.
+         !if ( l_chem ) lXimat_FD(:)=.false.
       end if
 
       !-- Mainly assemble the r.h.s. and rebuild the matrices if required
       if ( l_heat ) call prepare_temp_FD(tscheme, dTdt)
+      !if ( l_chem ) call prepare_comp_FD(tscheme, dxidt)
+      call prepare_psi_FD(tscheme, dpsidt)
 
+      !-- solve the uphi0 equation on its own (one single m is involved)
+      call upMat_FD%solver_single(up0_ghost, nRstart, nRstop)
 
       !-----------------------------------------------------------
       !--- This is where the matrices are solved
@@ -155,9 +171,12 @@ contains
       !-- Now simply fill the ghost zones to ensure the boundary conditions
       if ( l_heat ) call fill_ghosts_temp(temp_ghost)
       !if ( l_chemical_conv ) call fill_ghosts_Xi(xi_ghost)
+      call fill_ghosts_psi(psi_ghost, up0_ghost)
 
       !-- Finally build the radial derivatives and the arrays for next iteration
       if ( l_heat ) call update_temp_FD(temp_Rloc, dtemp_Rloc, dTdt, tscheme)
+      call update_psi_FD(us_Rloc, up_Rloc, om_Rloc, dpsidt, tscheme, vp_bal, &
+           &             vort_bal)
 
    end subroutine mloop_Rdist
 !------------------------------------------------------------------------------------
@@ -197,9 +216,9 @@ contains
             !tag = tag+1
          end if
 
-         !call psiMat_FD%solver_up(psi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
-         !     &                 array_of_requests, req, n_ms_block, n_m_block)
-         !tag = tag+2
+         call psiMat_FD%solver_up(psi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
+              &                 array_of_requests, req, n_ms_block, n_m_block)
+         tag = tag+2
       end do
 
       do n_ms_block=1,n_m_max,block_sze
@@ -221,9 +240,9 @@ contains
          !   tag = tag+1
          !end if
 
-         !call psiMat_FD%solver_dn(psi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
-         !     &                   array_of_requests, req, n_ms_block, n_m_block)
-         !tag = tag+2
+         call psiMat_FD%solver_dn(psi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
+              &                   array_of_requests, req, n_ms_block, n_m_block)
+         tag = tag+2
       end do
 
       !$omp master
@@ -243,9 +262,9 @@ contains
          !   tag = tag+1
          !end if
 
-         !call psiMat_FD%solver_finish(psi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
-         !     &                       tag, array_of_requests, req)
-         !tag = tag+2
+         call psiMat_FD%solver_finish(psi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
+              &                       tag, array_of_requests, req)
+         tag = tag+2
       end do
 
       call MPI_Waitall(req-1, array_of_requests(1:req-1), MPI_STATUSES_IGNORE, ierr)
@@ -285,7 +304,6 @@ contains
 
    end function set_block_number
 !------------------------------------------------------------------------------------
-!--------------------------------------------------------------------------------
    subroutine find_faster_block
       !
       ! This routine is used to find the best lm-block size for MPI communication.

@@ -19,7 +19,7 @@ module init_fields
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max, n_m_max
    use useful, only: logWrite, abortRun, gausslike_compact_center, &
        &             gausslike_compact_middle, gausslike_compact_edge
-   use radial_der, only: get_dr, exch_ghosts, bulk_to_ghost
+   use radial_der, only: get_dr, exch_ghosts, bulk_to_ghost, get_dr_Rloc
    use fourier, only: fft
    use checkpoints, only: read_checkpoint
    use time_schemes, only: type_tscheme
@@ -32,6 +32,8 @@ module init_fields
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
    use update_psi_integ_smat, only: get_psi_rhs_imp_int_smat
    use update_psi_integ_dmat, only: get_psi_rhs_imp_int_dmat
+   use update_psi_fd_mod, only: get_psi_rhs_imp_ghost, psi_ghost, fill_ghosts_psi, &
+       &                        up0_ghost
    use fields
    use fieldsLast
    use precision_mod
@@ -51,6 +53,7 @@ contains
       class(type_tscheme), intent(inout) :: tscheme
 
       !-- Local variables
+      complex(cp) :: psi_Rloc(n_m_max, nRstart:nRstop)
       integer :: m, n_r, n_m
       logical :: lMat
       real(cp) :: h2
@@ -114,7 +117,8 @@ contains
 
       if ( init_u /= 0 ) call initU(us_Mloc, up_Mloc)
 
-      if ( l_finite_diff ) then
+      if ( l_finite_diff ) then ! Finite diff. are used in radius
+
          if ( l_heat ) call m2r_single%transp_m2r(temp_Mloc, temp_Rloc)
          if ( l_chem ) call m2r_single%transp_m2r(xi_Mloc, xi_Rloc)
          call m2r_single%transp_m2r(us_Mloc, us_Rloc)
@@ -128,7 +132,33 @@ contains
             call get_temp_rhs_imp_ghost(temp_ghost, dtemp_Rloc, dTdt, 1, .true.)
          end if
 
-      else
+         !-- psi is unknown: rebuild it from us
+         do n_r=nRstart,nRstop
+            do n_m=2,n_m_max
+               m = idx2m(n_m)
+               psi_Rloc(n_m,n_r)=us_Rloc(n_m,n_r)/(ci*real(m,cp)) * r(n_r)
+            end do
+         end do
+         call bulk_to_ghost(up_Rloc(1,:), up0_ghost, 1, nRstart, nRstop, 1, 1, 1)
+         call exch_ghosts(up0_ghost, 1, nRstart, nRstop, 1)
+         call bulk_to_ghost(psi_RLoc, psi_ghost, 2, nRstart, nRstop, n_m_max, &
+              &             1, n_m_max)
+         call exch_ghosts(psi_ghost, n_m_max, nRstart, nRstop, 2)
+         call fill_ghosts_psi(psi_ghost, up0_ghost)
+         call get_psi_rhs_imp_ghost(psi_ghost, up0_ghost, us_Rloc, up_Rloc, om_Rloc, &
+              &                     dpsidt, 1, vp_bal, vort_bal, .true.)
+
+         !-- Construct vorticity (use psi_Rloc for temp array)
+         call get_dr_Rloc(up_Rloc, psi_Rloc, n_m_max, nRstart, nRstop, n_r_max, rscheme)
+         do n_r=nRstart,nRstop
+            do n_m=1,n_m_max
+               m = idx2m(n_m)
+               om_Rloc(n_m,n_r)=psi_Rloc(n_m,n_r)+or1(n_r)*up_Rloc(n_m,n_r)- &
+               &                    or1(n_r)*ci*real(m,cp)*us_Rloc(n_m,n_r)
+            end do
+         end do
+
+      else ! Chebyshev polynomials are used for the radial representation
 
          !-- Reconstruct missing fields, dtemp_Mloc, om_Mloc
          if ( l_heat ) call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, &

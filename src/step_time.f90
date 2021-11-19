@@ -14,16 +14,19 @@ module step_time
        &                 dVsOm_Rloc, dVsOm_Mloc, dpsidt, dTdt, dxidt,     &
        &                 dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,              &
        &                 dt_fields_Rloc_container, dt_fields_Mloc_container
-   use truncation, only: n_m_max
+   use truncation, only: n_m_max, idx2m
    use courant_mod, only: dt_courant
    use radial_der, only: exch_ghosts, bulk_to_ghost
    use blocking, only: nRstart, nRstop
-   use constants, only: half, one
+   use constants, only: half, one, ci
+   use radial_functions, only: r
    use update_temp_coll, only: get_temp_rhs_imp_coll
    use update_xi_coll, only: get_xi_rhs_imp_coll
    use update_temp_fd_mod, only: get_temp_rhs_imp_ghost, temp_ghost, fill_ghosts_temp
    use update_temp_integ, only: get_temp_rhs_imp_int
    use update_xi_integ, only: get_xi_rhs_imp_int
+   use update_psi_fd_mod, only: get_psi_rhs_imp_ghost, psi_ghost, up0_ghost, &
+       &                        fill_ghosts_psi
    use update_psi_integ_smat, only: get_psi_rhs_imp_int_smat
    use update_psi_integ_dmat, only: get_psi_rhs_imp_int_dmat
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
@@ -240,10 +243,10 @@ contains
                !--------------------
                runStart = MPI_Wtime()
                if ( l_finite_diff ) then
-                  call finish_explicit_assembly_Rdist(us_Rloc,dVsT_Rloc,           &
-                       &                              dVsXi_Rloc,dVsOm_Rloc,       &
-                       &                              dTdt, dxidt, dpsidt, tscheme,&
-                       &                              vp_bal, vort_bal)
+                  call finish_explicit_assembly_Rdist(us_Rloc,temp_Rloc,xi_Rloc,   &
+                       &                              dVsT_Rloc,dVsXi_Rloc,        &
+                       &                              dVsOm_Rloc,dTdt,dxidt,dpsidt,&
+                       &                              tscheme,vort_bal)
                else
                   call finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc,      &
                        &                        us_Mloc, up_Mloc, om_Mloc,         &
@@ -384,9 +387,14 @@ contains
 !-------------------------------------------------------------------------------
    subroutine start_from_another_scheme(l_bridge_step, n_time_step, tscheme)
 
+      !-- Input variables
       logical,             intent(in) :: l_bridge_step
       integer,             intent(in) :: n_time_step
       class(type_tscheme), intent(inout) :: tscheme
+
+      !-- Local variables
+      integer :: n_r, n_m, m
+      complex(cp) :: psi_Rloc(n_m_max,nRstart:nRstop)
 
       !-- If the scheme is a multi-step scheme that is not Crank-Nicolson 
       !-- we have to use a different starting scheme
@@ -401,6 +409,22 @@ contains
                call fill_ghosts_temp(temp_ghost)
                call get_temp_rhs_imp_ghost(temp_ghost, dtemp_Rloc, dTdt, 1, .true.)
             end if
+            call bulk_to_ghost(up_Rloc(1,:), up0_ghost, 1, nRstart, nRstop, 1, 1, 1)
+            call exch_ghosts(up0_ghost, 1, nRstart, nRstop, 1)
+            !-- psi is unknown: rebuild it from us
+            do n_r=nRstart,nRstop
+               do n_m=1,n_m_max
+                  m = idx2m(n_m)
+                  if ( m == 0 ) cycle
+                  psi_Rloc(n_m,n_r)=us_Rloc(n_m,n_r)/(ci*real(m,cp)) * r(n_r)
+               end do
+            end do
+            call bulk_to_ghost(psi_Rloc, psi_ghost, 2, nRstart, nRstop, n_m_max, 1, &
+                 &             n_m_max)
+            call exch_ghosts(psi_ghost, 2, nRstart, nRstop, n_m_max)
+            call fill_ghosts_psi(psi_ghost, up0_ghost)
+            call get_psi_rhs_imp_ghost(psi_ghost, up0_ghost, us_Rloc, up_Rloc, om_Rloc, &
+                 &                     dpsidt, 1, vp_bal, vort_bal, .true.)
          else
             if ( l_cheb_coll ) then
 

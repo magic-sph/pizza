@@ -5,7 +5,8 @@ module checkpoints
    use constants, only: zero, two
    use char_manip, only: dble2str
    use blocking, only: nMstart,nMstop,nm_per_rank
-   use communications, only: scatter_from_rank0_to_mloc, r2m_single
+   use communications, only: scatter_from_rank0_to_mloc, r2m_single, &
+       &                     scatter_from_rank0_to_Rloc
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &
@@ -13,6 +14,7 @@ module checkpoints
    use radial_scheme, only: type_rscheme
    use radial_functions, only: rscheme, r
    use chebyshev, only: type_cheb
+   use finite_differences, only: type_fd
    use useful, only: abortRun, polynomial_interpolation
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
@@ -53,7 +55,7 @@ contains
 
       !-- Local variables
       logical :: l_transp
-      integer :: info, fh, filetype, n_o
+      integer :: info, fh, filetype
       integer :: version, header_size
       integer :: istat(MPI_STATUS_SIZE)
       integer :: arr_size(2), arr_loc_size(2), arr_start(2)
@@ -312,8 +314,8 @@ contains
          read(n_start_file) rscheme_version_old, n_in, n_in_2, ratio1, ratio2
          if ( rscheme_version_old == 'cheb' ) then
             allocate ( type_cheb :: rscheme_old )
-         ! else
-            ! allocate ( type_fd :: rscheme_old )
+         else
+            allocate ( type_fd :: rscheme_old )
          end if
 
          call rscheme_old%initialize(n_r_max_old, n_in, n_in_2,l_cheb_coll=.true.,&
@@ -322,9 +324,9 @@ contains
          ! call rscheme_old%get_grid(n_r_max_old, r_icb_old, r_cmb_old, ratio1, &
               ! &                       ratio2, r_old)
 
-         if ( rscheme%version /= rscheme_old%version ) &
-            & write(*,'(/,'' ! New radial scheme (old/new):'',2A4)') &
-            & rscheme_old%version, rscheme%version
+         if ( rscheme%version /= rscheme_old%version )               &
+         &    write(*,'(/,'' ! New radial scheme (old/new):'',2A4)') &
+         &    rscheme_old%version, rscheme%version
 
          allocate( r_old(n_r_max_old) )
          read(n_start_file) r_old
@@ -451,7 +453,11 @@ contains
                     &         lBc=.true.,l_phys_space=l_coll_old)
             end if
             if ( n_o <= tscheme%nexp ) then
-               call scatter_from_rank0_to_mloc(work, dpsidt%expl(:,:,n_o))
+               if ( l_finite_diff ) then
+                  call scatter_from_rank0_to_Rloc(work, dpsidt%expl(:,:,n_o))
+               else
+                  call scatter_from_rank0_to_mloc(work, dpsidt%expl(:,:,n_o))
+               end if
             end if
          end do
 
@@ -464,7 +470,11 @@ contains
                     &         lBc=.true.,l_phys_space=l_coll_old)
             end if
             if ( n_o <= tscheme%nimp ) then
-               call scatter_from_rank0_to_mloc(work, dpsidt%impl(:,:,n_o))
+               if ( l_finite_diff ) then
+                  call scatter_from_rank0_to_Rloc(work, dpsidt%impl(:,:,n_o))
+               else
+                  call scatter_from_rank0_to_mloc(work, dpsidt%impl(:,:,n_o))
+               end if
             end if
          end do
          if ( version > 3 ) then
@@ -476,7 +486,11 @@ contains
                        &         lBc=.false.,l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%nold ) then
-                  call scatter_from_rank0_to_mloc(work, dpsidt%old(:,:,n_o))
+                  if ( l_finite_diff ) then
+                     call scatter_from_rank0_to_Rloc(work, dpsidt%old(:,:,n_o))
+                  else
+                     call scatter_from_rank0_to_mloc(work, dpsidt%old(:,:,n_o))
+                  end if
                end if
             end do
          end if
@@ -502,7 +516,11 @@ contains
                        &         lBc=.true.,l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%nexp ) then
-                  call scatter_from_rank0_to_mloc(work, dTdt%expl(:,:,n_o))
+                  if ( l_finite_diff ) then
+                     call scatter_from_rank0_to_Rloc(work, dTdt%expl(:,:,n_o))
+                  else
+                     call scatter_from_rank0_to_mloc(work, dTdt%expl(:,:,n_o))
+                  end if
                end if
             end do
 
@@ -515,7 +533,11 @@ contains
                        &         lBc=.true.,l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%nimp ) then
-                  call scatter_from_rank0_to_mloc(work, dTdt%impl(:,:,n_o))
+                  if ( l_finite_diff ) then
+                     call scatter_from_rank0_to_Rloc(work, dTdt%impl(:,:,n_o))
+                  else
+                     call scatter_from_rank0_to_mloc(work, dTdt%impl(:,:,n_o))
+                  end if
                end if
             end do
             if ( version > 3 ) then
@@ -527,7 +549,11 @@ contains
                           &         lBc=.false.,l_phys_space=l_coll_old)
                   end if
                   if ( n_o <= tscheme%nold ) then
-                     call scatter_from_rank0_to_mloc(work, dTdt%old(:,:,n_o))
+                     if ( l_finite_diff ) then
+                        call scatter_from_rank0_to_Rloc(work, dTdt%old(:,:,n_o))
+                     else
+                        call scatter_from_rank0_to_mloc(work, dTdt%old(:,:,n_o))
+                     end if
                   end if
                end do
             end if
@@ -555,7 +581,11 @@ contains
                        &         lBc=.true.,l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%nexp ) then
-                  call scatter_from_rank0_to_mloc(work, dxidt%expl(:,:,n_o))
+                  if ( l_finite_diff ) then
+                     call scatter_from_rank0_to_Rloc(work, dxidt%expl(:,:,n_o))
+                  else
+                     call scatter_from_rank0_to_mloc(work, dxidt%expl(:,:,n_o))
+                  end if
                end if
             end do
 
@@ -568,7 +598,11 @@ contains
                        &         lBc=.true.,l_phys_space=l_coll_old)
                end if
                if ( n_o <= tscheme%nimp ) then
-                  call scatter_from_rank0_to_mloc(work, dxidt%impl(:,:,n_o))
+                  if ( l_finite_diff ) then
+                     call scatter_from_rank0_to_Rloc(work, dxidt%impl(:,:,n_o))
+                  else
+                     call scatter_from_rank0_to_mloc(work, dxidt%impl(:,:,n_o))
+                  end if
                end if
             end do
             if ( version > 3 ) then
@@ -580,7 +614,11 @@ contains
                           &         lBc=.false.,l_phys_space=l_coll_old)
                   end if
                   if ( n_o <= tscheme%nold ) then
-                     call scatter_from_rank0_to_mloc(work, dxidt%old(:,:,n_o))
+                     if ( l_finite_diff ) then
+                        call scatter_from_rank0_to_Rloc(work, dxidt%old(:,:,n_o))
+                     else
+                        call scatter_from_rank0_to_mloc(work, dxidt%old(:,:,n_o))
+                     end if
                   end if
                end do
             end if

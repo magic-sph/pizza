@@ -32,7 +32,8 @@ module communications
    public :: initialize_communications, &
    &         gather_from_mloc_to_rank0, scatter_from_rank0_to_mloc, &
    &         finalize_communications, reduce_radial_on_rank,        &
-   &         my_reduce_mean, my_allreduce_maxloc
+   &         my_reduce_mean, my_allreduce_maxloc,                   &
+   &         scatter_from_rank0_to_Rloc
 
 contains
 
@@ -233,6 +234,60 @@ contains
       deallocate ( scounts, sdisp, rbuff, sbuff )
 
    end subroutine scatter_from_rank0_to_mloc
+!------------------------------------------------------------------------------
+   subroutine scatter_from_rank0_to_Rloc(arr_full, arr_Rloc)
+
+      !-- Input variable:
+      complex(cp), intent(in) :: arr_full(n_m_max, n_r_max)
+
+      !-- Output variable:
+      complex(cp), intent(out) :: arr_Rloc(n_m_max, nRstart:nRstop)
+
+      !-- Local variables:
+      complex(cp), allocatable :: rbuff(:), sbuff(:)
+      integer, allocatable :: scounts(:)
+      integer, allocatable :: sdisp(:)
+      integer :: p, ii, n_r, n_m
+
+      allocate( rbuff(nR_per_rank*n_m_max), sbuff(n_m_max*n_r_max) )
+      allocate ( scounts(0:n_procs-1), sdisp(0:n_procs-1) )
+
+      do p=0,n_procs-1
+         scounts(p)=n_m_max*radial_balance(p)%n_per_rank
+      end do
+
+      sdisp(0)=0
+      do p=1,n_procs-1
+         sdisp(p)=sdisp(p-1)+scounts(p-1)
+      end do
+
+      if ( rank == 0 ) then
+         do p = 0, n_procs-1
+            ii = sdisp(p)+1
+            do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
+               do n_m=1,n_m_max
+                  sbuff(ii) = arr_full(n_m,n_r)
+                  ii=ii+1
+               end do
+            end do
+         end do
+      end if
+
+      call MPI_Scatterv(sbuff, scounts, sdisp, MPI_DEF_COMPLEX,         &
+           &            rbuff, nR_per_rank*n_m_max, MPI_DEF_COMPLEX, 0, &
+           &            MPI_COMM_WORLD, ierr)
+
+      ii = 1
+      do n_r=nRstart,nRstop
+         do n_m=1,n_m_max
+            arr_Rloc(n_m,n_r)=rbuff(ii)
+            ii = ii +1
+         end do
+      end do
+
+      deallocate ( scounts, sdisp, rbuff, sbuff )
+
+   end subroutine scatter_from_rank0_to_Rloc
 !------------------------------------------------------------------------------
    subroutine reduce_radial_on_rank(arr_dist, irank)
 

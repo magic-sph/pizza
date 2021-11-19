@@ -1213,10 +1213,8 @@ contains
          n_lu_calls = n_lu_calls + 1
       end if
 
-
       deallocate( stencilA, CorSten, stencilB )
       call Amat%finalize()
-
 
    end subroutine get_lhs_mat_gal
 !------------------------------------------------------------------------------
