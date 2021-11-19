@@ -8,7 +8,7 @@ module parallel_solvers
    use precision_mod
    use parallel_mod
    use mem_alloc, only: bytes_allocated
-   use constants, only: one
+   use constants, only: one, zero
    use truncation, only: n_m_max, n_r_max
 
    implicit none
@@ -38,11 +38,11 @@ module parallel_solvers
       integer :: nRMax
       integer :: mMin
       integer :: mMax
-      real(cp), allocatable :: low2(:,:)
-      real(cp), allocatable :: low1(:,:)
-      real(cp), allocatable :: diag(:,:)
-      real(cp), allocatable :: up1(:,:)
-      real(cp), allocatable :: up2(:,:)
+      complex(cp), allocatable :: low2(:,:)
+      complex(cp), allocatable :: low1(:,:)
+      complex(cp), allocatable :: diag(:,:)
+      complex(cp), allocatable :: up1(:,:)
+      complex(cp), allocatable :: up2(:,:)
    contains
       procedure :: initialize => initialize_5
       procedure :: finalize => finalize_5
@@ -102,11 +102,11 @@ contains
       bytes_allocated = bytes_allocated+5*(mMax-mMin+1)*(nRstop-nRstart+1)*SIZEOF_DEF_REAL
 
       !-- Fill an identity matrix by default
-      this%low2(:,:)=0.0_cp
-      this%low1(:,:)=0.0_cp
+      this%low2(:,:)=zero
+      this%low1(:,:)=zero
       this%diag(:,:)=one
-      this%up1(:,:) =0.0_cp
-      this%up2(:,:) =0.0_cp
+      this%up1(:,:) =zero
+      this%up2(:,:) =zero
 
    end subroutine initialize_5
 !-------------------------------------------------------------------------------------
@@ -238,10 +238,8 @@ contains
       nR0 = nRstart
       if ( nRstart > 1 ) then ! Not the first block
          nR0 = nR0-1
-#ifdef WITH_MPI
          call MPI_Recv(x(nR0), 1, MPI_DEF_COMPLEX, rank-1, tag, MPI_COMM_WORLD, &
               &        MPI_STATUS_IGNORE, ierr)
-#endif
       else ! Lower boundary: x -> x - low * x(i-1)
          x(nR0)=x(nR0)-this%low(1,nR0)*x(nR0-1)
       end if
@@ -251,37 +249,24 @@ contains
       end do
 
       if ( nRstop < n_r_max ) then ! Not the last block
-#ifdef WITH_MPI
-         !call MPI_ISend(x(nRstop), 1, MPI_DEF_COMPLEX, rank+1, &
-         !     &         tag, MPI_COMM_WORLD, array_req(req), ierr)
-         !req = req+1
          call MPI_SSend(x(nRstop), 1, MPI_DEF_COMPLEX, rank+1, tag, MPI_COMM_WORLD, ierr)
-#endif
       end if
 
       tag = tag+1
-#ifdef WITH_MPI
       if ( nRstop < n_r_max ) then ! This is not the last chunk
          call MPI_Recv(x(nRstop+1), 1, MPI_DEF_COMPLEX, rank+1, &
               &        tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
       end if
-#endif
 
       do nR=nRstop,nRstart,-1
          x(nR)=(x(nR)-this%up(1,nR)*x(nR+1))*this%diag(1,nR)
       end do
 
-#ifdef WITH_MPI
       if ( nRstart > 1 ) then
-         !call MPI_ISend(x(nRstart), 1, MPI_DEF_COMPLEX, rank-1, &
-         !     &         tag, MPI_COMM_WORLD, array_req(req), ierr)
-         !req=req+1
          call MPI_SSend(x(nRstart), 1, MPI_DEF_COMPLEX, rank-1, tag, MPI_COMM_WORLD, ierr)
       end if
-#endif
 
       tag = tag+1
-#ifdef WITH_MPI
       if ( nRstart /= 1 ) then
          if ( nRstart == 2 ) then ! send down
             call MPI_Ssend(x(nRstart), 1, MPI_DEF_COMPLEX, rank-1, tag, &
@@ -304,11 +289,7 @@ contains
 
       if ( nRstop < n_r_max .and. nRstop >= 1 ) then ! This is not the last block
          call MPI_Ssend(x(nRstop), 1, MPI_DEF_COMPLEX, rank+1, tag, MPI_COMM_WORLD, ierr)
-         !call MPI_Isend(x(nRstop), mu-mb+1, MPI_DEF_COMPLEX, rank+1, &
-         !     &         tag, MPI_COMM_WORLD, array_req(req), ierr)
-         !req = req+1
       end if
-#endif
 
    end subroutine solver_single
 !-------------------------------------------------------------------------------------
@@ -343,13 +324,11 @@ contains
       nR0 = nRstart
       if ( nRstart > 1 ) then ! Not the first block
          nR0 = nR0-1
-#ifdef WITH_MPI
          !$omp master
          call MPI_Recv(x(mb:mu,nR0), mu-mb+1, MPI_DEF_COMPLEX, rank-1, tag, &
               &        MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
          !$omp end master
          !$omp barrier
-#endif
       else ! Lower boundary: x -> x - low * x(i-1)
          M_LOOP(mStart, mStop, x(n_m,nR0)=x(n_m,nR0)-this%low(n_m,nR0)*x(n_m,nR0-1))
          !$omp barrier
@@ -361,7 +340,6 @@ contains
       !$omp barrier
 
       if ( nRstop < n_r_max ) then ! Not the last block
-#ifdef WITH_MPI
          !$omp barrier
          !$omp master
          call MPI_ISend(x(mb:mu,nRstop), mu-mb+1, MPI_DEF_COMPLEX, rank+1, &
@@ -370,7 +348,6 @@ contains
          !call MPI_SSend(x(mb:mu,nRstop), mu-mb+1, MPI_DEF_COMPLEX, rank+1, &
          !     &         tag, MPI_COMM_WORLD, ierr)
          !$omp end master
-#endif
       end if
 
    end subroutine solver_up_3
@@ -404,7 +381,6 @@ contains
       lb=mStart
       lu=mStop
 
-#ifdef WITH_MPI
       if ( nRstart > 1 ) then ! This is not the first block
          !$omp master
          call MPI_IRecv(x(mb:mu,nRstart-2), mu-mb+1, MPI_DEF_COMPLEX, rank-1,&
@@ -417,14 +393,12 @@ contains
          !$omp end master
          !$omp barrier
       end if
-#endif
 
       do nR=nRstart,nRstop
          M_LOOP(lb,lu,x(n_m,nR)=this%diag(n_m,nR)*x(n_m,nR)-this%low1(n_m,nR)*x(n_m,nR-1)-this%low2(n_m,nR)*x(n_m,nR-2))
       end do
       !$omp barrier
 
-#ifdef WITH_MPI
       if ( nRstop < n_r_max ) then ! This is not the last block
          !$omp barrier
          !$omp master
@@ -435,7 +409,6 @@ contains
          req = req+2
          !$omp end master
       end if
-#endif
 
    end subroutine solver_up_5
 !-------------------------------------------------------------------------------------
@@ -467,7 +440,6 @@ contains
       mb = ms_block
       mu = mb+n_m_block-1
 
-#ifdef WITH_MPI
       if ( nRstop < n_r_max ) then ! This is not the last chunk
          !$omp master
          call MPI_Recv(x(mb:mu,nRstop+1), mu-mb+1, MPI_DEF_COMPLEX, rank+1, &
@@ -475,13 +447,11 @@ contains
          !$omp end master
          !$omp barrier
       end if
-#endif
 
       do nR=nRstop,nRstart,-1
          M_LOOP(mStart,mStop,x(n_m,nR)=(x(n_m,nR)-this%up(n_m,nR)*x(n_m,nR+1))*this%diag(n_m,nR))
       end do
 
-#ifdef WITH_MPI
       if ( nRstart > 1 ) then
          !$omp barrier
          !$omp master
@@ -492,7 +462,6 @@ contains
          !     &         tag, MPI_COMM_WORLD, ierr)
          !$omp end master
       end if
-#endif
 
    end subroutine solver_dn_3
 !-------------------------------------------------------------------------------------
@@ -524,7 +493,6 @@ contains
       mb = ms_block
       mu = mb+n_m_block-1
 
-#ifdef WITH_MPI
       if ( nRstop < n_r_max ) then ! This is not the last rank
          !$omp master
          call MPI_IRecv(x(mb:mu,nRstop+1), mu-mb+1, MPI_DEF_COMPLEX, rank+1, &
@@ -535,13 +503,11 @@ contains
          !$omp end master
          !$omp barrier
       end if
-#endif
 
       do nR=nRstop,nRstart,-1
          M_LOOP(mStart,mStop,x(n_m,nR)=x(n_m,nR)-this%up1(n_m,nR)*x(n_m,nR+1)-this%up2(n_m,nR)*x(n_m,nR+2))
       end do
 
-#ifdef WITH_MPI
       !$omp barrier
       !$omp master
       if ( nRstart > 1 ) then
@@ -552,7 +518,6 @@ contains
          req=req+2
       end if
       !$omp end master
-#endif
 
    end subroutine solver_dn_5
 !-------------------------------------------------------------------------------------
@@ -582,7 +547,6 @@ contains
       mb = ms_block
       mu = mb+n_m_block-1
 
-#ifdef WITH_MPI
       !$omp master
       if ( nRstart /= 1 ) then
          if ( nRstart == 2 ) then ! send down
@@ -612,7 +576,6 @@ contains
          req = req+1
       end if
       !$omp end master
-#endif
 
    end subroutine solver_finish_3
 !-------------------------------------------------------------------------------------
@@ -647,7 +610,6 @@ contains
       istart = 1
       istop = n_r_max
 
-#ifdef WITH_MPI
       !$omp master
       if ( nRstart == 2 ) then ! Send down
          call MPI_Isend(x(mb:mu,nRstart), mu-mb+1, MPI_DEF_COMPLEX, rank-1, &
@@ -698,7 +660,6 @@ contains
          req=req+1
       end if
       !$omp end master
-#endif
 
    end subroutine solver_finish_5
 !-------------------------------------------------------------------------------------
