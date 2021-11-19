@@ -29,7 +29,7 @@ module communications
    class(type_mpitransp), public, pointer :: r2m_fields, r2m_single
    class(type_mpitransp), public, pointer :: m2r_fields, m2r_single
 
-   public :: initialize_communications, &
+   public :: initialize_communications, gather_from_Rloc,           &
    &         gather_from_mloc_to_rank0, scatter_from_rank0_to_mloc, &
    &         finalize_communications, reduce_radial_on_rank,        &
    &         my_reduce_mean, my_allreduce_maxloc,                   &
@@ -234,6 +234,36 @@ contains
       deallocate ( scounts, sdisp, rbuff, sbuff )
 
    end subroutine scatter_from_rank0_to_mloc
+!------------------------------------------------------------------------------
+   subroutine gather_from_Rloc(arr_Rloc, arr_glob, irank)
+      !
+      ! This subroutine gather a r-distributed array on rank=irank
+      !
+
+      !-- Input variable
+      real(cp), intent(in) :: arr_Rloc(nRstart:nRstop)
+      integer,  intent(in) :: irank
+
+      !-- Output variable
+      real(cp), intent(out) :: arr_glob(1:n_r_max)
+
+      !-- Local variables:
+      integer :: p
+      integer :: scount, rcounts(0:n_procs-1), rdisp(0:n_procs-1)
+
+      scount = nRstop-nRstart+1
+      do p=0,n_procs-1
+         rcounts(p)=radial_balance(p)%n_per_rank
+      end do
+      rdisp(0)=0
+      do p=1,n_procs-1
+         rdisp(p)=rdisp(p-1)+rcounts(p-1)
+      end do
+
+      call MPI_GatherV(arr_Rloc, scount, MPI_DEF_REAL, arr_glob, rcounts, &
+           &           rdisp, MPI_DEF_REAL, irank, MPI_COMM_WORLD, ierr)
+
+   end subroutine gather_from_Rloc
 !------------------------------------------------------------------------------
    subroutine scatter_from_rank0_to_Rloc(arr_full, arr_Rloc)
 
