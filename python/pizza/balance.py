@@ -257,7 +257,7 @@ class PizzaBalance(PizzaSetup):
                 data[0:6]
             radius = data[6:7+n_r_max-1]
             data = data[7+n_r_max-1:]
-            nsteps = len(data)/(5*n_r_max+1)
+            nsteps = len(data)//(5*n_r_max+1)
 
             data = data.reshape((nsteps, 5*n_r_max+1))
             time = data[:, 0]
