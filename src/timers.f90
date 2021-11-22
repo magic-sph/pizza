@@ -110,7 +110,9 @@ contains
       end if
       this%mpi_comms = this%mpi_comms/this%n_mpi_comms
       call my_reduce_mean(this%mpi_comms, 0)
-      this%fft = this%fft/this%n_fft_calls
+      if ( this%n_fft_calls /= 0 ) then
+         this%fft = this%fft/this%n_fft_calls
+      end if
       if ( this%n_lu_calls /= 0 ) then
          call my_reduce_mean(this%fft, 0)
          this%lu = this%lu/this%n_lu_calls

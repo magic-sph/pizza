@@ -28,6 +28,7 @@ module init_fields
    use update_temp_fd_mod, only: get_temp_rhs_imp_ghost, temp_ghost, fill_ghosts_temp
    use update_xi_coll, only: get_xi_rhs_imp_coll
    use update_xi_integ, only: get_xi_rhs_imp_int
+   use update_xi_fd_mod, only: get_xi_rhs_imp_ghost, xi_ghost, fill_ghosts_xi
    use update_psi_coll_smat, only: get_psi_rhs_imp_coll_smat
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
    use update_psi_integ_smat, only: get_psi_rhs_imp_int_smat
@@ -130,6 +131,14 @@ contains
             call exch_ghosts(temp_ghost, n_m_max, nRstart, nRstop, 1)
             call fill_ghosts_temp(temp_ghost)
             call get_temp_rhs_imp_ghost(temp_ghost, dtemp_Rloc, dTdt, 1, .true.)
+         end if
+
+         if ( l_chem ) then
+            call bulk_to_ghost(xi_RLoc, xi_ghost, 1, nRstart, nRstop, n_m_max, &
+                 &             1, n_m_max)
+            call exch_ghosts(xi_ghost, n_m_max, nRstart, nRstop, 1)
+            call fill_ghosts_temp(xi_ghost)
+            call get_xi_rhs_imp_ghost(xi_ghost, dxi_Rloc, dxidt, 1, .true.)
          end if
 
          !-- psi is unknown: rebuild it from us

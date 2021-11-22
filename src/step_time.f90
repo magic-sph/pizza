@@ -25,6 +25,7 @@ module step_time
    use update_temp_fd_mod, only: get_temp_rhs_imp_ghost, temp_ghost, fill_ghosts_temp
    use update_temp_integ, only: get_temp_rhs_imp_int
    use update_xi_integ, only: get_xi_rhs_imp_int
+   use update_xi_fd_mod, only: get_xi_rhs_imp_ghost, xi_ghost, fill_ghosts_xi
    use update_psi_fd_mod, only: get_psi_rhs_imp_ghost, psi_ghost, up0_ghost, &
        &                        fill_ghosts_psi
    use update_psi_integ_smat, only: get_psi_rhs_imp_int_smat
@@ -305,7 +306,7 @@ contains
                   call mloop_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, &
                        &           om_Rloc, us_Rloc, up_Rloc, dTdt, dxidt,   &
                        &           dpsidt, vp_bal, vort_bal, tscheme, lMat,  &
-                       &           l_log_next, timers)
+                       &           timers)
                else
                   call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,       &
                        &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,      & 
@@ -416,6 +417,15 @@ contains
                call fill_ghosts_temp(temp_ghost)
                call get_temp_rhs_imp_ghost(temp_ghost, dtemp_Rloc, dTdt, 1, .true.)
             end if
+
+            if ( l_chem ) then
+               call bulk_to_ghost(xi_Rloc, xi_ghost, 1, nRstart, nRstop, n_m_max,&
+                    &             1, n_m_max)
+               call exch_ghosts(xi_ghost, n_m_max, nRstart, nRstop, 1)
+               call fill_ghosts_xi(xi_ghost)
+               call get_xi_rhs_imp_ghost(xi_ghost, dxi_Rloc, dxidt, 1, .true.)
+            end if
+
             call bulk_to_ghost(up_Rloc(1,:), up0_ghost, 1, nRstart, nRstop, 1, 1, 1)
             call exch_ghosts(up0_ghost, 1, nRstart, nRstop, 1)
             !-- psi is unknown: rebuild it from us

@@ -15,6 +15,7 @@ module mloop_fd_mod
    use time_schemes, only: type_tscheme
    use timers_mod, only: timers_type, timer_type
    use update_temp_fd_mod
+   use update_xi_fd_mod
    use update_psi_fd_mod
 
    implicit none
@@ -42,8 +43,8 @@ contains
          n_tri = n_tri+1
       end if
       if ( l_chem ) then
-         !call initialize_comp_fd()
-         !lXimat_FD(:)=.false.
+         call initialize_xi_fd()
+         lXimat_FD(:)=.false.
          n_tri = n_tri+1
       end if
       call initialize_psi_fd(tscheme)
@@ -63,6 +64,7 @@ contains
 
       deallocate( array_of_requests )
       if ( l_heat ) call finalize_temp_fd()
+      if ( l_chem ) call finalize_xi_fd()
       call finalize_psi_fd(tscheme)
 
    end subroutine finalize_mloop_fd
@@ -95,6 +97,10 @@ contains
          call finish_exp_temp_Rdist(us_Rloc, dVsT_Rloc, dTdt%expl(:,:,tscheme%istage))
       end if
 
+      if ( l_chem ) then
+         call finish_exp_xi_Rdist(us_Rloc, dVsXi_Rloc, dxidt%expl(:,:,tscheme%istage))
+      end if
+
    end subroutine finish_explicit_assembly_Rdist
 !------------------------------------------------------------------------------------
    subroutine test_mloop(tscheme)
@@ -111,13 +117,14 @@ contains
 
       lPsimat_FD(:)=.false.
       if ( l_heat ) lTmat_FD(:) =.false.
+      if ( l_chem ) lXimat_FD(:) =.false.
 
       call MPI_Barrier(MPI_COMM_WORLD,ierr)
       call dummy%initialize(1, n_m_max, nRstart, nRstop, tscheme%nold, tscheme%nexp,&
            &                tscheme%nimp, l_allocate_exp=.true.)
 
       if ( l_heat ) call prepare_temp_FD(tscheme, dummy)
-      !if ( l_chem ) call prepareXi_FD(tscheme, dummy)
+      if ( l_chem ) call prepare_xi_FD(tscheme, dummy)
       call prepare_psi_fd(tscheme, dummy)
 
       call find_faster_block() ! Find the fastest blocking
@@ -130,12 +137,11 @@ contains
 !------------------------------------------------------------------------------------
    subroutine mloop_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, om_Rloc, &
               &           us_Rloc, up_Rloc, dTdt, dxidt, dpsidt, vp_bal,     &
-              &           vort_bal, tscheme, lMat, l_log_next, timers)
+              &           vort_bal, tscheme, lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
-      logical,             intent(in) :: l_log_next
 
       !-- Output variables
       complex(cp),         intent(out) :: temp_Rloc(n_m_max,nRstart:nRstop)
@@ -166,12 +172,12 @@ contains
       if ( lMat ) then ! update matrices
          lPsimat_FD(:)=.false.
          if ( l_heat ) lTmat_FD(:)=.false.
-         !if ( l_chem ) lXimat_FD(:)=.false.
+         if ( l_chem ) lXimat_FD(:)=.false.
       end if
 
       !-- Mainly assemble the r.h.s. and rebuild the matrices if required
       if ( l_heat ) call prepare_temp_FD(tscheme, dTdt)
-      !if ( l_chem ) call prepare_comp_FD(tscheme, dxidt)
+      if ( l_chem ) call prepare_xi_FD(tscheme, dxidt)
       call prepare_psi_FD(tscheme, dpsidt)
 
       !-- solve the uphi0 equation on its own (one single m is involved)
@@ -191,11 +197,12 @@ contains
 
       !-- Now simply fill the ghost zones to ensure the boundary conditions
       if ( l_heat ) call fill_ghosts_temp(temp_ghost)
-      !if ( l_chemical_conv ) call fill_ghosts_Xi(xi_ghost)
+      if ( l_chem ) call fill_ghosts_xi(xi_ghost)
       call fill_ghosts_psi(psi_ghost, up0_ghost)
 
       !-- Finally build the radial derivatives and the arrays for next iteration
       if ( l_heat ) call update_temp_FD(temp_Rloc, dtemp_Rloc, dTdt, tscheme)
+      if ( l_chem ) call update_xi_FD(xi_Rloc, dxi_Rloc, dxidt, tscheme)
       call update_psi_FD(us_Rloc, up_Rloc, om_Rloc, dpsidt, tscheme, vp_bal, &
            &             vort_bal)
 
@@ -231,7 +238,7 @@ contains
       type(type_tarray),   intent(inout) :: dxidt
 
       if ( l_heat ) call assemble_temp_Rdist(temp_Rloc, dtemp_Rloc, dTdt, tscheme)
-      !if ( l_chem ) call assemble_comp_Rdist(xi_Rloc, dxi_Rloc, dxidt, tscheme)
+      if ( l_chem ) call assemble_xi_Rdist(xi_Rloc, dxi_Rloc, dxidt, tscheme)
       call assemble_psi_Rloc(block_sze, nblocks, us_Rloc, up_Rloc, om_Rloc, dpsidt, &
            &                 tscheme, vp_bal, vort_bal)
 
@@ -268,13 +275,13 @@ contains
          end if
 
          if ( l_chem ) then
-            !call xiMat_FD%solver_up(xi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
-            !     &                  array_of_requests, req, n_ms_block, n_m_block)
-            !tag = tag+1
+            call xiMat_FD%solver_up(xi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
+                 &                  array_of_requests, req, n_ms_block, n_m_block)
+            tag = tag+1
          end if
 
          call psiMat_FD%solver_up(psi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
-              &                 array_of_requests, req, n_ms_block, n_m_block)
+              &                   array_of_requests, req, n_ms_block, n_m_block)
          tag = tag+2
       end do
 
@@ -291,11 +298,11 @@ contains
             tag = tag+1
          end if
 
-         !if ( l_chem ) then
-         !   call xiMat_FD%solver_dn(xi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
-         !        &                  array_of_requests, req, n_ms_block, n_m_block)
-         !   tag = tag+1
-         !end if
+         if ( l_chem ) then
+            call xiMat_FD%solver_dn(xi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
+                 &                  array_of_requests, req, n_ms_block, n_m_block)
+            tag = tag+1
+         end if
 
          call psiMat_FD%solver_dn(psi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
               &                   array_of_requests, req, n_ms_block, n_m_block)
@@ -313,11 +320,11 @@ contains
             tag = tag+1
          end if
 
-         !if ( l_chem ) then
-         !   call xiMat_FD%solver_finish(xi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
-         !        &                      tag, array_of_requests, req)
-         !   tag = tag+1
-         !end if
+         if ( l_chem ) then
+            call xiMat_FD%solver_finish(xi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
+                 &                      tag, array_of_requests, req)
+            tag = tag+1
+         end if
 
          call psiMat_FD%solver_finish(psi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
               &                       tag, array_of_requests, req)
