@@ -329,13 +329,13 @@ contains
 
                   if ( l_ek_pump ) then
                      dpsidt%impl(n_m,nR,istage)=dpsidt%impl(n_m,nR,istage)+CorFac*   &
-                     &         beta(nR) * (                       om_Rloc(n_m,nR) +  &
+                     &                    ekpump(nR) * (          om_Rloc(n_m,nR) +  &
                      &                  (or1(nR)+half*beta(nR))  *up_Rloc(n_m,nR) +  &
                      &         (dbeta(nR)+beta(nR)*or1(nR)-half*beta(nR)*beta(nR)+   &
                      &          dm2*(beta(nR)*or1(nR)-or2(nR))+5.0_cp*beta(nR)*ci*   &
                      &          real(m,cp)*or1(nR)*r_cmb*oheight(nR))* psig(n_m,nR))
                      if ( vort_bal%l_calc ) then
-                        vort_bal%pump(n_m,nR)=CorFac*beta(nR) * ( om_Rloc(n_m,nR) +  &
+                        vort_bal%pump(n_m,nR)=CorFac*ekpump(nR)* (om_Rloc(n_m,nR) +  &
                         &               (or1(nR)+half*beta(nR))  *up_Rloc(n_m,nR) +  &
                         &      (dbeta(nR)+beta(nR)*or1(nR)-half*beta(nR)*beta(nR)+   &
                         &       dm2*(beta(nR)*or1(nR)-or2(nR))+5.0_cp*beta(nR)*ci*   &

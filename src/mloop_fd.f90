@@ -159,6 +159,10 @@ contains
          call vp_bal%initialize_dvpdt(up_Rloc, tscheme)
       end if
 
+      if ( vort_bal%l_calc .and. tscheme%istage==1 ) then
+         call vort_bal%initialize_domdt(om_Rloc, tscheme)
+      end if
+
       if ( lMat ) then ! update matrices
          lPsimat_FD(:)=.false.
          if ( l_heat ) lTmat_FD(:)=.false.
@@ -197,6 +201,10 @@ contains
 
       if ( vp_bal%l_calc .and. tscheme%istage==tscheme%nstages ) then
          call vp_bal%finalize_dvpdt(up_Rloc, tscheme)
+      end if
+
+      if ( vort_bal%l_calc .and. tscheme%istage==tscheme%nstages ) then
+         call vort_bal%finalize_domdt(om_Rloc, tscheme)
       end if
 
    end subroutine mloop_Rdist

@@ -9,10 +9,11 @@ module vort_balance
    use constants, only: zero, vol_otc
    use time_schemes, only: type_tscheme
    use mem_alloc, only: bytes_allocated
+   use communications, only: r2m_single
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
-   use blocking, only: nMstart, nMstop, nm_per_rank, m_balance
+   use blocking, only: nMstart, nMstop, nm_per_rank, m_balance, nRstart, nRstop
    use namelists, only: ra, pr, ek, radratio, sc, raxi, tag, r_cmb, r_icb, &
-       &                bl_cut, l_2D_SD
+       &                bl_cut, l_2D_SD, l_finite_diff
    use radial_functions, only: r, height
    use integration, only: simps
    use useful, only: cc2real, getMSD2
@@ -23,6 +24,7 @@ module vort_balance
    private
 
    type, public :: vort_bal_type
+      integer :: nRmin, nRmax, mMin, mMax
       complex(cp), allocatable :: visc(:,:)
       complex(cp), allocatable :: cor(:,:)
       complex(cp), allocatable :: adv(:,:)
@@ -70,17 +72,26 @@ contains
 
       class(vort_bal_type) :: this
 
-      !-- Local variables
-      integer :: n_r, n_m
+      if ( l_finite_diff ) then
+         this%mMin=1
+         this%mMax=n_m_max
+         this%nRmin=nRstart
+         this%nRmax=nRstop
+      else
+         this%mMin=nMstart
+         this%mMax=nMstop
+         this%nRmin=1
+         this%nRmax=n_r_max
+      end if
 
-      allocate( this%visc(nMstart:nMstop,n_r_max) )
-      allocate( this%cor(nMstart:nMstop,n_r_max) )
-      allocate( this%adv(nMstart:nMstop,n_r_max) )
-      allocate( this%dwdt(nMstart:nMstop,n_r_max) )
-      allocate( this%pump(nMstart:nMstop,n_r_max) )
-      allocate( this%buo(nMstart:nMstop,n_r_max) )
-      bytes_allocated = bytes_allocated + 6*n_r_max*(nMstop-nMstart+1)* &
-      &                 SIZEOF_DEF_COMPLEX
+      allocate( this%visc(this%mMin:this%mMax,this%nRmin:this%nRmax) )
+      allocate( this%cor(this%mMin:this%mMax,this%nRmin:this%nRmax) )
+      allocate( this%adv(this%mMin:this%mMax,this%nRmin:this%nRmax) )
+      allocate( this%dwdt(this%mMin:this%mMax,this%nRmin:this%nRmax) )
+      allocate( this%pump(this%mMin:this%mMax,this%nRmin:this%nRmax) )
+      allocate( this%buo(this%mMin:this%mMax,this%nRmin:this%nRmax) )
+      bytes_allocated = bytes_allocated + 6*(this%nRmax-this%nRmin+1)* &
+      &                 (this%mMax-this%mMin+1)*SIZEOF_DEF_COMPLEX
 
       call this%visc2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
       call this%cor2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
@@ -92,16 +103,12 @@ contains
       call this%thwind2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
       call this%cia2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
 
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            this%visc(n_m,n_r)=zero
-            this%cor(n_m,n_r) =zero
-            this%adv(n_m,n_r) =zero
-            this%dwdt(n_m,n_r)=zero
-            this%buo(n_m,n_r) =zero
-            this%pump(n_m,n_r)=zero
-         end do
-      end do
+      this%visc(:,:)=zero
+      this%cor(:,:) =zero
+      this%adv(:,:) =zero
+      this%dwdt(:,:)=zero
+      this%buo(:,:) =zero
+      this%pump(:,:)=zero
 
       this%n_calls = 0
       this%l_calc = .false.
@@ -149,41 +156,27 @@ contains
 
    end subroutine finalize
 !------------------------------------------------------------------------------
-   subroutine initialize_domdt(this, om_Mloc, tscheme)
+   subroutine initialize_domdt(this, om, tscheme)
 
       class(vort_bal_type) :: this
 
       !-- Input variables
-      complex(cp),         intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: om(this%mMin:this%mMax,this%nRmin:this%nRmax)
       class(type_tscheme), intent(in) :: tscheme
 
-      !-- Local variables:
-      integer :: n_r, n_m
-
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            this%dwdt(n_m,n_r)=om_Mloc(n_m,n_r)/tscheme%dt(1)
-         end do
-      end do
+      this%dwdt(:,:)=om(:,:)/tscheme%dt(1)
 
    end subroutine initialize_domdt
 !------------------------------------------------------------------------------
-   subroutine finalize_domdt(this, om_Mloc, tscheme)
+   subroutine finalize_domdt(this, om, tscheme)
 
       class(vort_bal_type) :: this
 
       !-- Input variables
-      complex(cp),         intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: om(this%mMin:this%mMax,this%nRmin:this%nRmax)
       class(type_tscheme), intent(in) :: tscheme
 
-      !-- Local variables:
-      integer :: n_r, n_m
-
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            this%dwdt(n_m,n_r)=om_Mloc(n_m,n_r)/tscheme%dt(1)-this%dwdt(n_m,n_r)
-         end do
-      end do
+      this%dwdt(:,:)=om(:,:)/tscheme%dt(1)-this%dwdt(:,:)
 
    end subroutine finalize_domdt
 !------------------------------------------------------------------------------
@@ -193,21 +186,28 @@ contains
 
       !-- Input variables
       real(cp),    intent(in) :: time
-      complex(cp), intent(in) :: input(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: input(this%mMin:this%mMax,this%nRmin:this%nRmax)
 
       !-- Output variables
       type(mean_sd_2D_type), intent(inout) :: output
       type(mean_sd_type),    intent(inout) :: outM
 
       !-- Local variables
+      complex(cp) :: tmp(nMstart:nMstop, n_r_max)
       real(cp) :: dat(n_r_max), sd, val_m
       integer :: n_r, n_m, m
+
+      if ( l_finite_diff ) then
+         call r2m_single%transp_r2m(input, tmp)
+      else
+         tmp(:,:)=input(:,:)
+      end if
 
       !-- This loop is not very cache-friendly but only done for some outputing
       do n_m=nMstart,nMstop
          m = idx2m(n_m)
          do n_r=1,n_r_max
-            dat(n_r)=cc2real(input(n_m,n_r), m)
+            dat(n_r)=cc2real(tmp(n_m,n_r), m)
             dat(n_r)=dat(n_r)*r(n_r)*height(n_r)
             if ( output%l_SD ) then
                call getMSD2(output%mean(n_m,n_r), output%SD(n_m,n_r), dat(n_r), &
@@ -236,9 +236,6 @@ contains
       real(cp), intent(in) :: time
       logical,  intent(in) :: l_stop_time
       class(vort_bal_type) :: this
-
-      !-- Local variables:
-      integer :: n_r, n_m
 
       this%n_calls = this%n_calls+1
       this%dt = time-this%timeLast
@@ -277,40 +274,23 @@ contains
       !-- Thermal wind balance
       !------
       !-- Make use of pump as a temporary array here
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            this%pump(n_m,n_r)=this%buo(n_m,n_r)+this%cor(n_m,n_r)
-         end do
-      end do
+      this%pump(:,:)=this%buo(:,:)+this%cor(:,:)
       call this%mean_sd_loc(time,this%pump,this%thwind2D,this%thwindM)
 
       !------
       !-- Inertial term: d\omega/dt + div( u \omega )
       !------
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            this%pump(n_m,n_r)=-this%dwdt(n_m,n_r)+this%adv(n_m,n_r)
-         end do
-      end do
+      this%pump(:,:)=-this%dwdt(:,:)+this%adv(:,:)
       call this%mean_sd_loc(time,this%pump,this%iner2D,this%inerM)
 
       !------
       !-- Coriolis-Inertia-Archimedian force balance
       !------
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            this%pump(n_m,n_r)=-this%dwdt(n_m,n_r)+this%adv(n_m,n_r)+ &
-            &                   this%buo(n_m,n_r)+this%cor(n_m,n_r)
-         end do
-      end do
+      this%pump(:,:)=-this%dwdt(:,:)+this%adv(:,:)+this%buo(:,:)+this%cor(:,:)
       call this%mean_sd_loc(time,this%pump,this%cia2D,this%ciaM)
 
       !-- Put zeros in this%pump again!
-      do n_r=1,n_r_max
-         do n_m=nMstart,nMstop
-            this%pump(n_m,n_r)=zero
-         end do
-      end do
+      this%pump(:,:)=zero
 
       this%timeLast = time
 
