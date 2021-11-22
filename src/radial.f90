@@ -191,8 +191,8 @@ contains
                oheight(n_r)= half/sqrt(r_cmb**2-r(n_r)**2)
                beta(n_r)   = -r(n_r)/(r_cmb**2-r(n_r)**2)
                dbeta(n_r)  = -(r_cmb**2+r(n_r)**2)/(r_cmb**2-r(n_r)**2)**2
-               d2beta(n_r) = -two*r(n_r)*(three*r_cmb**2+r(n_r)**2)/height(n_r)**6
-               d3beta(n_r) = -6.0_cp*(r_cmb**4+r(n_r)**4+6.0_cp*r(n_r)**2*r_cmb**2)/&
+               d2beta(n_r) = -128.0_cp*r(n_r)*(three*r_cmb**2+r(n_r)**2)/height(n_r)**6
+               d3beta(n_r) = -1536.0_cp*(r_cmb**4+r(n_r)**4+6.0_cp*r(n_r)**2*r_cmb**2)/&
                &             height(n_r)**8
                ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
                &             (r_cmb**2-r(n_r)**2)**(3.0_cp/4.0_cp)

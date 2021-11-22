@@ -145,7 +145,7 @@ contains
          &         .or. n_frame_signal == 1
          spec%l_calc = l_correct_step(n_time_step-1,n_time_steps,n_spec_step,n_specs) &
          &        .or. n_spec_signal == 1
-         l_vphi_bal_write = l_log .and. l_vphi_balance
+         l_vphi_bal_write = (l_log .and. l_vphi_balance) .and.  (n_time_step>1)
          vp_bal%l_calc = l_log_next .and. l_vphi_balance
          vort_bal%l_calc = l_log_next .and. l_vort_balance
 

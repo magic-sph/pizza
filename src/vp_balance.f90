@@ -7,7 +7,7 @@ module vp_balance
    use precision_mod
    use time_schemes, only: type_tscheme
    use mem_alloc, only: bytes_allocated
-   use truncation, only: n_r_max, m2idx
+   use truncation, only: n_r_max, m2idx, n_m_max
    use blocking, only: nMstart, nMstop, l_rank_has_m0, nRstart, nRstop
    use namelists, only: ra, pr, ek, radratio, sc, raxi, tag, l_finite_diff
    use radial_functions, only: r
@@ -25,7 +25,7 @@ module vp_balance
       real(cp), allocatable :: pump(:)
       logical :: l_calc
       integer :: n_calls
-      integer :: nRmin, nRmax
+      integer :: nRmin, nRmax, mMin, mMax
       integer :: n_vphi_bal_file
    contains
       procedure :: initialize
@@ -49,9 +49,13 @@ contains
       if ( l_finite_diff ) then
          this%nRmin = nRstart
          this%nRmax = nRstop
+         this%mMin = 1
+         this%mMax = n_m_max
       else
          this%nRmin = 1
          this%nRmax = n_r_max
+         this%mMin = nMstart
+         this%mMax = nMstop
       end if
 
       if ( l_finite_diff .or. l_rank_has_m0 ) then
@@ -93,7 +97,7 @@ contains
       class(vp_bal_type) :: this
 
       !-- Input variables
-      complex(cp),         intent(in) :: up(:,:)
+      complex(cp),         intent(in) :: up(this%mMin:this%mMax,this%nRmin:this%nRmax)
       class(type_tscheme), intent(in) :: tscheme
 
       !-- Local variables:
@@ -113,7 +117,7 @@ contains
       class(vp_bal_type) :: this
 
       !-- Input variables
-      complex(cp),         intent(in) :: up(:,:)
+      complex(cp),         intent(in) :: up(this%mMin:this%mMax,this%nRmin:this%nRmax)
       class(type_tscheme), intent(in) :: tscheme
 
       !-- Local variables:

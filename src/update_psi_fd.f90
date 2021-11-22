@@ -752,7 +752,7 @@ contains
          end if
       end if
 
-      if ( nRstop == 1 ) then
+      if ( nRstop == n_r_max ) then
          if ( kbotv == 1 ) then ! free slip
             upMat%low(n_m,n_r_max) =upMat%low(n_m,n_r_max)+upMat%up(n_m,n_r_max)
             upMat%diag(n_m,n_r_max)=upMat%diag(n_m,n_r_max)+two*(r(n_r_max)-r(n_r_max-1))* &
