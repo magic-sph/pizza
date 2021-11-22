@@ -36,8 +36,6 @@ contains
 
       n_tri=0
       n_penta=1   
-      call initialize_psi_fd(tscheme)
-      lPsimat_FD(:)=.false.
       if ( l_heat ) then
          call initialize_temp_fd()
          lTmat_FD(:)=.false.
@@ -48,6 +46,8 @@ contains
          !lXimat_FD(:)=.false.
          n_tri = n_tri+1
       end if
+      call initialize_psi_fd(tscheme)
+      lPsimat_FD(:)=.false.
 
       block_sze=50
       n_requests=10
@@ -69,7 +69,7 @@ contains
 !------------------------------------------------------------------------------------
    subroutine finish_explicit_assembly_Rdist(us_Rloc,temp_Rloc,xi_Rloc,dVsT_Rloc,    &
               &                              dVsXi_Rloc,dVsOm_Rloc,dTdt,dxidt,dpsidt,&
-              &                              tscheme, vort_bal)
+              &                              tscheme, vp_bal, vort_bal)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -84,10 +84,12 @@ contains
       type(type_tarray),   intent(inout) :: dTdt
       type(type_tarray),   intent(inout) :: dxidt
       type(type_tarray),   intent(inout) :: dpsidt
+      type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
 
-      call finish_exp_psi_Rdist(us_Rloc, dVsOm_Rloc, temp_Rloc, xi_Rloc, &
-           &                    dpsidt%expl(:,:,tscheme%istage), vort_bal)
+      call finish_exp_psi_Rdist(us_Rloc, dVsOm_Rloc, temp_Rloc, xi_Rloc,   &
+           &                    dpsidt%expl(:,:,tscheme%istage), vp_bal,   &
+           &                    vort_bal, tscheme)
 
       if ( l_heat ) then
          call finish_exp_temp_Rdist(us_Rloc, dVsT_Rloc, dTdt%expl(:,:,tscheme%istage))
@@ -153,6 +155,10 @@ contains
       !-- Local variables
       real(cp) :: runStart, runStop
 
+      if ( vp_bal%l_calc .and. tscheme%istage==1 ) then
+         call vp_bal%initialize_dvpdt(up_Rloc, tscheme)
+      end if
+
       if ( lMat ) then ! update matrices
          lPsimat_FD(:)=.false.
          if ( l_heat ) lTmat_FD(:)=.false.
@@ -188,6 +194,10 @@ contains
       if ( l_heat ) call update_temp_FD(temp_Rloc, dtemp_Rloc, dTdt, tscheme)
       call update_psi_FD(us_Rloc, up_Rloc, om_Rloc, dpsidt, tscheme, vp_bal, &
            &             vort_bal)
+
+      if ( vp_bal%l_calc .and. tscheme%istage==tscheme%nstages ) then
+         call vp_bal%finalize_dvpdt(up_Rloc, tscheme)
+      end if
 
    end subroutine mloop_Rdist
 !------------------------------------------------------------------------------------

@@ -40,8 +40,8 @@ contains
       !-- Input variable
       class(type_tscheme), intent(in) :: tscheme ! time scheme
 
-      call upMat_FD%initialize(1,n_r_max,1,1)
-      call psiMat_FD%initialize(1,n_r_max,1,n_m_max)
+      call upMat_FD%initialize(nRstart,nRstop,1,1)
+      call psiMat_FD%initialize(nRstart,nRstop,1,n_m_max)
       allocate( psi_ghost(n_m_max,nRstart-2:nRstop+2) )
       allocate( up0_ghost(nRstart-1:nRstop+1) )
       bytes_allocated=bytes_allocated + n_m_max*(nRstop-nRstart+8)*SIZEOF_DEF_COMPLEX
@@ -50,7 +50,7 @@ contains
       allocate( lPsimat_FD(1:n_m_max) )
 
       if ( tscheme%l_assembly ) then
-         call ellMat_FD%initialize(1,n_r_max,1,n_m_max)
+         call ellMat_FD%initialize(nRstart,nRstop,1,n_m_max)
          allocate( lEllmat_FD(1:n_m_max) )
          lEllmat_FD(:)=.false.
       end if
@@ -370,20 +370,22 @@ contains
    end subroutine get_psi_rhs_imp_ghost
 !---------------------------------------------------------------------------------
    subroutine finish_exp_psi_Rdist(us_Rloc, dVsOmM, temp_Rloc, xi_Rloc, &
-              &                    dpsi_exp_last, vort_bal)
+              &                    dpsi_exp_last, vp_bal, vort_bal, tscheme)
       !
       ! This subroutine completes the computation of the advection term by
       ! computing the radial derivative (R-distributed variant).
       !
 
       !-- Input variables
-      complex(cp), intent(in) :: us_Rloc(n_m_max,nRstart:nRstop)
-      complex(cp), intent(inout) :: dVsOmM(n_m_max,nRstart:nRstop)
-      complex(cp), intent(in) :: temp_Rloc(n_m_max,nRstart:nRstop)
-      complex(cp), intent(in) :: xi_Rloc(n_m_max,nRstart:nRstop)
+      class(type_tscheme), intent(in) :: tscheme
+      complex(cp),         intent(in) :: us_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(inout) :: dVsOmM(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: temp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: xi_Rloc(n_m_max,nRstart:nRstop)
 
       !-- Output variables
-      complex(cp), intent(inout) :: dpsi_exp_last(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(inout) :: dpsi_exp_last(n_m_max,nRstart:nRstop)
+      type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
 
       !-- Local variables
@@ -402,9 +404,13 @@ contains
       do n_r=nRstart,nRstop
          do n_m=start_m,stop_m
             m = idx2m(n_m)
-            if ( m /= 0 ) then
+            if ( m == 0 ) then
+               if ( vp_bal%l_calc .and. tscheme%istage==1 ) then
+                  vp_bal%rey_stress(n_r)=real(dpsi_exp_last(n_m,n_r))
+               end if
+            else
                dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-or1(n_r)*work_Rloc(n_m,n_r)
-               if ( vort_bal%l_calc ) then
+               if ( vort_bal%l_calc .and. tscheme%istage==1 ) then
                   vort_bal%adv(n_m,n_r)=dpsi_exp_last(n_m,n_r)
                end if
                if ( .not. l_coriolis_imp ) then
@@ -415,7 +421,7 @@ contains
                if ( l_heat ) then
                   dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-BuoFac*rgrav(n_r)*&
                   &                      or1(n_r)*ci*real(m,cp)*temp_Rloc(n_m,n_r)
-                  if ( vort_bal%l_calc ) then
+                  if ( vort_bal%l_calc .and. tscheme%istage==1 ) then
                      vort_bal%buo(n_m,n_r)=-BuoFac*rgrav(n_r)*&
                      &                     or1(n_r)*ci*real(m,cp)*temp_Rloc(n_m,n_r)
                   end if
@@ -423,7 +429,7 @@ contains
                if ( l_chem ) then
                   dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-ChemFac*rgrav(n_r)*&
                   &                      or1(n_r)*ci*real(m,cp)*xi_Rloc(n_m,n_r)
-                  if ( vort_bal%l_calc ) then
+                  if ( vort_bal%l_calc .and. tscheme%istage==1 ) then
                      vort_bal%buo(n_m,n_r)=vort_bal%buo(n_m,n_r)-ChemFac*rgrav(n_r)*&
                      &                     or1(n_r)*ci*real(m,cp)*xi_Rloc(n_m,n_r)
                   end if
@@ -454,7 +460,6 @@ contains
       !-- Local variables
       integer :: n_m_start, n_m_stop, tag, req, nm_block, n_m, nms_block, n_r
       integer :: array_of_requests(4*nblocks)
-      real(cp) :: dr
       complex(cp) :: up0_Rloc(nRstart:nRstop)
       complex(cp) :: work_Rloc(n_m_max, nRstart:nRstop)
       complex(cp) :: work_ghost(n_m_max, nRstart-1:nRstop+1)
@@ -588,7 +593,7 @@ contains
       !-- Neumann boundary conditions
       !$omp parallel default(shared) private(nR,m,n_m,dm2)
       !$omp do
-      do nR=1,n_r_max
+      do nR=nRstart,nRstop
          do n_m=1,n_m_max
             m=idx2m(n_m)
             dm2 = real(m*m,cp)
@@ -652,46 +657,54 @@ contains
       !$omp end parallel
 
       !-- Boundary conditions
-      do n_m=1,n_m_max
-         m = idx2m(n_m)
-         if ( m == 0 ) cycle
-         !-- Non-penetration condition at both boundaries
-         psiMat%diag(n_m,1)=one
-         psiMat%low1(n_m,1)=zero
-         psiMat%low2(n_m,1)=zero
-         psiMat%up1(n_m,1) =zero
-         psiMat%up2(n_m,1) =zero
+      if ( nRstart == 1) then
+         do n_m=1,n_m_max
+            m = idx2m(n_m)
+            if ( m == 0 ) cycle
+            !-- Non-penetration condition at both boundaries
+            psiMat%diag(n_m,1)=one
+            psiMat%low1(n_m,1)=zero
+            psiMat%low2(n_m,1)=zero
+            psiMat%up1(n_m,1) =zero
+            psiMat%up2(n_m,1) =zero
 
-         psiMat%diag(n_m,n_r_max)=one
-         psiMat%low1(n_m,n_r_max)=zero
-         psiMat%low2(n_m,n_r_max)=zero
-         psiMat%up1(n_m,n_r_max) =zero
-         psiMat%up2(n_m,n_r_max) =zero
+            !-- Second part of B.C.
+            if ( ktopv == 1 ) then ! free slip
+               dr=r(2)-r(1)
+               fac=(one-half*or1(1)*dr)/(one+half*or1(1)*dr)
+               psiMat%diag(n_m,2)=psiMat%diag(n_m,2)-fac*psiMat%low2(n_m,2)
+               psiMat%low1(n_m,2)=psiMat%low1(n_m,2)+two/(one+half*or1(1)*dr)*&
+               &              psiMat%low2(n_m,2)
+            else ! No slip
+               psiMat%diag(n_m,2)=psiMat%diag(n_m,2)+psiMat%low2(n_m,2)
+            end if
+         end do
+      end if
 
-         !-- Second part of B.C.
-         if ( ktopv == 1 ) then ! free slip
-            dr=r(2)-r(1)
-            fac=(one-half*or1(1)*dr)/(one+half*or1(1)*dr)
-            psiMat%diag(n_m,2)=psiMat%diag(n_m,2)-fac*psiMat%low2(n_m,2)
-            psiMat%low1(n_m,2)=psiMat%low1(n_m,2)+two/(one+half*or1(1)*dr)*&
-            &              psiMat%low2(n_m,2)
-         else ! No slip
-            psiMat%diag(n_m,2)=psiMat%diag(n_m,2)+psiMat%low2(n_m,2)
-         end if
+      if ( nRstop == n_r_max ) then
+         do n_m=1,n_m_max
+            m = idx2m(n_m)
+            if ( m == 0 ) cycle
+            psiMat%diag(n_m,n_r_max)=one
+            psiMat%low1(n_m,n_r_max)=zero
+            psiMat%low2(n_m,n_r_max)=zero
+            psiMat%up1(n_m,n_r_max) =zero
+            psiMat%up2(n_m,n_r_max) =zero
 
-         if ( kbotv == 1 ) then ! free-slip
-            dr=r(n_r_max)-r(n_r_max-1)
-            fac=(one+half*or1(n_r_max)*dr)/(one-half*or1(n_r_max)*dr)
-            psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) - &
-            &                          fac*psiMat%up2(n_m,n_r_max-1)
-            psiMat%up1(n_m,n_r_max-1)=psiMat%up1(n_m,n_r_max-1) +   &
-            &                         two*psiMat%up2(n_m,n_r_max-1) &
-            &                         /(one-half*or1(n_r_max)*dr)
-         else ! no slip
-            psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) + &
-            &                          psiMat%up2(n_m,n_r_max-1)
-         end if
-      end do
+            if ( kbotv == 1 ) then ! free-slip
+               dr=r(n_r_max)-r(n_r_max-1)
+               fac=(one+half*or1(n_r_max)*dr)/(one-half*or1(n_r_max)*dr)
+               psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) - &
+               &                          fac*psiMat%up2(n_m,n_r_max-1)
+               psiMat%up1(n_m,n_r_max-1)=psiMat%up1(n_m,n_r_max-1) +   &
+               &                         two*psiMat%up2(n_m,n_r_max-1) &
+               &                         /(one-half*or1(n_r_max)*dr)
+            else ! no slip
+               psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) + &
+               &                          psiMat%up2(n_m,n_r_max-1)
+            end if
+         end do
+      end if
 
       call psiMat%prepare_mat()
 
@@ -713,7 +726,7 @@ contains
 
       !-- Bulk points: we fill all the points: this is then easier to handle
       !-- Neumann boundary conditions
-      do nR=1,n_r_max
+      do nR=nRstart,nRstop
          upMat%diag(n_m,nR)=one - tscheme%wimp_lin(1)*(ViscFac*  &
          &                (               rscheme%ddr(nR,1) +    &
          &                         or1(nR)*rscheme%dr(nR,1) -    &
@@ -728,23 +741,27 @@ contains
       end do
 
       !-- Boundary conditions
-      if ( ktopv == 1 ) then ! free slip -> duphi/dr - uphi/r = 0
-         upMat%up(n_m,1)  =upMat%up(n_m,1)+upMat%low(n_m,1)
-         upMat%diag(n_m,1)=upMat%diag(n_m,1)-two*(r(2)-r(1))*or1(1)*upMat%low(n_m,1)
-      else ! no slip
-         upMat%diag(n_m,1)=1.0_cp
-         upMat%low(n_m,1) =0.0_cp
-         upMat%up(n_m,1)  =0.0_cp
+      if ( nRstart== 1 ) then
+         if ( ktopv == 1 ) then ! free slip -> duphi/dr - uphi/r = 0
+            upMat%up(n_m,1)  =upMat%up(n_m,1)+upMat%low(n_m,1)
+            upMat%diag(n_m,1)=upMat%diag(n_m,1)-two*(r(2)-r(1))*or1(1)*upMat%low(n_m,1)
+         else ! no slip
+            upMat%diag(n_m,1)=1.0_cp
+            upMat%low(n_m,1) =0.0_cp
+            upMat%up(n_m,1)  =0.0_cp
+         end if
       end if
 
-      if ( kbotv == 1 ) then ! free slip
-         upMat%low(n_m,n_r_max) =upMat%low(n_m,n_r_max)+upMat%up(n_m,n_r_max)
-         upMat%diag(n_m,n_r_max)=upMat%diag(n_m,n_r_max)+two*(r(n_r_max)-r(n_r_max-1))* &
-         &                       or1(n_r_max)*upMat%up(n_m,n_r_max)
-      else ! no slip
-         upMat%diag(n_m,n_r_max)=1.0_cp
-         upMat%low(n_m,n_r_max) =0.0_cp
-         upMat%up(n_m,n_r_max)  =0.0_cp
+      if ( nRstop == 1 ) then
+         if ( kbotv == 1 ) then ! free slip
+            upMat%low(n_m,n_r_max) =upMat%low(n_m,n_r_max)+upMat%up(n_m,n_r_max)
+            upMat%diag(n_m,n_r_max)=upMat%diag(n_m,n_r_max)+two*(r(n_r_max)-r(n_r_max-1))* &
+            &                       or1(n_r_max)*upMat%up(n_m,n_r_max)
+         else ! no slip
+            upMat%diag(n_m,n_r_max)=1.0_cp
+            upMat%low(n_m,n_r_max) =0.0_cp
+            upMat%up(n_m,n_r_max)  =0.0_cp
+         end if
       end if
 
       !-- LU decomposition:
@@ -767,7 +784,7 @@ contains
       integer :: nR, m, n_m
 
       !----- Bulk points:
-      do nR=2,n_r_max-1
+      do nR=nRstart,nRstop
          do n_m=1,n_m_max
             m = idx2m(n_m)
             if ( m == 0 ) cycle
@@ -783,14 +800,21 @@ contains
       end do
 
       !-- Non penetrative boundary condition
-      do n_m=1,n_m_max
-         ellMat%diag(n_m,1)      =one
-         ellMat%up(n_m,1)        =0.0_cp
-         ellMat%low(n_m,1)       =0.0_cp
-         ellMat%diag(n_m,n_r_max)=one
-         ellMat%up(n_m,n_r_max)  =0.0_cp
-         ellMat%low(n_m,n_r_max) =0.0_cp
-      end do
+      if ( nRstart == 1 ) then
+         do n_m=1,n_m_max
+            ellMat%diag(n_m,1)      =one
+            ellMat%up(n_m,1)        =0.0_cp
+            ellMat%low(n_m,1)       =0.0_cp
+         end do
+      end if
+
+      if ( nRstop == n_r_max ) then
+         do n_m=1,n_m_max
+            ellMat%diag(n_m,n_r_max)=one
+            ellMat%up(n_m,n_r_max)  =0.0_cp
+            ellMat%low(n_m,n_r_max) =0.0_cp
+         end do
+      end if
 
       !-- Lu factorisation
       call ellMat%prepare_mat()

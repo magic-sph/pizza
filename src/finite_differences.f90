@@ -65,14 +65,6 @@ contains
       &               order/2*(4*order_boundary+6)+                    &
       &               (order/2+1)*(2*order_boundary+6))*SIZEOF_DEF_REAL
 
-      allocate( this%rMat(this%n_max,this%n_max) )
-      allocate( this%drMat(this%n_max,this%n_max) )
-      allocate( this%d2rMat(this%n_max,this%n_max) )
-      allocate( this%d3rMat(this%n_max,this%n_max) )
-      allocate( this%d4rMat(this%n_max,this%n_max) )
-
-      bytes_allocated=bytes_allocated+5*this%n_max*this%n_max*SIZEOF_DEF_REAL
-
    end subroutine initialize
 !---------------------------------------------------------------------------
    subroutine finalize(this, no_work_array)
@@ -89,7 +81,6 @@ contains
       deallocate( this%ddr_top, this%ddr_bot )
       deallocate( this%dddr_top, this%dddr_bot )
       deallocate( this%ddddr_top, this%ddddr_bot )
-      deallocate( this%rMat, this%drMat, this%d2rMat, this%d3rMat, this%d4rMat )
 
    end subroutine finalize
 !---------------------------------------------------------------------------
@@ -505,56 +496,6 @@ contains
       !-- Input variable
       integer, intent(in) :: n_r_max
       logical, intent(in) :: l_cheb_coll
-
-      !-- Local variables
-      integer :: i, j, n_r
-
-      !-- Set everything to zero
-      do j=1,n_r_max
-         do i=1,n_r_max
-            this%drMat(i,j) =0.0_cp
-            this%d2rMat(i,j)=0.0_cp
-            this%d3rMat(i,j)=0.0_cp
-            this%rMat(i,j)  =0.0_cp
-         end do
-         this%rMat(j,j)=1.0_cp
-      end do
-
-      !-- Bulk points for 1st and 2nd derivatives
-      do n_r=this%order/2+1,n_r_max-this%order/2
-         this%drMat(n_r,n_r-this%order/2:n_r+this%order/2) = this%dr(n_r,:)
-         this%d2rMat(n_r,n_r-this%order/2:n_r+this%order/2)=this%ddr(n_r,:)
-      end do
-
-      !-- Bulk points for 3rd derivative
-      do n_r=2+this%order/2,n_r_max-this%order/2-1
-         this%d3rMat(n_r,n_r-this%order/2-1:n_r+this%order/2+1)=this%dddr(n_r,:)
-         this%d4rMat(n_r,n_r-this%order/2-1:n_r+this%order/2+1)=this%ddddr(n_r,:)
-      end do
-
-      !-- Boundary points for 1st derivative
-      do n_r=1,this%order/2
-         this%drMat(n_r,1:this%order_boundary+1)                         =this%dr_top(n_r,:)
-         this%drMat(n_r_max-n_r+1,n_r_max:n_r_max-this%order_boundary:-1)=this%dr_bot(n_r,:)
-      end do
-
-      !-- Boundary points for 2nd derivative
-      do n_r=1,this%order/2
-         this%d2rMat(n_r,1:this%order_boundary+2)                           =this%ddr_top(n_r,:)
-         this%d2rMat(n_r_max-n_r+1,n_r_max:n_r_max-this%order_boundary-1:-1)=this%ddr_bot(n_r,:)
-      end do
-
-      !-- Boundary points for 3rd derivative
-      do n_r=1,this%order/2+1
-         this%d3rMat(n_r,1:this%order_boundary+3)                           =this%dddr_top(n_r,:)
-         this%d3rMat(n_r_max-n_r+1,n_r_max:n_r_max-this%order_boundary-2:-1)=this%dddr_bot(n_r,:)
-      end do
-
-      !-- Boundary points for 4th derivative
-      do n_r=1,this%order/2+1
-         this%d4rMat(n_r,1:this%order_boundary+4)                           =this%ddddr_top(n_r,:)
-         this%d4rMat(n_r_max-n_r+1,n_r_max:n_r_max-this%order_boundary-3:-1)=this%ddddr_bot(n_r,:)
-      end do
 
    end subroutine get_der_mat
 !----------------------------------------------------------------------------

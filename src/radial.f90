@@ -130,7 +130,9 @@ contains
       end if
 
       call rscheme%get_grid(n_r_max, r_icb, r_cmb, ratio1, ratio2, r)
-      call rscheme%get_der_mat(n_r_max, l_cheb_coll)
+      if ( .not. l_finite_diff ) then
+         call rscheme%get_der_mat(n_r_max, l_cheb_coll)
+      end if
 
       if ( rank == 0 ) then
          file_name = 'radius.'//tag

@@ -69,10 +69,10 @@ contains
       this%nRMax=nRstop
       this%mMin=mMin
       this%mMax=mMax
-      allocate( this%low(mMin:mMax,nRstart:nRstop) )
-      allocate( this%diag(mMin:mMax,nRstart:nRstop) )
-      allocate( this%up(mMin:mMax,nRstart:nRstop) )
-      bytes_allocated = bytes_allocated+3*(mMax-mMin+1)*(nRstop-nRstart+1)*SIZEOF_DEF_REAL
+      allocate( this%low(mMin:mMax,nRstart-1:nRstop+1) )
+      allocate( this%diag(mMin:mMax,nRstart-1:nRstop+1) )
+      allocate( this%up(mMin:mMax,nRstart-1:nRstop+1) )
+      bytes_allocated = bytes_allocated+3*(mMax-mMin+1)*(nRstop-nRstart+3)*SIZEOF_DEF_REAL
 
       !-- Fill an identity matrix by default
       this%low(:,:) =0.0_cp
@@ -96,10 +96,12 @@ contains
       this%nRMax=nRstop
       this%mMin=mMin
       this%mMax=mMax
-      allocate( this%low1(mMin:mMax,nRstart:nRstop), this%low2(mMin:mMax,nRstart:nRstop) )
-      allocate( this%diag(mMin:mMax,nRstart:nRstop) )
-      allocate( this%up1(mMin:mMax,nRstart:nRstop), this%up2(mMin:mMax,nRstart:nRstop) )
-      bytes_allocated = bytes_allocated+5*(mMax-mMin+1)*(nRstop-nRstart+1)*SIZEOF_DEF_REAL
+      allocate( this%low1(mMin:mMax,nRstart-2:nRstop+2) )
+      allocate( this%low2(mMin:mMax,nRstart-2:nRstop+2) )
+      allocate( this%diag(mMin:mMax,nRstart-2:nRstop+2) )
+      allocate( this%up1(mMin:mMax,nRstart-2:nRstop+2) )
+      allocate( this%up2(mMin:mMax,nRstart-2:nRstop+2) )
+      bytes_allocated = bytes_allocated+5*(mMax-mMin+1)*(nRstop-nRstart+5)*SIZEOF_DEF_REAL
 
       !-- Fill an identity matrix by default
       this%low2(:,:)=zero
@@ -137,8 +139,11 @@ contains
       class(type_tri_par) :: this
 
       !-- Local variables
-      integer :: m, nR
       real(cp) :: p
+      integer :: m, nR, n_ms, tag
+
+      tag = 97437
+      n_ms = this%mMax-this%mMin+1
 
       !-- Set 'out-of-bound' values to zero for safety
       do m=this%mMin, this%mMax
@@ -146,13 +151,34 @@ contains
          if ( this%nRMax == n_r_max ) this%up(m,this%nRMax) =0.0_cp
       end do
 
-      do nR=this%nRMin,this%nRMax
-         do m=this%mMin, this%mMax
-            if ( nR == 1 ) p=this%diag(m,nR)
-            if ( nR > 1 ) p=this%diag(m,nR)-this%low(m,nR)*this%up(m,nR-1)*this%diag(m,nR-1)
-            this%diag(m,nR)=one/p
+      if ( rank == 0 ) then ! Rank 0 starts the flow
+         do nR=this%nRMin+1,this%nRMax
+            do m=this%mMin,this%mMax
+               p=this%diag(m,nR)-this%low(m,nR)*this%up(m,nR-1)* &
+               & this%diag(m,nR-1)
+               this%diag(m,nR)=one/p
+            end do
          end do
-      end do
+      else
+         call MPI_Recv(this%diag(this%mMin:this%mMax,this%nRMin-1), n_ms, MPI_DEF_REAL, &
+              &        rank-1, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
+         call MPI_Recv(this%up(this%mMin:this%mMax,this%nRMin-1), n_ms, MPI_DEF_REAL, &
+              &        rank-1, tag+1, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
+         do nR=this%nRMin,this%nRMax
+            do m=this%mMin,this%mMax
+               p=this%diag(m,nR)-this%low(m,nR)*this%up(m,nR-1)* &
+               & this%diag(m,nR-1)
+               this%diag(m,nR)=one/p
+            end do
+         end do
+      end if
+      
+      if ( rank < n_procs-1 ) then ! If this is not the last rank
+         call MPI_Send(this%diag(this%mMin:this%mMax,this%nRMax), n_ms, MPI_DEF_REAL, &
+              &        rank+1, tag, MPI_COMM_WORLD, ierr)
+         call MPI_Send(this%up(this%mMin:this%mMax,this%nRMax), n_ms, MPI_DEF_REAL, &
+              &        rank+1, tag+1, MPI_COMM_WORLD, ierr)
+      end if
 
    end subroutine prepare_mat_3
 !-------------------------------------------------------------------------------------
@@ -163,15 +189,13 @@ contains
       class(type_penta_par) :: this
 
       !-- Local variables
-      integer :: nR, m, start_m, stop_m
+      integer :: nR, m, n_ms, tag
 
-      !$omp parallel default(shared) private(start_m,stop_m,m,nR)
-      start_m=this%mMin; stop_m=this%mMax
-      call get_openmp_blocks(start_m,stop_m)
-      !$omp barrier
+      n_ms = this%mMax-this%mMin+1
+      tag = 69843
 
       !-- Set 'out-of-bound' values to zero for safety
-      do m=start_m,stop_m
+      do m=this%mMin,this%mMax
          if ( this%nRMin == 1 ) then
             this%low1(m,this%nRMin)  =0.0_cp
             this%low2(m,this%nRMin)  =0.0_cp
@@ -185,27 +209,70 @@ contains
       end do
 
       !-- Now proper LU factorisation
-      nR=2
-      do m=start_m,stop_m
-         this%up1(m,nR)=this%up1(m,nR)-this%low1(m,nR)*this%up2(m,nR-1)/this%diag(m,nR-1)
-         this%diag(m,nR)=this%diag(m,nR)-this%low1(m,nR)*this%up1(m,nR-1)/ &
-         &               this%diag(m,nR-1)
-      end do
-
-      do nR=3,this%nRMax
-         do m=start_m,stop_m
-            this%low1(m,nR)=this%low1(m,nR)-this%low2(m,nR)*this%up1(m,nR-2)/ &
-            &               this%diag(m,nR-2)
+      if ( rank == 0 ) then
+         nR=2
+         do m=this%mMin,this%mMax
             this%up1(m,nR)=this%up1(m,nR)-this%low1(m,nR)*this%up2(m,nR-1)/ &
             &              this%diag(m,nR-1)
             this%diag(m,nR)=this%diag(m,nR)-this%low1(m,nR)*this%up1(m,nR-1)/ &
-            &               this%diag(m,nR-1)-this%low2(m,nR)*this%up2(m,nR-2)/ &
-            &               this%diag(m,nR-2)
-          end do
-      enddo
+            &               this%diag(m,nR-1)
+         end do
 
-      do nR=1,this%nRMax
-         do m=start_m,stop_m
+         do nR=this%nRmin+2,this%nRMax
+            do m=this%mMin,this%mMax
+               this%low1(m,nR)=this%low1(m,nR)-this%low2(m,nR)*this%up1(m,nR-2)/ &
+               &               this%diag(m,nR-2)
+               this%up1(m,nR)=this%up1(m,nR)-this%low1(m,nR)*this%up2(m,nR-1)/ &
+               &              this%diag(m,nR-1)
+               this%diag(m,nR)=this%diag(m,nR)-this%low1(m,nR)*this%up1(m,nR-1)/ &
+               &               this%diag(m,nR-1)-this%low2(m,nR)*this%up2(m,nR-2)/ &
+               &               this%diag(m,nR-2)
+             end do
+         end do
+      else
+         call MPI_Recv(this%diag(this%mMin:this%mMax,this%nRMin-2), n_ms, MPI_DEF_COMPLEX, &
+              &        rank-1, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
+         call MPI_Recv(this%diag(this%mMin:this%mMax,this%nRMin-1), n_ms, MPI_DEF_COMPLEX, &
+              &        rank-1, tag+1, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
+         call MPI_Recv(this%up1(this%mMin:this%mMax,this%nRMin-2), n_ms, MPI_DEF_COMPLEX, &
+              &        rank-1, tag+1, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
+         call MPI_Recv(this%up1(this%mMin:this%mMax,this%nRMin-1), n_ms, MPI_DEF_COMPLEX, &
+              &        rank-1, tag+2, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
+         call MPI_Recv(this%up2(this%mMin:this%mMax,this%nRMin-2), n_ms, MPI_DEF_COMPLEX, &
+              &        rank-1, tag+3, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
+         call MPI_Recv(this%up2(this%mMin:this%mMax,this%nRMin-1), n_ms, MPI_DEF_COMPLEX, &
+              &        rank-1, tag+4, MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
+
+         do nR=this%nRmin,this%nRMax
+            do m=this%mMin,this%mMax
+               this%low1(m,nR)=this%low1(m,nR)-this%low2(m,nR)*this%up1(m,nR-2)/ &
+               &               this%diag(m,nR-2)
+               this%up1(m,nR)=this%up1(m,nR)-this%low1(m,nR)*this%up2(m,nR-1)/ &
+               &              this%diag(m,nR-1)
+               this%diag(m,nR)=this%diag(m,nR)-this%low1(m,nR)*this%up1(m,nR-1)/ &
+               &               this%diag(m,nR-1)-this%low2(m,nR)*this%up2(m,nR-2)/ &
+               &               this%diag(m,nR-2)
+             end do
+         end do
+      end if
+
+      if ( rank < n_procs-1 ) then ! If not last rank -> send
+         call MPI_Send(this%diag(this%mMin:this%mMax,this%nRMax-1), n_ms, MPI_DEF_COMPLEX, &
+              &        rank+1, tag, MPI_COMM_WORLD, ierr)
+         call MPI_Send(this%diag(this%mMin:this%mMax,this%nRMax), n_ms, MPI_DEF_COMPLEX, &
+              &        rank+1, tag+1, MPI_COMM_WORLD, ierr)
+         call MPI_Send(this%up1(this%mMin:this%mMax,this%nRMax-1), n_ms, MPI_DEF_COMPLEX, &
+              &        rank+1, tag+1, MPI_COMM_WORLD, ierr)
+         call MPI_Send(this%up1(this%mMin:this%mMax,this%nRMax), n_ms, MPI_DEF_COMPLEX, &
+              &        rank+1, tag+2, MPI_COMM_WORLD, ierr)
+         call MPI_Send(this%up2(this%mMin:this%mMax,this%nRMax-1), n_ms, MPI_DEF_COMPLEX, &
+              &        rank+1, tag+3, MPI_COMM_WORLD, ierr)
+         call MPI_Send(this%up2(this%mMin:this%mMax,this%nRMax), n_ms, MPI_DEF_COMPLEX, &
+              &        rank+1, tag+4, MPI_COMM_WORLD, ierr)
+      end if
+
+      do nR=this%nRmin,this%nRMax
+         do m=this%mMin,this%mMax
             this%diag(m,nR)=one/this%diag(m,nR)
             this%up1(m,nR) =this%up1(m,nR)*this%diag(m,nR)
             this%up2(m,nR) =this%up2(m,nR)*this%diag(m,nR)
@@ -213,7 +280,6 @@ contains
             this%low2(m,nR)=this%low2(m,nR)*this%diag(m,nR)
           end do
       enddo
-      !$omp end parallel
 
    end subroutine prepare_mat_5
 !-------------------------------------------------------------------------------------
@@ -317,7 +383,7 @@ contains
       integer,     intent(inout) :: req
 
       !-- Local variables
-      integer :: nR, nR0, n_m, m, mb, mu
+      integer :: nR, nR0, n_m, mb, mu
 
       mb = ms_block
       mu = mb+n_m_block-1

@@ -29,7 +29,7 @@ contains
 
    subroutine initialize_temp_fd
 
-      call tMat_FD%initialize(1,n_r_max,1,n_m_max)
+      call tMat_FD%initialize(nRstart,nRstop,1,n_m_max)
       allocate( temp_ghost(n_m_max,nRstart-1:nRstop+1) )
       bytes_allocated=bytes_allocated + n_m_max*(nRstop-nRstart+3)*SIZEOF_DEF_COMPLEX
       temp_ghost(:,:)=zero
@@ -357,7 +357,7 @@ contains
       !-- Neumann boundary conditions
       !$omp parallel default(shared) private(nR,m,n_m,dm2)
       !$omp do
-      do nR=1,n_r_max
+      do nR=nRstart,nRstop
          do n_m=1,n_m_max
             m=idx2m(n_m)
             dm2 = real(m*m,cp)
@@ -376,27 +376,35 @@ contains
       !$omp end do
 
       !----- Boundary conditions:
-      !$omp do
-      do n_m=1,n_m_max
-         if ( ktopt == 1 ) then
-            sMat%diag(n_m,1)=one
-            sMat%up(n_m,1)  =0.0_cp
-            sMat%low(n_m,1) =0.0_cp
-         else
-            sMat%up(n_m,1)=sMat%up(n_m,1)+sMat%low(n_m,1)
-            !fd_fac_top(n_m)=two*(r(2)-r(1))*sMat%low(n_m,1)
-         end if
+      if ( nRstart == 1 ) then
+         !$omp do
+         do n_m=1,n_m_max
+            if ( ktopt == 1 ) then
+               sMat%diag(n_m,1)=one
+               sMat%up(n_m,1)  =0.0_cp
+               sMat%low(n_m,1) =0.0_cp
+            else
+               sMat%up(n_m,1)=sMat%up(n_m,1)+sMat%low(n_m,1)
+               !fd_fac_top(n_m)=two*(r(2)-r(1))*sMat%low(n_m,1)
+            end if
+         end do
+         !$omp end do
+      end if
 
-         if ( kbott == 1 ) then
-            sMat%diag(n_m,n_r_max)=one
-            sMat%up(n_m,n_r_max)  =0.0_cp
-            sMat%low(n_m,n_r_max) =0.0_cp
-         else
-            sMat%low(n_m,n_r_max)=sMat%up(n_m,n_r_max)+sMat%low(n_m,n_r_max)
-            !fd_fac_bot(n_m)=two*(r(n_r_max-1)-r(n_r_max))*sMat%up(n_m,n_r_max)
-         end if
-      end do
-      !$omp end do
+      if ( nRstop == n_r_max ) then
+         !$omp do
+         do n_m=1,n_m_max
+            if ( kbott == 1 ) then
+               sMat%diag(n_m,n_r_max)=one
+               sMat%up(n_m,n_r_max)  =0.0_cp
+               sMat%low(n_m,n_r_max) =0.0_cp
+            else
+               sMat%low(n_m,n_r_max)=sMat%up(n_m,n_r_max)+sMat%low(n_m,n_r_max)
+               !fd_fac_bot(n_m)=two*(r(n_r_max-1)-r(n_r_max))*sMat%up(n_m,n_r_max)
+            end if
+         end do
+         !$omp end do
+      end if
       !$omp end parallel
 
       !-- LU decomposition:

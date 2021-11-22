@@ -247,7 +247,7 @@ contains
                   call finish_explicit_assembly_Rdist(us_Rloc,temp_Rloc,xi_Rloc,   &
                        &                              dVsT_Rloc,dVsXi_Rloc,        &
                        &                              dVsOm_Rloc,dTdt,dxidt,dpsidt,&
-                       &                              tscheme,vort_bal)
+                       &                              tscheme,vp_bal,vort_bal)
                else
                   call finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc,      &
                        &                        us_Mloc, up_Mloc, om_Mloc,         &
