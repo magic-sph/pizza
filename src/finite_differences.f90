@@ -103,7 +103,6 @@ contains
 
       !-- Local quantities:
       real(cp) :: dr_before, dr_after
-      character(len=80) :: message
       integer :: n_r
       integer :: n_bulk_points, n_boundary_points
 

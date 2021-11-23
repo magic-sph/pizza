@@ -72,19 +72,22 @@ contains
 
    end subroutine finalize_psi_fd
 !---------------------------------------------------------------------------------
-   subroutine prepare_psi_fd(tscheme, dpsidt)
+   subroutine prepare_psi_fd(tscheme, dpsidt, lu_time, n_lu_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
       type(type_tarray), intent(inout) :: dpsidt
+      real(cp),          intent(inout) :: lu_time
+      integer,           intent(inout) :: n_lu_calls
+
 
       !-- Local variables
       integer :: n_m, m, n_m_start, n_m_stop, nR
 
       if ( .not. lPsimat_FD(1) ) then
-         call get_psiMat_Rdist(tscheme, psiMat_FD)
+         call get_psiMat_Rdist(tscheme, psiMat_FD, lu_time, n_lu_calls)
          call get_uphiMat_Rdist(tscheme, upMat_FD)
          lPsimat_FD(:)=.true.
       end if
@@ -577,16 +580,18 @@ contains
 
    end subroutine assemble_psi_Rloc
 !---------------------------------------------------------------------------------
-   subroutine get_psimat_Rdist(tscheme, psiMat)
+   subroutine get_psimat_Rdist(tscheme, psiMat, time_lu, n_lu_calls)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
       type(type_penta_par), intent(inout) :: psiMat
+      real(cp),             intent(inout) :: time_lu
+      integer,              intent(inout) :: n_lu_calls
 
       !-- Local variables:
-      real(cp) :: dm2, dr, fac
+      real(cp) :: dm2, dr, fac, runStart, runStop
       integer :: nR, n_m, m
 
       !-- Bulk points: we fill all the points: this is then easier to handle
@@ -706,7 +711,14 @@ contains
          end do
       end if
 
+      runStart = MPI_Wtime()
+      !-- LU decomposition of the pentadiagonal matrix for \psi
       call psiMat%prepare_mat()
+      runStop = MPI_Wtime()
+      if ( runStop > runStart ) then
+         time_lu = time_lu+(runStop-runStart)
+         n_lu_calls = n_lu_calls+1
+      end if
 
    end subroutine get_psimat_Rdist
 !---------------------------------------------------------------------------------
@@ -717,7 +729,6 @@ contains
 
       !-- Output variables
       type(type_tri_par), intent(inout) :: upMat
-
 
       !-- Local variables:
       integer :: nR, n_m

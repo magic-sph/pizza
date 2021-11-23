@@ -374,6 +374,16 @@ contains
             &    '(" ! Coriolis term will be treated explicitly")')
          end if
       end if
+      
+      if ( l_finite_diff ) then
+         l_buo_imp = .false.
+         if ( rank == 0 ) then
+            write(output_unit, &
+            &    '(" ! Implicit buoyancy term not compatible with finite differences")')
+            write(output_unit, &
+            &    '(" ! Buoyancy term will be treated explicitly")')
+         end if
+      end if
 
       !-- Time unit
       call capitalize(time_scale) 

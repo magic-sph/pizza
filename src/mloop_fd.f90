@@ -114,6 +114,8 @@ contains
 
       !-- Local variable
       type(type_tarray) :: dummy
+      real(cp) :: dummy_time
+      integer :: dummy_counter
 
       lPsimat_FD(:)=.false.
       if ( l_heat ) lTmat_FD(:) =.false.
@@ -125,7 +127,7 @@ contains
 
       if ( l_heat ) call prepare_temp_FD(tscheme, dummy)
       if ( l_chem ) call prepare_xi_FD(tscheme, dummy)
-      call prepare_psi_fd(tscheme, dummy)
+      call prepare_psi_fd(tscheme, dummy, dummy_time, dummy_counter)
 
       call find_faster_block() ! Find the fastest blocking
 
@@ -178,7 +180,7 @@ contains
       !-- Mainly assemble the r.h.s. and rebuild the matrices if required
       if ( l_heat ) call prepare_temp_FD(tscheme, dTdt)
       if ( l_chem ) call prepare_xi_FD(tscheme, dxidt)
-      call prepare_psi_FD(tscheme, dpsidt)
+      call prepare_psi_FD(tscheme, dpsidt, timers%lu, timers%n_lu_calls)
 
       !-- solve the uphi0 equation on its own (one single m is involved)
       call upMat_FD%solver_single(up0_ghost, nRstart, nRstop)

@@ -137,7 +137,7 @@ contains
             call bulk_to_ghost(xi_RLoc, xi_ghost, 1, nRstart, nRstop, n_m_max, &
                  &             1, n_m_max)
             call exch_ghosts(xi_ghost, n_m_max, nRstart, nRstop, 1)
-            call fill_ghosts_temp(xi_ghost)
+            call fill_ghosts_xi(xi_ghost)
             call get_xi_rhs_imp_ghost(xi_ghost, dxi_Rloc, dxidt, 1, .true.)
          end if
 

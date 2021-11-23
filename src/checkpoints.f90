@@ -69,7 +69,7 @@ contains
          rst_file='checkpoint_t='//trim(string)//'.'//tag
       end if
 
-      l_transp = .not. l_finite_diff
+      l_transp = l_finite_diff
 
       version = 6
 
@@ -345,15 +345,15 @@ contains
          allocate( work_old(n_m_max_old, n_r_max_old) )
          allocate(     work(n_m_max, n_r_max) )
 
+         !-- Reduce the number of implicit states for backward compatibility with
+         !-- old checkpoints
+         if ( version <= 5 ) then
+            nimp_old = nimp_old-1
+            nold_old = nold_old-1
+         end if
+
       else
          allocate( r_old(1), work_old(1,1), work(1,1), m2idx_old(1) )
-      end if
-
-      !-- Reduce the number of implicit states for backward compatibility with
-      !-- old checkpoints
-      if ( version <= 5 ) then
-         nimp_old = nimp_old-1
-         nold_old = nold_old-1
       end if
 
       call MPI_Barrier(MPI_COMM_WORLD, ierr)
