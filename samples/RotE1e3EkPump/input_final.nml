@@ -1,15 +1,16 @@
 &grid
-   n_r_max    =32,
-   n_cheb_max =32,
+   n_r_max    =64,
    m_max      =32,
    minc       =1,
 /
 &control
-   tag        ="start",
+   tag        ="final",
    l_newmap   =.false.,
- n_time_steps =1000,
+ n_time_steps =500,
    dtMax      =1d-4,
   l_rerror_fix=.false.,
+ radial_scheme='FD',
+   time_scheme='ARS343',
 /
  &phys_param
   ra          =2.77E+04,
@@ -26,9 +27,9 @@
   l_ek_pump   =.true.,
  /
  &start_field
-  l_start_file=.false.,
-  start_file  ="checkpoint_end.testB",
-  init_t      =4,
+  l_start_file=.true.,
+  start_file  ="checkpoint_end.restart1",
+  init_t      =0,
   amp_t       =2.5e-4,
   init_u      =0,
   amp_u       =3.0e-4,

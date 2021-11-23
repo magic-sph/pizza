@@ -43,15 +43,43 @@ class RotE1e3EkPump(unittest.TestCase):
         print('Description :           %s' % self.description)
         self.startTime = time.time()
         cleanDir(self.dir)
+        for f in glob.glob('%s/*.start' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.restart' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.restart1' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.final' % self.dir):
+            os.remove(f)
         os.chdir(self.dir)
         cmd = '%s %s/input.nml' % (self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
+        cmd = '%s %s/input_FD.nml' % (self.execCmd, self.dir)
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
+                stderr=open(os.devnull, 'wb'))
+        cmd = '%s %s/input_cheb.nml' % (self.execCmd, self.dir)
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
+                stderr=open(os.devnull, 'wb'))
+        cmd = '%s %s/input_final.nml' % (self.execCmd, self.dir)
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
+                stderr=open(os.devnull, 'wb'))
+
+        cmd = 'cat e_kin_3D.start e_kin_3D.restart e_kin_3D.restart1 e_kin_3D.final > e_kin_3D.test'
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'))
 
     def tearDown(self):
         # Cleaning when leaving
         os.chdir(self.startDir)
         cleanDir(self.dir)
+        for f in glob.glob('%s/*.start' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.restart' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.restart1' % self.dir):
+            os.remove(f)
+        for f in glob.glob('%s/*.final' % self.dir):
+            os.remove(f)
 
         t = time.time()-self.startTime
         st = time.strftime("%M:%S", time.gmtime(t))
