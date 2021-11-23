@@ -9,7 +9,7 @@ module communications
    use namelists, only: mpi_transp, l_packed_transp, l_heat, l_chem
    use parallel_mod, only: n_procs, rank, ierr
    use mpi_alltoall_mod, only: type_mpiatoav, type_mpiatoaw
-   use mpi_transp, only: type_mpitransp
+   use mpi_transp_mod, only: type_mpitransp
    use char_manip, only: capitalize
 
    implicit none
