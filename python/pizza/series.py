@@ -314,3 +314,11 @@ class PizzaTs(PizzaSetup):
             ax.set_xlabel('Time')
             ax.set_ylabel('Correlation')
             fig.tight_layout()
+        elif self.field == 'timestep':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.step(self.time, self.dt)
+            ax.set_yscale('log')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Time step size')
+            fig.tight_layout()

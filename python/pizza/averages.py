@@ -12,7 +12,7 @@ class PizzaAverages:
     the next time you use it you don't need to give ``tstart`` again.
     """
 
-    def __init__(self, tstart=None, tag=None, std=False):
+    def __init__(self, tstart=None, tag=None, std=False, tstartHeat=None, l_3D=True):
         """
         :param tstart: the starting time for averaging
         :type tstart: float
@@ -22,7 +22,10 @@ class PizzaAverages:
         :type tag: str
         :type std: compute the standard deviation when set to True
         :type std: bool
+        :param l_3D: when turned on, 3D files are used for diagnostic
+        :type l_3D: bool
         """
+        self.l_3D = l_3D
 
         if os.path.exists('tInitAvg') and tstart is None:
             file = open('tInitAvg', 'r')
@@ -34,10 +37,29 @@ class PizzaAverages:
             file.write('%f' % tstart)
             file.close()
 
+        if os.path.exists('tstartHeat') and tstartHeat is None:
+            file = open('tstartHeat', 'r')
+            st = file.readline().strip('\n')
+            tstartHeat = float(st)
+            file.close()
+        else:
+            if tstartHeat is None:
+                tstartHeat = tstart
+            file = open('tstartHeat', 'w')
+            file.write('%f' % tstartHeat)
+            file.close()
+
+        print(tstart, tstartHeat)
+
+
         self.std = std
 
         # e_kin_3D file
-        ts = PizzaTs(field='e_kin_3D', all=True, tag=tag, iplot=False)
+        if self.l_3D:
+            file = 'e_kin_3D'
+        else:
+            file = 'e_kin'
+        ts = PizzaTs(field=file, all=True, tag=tag, iplot=False)
         mask = np.where(abs(ts.time-tstart) == min(abs(ts.time-tstart)), 1, 0)
         ind = np.nonzero(mask)[0][0]
 
@@ -54,7 +76,8 @@ class PizzaAverages:
         else:
             self.us2_avg = avgField(ts.time[ind:], ts.us2[ind:])
             self.up2_avg = avgField(ts.time[ind:], ts.up2[ind:])
-            self.uz2_avg = avgField(ts.time[ind:], ts.uz2[ind:])
+            if self.l_3D:
+                self.uz2_avg = avgField(ts.time[ind:], ts.uz2[ind:])
             self.up2_axi_avg = avgField(ts.time[ind:], ts.up2_axi[ind:])
 
         self.tavg = ts.time[-1]-ts.time[ind]  # Averaging time
@@ -65,7 +88,11 @@ class PizzaAverages:
         self.radratio = ts.radratio
 
         # reynolds_3D file
-        ts2 = PizzaTs(field='reynolds_3D', all=True, iplot=False, tag=tag)
+        if self.l_3D:
+            file = 'reynolds_3D'
+        else:
+            file = 'reynolds'
+        ts2 = PizzaTs(field=file, all=True, iplot=False, tag=tag)
         mask = np.where(abs(ts2.time-tstart) == min(abs(ts2.time-tstart)),
                         1, 0)
         ind = np.nonzero(mask)[0][0]
@@ -86,8 +113,7 @@ class PizzaAverages:
 
         # heat.TAG files
         ts3 = PizzaTs(field='heat', all=True, iplot=False, tag=tag)
-        mask = np.where(abs(ts3.time-tstart) == min(abs(ts3.time-tstart)),
-                        1, 0)
+        mask = np.where(abs(ts3.time-tstartHeat) == min(abs(ts3.time-tstartHeat)), 1, 0)
         ind = np.nonzero(mask)[0][0]
 
         if self.std:
@@ -107,7 +133,11 @@ class PizzaAverages:
             self.nu_shell_avg = avgField(ts3.time[ind:], ts3.shellnuss[ind:])
 
         # power3D.TAG files
-        ts4 = PizzaTs(field='power_3D', all=True, iplot=False, tag=tag)
+        if self.l_3D:
+            file = 'power_3D'
+        else:
+            file = 'power'
+        ts4 = PizzaTs(field=file, all=True, iplot=False, tag=tag)
         mask = np.where(abs(ts4.time-tstart) == min(abs(ts4.time-tstart)),
                         1, 0)
         ind = np.nonzero(mask)[0][0]
@@ -144,9 +174,14 @@ class PizzaAverages:
         Formatted output
         """
         st_std = ''
-        st = '%.3e%9.2e%9.2e%9.2e%12.5e%12.5e%12.5e%12.5e' % \
-            (self.ra, self.ek, self.pr, self.radratio, self.us2_avg,
-             self.up2_avg, self.uz2_avg, self.up2_axi_avg)
+        if self.l_3D:
+            st = '%.3e%9.2e%9.2e%9.2e%12.5e%12.5e%12.5e%12.5e' % \
+                (self.ra, self.ek, self.pr, self.radratio, self.us2_avg,
+                 self.up2_avg, self.uz2_avg, self.up2_axi_avg)
+        else:
+            st = '%.3e%9.2e%9.2e%12.5e%12.5e%12.5e' % \
+                (self.ra, self.pr, self.radratio, self.us2_avg,
+                 self.up2_avg, self.up2_axi_avg)
         if self.std:
             st_std = '%12.5e%12.5e%12.5e%12.5e' % \
                 (self.us2_std, self.up2_std, self.uz2_std, self.up2_axi_avg)
