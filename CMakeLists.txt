@@ -187,7 +187,7 @@ if(USE_LAPACKLIB MATCHES LIBSCI)
        PATHS $ENV{CRAY_LIBSCI_PREFIX}/lib
              $ENV{HOME}/local/lib
              $ENV{HOME}/local/lib64)
-   if ( SCI MATCHES LIBSCI-NOTFOUND )
+   if ( SCI MATCHES SCI-NOTFOUND )
       message(STATUS "LIBSCI was not found")
       set(USE_LAPACKLIB "LAPACK")
    else()
