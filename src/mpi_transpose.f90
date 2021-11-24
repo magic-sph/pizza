@@ -1,4 +1,4 @@
-module mpi_transp
+module mpi_transp_mod
    !
    ! This is an abstract class that will be used to define MPI transposers
    !
@@ -49,7 +49,7 @@ module mpi_transp
 
    end interface
 
-end module mpi_transp
+end module mpi_transp_mod
 
 
 !----------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ module  mpi_alltoall_mod
    use mem_alloc
    use truncation, only: n_m_max, n_r_max
    use blocking
-   use mpi_transp, only: type_mpitransp
+   use mpi_transp_mod, only: type_mpitransp
 
    implicit none
 

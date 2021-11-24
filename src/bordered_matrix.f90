@@ -336,7 +336,7 @@ contains
       complex(cp) :: tmp(this%nlines)
       integer :: n_r, n_col, file_handle
 
-      open(file_handle, file='A_mat_tau', form='unformatted', access='stream')
+      open(newunit=file_handle, file='A_mat_tau', form='unformatted', access='stream')
 
       write(file_handle) this%nlines
 

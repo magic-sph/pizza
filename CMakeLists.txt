@@ -46,6 +46,22 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES GNU)
       set(FFLAG_OPT      "-march=native")
    endif(AVX2_FOUND)
 endif()
+if(CMAKE_Fortran_COMPILER_ID MATCHES Cray)
+   set(FFLAG_ARCH      " ")
+   set(FFLAG_STD       "-en")
+   set(FFLAG_NO_STD    " ")
+   set(FFLAG_TRACEBACK " ")
+   set(FFLAG_CONVERT   "-h byteswapio")
+   set(FFLAG_PREPROCESSOR "-eZ")
+   set(FFLAG_WARN_ALL  " ")
+   set(FFLAG_CHECK_ALL "-G 0")
+   set(FFLAG_FPE       "-K trap=fp")
+   set(FFLAG_OPT       " ")
+   #set(CMAKE_EXE_LINKER_FLAGS "-h dynamic")
+   # Remove -rdynamic option (workaround for test machine):
+   # https://cmake.org/pipermail/cmake/2014-November/059154.html
+   #set(CMAKE_SHARED_LIBRARY_LINK_Fortran_FLAGS "")
+endif()
 if(CMAKE_Fortran_COMPILER_ID MATCHES PGI)
    set(FFLAG_ARCH      "-m${ARCH}")
    set(FFLAG_STD       " ")
@@ -84,13 +100,16 @@ set(_MPI_Intel_Fortran_COMPILER_NAMES      "mpiifort")
 # PGI compiler names
 set(_MPI_PGI_C_COMPILER_NAMES              "mpipgcc|mppgcc")
 set(_MPI_PGI_Fortran_COMPILER_NAMES        "mpipgf|mppgf")
+# Cray compiler names
+set(_MPI_Cray_C_COMPILER_NAMES             "cc")
+set(_MPI_Cray_Fortran_COMPILER_NAMES       "ftn")
 # XLC MPI Compiler names
 set(_MPI_XL_C_COMPILER_NAMES               "mpxlc|mpxlc_r|mpixlc|mpixlc_r")
 set(_MPI_XL_Fortran_COMPILER_NAMES         "mpxlf|mpixlf")
 
 # Find CC, CXX and Fortran MPI wrappers
-string(REGEX MATCH "${_MPI_C_COMPILER_NAMES}|${_MPI_GNU_C_COMPILER_NAMES}|${_MPI_Intel_C_COMPILER_NAMES}|${_MPI_PGI_C_COMPILER_NAMES}|${_MPI_XL_C_COMPILER_NAMES}" MPICC_COMPILER "${CMAKE_C_COMPILER}")
-string(REGEX MATCH "${_MPI_Fortran_COMPILER_NAMES}|${_MPI_GNU_Fortran_COMPILER_NAMES}|${_MPI_Intel_Fortran_COMPILER_NAMES}|${_MPI_PGI_Fortran_COMPILER_NAMES}|${_MPI_XL_Fortran_COMPILER_NAMES}" MPIFORTRAN_COMPILER "${CMAKE_Fortran_COMPILER}")
+string(REGEX MATCH "${_MPI_C_COMPILER_NAMES}|${_MPI_GNU_C_COMPILER_NAMES}|${_MPI_Intel_C_COMPILER_NAMES}|${_MPI_PGI_C_COMPILER_NAMES}|${_MPI_XL_C_COMPILER_NAMES}|${_MPI_Cray_C_COMPILER_NAMES}" MPICC_COMPILER "${CMAKE_C_COMPILER}")
+string(REGEX MATCH "${_MPI_Fortran_COMPILER_NAMES}|${_MPI_GNU_Fortran_COMPILER_NAMES}|${_MPI_Intel_Fortran_COMPILER_NAMES}|${_MPI_PGI_Fortran_COMPILER_NAMES}|${_MPI_XL_Fortran_COMPILER_NAMES}|${_MPI_Cray_Fortran_COMPILER_NAMES}" MPIFORTRAN_COMPILER "${CMAKE_Fortran_COMPILER}")
 
 # Look for MPI and add the required flags if found
 if(USE_MPI MATCHES yes)
@@ -144,10 +163,23 @@ if(USE_LAPACKLIB MATCHES MKL OR USE_FFTLIB MATCHES MKL)
       include_directories(${MKLROOT}/include)
    else()
       message(STATUS "MKL was not found")
-      set(USE_LAPACKLIB "LAPACK")
+      set(USE_LAPACKLIB "LIBSCI")
    endif()
 endif()
 
+# Detect LIBSCI (Cray)
+if(USE_LAPACKLIB MATCHES LIBSCI)
+   find_library(SCI NAME sci_cray
+       PATHS $ENV{CRAY_LIBSCI_PREFIX}/lib
+             $ENV{HOME}/local/lib
+             $ENV{HOME}/local/lib64)
+   if ( SCI MATCHES FLAME-NOTFOUND )
+      message(STATUS "LIBSCI was not found")
+      set(USE_LAPACKLIB "LAPCK")
+   else()
+      message(STATUS "LIBSCI: '${SCI}'")
+   endif()
+endif()
 
 # Detect LAPACK
 if(USE_LAPACKLIB MATCHES LAPACK)

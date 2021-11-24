@@ -24,6 +24,8 @@ endif()
 # Link LAPACK
 if(USE_LAPACKLIB MATCHES LAPACK)
    target_link_libraries(${EXEC} ${LAPACK_LIBRARIES})
+elseif(USE_LAPACKLIB MATCHES LIBSCI)
+   target_link_libraries (${EXEC} ${SCI})
 endif()
 
 target_link_libraries(${EXEC} ${FFTW3})
