@@ -53,6 +53,7 @@ module namelists
    character(len=72), public :: time_scale  ! Time unit
    character(len=72), public :: time_scheme ! Time scheme
    character(len=72) :: bc_method    ! Galerkin or Tau-Lanczos method for BCs
+   character(len=72), public :: container    ! shape of the container: sphere, expo, busse
    character(len=72) :: radial_scheme ! Chebyshev or finite differences
    character(len=72) :: cheb_method  ! Chebyshev method: collocation, integration
    character(len=72) :: matrix_solve ! Either direct or influence matrix
@@ -149,7 +150,7 @@ contains
       &                   l_temp_3D,tcond_fac,l_temp_advz,         &
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
       &                   xi_bot,xi_top, l_xi_3D, xicond_fac,      &
-      &                   h_temp, h_xi
+      &                   h_temp, h_xi, container
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi
@@ -328,6 +329,13 @@ contains
          l_galerkin = .false.
       end if
 
+      !-- Shape of the container (for QG computations)
+      call capitalize(container)
+
+      if ( index(container, 'SPHERE') == 0 .and. (.not. l_cheb_coll) .and. &
+      &    (.not. l_finite_diff) ) then
+         call abortRun('! This container is not supported by the sparse cheb form')
+      end if
 
       !-- Determine solver method
       call capitalize(matrix_solve)
@@ -536,6 +544,7 @@ contains
          xi_bot(n)=0.0_cp
          xi_top(n)=0.0_cp
       end do
+      container        ='sphere'
 
       !----- Namelist start_field:
       l_reset_t        =.false.
@@ -645,6 +654,8 @@ contains
       write(n_out,'(''  radratio        ='',ES14.6,'','')') radratio
       write(n_out,'(''  tcond_fac       ='',ES14.6,'','')') tcond_fac
       write(n_out,'(''  xicond_fac      ='',ES14.6,'','')') xicond_fac
+      length=length_to_blank(container)
+      write(n_out,*) " container       = """,container(1:length),""","
       write(n_out,'(''  beta_shift      ='',ES14.6,'','')') beta_shift
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1

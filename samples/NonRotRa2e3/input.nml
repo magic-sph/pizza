@@ -1,6 +1,5 @@
 &grid
    n_r_max    =32,
-   n_cheb_max =32,
    m_max      =32,
    minc       =1,
 /
@@ -10,7 +9,6 @@
  n_time_steps =1000,
    dtMax      =1d-3,
    l_non_rot  =.true.,
-  matrix_solve="influence",
 n_fft_optim_lev=2,
 /
  &phys_param

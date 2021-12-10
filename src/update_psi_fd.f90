@@ -13,7 +13,7 @@ module update_psi_fd_mod
    use namelists, only: kbotv, ktopv, BuoFac, ChemFac, l_chem, l_heat, CorFac, &
        &                l_coriolis_imp, ViscFac, r_cmb, l_ek_pump, l_non_rot
    use radial_functions, only: or1, rgrav, rscheme, beta, ekpump, or2, r, dbeta, &
-       &                       d2beta, d3beta, or3, oheight
+       &                       d2beta, d3beta, or3, ekp_up, ekp_us, ekp_dusdp
    use radial_der, only: get_dr_Rloc, get_ddddr_ghost, get_ddr_ghost, exch_ghosts, &
        &                 bulk_to_ghost
    use vort_balance, only: vort_bal_type
@@ -331,18 +331,20 @@ contains
                   end if
 
                   if ( l_ek_pump ) then
+                     !-- Careful again that om is 2nd derivative of psi, up first
+                     ! derivative
                      dpsidt%impl(n_m,nR,istage)=dpsidt%impl(n_m,nR,istage)+CorFac*   &
                      &                    ekpump(nR) * (          om_Rloc(n_m,nR) +  &
-                     &                  (or1(nR)+half*beta(nR))  *up_Rloc(n_m,nR) +  &
-                     &         (dbeta(nR)+beta(nR)*or1(nR)-half*beta(nR)*beta(nR)+   &
-                     &          dm2*(beta(nR)*or1(nR)-or2(nR))+5.0_cp*beta(nR)*ci*   &
-                     &          real(m,cp)*or1(nR)*r_cmb*oheight(nR))* psig(n_m,nR))
+                     &            (or1(nR)+beta(nR)+ekp_up(nR))  *up_Rloc(n_m,nR) +  &
+                     &  (dbeta(nR)+beta(nR)*or1(nR)-dm2*or2(nR)+beta(nR)*ekp_up(nR)- &
+                     &          ci*real(m,cp)*or1(nR)*(ekp_us(nR)+ci*real(m,cp)*     &
+                     &          ekp_dusdp(nR)))*                     psig(n_m,nR))
                      if ( vort_bal%l_calc ) then
                         vort_bal%pump(n_m,nR)=CorFac*ekpump(nR)* (om_Rloc(n_m,nR) +  &
-                        &               (or1(nR)+half*beta(nR))  *up_Rloc(n_m,nR) +  &
-                        &      (dbeta(nR)+beta(nR)*or1(nR)-half*beta(nR)*beta(nR)+   &
-                        &       dm2*(beta(nR)*or1(nR)-or2(nR))+5.0_cp*beta(nR)*ci*   &
-                        &       real(m,cp)*or1(nR)*r_cmb*oheight(nR))* psig(n_m,nR))
+                        &         (or1(nR)+beta(nR)+ekp_up(nR))  *up_Rloc(n_m,nR) +  &
+                        &      (dbeta(nR)+beta(nR)*or1(nR)-dm2+beta(nR)*ekp_up(nR)-  &
+                        &       ci*real(m,cp)*or1(nR)*(ekp_us(nR)+ci*real(m,cp)*     &
+                        &       ekp_dusdp(nR)))*                     psig(n_m,nR))
                      end if
                   end if
                end if
@@ -619,10 +621,10 @@ contains
             &       or1(nR)+dbeta(nR)-dm2*or2(nR) ) ) ) -                   &
             &                                    CorFac*ekpump(nR)* (       &
             &                                          rscheme%ddr(nR,1)+   &
-            &           (half*beta(nR)+or1(nR))  *      rscheme%dr(nR,1)+   &
-            &        (dbeta(nR)+beta(nR)*or1(nR)-half*beta(nR)*beta(nR) -   &
-            &         dm2*(or2(nR)-beta(nR)*or1(nR))+5.0_cp*r_cmb*ci*       &
-            &         real(m,cp)*oheight(nR)*beta(nR)*or1(nR)) ) -          &
+            &          (beta(nR)+or1(nR)+ekp_up(nR))  * rscheme%dr(nR,1)+   &
+            &        (dbeta(nR)+beta(nR)*or1(nR)-dm2*or2(nR)+beta(nR)*      &
+            &         ekp_up(nR)-ci*real(m,cp)*or1(nR)*(ekp_us(nR)+ci*      &
+            &         real(m,cp)*ekp_dusdp(nR)))) -                         &
             &                   CorFac*beta(nR)*ci*real(m,cp)*or1(nR) )
             psiMat%low1(n_m,nR)=-(                     rscheme%ddr(nR,0)  + &
             &                     (or1(nR)+beta(nR))*   rscheme%dr(nR,0) )  &
@@ -636,7 +638,7 @@ contains
             &                                           rscheme%dr(nR,0) )- &
             &                                    CorFac*ekpump(nR)* (       &
             &                                          rscheme%ddr(nR,0)+   &
-            &           (half*beta(nR)+or1(nR))  *      rscheme%dr(nR,0) ) )
+            &     (beta(nR)+or1(nR)+ekp_up(nR))  *      rscheme%dr(nR,0) ) )
             psiMat%up1(n_m,nR) =-(                     rscheme%ddr(nR,2)  + &
             &                     (or1(nR)+beta(nR))*   rscheme%dr(nR,2) )  &
             &                      +tscheme%wimp_lin(1)*(ViscFac*         ( &
@@ -649,7 +651,7 @@ contains
             &                                           rscheme%dr(nR,2) )- &
             &                                    CorFac*ekpump(nR)* (       &
             &                                          rscheme%ddr(nR,2)+   &
-            &           (half*beta(nR)+or1(nR))  *      rscheme%dr(nR,2) ) )
+            &     (beta(nR)+or1(nR)+ekp_up(nR))  *      rscheme%dr(nR,2) ) )
             psiMat%low2(n_m,nR)=tscheme%wimp_lin(1)*ViscFac*         (   &
             &                                        rscheme%ddddr(nR,0) &
             &          +   (two*or1(nR)+beta(nR))*    rscheme%dddr(nR,0))

@@ -5,7 +5,7 @@ module rloop
    use constants, only: ci, one, half
    use mem_alloc, only: bytes_allocated
    use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem
-   use radial_functions, only: or1, r, beta, oheight, dtcond, ekpump
+   use radial_functions, only: or1, r, beta, dtcond, ekpump
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
    use courant_mod, only: courant

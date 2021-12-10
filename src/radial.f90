@@ -13,7 +13,7 @@ module radial_functions
        &                r_cmb, r_icb, l_cheb_coll, beta_shift, xicond_fac, &
        &                ktopt, kbott, t_bot, t_top, l_heat, l_chem, xi_bot,&
        &                xi_top, l_xi_3D, ktopxi, kbotxi, h_temp, h_xi,     &
-       &                l_finite_diff, fd_stretch, fd_ratio
+       &                l_finite_diff, fd_stretch, fd_ratio, container
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -36,6 +36,9 @@ module radial_functions
    real(cp), public, allocatable :: d3beta(:)    ! Radial gradient of beta
    real(cp), public, allocatable :: height(:)    ! Spherical shell height
    real(cp), public, allocatable :: ekpump(:)    ! Ekman pumping function
+   real(cp), public, allocatable :: ekp_up(:)    ! Ekman pumping function (in front of up)
+   real(cp), public, allocatable :: ekp_us(:)    ! Ekman pumping function (in front of us)
+   real(cp), public, allocatable :: ekp_dusdp(:) ! Ekman pumping function (in front of dus/dphi)
    real(cp), public, allocatable :: oheight(:)   ! 1/h
 
    real(cp), public, allocatable :: delxr2(:) ! Auxiliary arrays containing effective Courant grid intervals
@@ -72,10 +75,10 @@ contains
       allocate( beta(n_r_max), dbeta(n_r_max), height(n_r_max) )
       allocate( d2beta(n_r_max), d3beta(n_r_max) )
       allocate( rgrav(n_r_max), ekpump(n_r_max), oheight(n_r_max) )
-      allocate( delxr2(n_r_max), delxh2(n_r_max) )
-      allocate( tcond(n_r_max), dtcond(n_r_max))
-      allocate( xicond(n_r_max), dxicond(n_r_max))
-      bytes_allocated = bytes_allocated+18*n_r_max*SIZEOF_DEF_REAL
+      allocate( delxr2(n_r_max), delxh2(n_r_max), ekp_up(n_r_max) )
+      allocate( tcond(n_r_max), dtcond(n_r_max), ekp_us(n_r_max) )
+      allocate( xicond(n_r_max), dxicond(n_r_max), ekp_dusdp(n_r_max) )
+      bytes_allocated = bytes_allocated+21*n_r_max*SIZEOF_DEF_REAL
 
       if ( .not. l_finite_diff ) then
          allocate ( type_cheb :: rscheme )
@@ -101,7 +104,7 @@ contains
       deallocate( tcond, dtcond, xicond, dxicond )
       deallocate( delxr2, delxh2, rgrav )
       deallocate( beta, dbeta, height, ekpump, oheight, d2beta, d3beta )
-      deallocate( r, or1, or2, or3 )
+      deallocate( r, or1, or2, or3, ekp_up, ekp_us, ekp_dusdp )
 
    end subroutine finalize_radial_functions
 !------------------------------------------------------------------------------
@@ -113,7 +116,7 @@ contains
       integer :: n_r, file_handle
       character(len=100) :: file_name
       real(cp) :: ratio1, ratio2, delmin, c1
-      real(cp) :: ek_pump_fac
+      real(cp) :: ek_pump_fac, fac, Lin, Lout
 
       if ( l_ek_pump .and. (.not. l_non_rot)) then
          ek_pump_fac = one
@@ -170,49 +173,88 @@ contains
                          &                    ktopxi,kbotxi,xi_top,xi_bot, h_xi)
 
       if ( l_non_rot ) then
-         beta(:)   =0.0_cp
-         dbeta(:)  =0.0_cp
-         ekpump(:) =0.0_cp
-         oheight(:)=1.0_cp
-         height(:) =1.0_cp
-         d2beta(:) =0.0_cp
-         d3beta(:) =0.0_cp
+         beta(:)     =0.0_cp
+         dbeta(:)    =0.0_cp
+         ekpump(:)   =0.0_cp
+         ekp_up(:)   =0.0_cp
+         ekp_us(:)   =0.0_cp
+         ekp_dusdp(:)=0.0_cp
+         oheight(:)  =1.0_cp
+         height(:)   =1.0_cp
+         d2beta(:)   =0.0_cp
+         d3beta(:)   =0.0_cp
       else ! Calculate beta only when this is rotating !
-         if ( abs(beta_shift) <= 10.0_cp*epsilon(beta_shift) ) then
-            height(1) = 0.0_cp
-            beta(1)   = 0.0_cp
-            dbeta(1)  = 0.0_cp
-            d2beta(1) = 0.0_cp
-            d3beta(1) = 0.0_cp
-            ekpump(1) = ek_pump_fac*0.0e0_cp
-            oheight(1)= 0.0e0_cp
-            do n_r=2,n_r_max
-               height(n_r) = two * sqrt(r_cmb**2-r(n_r)**2)
-               oheight(n_r)= half/sqrt(r_cmb**2-r(n_r)**2)
-               beta(n_r)   = -r(n_r)/(r_cmb**2-r(n_r)**2)
-               dbeta(n_r)  = -(r_cmb**2+r(n_r)**2)/(r_cmb**2-r(n_r)**2)**2
-               d2beta(n_r) = -128.0_cp*r(n_r)*(three*r_cmb**2+r(n_r)**2)/height(n_r)**6
-               d3beta(n_r) = -1536.0_cp*(r_cmb**4+r(n_r)**4+6.0_cp*r(n_r)**2*r_cmb**2)/&
-               &             height(n_r)**8
-               ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
-               &             (r_cmb**2-r(n_r)**2)**(3.0_cp/4.0_cp)
-            end do
-         else
-            do n_r=1,n_r_max
-               height(n_r) = two * sqrt((r_cmb+beta_shift)**2-r(n_r)**2)
-               oheight(n_r)= half/sqrt((r_cmb+beta_shift)**2-r(n_r)**2)
-               beta(n_r)   = -r(n_r)/((r_cmb+beta_shift)**2-r(n_r)**2)
-               dbeta(n_r)  = -((r_cmb+beta_shift)**2+r(n_r)**2)/   &
-               &              ((r_cmb+beta_shift)**2-r(n_r)**2)**2
-               d2beta(n_r) = -two*r(n_r)*(three*(r_cmb+beta_shift)**2+r(n_r)**2)/ &
-               &              height(n_r)**6
-               d3beta(n_r) = -6.0_cp*((r_cmb+beta_shift)**4+r(n_r)**4+6.0_cp* &
-               &              r(n_r)**2*(r_cmb+beta_shift)**2)/height(n_r)**8
-               ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/      &
-               &             ((r_cmb+beta_shift)**2-r(n_r)**2)**(3.0_cp/4.0_cp)
-            end do
+         if ( index(container, 'SPHERE') == 1 ) then
+            if ( abs(beta_shift) <= 10.0_cp*epsilon(beta_shift) ) then
+               height(1) = 0.0_cp
+               beta(1)   = 0.0_cp
+               dbeta(1)  = 0.0_cp
+               d2beta(1) = 0.0_cp
+               d3beta(1) = 0.0_cp
+               ekpump(1) = ek_pump_fac*0.0e0_cp
+               oheight(1)= 0.0e0_cp
+               do n_r=2,n_r_max
+                  height(n_r) = two * sqrt(r_cmb**2-r(n_r)**2)
+                  oheight(n_r)= half/sqrt(r_cmb**2-r(n_r)**2)
+                  beta(n_r)   = -r(n_r)/(r_cmb**2-r(n_r)**2)
+                  dbeta(n_r)  = -(r_cmb**2+r(n_r)**2)/(r_cmb**2-r(n_r)**2)**2
+                  d2beta(n_r) = -128.0_cp*r(n_r)*(three*r_cmb**2+r(n_r)**2)/height(n_r)**6
+                  d3beta(n_r) = -1536.0_cp*(r_cmb**4+r(n_r)**4+6.0_cp*r(n_r)**2*r_cmb**2)/&
+                  &             height(n_r)**8
+                  ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
+                  &             (r_cmb**2-r(n_r)**2)**0.75_cp
+               end do
+            else
+               do n_r=1,n_r_max
+                  height(n_r) = two * sqrt((r_cmb+beta_shift)**2-r(n_r)**2)
+                  oheight(n_r)= half/sqrt((r_cmb+beta_shift)**2-r(n_r)**2)
+                  beta(n_r)   = -r(n_r)/((r_cmb+beta_shift)**2-r(n_r)**2)
+                  dbeta(n_r)  = -((r_cmb+beta_shift)**2+r(n_r)**2)/   &
+                  &              ((r_cmb+beta_shift)**2-r(n_r)**2)**2
+                  d2beta(n_r) = -two*r(n_r)*(three*(r_cmb+beta_shift)**2+r(n_r)**2)/ &
+                  &              height(n_r)**6
+                  d3beta(n_r) = -6.0_cp*((r_cmb+beta_shift)**4+r(n_r)**4+6.0_cp* &
+                  &              r(n_r)**2*(r_cmb+beta_shift)**2)/height(n_r)**8
+                  ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/      &
+                  &             ((r_cmb+beta_shift)**2-r(n_r)**2)**0.75_cp
+               end do
+            end if
+            ekp_up(:)   =-half*beta(:)
+            ekp_us(:)   =-5.0_cp*r_cmb*beta(:)*oheight(:)
+            ekp_dusdp(:)=beta(:)
+         else if ( index(container, 'EXP') == 1 ) then
+            fac=one/r_cmb ! container with L=exp(-fac * r)
+            height(:) =exp(-fac*r(:))
+            beta(:)   =-fac
+            dbeta(:)  =0.0_cp
+            d2beta(:) =0.0_cp
+            d3beta(:) =0.0_cp
+            ! n.ez = cos(theta); tan(theta)=dh/ds; n.ez=1/sqrt((dh/ds)^2+1)
+            ! Here: n.ez=1/sqrt(fac^2*exp(-2*gamma*r)+1)
+            ! Ekpump = E^{-1/2} / h / sqrt(n.ez)
+            ekpump(:)   =half *ek_pump_fac * sqrt(ek) / height(:) * &
+            &            (one+fac**2*height(:)**2)**0.25_cp
+            ekp_up(:)   =-half*fac**3*height(:)**2/(one+fac**2*height(:)**2)
+            ekp_us(:)   =half*(two*fac-fac**3*height(:)**2)/sqrt(one+fac**2*height(:)**2)
+            ekp_dusdp(:)=-fac**2*height**2*or1(:)
+            height(:)   =two*exp(-fac*r(:)) ! twice for total height afterwards
+            oheight(:)  =one/height(:)
+         else if ( index(container, 'BUSSE') == 1 ) then
+            Lin =one ! Normalised at one in full disks
+            Lout=0.4_cp
+            fac =(Lin-Lout)/(r_cmb-r_icb)/r_cmb
+            height(:)   =-fac*r(:)+Lin
+            beta(:)     =-fac/height
+            dbeta(:)    =-fac**2/height(:)**2
+            d2beta(:)   =two*fac**3/height**3
+            d3beta(:)   =-6.0_cp*fac**4/height(:)**4
+            ekpump(:)   =half*ek_pump_fac*sqrt(ek) / height(:) *(one+fac**2)**0.25_cp
+            ekp_up(:)   =0.0_cp
+            ekp_us(:)   =fac*(1+fac**2)**0.75_cp/height(:)
+            ekp_dusdp(:)=-fac**2*or1(:)
+            height(:) =two*(fac*r(:)+Lin) ! twice for total height afterwards
+            oheight(:)=one/height(:)
          end if
-
       end if
 
    end subroutine radial
