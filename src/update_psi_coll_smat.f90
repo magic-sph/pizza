@@ -8,8 +8,8 @@ module update_psi_coll_smat
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, BuoFac, &
        &                l_coriolis_imp, l_buo_imp, l_ek_pump, l_non_rot,     &
        &                ChemFac, l_chem, l_heat
-   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight, &
-       &                       rgrav
+   use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, &
+       &                       rgrav, ekp_up, ekp_us, ekp_dusdp
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
    use radial_der, only: get_ddr, get_dr
@@ -462,11 +462,10 @@ contains
                   &                                    work_Mloc(n_m,n_r)   &
                   &                   +or1(n_r)*        dom_Mloc(n_m,n_r)   &
                   &                   -dm2*or2(n_r)*     om_Mloc(n_m,n_r) ) &
-                  &             -CorFac*ekpump(n_r)*     om_Mloc(n_m,n_r)   &
-                  & +half*CorFac*ekpump(n_r)*beta(n_r)*  up_Mloc(n_m,n_r)   &
-                  & +CorFac*( ekpump(n_r)*beta(n_r)*(-ci*real(m,cp)+        &
-                  &              5.0_cp*r_cmb*oheight(n_r)) )*              &
-                  &                                      us_Mloc(n_m,n_r)
+                  &             -CorFac*ekpump(n_r)*(     om_Mloc(n_m,n_r)  &
+                  &                        +ekp_up(n_r)*  up_Mloc(n_m,n_r)  &
+                  &         +(ekp_dusdp(n_r)*ci*real(m,cp)+ekp_us(n_r)) *   &
+                  &                                       us_Mloc(n_m,n_r))
 
                   if ( l_coriolis_imp ) then
                      dpsidt%impl(n_m,n_r,istage)=dpsidt%impl(n_m,n_r,istage) &
@@ -495,10 +494,10 @@ contains
                         vort_bal%cor(n_m,n_r) =CorFac*beta(n_r)*us_Mloc(n_m,n_r)
                      end if
                      if ( l_ek_pump ) then
-                        vort_bal%pump(n_m,n_r)=CorFac*ekpump(n_r)*(             &
-                        &                                     -om_Mloc(n_m,n_r) &
-                        &                    +half*beta(n_r)*  up_Mloc(n_m,n_r) &
-                        & +beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*&
+                        vort_bal%pump(n_m,n_r)=-CorFac*ekpump(n_r)*(            &
+                        &                                      om_Mloc(n_m,n_r) &
+                        &                       +ekp_up(n_r) * up_Mloc(n_m,n_r) &
+                        &           +(ekp_dusdp(n_r)*ci*real(m,cp)+ekp_us(n_r))*&
                         &                                      us_Mloc(n_m,n_r) )
                      end if
                   end if
@@ -725,12 +724,11 @@ contains
             &            dm2*or2(nR)*        rscheme%rMat(nR,nR_out) ) - &
             &  CorFac*ekpump(nR)*            rscheme%rMat(nR,nR_out) ) )
 
-            psiMat(nR,nR_out_psi)=-rscheme%rnorm*tscheme%wimp_lin(1)*(   &
-            &-half*CorFac*ekpump(nR)*beta(nR)*rscheme%drMat(nR,nR_out)+  &
-            &  CorFac*( -half*ekpump(nR)*beta(nR)*beta(nR)               &
-            &   +ekpump(nR)*beta(nR)*or1(nR)*( dm2+                      &
-            &              5.0_cp*r_cmb*oheight(nR)*ci*real(m,cp)) )*    &
-            &                                  rscheme%rMat(nR,nR_out) ) 
+            psiMat(nR,nR_out_psi)=-rscheme%rnorm*tscheme%wimp_lin(1)*(  &
+            &  CorFac*ekpump(nR)*ekp_up(nR)*rscheme%drMat(nR,nR_out)+   &
+            &  CorFac*ekpump(nR)*(  ekp_up(nR)*beta(nR)                 &
+            &     -(ekp_dusdp(nR)*ci*real(m,cp)+ekp_us(nR))*            &
+            &       ci*real(m,cp)* or1(nR))* rscheme%rMat(nR,nR_out))
 
             if ( l_coriolis_imp ) then
                psiMat(nR,nR_out_psi) = psiMat(nR,nR_out_psi) -        &

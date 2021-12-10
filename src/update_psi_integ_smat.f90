@@ -8,8 +8,8 @@ module update_psi_integ_smat
        &                l_ek_pump, ViscFac, l_coriolis_imp, ek, l_buo_imp,    &
        &                l_galerkin, BuoFac, ChemFac, l_heat, l_chem
    use horizontal, only: hdif_V
-   use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r, &
-       &                       rgrav
+   use radial_functions, only: rscheme, or1, or2, beta, ekpump, ekp_us, r, &
+       &                       rgrav, ekp_up, ekp_dusdp
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx, n_cheb_max
    use radial_der, only: get_ddr, get_dr
@@ -519,10 +519,10 @@ contains
                      vort_bal%cor(n_m,n_r) =CorFac*beta(n_r)*us_Mloc(n_m,n_r)
                   end if
                   if ( l_ek_pump ) then
-                     vort_bal%pump(n_m,n_r)=CorFac*ekpump(n_r)*(             &
-                     &                                     -om_Mloc(n_m,n_r) &
-                     &                    +half*beta(n_r)*  up_Mloc(n_m,n_r) &
-                     & +beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*&
+                     vort_bal%pump(n_m,n_r)=-CorFac*ekpump(n_r)*(            &
+                     &                                      om_Mloc(n_m,n_r) &
+                     &                    +   ekp_up(n_r)*  up_Mloc(n_m,n_r) &
+                     & +(ci*real(m,cp)*ekp_dusdp(n_r)+ekp_us(n_r))*          &
                      &                                      us_Mloc(n_m,n_r) )
                   end if
                end if
@@ -717,10 +717,10 @@ contains
                      vort_bal%cor(n_m,n_r) =CorFac*beta(n_r)*us_Mloc(n_m,n_r)
                   end if
                   if ( l_ek_pump ) then
-                     vort_bal%pump(n_m,n_r)=CorFac*ekpump(n_r)*(             &
-                     &                                     -om_Mloc(n_m,n_r) &
-                     &                    +half*beta(n_r)*  up_Mloc(n_m,n_r) &
-                     & +beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*&
+                     vort_bal%pump(n_m,n_r)=-CorFac*ekpump(n_r)*(            &
+                     &                                      om_Mloc(n_m,n_r) &
+                     &                       +ekp_up(n_r)*  up_Mloc(n_m,n_r) &
+                     &           +(ci*real(m,cp)*ekp_dusdp(n_r)+ekp_us(n_r))*&
                      &                                      us_Mloc(n_m,n_r) )
                   end if
                end if
@@ -844,10 +844,10 @@ contains
                   dpsi_exp_last(n_m,n_r)=  dpsi_exp_last(n_m,n_r)- &
                   &                      ekp_fac*up_Mloc(n_m,n_r)
                else 
-                  dpsi_exp_last(n_m,n_r)=     dpsi_exp_last(n_m,n_r) +       &
-                  &               ekp_fac*r(n_r)*( -om_Mloc(n_m,n_r) +       &
-                  &               half*beta(n_r)*   up_Mloc(n_m,n_r) +       &
-                  &   beta(n_r)*(-ci*real(m,cp)+5.0_cp*r_cmb*oheight(n_r))*  &
+                  dpsi_exp_last(n_m,n_r)=     dpsi_exp_last(n_m,n_r) -       &
+                  &               ekp_fac*r(n_r)*(  om_Mloc(n_m,n_r) +       &
+                  &                  ekp_up(n_r)*   up_Mloc(n_m,n_r) +       &
+                  &             (ci*real(m,cp)*ekp_dusdp(n_r)+ekp_us(n_r))*  &
                   &                                 us_Mloc(n_m,n_r) )
                end if
             end do

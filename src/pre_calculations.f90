@@ -5,10 +5,11 @@ module pre_calculations
    &                     n_cheb_max
    use constants, only: one, four, third, pi, vol_oc, surf, two, vol_otc
    use outputs, only: n_log_file
-   use radial_functions, only: r, rscheme, radial
+   use radial_functions, only: r, rscheme, radial, height
    use namelists, only: l_newmap, tag, dtMax, dtMin, pr, l_non_rot, ek, &
-       &                r_cmb, r_icb
+       &                r_cmb, r_icb, container
    use horizontal, only: mfunctions
+   use integration, only: rInt_R
    use precision_mod
    use parallel_mod
 
@@ -47,7 +48,14 @@ contains
 
       !-- Compute some constants
       vol_oc =four*third*pi*(r_cmb**3-r_icb**3)
-      vol_otc=four*third*pi*(r_cmb**2-r_icb**2)**(1.5_cp)
+      if ( index(container, 'SPHERE') == 1 ) then
+         vol_otc=four*third*pi*(r_cmb**2-r_icb**2)**(1.5_cp)
+      else if ( index(container, 'EXP') == 1 ) then
+         vol_otc=two * pi * rInt_R(height(:)*r(:), r(:), rscheme)
+      else if ( index(container, 'BUSSE') == 1 ) then
+         vol_otc=two * pi * rInt_R(height(:)*r(:), r(:), rscheme)
+      end if
+
       surf   =pi*(r_cmb**2-r_icb**2)
 
       !-- Write some informations
