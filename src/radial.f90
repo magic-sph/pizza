@@ -13,7 +13,8 @@ module radial_functions
        &                r_cmb, r_icb, l_cheb_coll, beta_shift, xicond_fac, &
        &                ktopt, kbott, t_bot, t_top, l_heat, l_chem, xi_bot,&
        &                xi_top, l_xi_3D, ktopxi, kbotxi, h_temp, h_xi,     &
-       &                l_finite_diff, fd_stretch, fd_ratio, container
+       &                l_finite_diff, fd_stretch, fd_ratio, container,    &
+       &                beta_fac
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -223,7 +224,7 @@ contains
             ekp_us(:)   =-5.0_cp*r_cmb*beta(:)*oheight(:)
             ekp_dusdp(:)=beta(:)
          else if ( index(container, 'EXP') == 1 ) then
-            fac=one/r_cmb ! container with L=exp(-fac * r)
+            fac=beta_fac/r_cmb ! container with L=exp(-fac * r)
             height(:) =exp(-fac*r(:))
             beta(:)   =-fac
             dbeta(:)  =0.0_cp
@@ -241,7 +242,7 @@ contains
             oheight(:)  =one/height(:)
          else if ( index(container, 'BUSSE') == 1 ) then
             Lin =one ! Normalised at one in full disks
-            Lout=0.4_cp
+            Lout=beta_fac
             fac =(Lin-Lout)/(r_cmb-r_icb)/r_cmb
             height(:)   =-fac*r(:)+Lin
             beta(:)     =-fac/height

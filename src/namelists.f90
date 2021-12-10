@@ -32,6 +32,7 @@ module namelists
    real(cp), public :: tcond_fac     ! Rescaling of the conducting temperature
    real(cp), public :: xicond_fac    ! Rescaling of the conducting composition
    real(cp), public :: beta_shift    ! Shift the upper bound of \beta
+   real(cp), public :: beta_fac      ! Constant to modify the container (used for non-spherical containers)
    logical,  public :: l_finite_diff ! Shift to finite differences in radius
    logical,  public :: l_non_rot     ! Switch to do a non-rotatig annulus
    logical,  public :: l_temp_3D     ! 2D or 3D temperature background
@@ -150,7 +151,7 @@ contains
       &                   l_temp_3D,tcond_fac,l_temp_advz,         &
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
       &                   xi_bot,xi_top, l_xi_3D, xicond_fac,      &
-      &                   h_temp, h_xi, container
+      &                   h_temp, h_xi, container, beta_fac
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi
@@ -523,6 +524,7 @@ contains
       tcond_fac        =one
       xicond_fac       =one
       beta_shift       =0.0_cp
+      beta_fac         =0.4_cp
       !----- Gravity parameters: defaut value g propto r (i.e. g1=1)
       g0               =0.0_cp
       g1               =one
@@ -657,6 +659,7 @@ contains
       length=length_to_blank(container)
       write(n_out,*) " container       = """,container(1:length),""","
       write(n_out,'(''  beta_shift      ='',ES14.6,'','')') beta_shift
+      write(n_out,'(''  beta_fac        ='',ES14.6,'','')') beta_fac
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1
       write(n_out,'(''  g2              ='',ES14.6,'','')') g2
