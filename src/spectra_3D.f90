@@ -151,8 +151,8 @@ contains
             e_pol_r_l(l,n_r) = e_pol_r_l(l,n_r) + e_pol_tmp
             e_tor_r_l(l,n_r) = e_tor_r_l(l,n_r) + e_tor_tmp
             !----- m-spectra:
-            e_pol_r_m(m+1,n_r) = e_pol_r_m(m+1,n_r) + e_pol_tmp
-            e_tor_r_m(m+1,n_r) = e_tor_r_m(m+1,n_r) + e_pol_tmp
+            !e_pol_r_m(m+1,n_r) = e_pol_r_m(m+1,n_r) + e_pol_tmp
+            !e_tor_r_m(m+1,n_r) = e_tor_r_m(m+1,n_r) + e_pol_tmp
             !!----- r-spectra:
             E_pol_r(n_r) = E_pol_r(n_r) + e_pol_tmp
             E_tor_r(n_r) = E_tor_r(n_r) + e_pol_tmp
@@ -160,8 +160,8 @@ contains
          !-- A reduction is needed here
          call reduce_radial_on_rank(e_pol_r_l(:,n_r), l_max, 0)
          call reduce_radial_on_rank(e_tor_r_l(:,n_r), l_max, 0)
-         call reduce_radial_on_rank(e_pol_r_m(:,n_r), l_max+1, 0)
-         call reduce_radial_on_rank(e_pol_r_m(:,n_r), l_max+1, 0)
+         !call reduce_radial_on_rank(e_pol_r_m(:,n_r), l_max+1, 0)
+         !call reduce_radial_on_rank(e_pol_r_m(:,n_r), l_max+1, 0)
        end do
        call reduce_radial_on_rank(E_pol_r, n_r_max_3D, 0)
        call reduce_radial_on_rank(E_tor_r, n_r_max_3D, 0)
@@ -179,14 +179,14 @@ contains
                  &       this%n_calls, this%dt, time)
          end do
          !-- m-spectra
-         do m=1,l_max+1 !- Note: counter m is actual order+1
-            E_pol_m(m) =Efac*rInt_R(e_pol_r_l(m,:),r_3D,rscheme_3D)
-            E_tor_m(m) =Efac*rInt_R(e_tor_r_l(m,:),r_3D,rscheme_3D)
-            call getMSD2(this%bpol2M%mean(m), this%bpol2M%SD(m), E_pol_m(m), &
-                 &       this%n_calls, this%dt, time)
-            call getMSD2(this%btor2M%mean(m), this%btor2M%SD(m), E_tor_m(m), &
-                 &       this%n_calls, this%dt, time)
-         end do
+         !do m=1,l_max+1 !- Note: counter m is actual order+1
+         !   E_pol_m(m) =Efac*rInt_R(e_pol_r_l(m,:),r_3D,rscheme_3D)
+         !   E_tor_m(m) =Efac*rInt_R(e_tor_r_l(m,:),r_3D,rscheme_3D)
+         !   call getMSD2(this%bpol2M%mean(m), this%bpol2M%SD(m), E_pol_m(m), &
+         !        &       this%n_calls, this%dt, time)
+         !   call getMSD2(this%btor2M%mean(m), this%btor2M%SD(m), E_tor_m(m), &
+         !        &       this%n_calls, this%dt, time)
+         !end do
          !-- r-spectra
          do n_r=1,n_r_max_3D
             call getMSD2(this%bpol2R%mean(n_r), this%bpol2R%SD(n_r), E_pol_r(n_r), &
@@ -203,10 +203,10 @@ contains
                        &       e_pol_r_l(l,n_r),this%n_calls, this%dt, time)
                   call getMSD2(this%btor2LR%mean(l,n_r), this%btor2LR%SD(l,n_r), &
                        &       e_tor_r_l(l,n_r),this%n_calls, this%dt, time)
-                  call getMSD2(this%bpol2MR%mean(l+1,n_r), this%bpol2MR%SD(l+1,n_r), &
-                       &       e_pol_r_m(l+1,n_r),this%n_calls, this%dt, time)
-                  call getMSD2(this%btor2MR%mean(l+1,n_r), this%btor2MR%SD(l+1,n_r), &
-                       &       e_tor_r_m(l+1,n_r),this%n_calls, this%dt, time)
+                  !call getMSD2(this%bpol2MR%mean(l+1,n_r), this%bpol2MR%SD(l+1,n_r), &
+                  !     &       e_pol_r_m(l+1,n_r),this%n_calls, this%dt, time)
+                  !call getMSD2(this%btor2MR%mean(l+1,n_r), this%btor2MR%SD(l+1,n_r), &
+                  !     &       e_tor_r_m(l+1,n_r),this%n_calls, this%dt, time)
                end do
             end do
          end if
@@ -226,13 +226,13 @@ contains
             do l=1,l_max
                this%bpol2L%SD(l) =sqrt(this%bpol2L%SD(l)/this%timeLast)
                this%btor2L%SD(l) =sqrt(this%btor2L%SD(l)/this%timeLast)
-               this%bpol2M%SD(l+1) =sqrt(this%bpol2M%SD(l+1)/this%timeLast)
-               this%btor2M%SD(l+1) =sqrt(this%btor2M%SD(l+1)/this%timeLast)
+               !this%bpol2M%SD(l+1) =sqrt(this%bpol2M%SD(l+1)/this%timeLast)
+               !this%btor2M%SD(l+1) =sqrt(this%btor2M%SD(l+1)/this%timeLast)
                write(file_handle, '(I5, 8es16.8)') l,                              &
                &     round_off(this%bpol2L%mean(l)), round_off(this%bpol2L%SD(l)), &
-               &     round_off(this%btor2L%mean(l)), round_off(this%btor2L%SD(l)), &
-               &     round_off(this%bpol2M%mean(l+1)), round_off(this%bpol2M%SD(l+1)), &
-               &     round_off(this%btor2M%mean(l+1)), round_off(this%btor2M%SD(l+1))
+               &     round_off(this%btor2L%mean(l)), round_off(this%btor2L%SD(l))!, &
+               !&     round_off(this%bpol2M%mean(l+1)), round_off(this%bpol2M%SD(l+1)), &
+               !&     round_off(this%btor2M%mean(l+1)), round_off(this%btor2M%SD(l+1))
             end do
             close(file_handle)
 

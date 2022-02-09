@@ -60,7 +60,7 @@ module radial_scheme
 
          !-- Input quantities:
          integer,  intent(in) :: n_r_max    ! Number of grid points
-         real(cp), intent(inout) :: ratio1  ! Nboudary/Nbulk
+         real(cp), intent(inout) :: ratio1  ! Nboundary/Nbulk
          real(cp), intent(in) :: ratio2     ! drMin/drMax
          real(cp), intent(in) :: ricb       ! inner boundary
          real(cp), intent(in) :: rcmb       ! outer boundary

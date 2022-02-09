@@ -6,7 +6,7 @@ module update_psi_integ_smat
    use constants, only: one, zero, ci, half
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, l_coriolis_imp, ek, l_buo_imp,    &
-       &                l_galerkin
+       &                l_galerkin, l_mag_LF, damp_zon
    use horizontal, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
@@ -196,8 +196,8 @@ contains
 
    end subroutine finalize_psi_integ_smat
 !------------------------------------------------------------------------------
-   subroutine update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,    &
-              &                   up_Mloc, buo_Mloc, dpsidt, vp_bal, vort_bal, &
+   subroutine update_psi_int_smat(psi_hat_Mloc, psi_Mloc, om_Mloc, us_Mloc,     &
+              &                   up_Mloc, buo_Mloc, dpsidt, vp_bal, vort_bal,  &
               &                   tscheme, lMat, timers)
 
       !-- Input variables
@@ -404,8 +404,8 @@ contains
 
                if ( m == 0 ) then
                   us_Mloc(n_m,n_r)=0.0_cp
-                  up_Mloc(n_m,n_r)=uphi0(n_r)
-                  om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+                  up_Mloc(n_m,n_r)=uphi0(n_r)*damp_zon
+                  om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)*damp_zon
                else
                   us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
                   up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
@@ -422,8 +422,8 @@ contains
 
                if ( m == 0 ) then
                   us_Mloc(n_m,n_r)=0.0_cp
-                  up_Mloc(n_m,n_r)=uphi0(n_r)
-                  om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+                  up_Mloc(n_m,n_r)=uphi0(n_r)*damp_zon
+                  om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)*damp_zon
                else
                   us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*h2*   psi_Mloc(n_m,n_r)
                   up_Mloc(n_m,n_r)=-h2*                        work_Mloc(n_m,n_r) &
@@ -477,8 +477,8 @@ contains
    end subroutine update_psi_int_smat
 !------------------------------------------------------------------------------
    subroutine finish_exp_psi_int_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
-              &                       dVsOm_Mloc, buo_Mloc, dpsi_exp_last, &
-              &                       vp_bal, vort_bal)
+              &                       dVsOm_Mloc, buo_Mloc, djxB_Mloc,     &
+              &                       dpsi_exp_last, vp_bal, vort_bal)
 
       !-- Input variables
       complex(cp), intent(in) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -487,6 +487,7 @@ contains
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: djxB_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       type(vp_bal_type),   intent(inout) :: vp_bal
@@ -556,6 +557,11 @@ contains
       if ( l_rank_has_m0 .and. vp_bal%l_calc ) then
          do n_r=1,n_r_max
             vp_bal%rey_stress(n_r)=real(dpsi_exp_last(m2idx(0),n_r))
+            vp_bal%lorentz_force(n_r)=0.0_cp
+            if ( l_mag_LF ) then
+               vp_bal%lorentz_force(n_r)=real(djxB_Mloc(m2idx(0),n_r))
+               vp_bal%rey_stress(n_r)=vp_bal%rey_stress(n_r) - real(djxB_Mloc(m2idx(0),n_r))
+             end if
          end do
       end if
 

@@ -19,8 +19,9 @@ module shtns
 
    private
 
-   public :: init_shtns, scal_to_spat, scal_to_SH, torpol_to_spat, &
-   &         torpol_to_curl_spat, scal_axi_to_grad_spat, spat_to_qst
+   public :: init_shtns, scal_to_spat, scal_to_SH, spat_to_qst, &
+   &         torpol_to_spat,torpol_to_curl_spat,                &
+   &         scal_axi_to_grad_spat
 
    type(c_ptr) :: sht_l, sht_lP
 

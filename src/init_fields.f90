@@ -15,7 +15,7 @@ module init_fields
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u,     &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_QG_basis,       &
        &                l_non_rot, l_reset_t, l_chem, l_heat, amp_xi, init_xi, &
-       &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac
+       &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac, l_mag_B0
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
@@ -148,6 +148,10 @@ contains
               &      n_r_max_3D, rscheme_3D)
          call get_dr(aj_3D_LMloc, dj_3D_LMloc, lmStart, lmStop,&
               &      n_r_max_3D, rscheme_3D)
+         if ( l_mag_B0 ) then
+            call get_ddr(b0_3D_LMloc, db0_3D_LMloc, ddb0_3D_LMloc, lmStart, lmStop,&
+                 &      n_r_max_3D, rscheme_3D)
+         end if
       end if
       call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
       do n_r=1,n_r_max
@@ -699,6 +703,20 @@ contains
                b_LMloc(lm,n_r)=b_LMloc(lm,n_r) + cmplx(bR*b1(n_r),bI*b1(n_r),kind=cp)
             end do
          end do
+      end if
+
+      if ( l_mag_B0 ) then  ! Simple Background field
+      ! l=1,m0 poloidal field
+      ! which is potential field at r_cmb
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+            b_pol=amp_B*5.0_cp*half*sqrt(third*pi)*r_icb**2
+            do n_r=1,n_r_max_3D
+               b0_3D_LMloc(lm10,n_r)=b0_3D_LMloc(lm10,n_r)+b_pol*(r_3D(n_r)/r_icb)**2 * &
+               &                     ( one - three/5.0_cp*(r_3D(n_r)/r_cmb)**2 )
+
+            end do
+            b_LMloc(:,:) = zero
+         end if
       end if
 
    end subroutine initB_3D

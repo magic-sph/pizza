@@ -22,7 +22,7 @@ module outputs
        &               nm_per_rank, m_balance, nRstart3D, nRstop3D
    use integration, only: rInt_R, simps
    use useful, only: round_off, cc2real, cc22real, getMSD2, abortRun
-   use constants, only: pi, two, third, four, surf, vol_otc, one, ci
+   use constants, only: pi, two, four, surf, vol_otc, one
    use checkpoints, only: write_checkpoint
    use output_frames, only: write_snapshot
    use time_schemes, only: type_tscheme

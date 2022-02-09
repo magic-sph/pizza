@@ -18,7 +18,7 @@ module grid_space_arrays_mod
    use mem_alloc, only: bytes_allocated
    use namelists, only: l_heat_3D, l_mag_3D, l_mag_LF, r_icb, r_cmb, &
    &                    l_mag_alpha, alpha_fac, l_mag_inertia,       &
-   &                    delta_fac, l_QG_basis
+   &                    delta_fac, l_QG_basis, l_lin_solve, l_mag_B0
    use blocking, only: nRstart3D, nRstop3D
    use truncation_3D, only: n_theta_max, n_phi_max_3D
    use radial_functions, only: or1_3D, r_3D, rgrav_3D, beta!, tcond_3D
@@ -32,11 +32,14 @@ module grid_space_arrays_mod
       !----- Nonlinear terms in phi/theta space: 
       real(cp), allocatable :: VTr(:,:), VTt(:,:), VTp(:,:)
       real(cp), allocatable :: VxBr(:,:), VxBt(:,:), VxBp(:,:)
+      real(cp), pointer :: Alphac(:,:)
 
       !----- Fields calculated from these help arrays by legtf:
       real(cp), pointer :: Tc(:,:)
       real(cp), pointer :: Brc(:,:), Btc(:,:), Bpc(:,:)
       real(cp), pointer :: curlBrc(:,:), curlBtc(:,:), curlBpc(:,:)
+      real(cp), pointer :: B0rc(:,:), B0tc(:,:), B0pc(:,:)
+      real(cp), pointer :: curlB0rc(:,:), curlB0tc(:,:), curlB0pc(:,:)
    contains
       procedure :: initialize
       procedure :: finalize
@@ -71,6 +74,24 @@ contains
             allocate( this%curlBpc(n_phi_max_3D,n_theta_max) )
             bytes_allocated=bytes_allocated + 3*n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL
          end if
+         if ( l_mag_B0 ) then
+            allocate( this%B0rc(n_phi_max_3D,n_theta_max) )
+            allocate( this%B0tc(n_phi_max_3D,n_theta_max) )
+            allocate( this%B0pc(n_phi_max_3D,n_theta_max) )
+            bytes_allocated=bytes_allocated + 3*n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL
+            if ( l_mag_LF ) then
+               allocate( this%curlB0rc(n_phi_max_3D,n_theta_max) )
+               allocate( this%curlB0tc(n_phi_max_3D,n_theta_max) )
+               allocate( this%curlB0pc(n_phi_max_3D,n_theta_max) )
+               bytes_allocated=bytes_allocated + 3*n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL
+            end if
+         end if
+         if ( l_mag_alpha ) then
+            allocate( this%Alphac(n_phi_max_3D,n_theta_max) )
+            bytes_allocated=bytes_allocated + n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL
+         else
+            allocate( this%Alphac(1,1) )
+         end if
       end if
 
       if ( l_heat_3D ) then
@@ -90,6 +111,17 @@ contains
             this%curlBrc(:,:)=0.0_cp
             this%curlBtc(:,:)=0.0_cp
             this%curlBpc(:,:)=0.0_cp
+            this%Alphac(:,:)=0.0_cp !if ( l_mag_alpha )
+         end if
+         if ( l_mag_B0 ) then
+            this%B0rc(:,:)=0.0_cp
+            this%B0tc(:,:)=0.0_cp
+            this%B0pc(:,:)=0.0_cp
+            if ( l_mag_LF ) then
+               this%curlB0rc(:,:)=0.0_cp
+               this%curlB0tc(:,:)=0.0_cp
+               this%curlB0pc(:,:)=0.0_cp
+            end if
          end if
       end if
 
@@ -108,6 +140,13 @@ contains
          deallocate( this%Brc, this%Btc, this%Bpc )
          if ( l_mag_LF ) then
             deallocate( this%curlBrc, this%curlBtc, this%curlBpc )
+            deallocate( this%Alphac )
+         end if
+         if ( l_mag_B0 ) then
+            deallocate( this%B0rc, this%B0tc, this%B0pc )
+            if ( l_mag_LF ) then
+               deallocate( this%curlB0rc, this%curlB0tc, this%curlB0pc )
+            end if
          end if
       end if
 
@@ -138,25 +177,27 @@ contains
       !-- Local variables:
       integer :: n_theta, n_phi
       real(cp) :: r2, or1sn1
-      real(cp) :: bamp2, rfunc, Afunc
+      real(cp) :: rfunc!, bamp2, Afunc
 
       r2 = r_3D(n_r)*r_3D(n_r)
 
       if ( l_heat_3D ) then
-         !------ Get V T, the divergence of it is temperature advection:
-         !$OMP PARALLEL DO default(shared) &
-         !$OMP& private(n_theta, n_phi)
-         do n_theta=1,n_theta_max
-            do n_phi=1,n_phi_max_3D     ! calculate u*T components
-               this%VTr(n_phi,n_theta) = &
-               &    r2*vr(n_phi,n_theta)*this%Tc(n_phi,n_theta)
-               this%VTt(n_phi,n_theta) = &
-               &    or1_3D(n_r)*vt(n_phi,n_theta)*this%Tc(n_phi,n_theta)
-               this%VTp(n_phi,n_theta) = &
-               &    or1_3D(n_r)*vp(n_phi,n_theta)*this%Tc(n_phi,n_theta)
-            end do
-         end do  ! theta loop
-         !$OMP END PARALLEL DO
+         if ( .not. l_lin_solve ) then  !-- Non-Linear terms?
+            !------ Get V T, the divergence of it is temperature advection:
+            !$OMP PARALLEL DO default(shared) &
+            !$OMP& private(n_theta, n_phi)
+            do n_theta=1,n_theta_max
+               do n_phi=1,n_phi_max_3D     ! calculate u*T components
+                  this%VTr(n_phi,n_theta) = &
+                  &    r2*vr(n_phi,n_theta)*this%Tc(n_phi,n_theta)
+                  this%VTt(n_phi,n_theta) = &
+                  &    or1_3D(n_r)*vt(n_phi,n_theta)*this%Tc(n_phi,n_theta)
+                  this%VTp(n_phi,n_theta) = &
+                  &    or1_3D(n_r)*vp(n_phi,n_theta)*this%Tc(n_phi,n_theta)
+               end do
+            end do  ! theta loop
+            !$OMP END PARALLEL DO
+         end if
 
          !$OMP PARALLEL DO default(shared) &
          !$OMP& private(n_theta, n_phi)
@@ -178,48 +219,63 @@ contains
          !$OMP END PARALLEL DO
       end if ! l_heat_3D?
 
-      if ( l_mag_3D ) then
+      if ( l_mag_3D .and. (.not. l_lin_solve) ) then
          !------ Get (V x B) , the curl of this is the dynamo term:
          !$OMP PARALLEL DO default(shared) &
          !$OMP& private(n_theta, n_phi, or1sn1)
          do n_theta=1,n_theta_max
             or1sn1=or1_3D(n_r)*osint1(n_theta)
             do n_phi=1,n_phi_max_3D     ! calculate V x B components
-               this%VxBr(n_phi,n_theta)=r2*(                   &
-               &    vt(n_phi,n_theta)*this%Bpc(n_phi,n_theta)- &
-               &    vp(n_phi,n_theta)*this%Btc(n_phi,n_theta) )!&&!
-               !&   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Bpc(n_phi,n_theta)- &
-               !&   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Btc(n_phi,n_theta) )!&&!
+               if ( .not. l_mag_B0 ) then
+                  this%VxBr(n_phi,n_theta)=r2*(                   &
+                  &    vt(n_phi,n_theta)*this%Bpc(n_phi,n_theta)- &
+                  &    vp(n_phi,n_theta)*this%Btc(n_phi,n_theta) )!&&!
+                  !&   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Bpc(n_phi,n_theta)- &
+                  !&   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Btc(n_phi,n_theta) )!&&!
 
-               this%VxBt(n_phi,n_theta)=or1sn1*(               &
-               &    vp(n_phi,n_theta)*this%Brc(n_phi,n_theta)- &
-               &    vr(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )!&&!
-               !&   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Brc(n_phi,n_theta)- &
-               !&   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Bpc(n_phi,n_theta) )!&&!
+                  this%VxBt(n_phi,n_theta)=or1sn1*(               &
+                  &    vp(n_phi,n_theta)*this%Brc(n_phi,n_theta)- &
+                  &    vr(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )!&&!
+                  !&   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Brc(n_phi,n_theta)- &
+                  !&   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Bpc(n_phi,n_theta) )!&&!
 
-               this%VxBp(n_phi,n_theta)=or1sn1*(         &
-               &    vr(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
-               &    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) )!&&!
-               !&   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Btc(n_phi,n_theta)- &
-               !&   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Brc(n_phi,n_theta) )!&&!
-               if ( l_mag_alpha ) then
-                  !-- Following the form of (Chan etal., 2001; eq.25)
-                  bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
-                  &       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
-                  &       this%Bpc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)
+                  this%VxBp(n_phi,n_theta)=or1sn1*(         &
+                  &    vr(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
+                  &    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) )!&&!
+                  !&   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Btc(n_phi,n_theta)- &
+                  !&   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Brc(n_phi,n_theta) )!&&!
+               else !-- Magneto-convection
+                  this%VxBr(n_phi,n_theta)=r2*(                   &
+                  &    vt(n_phi,n_theta)*this%B0pc(n_phi,n_theta)- &
+                  &    vp(n_phi,n_theta)*this%B0tc(n_phi,n_theta) )!
+
+                  this%VxBt(n_phi,n_theta)=or1sn1*(               &
+                  &    vp(n_phi,n_theta)*this%B0rc(n_phi,n_theta)- &
+                  &    vr(n_phi,n_theta)*this%B0pc(n_phi,n_theta) )
+
+                  this%VxBp(n_phi,n_theta)=or1sn1*(         &
+                  &    vr(n_phi,n_theta)*this%B0tc(n_phi,n_theta)- &
+                  &    vt(n_phi,n_theta)*this%B0rc(n_phi,n_theta) )
+               end if
+
+               if ( l_mag_alpha .and. r_3D(n_r)*sint(n_theta) >= r_icb ) then
+                  !-- Following the form of (Chan etal., 2001; eq.25) --> only when nothing can prevent B from growing
+                  !bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
+                  !&       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
+                  !&       this%Bpc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)
                   rfunc = sin(pi*(r_3D(n_r)-r_icb))
                   !rfunc = 4.*r_3D(n_r)*sint(n_theta) *                   &
                   !&      ( r_cmb - r_3D(n_r)*sint(n_theta) ) / r_cmb**2.
-                  Afunc = alpha_fac*cost(n_theta)*rfunc
+                  this%Alphac(n_phi,n_theta) = alpha_fac*cost(n_theta)*rfunc
 
-                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + r2*(             &
-                  &                        Afunc*this%Brc(n_phi,n_theta)/(1. + bamp2) )
+                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + r2*(              &
+                  &    this%Alphac(n_phi,n_theta)*this%Brc(n_phi,n_theta))!/(1. + bamp2) )
 
-                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta) + or1sn1*(         &
-                  &                        Afunc*this%Btc(n_phi,n_theta)/(1. + bamp2) )
+                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta) + or1sn1*(          &
+                  &    this%Alphac(n_phi,n_theta)*this%Btc(n_phi,n_theta))!/(1. + bamp2) )
 
-                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + or1sn1*(         &
-                  &                        Afunc*this%Bpc(n_phi,n_theta)/(1. + bamp2) )
+                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + or1sn1*(          &
+                  &    this%Alphac(n_phi,n_theta)*this%Bpc(n_phi,n_theta))!/(1. + bamp2) )
                end if
 
                if ( l_mag_inertia ) then
@@ -254,26 +310,53 @@ contains
             do n_theta=1,n_theta_max
                or1sn1=or1_3D(n_r)*osint1(n_theta)
                do n_phi=1,n_phi_max_3D
-                  !---- jxBs= 1/(E*Pm) * ( curl(B)_p*B_z - curl(B)_z*B_p )
-                  !--       = sint * jxBr + cost * jxBt
-                  jxBs(n_phi,n_theta)=sint(n_theta)*r2*(                    &!(&!
-                  &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
-                  &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) ) &
-                  &                  +cost(n_theta)*or1sn1*(                &!(&!
-                  &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-  &
-                  &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
+                  if ( .not. l_mag_B0 ) then
+                     !---- jxBs= 1/(E*Pm) * ( curl(B)_p*B_z - curl(B)_z*B_p )
+                     !--       = sint * jxBr + cost * jxBt
+                     jxBs(n_phi,n_theta)=sint(n_theta)*r2*(                    &!(&!
+                     &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
+                     &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) ) &
+                     &                  +cost(n_theta)*or1sn1*(                &!(&!
+                     &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-  &
+                     &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
 
-                  !---- jxBp= 1/(E*Pm) * ( curl(B)_r*B_t - curl(B)_t*B_r )
-                  jxBp(n_phi,n_theta) =or1sn1*(                             &!(&!
-                  &    this%curlBrc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
-                  &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
+                     !---- jxBp= 1/(E*Pm) * ( curl(B)_r*B_t - curl(B)_t*B_r )
+                     jxBp(n_phi,n_theta) =or1sn1*(                             &!(&!
+                     &    this%curlBrc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
+                     &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
+                  else !-- Magneto-convection
+                     !---- j0xBs= sint * j0xBr + cost * j0xBt
+                     jxBs(n_phi,n_theta)=sint(n_theta)*r2*(                     &!(&!
+                     &   this%curlB0tc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
+                     &   this%curlB0pc(n_phi,n_theta)*this%Btc(n_phi,n_theta) ) &
+                     &                  +cost(n_theta)*or1sn1*(                 &!(&!
+                     &   this%curlB0pc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-  &
+                     &   this%curlB0rc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
+                     !---- + jxB0s= sint * j0xBr + cost * j0xBt
+                     jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta)+sint(n_theta)*r2*( &!(&!
+                     &   this%curlBtc(n_phi,n_theta)*this%B0pc(n_phi,n_theta)-  &
+                     &   this%curlBpc(n_phi,n_theta)*this%B0tc(n_phi,n_theta) ) &
+                     &                  +cost(n_theta)*or1sn1*(                 &!(&!
+                     &   this%curlBpc(n_phi,n_theta)*this%B0rc(n_phi,n_theta)-  &
+                     &   this%curlBrc(n_phi,n_theta)*this%B0pc(n_phi,n_theta) )
+
+                     !---- j0xBp= j0_r*B_t - j0_t*B_r
+                     jxBp(n_phi,n_theta) =or1sn1*(                              &!(&!
+                     &    this%curlB0rc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
+                     &    this%curlB0tc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
+                     !---- + jxB0p= j0_r*B_t - j0_t*B_r
+                     jxBp(n_phi,n_theta) =jxBp(n_phi,n_theta)+or1sn1*(          &!(&!
+                     &    this%curlBrc(n_phi,n_theta)*this%B0tc(n_phi,n_theta)- &
+                     &    this%curlBtc(n_phi,n_theta)*this%B0rc(n_phi,n_theta) )
+                  end if
+
                   if ( l_QG_basis ) then
                      !-- Additional buoyancy term from the QG basis projection: +\beta/s z Vx(jxB)_s
                      !-- Only need to compute the s component of Vx(jxB)
                      !-- Vx(jxB)_s = 1/s \partial_p jxB_z - \partial_z jxB_p (<- computed above)
                      !-- jxBz = 1/(E*Pm) * ( curl(B)_p*B_s - curl(B)_s*B_p )
                      !--      = cost * jxBr - sint * jxBt
-                     !-- Can be added to jxBs because it will get 1/s \partial_\phi later
+                     !-- Can be added to jxBs because it will get -1/s \partial_\phi later
                      jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta) -(cost(n_theta)*r2*( &
                      &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-     &
                      &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) )    &

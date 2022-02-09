@@ -6,7 +6,7 @@ module update_psi_coll_dmat
    use constants, only: one, zero, ci, half
    use horizontal, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
-       &                l_non_rot, l_ek_pump, l_buo_imp
+       &                l_non_rot, l_ek_pump, l_mag_LF, l_buo_imp, damp_zon
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -105,13 +105,14 @@ contains
    end subroutine finalize_om_coll_dmat
 !------------------------------------------------------------------------------
    subroutine update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc, &
-              &                   buo_Mloc, dpsidt, vp_bal, vort_bal, tscheme,   &
-              &                   lMat, timers)
+              &                   buo_Mloc, djxB_Mloc, dpsidt, vp_bal, vort_bal, &
+              &                   tscheme, lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       complex(cp),         intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: djxB_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),         intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -170,6 +171,11 @@ contains
             if ( vp_bal%l_calc ) then
                do n_r=1,n_r_max
                   vp_bal%rey_stress(n_r)=real(dpsidt%expl(n_m,n_r,tscheme%istage))
+                  vp_bal%lorentz_force(n_r)=0.0_cp
+                  if ( l_mag_LF ) then
+                     vp_bal%lorentz_force(n_r)=real(djxB_Mloc(n_m,n_r))
+                     vp_bal%rey_stress(n_r)=vp_bal%rey_stress(n_r) - real(djxB_Mloc(n_m,n_r))
+                  end if
                end do
             end if
 
@@ -383,8 +389,8 @@ contains
 
             if ( m == 0 ) then
                us_Mloc(n_m,n_r)=0.0_cp
-               up_Mloc(n_m,n_r)=uphi0(n_r)
-               om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+               up_Mloc(n_m,n_r)=uphi0(n_r)*damp_zon
+               om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)*damp_zon
             else
                us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
                up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)

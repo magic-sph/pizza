@@ -22,6 +22,7 @@ module vp_balance
       real(cp), allocatable :: dvpdt(:)
       real(cp), allocatable :: visc(:)
       real(cp), allocatable :: pump(:)
+      real(cp), allocatable :: lorentz_force(:)
       logical :: l_calc
       integer :: n_calls
       integer :: n_vphi_bal_file
@@ -50,9 +51,10 @@ contains
          allocate( this%dvpdt(n_r_max) )
          allocate( this%visc(n_r_max) )
          allocate( this%pump(n_r_max) )
+         allocate( this%lorentz_force(n_r_max) )
          this%n_calls = 0
          this%l_calc = .false.
-         bytes_allocated = bytes_allocated+4*n_r_max*SIZEOF_DEF_REAL
+         bytes_allocated = bytes_allocated+5*n_r_max*SIZEOF_DEF_REAL
       end if
 
    end subroutine initialize
@@ -66,6 +68,7 @@ contains
 
       if ( l_rank_has_m0 ) then
          close(this%n_vphi_bal_file)
+         deallocate( this%lorentz_force )
          deallocate( this%pump, this%visc )
          deallocate( this%dvpdt, this%rey_stress )
       end if
@@ -141,6 +144,9 @@ contains
          write(this%n_vphi_bal_file) this%rey_stress
          write(this%n_vphi_bal_file) this%pump
          write(this%n_vphi_bal_file) this%visc
+         write(this%n_vphi_bal_file) this%lorentz_force
+         !print*, "INSIDE vp_bal"
+         !print*, "this%lorentz_force", this%lorentz_force
       end if
 
    end subroutine write_outputs

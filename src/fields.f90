@@ -6,7 +6,7 @@ module fields
    use precision_mod
    use constants, only: zero
    use namelists, only: l_cheb_coll, l_heat, l_chem, l_heat_3D, l_mag_3D, &
-       &                l_3D
+       &                l_3D, l_mag_B0
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
    use truncation_3D, only: lm_max, n_r_max_3D, n_theta_max, n_phi_max_3D
@@ -43,6 +43,8 @@ module fields
    !-- Magnetic field 3-D:
    complex(cp), allocatable, public :: b_3D_LMloc(:,:), db_3D_LMloc(:,:), ddB_3D_LMloc(:,:)
    complex(cp), allocatable, public :: b_3D_Rloc(:,:), db_3D_Rloc(:,:), ddB_3D_Rloc(:,:)
+   complex(cp), allocatable, public :: b0_3D_LMloc(:,:), db0_3D_LMloc(:,:), ddb0_3D_LMloc(:,:)
+   complex(cp), allocatable, public :: b0_3D_Rloc(:,:), db0_3D_Rloc(:,:), ddb0_3D_Rloc(:,:)
    complex(cp), allocatable, public :: work_b_LMloc(:,:)
    complex(cp), allocatable, public :: aj_3D_LMloc(:,:), dj_3D_LMloc(:,:)
    complex(cp), allocatable, public :: aj_3D_Rloc(:,:), dj_3D_Rloc(:,:)
@@ -208,6 +210,27 @@ contains
          &                 7*(lmStop-lmStart+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
          bytes_allocated = bytes_allocated + &
          &                 5*lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
+         if ( l_mag_B0 ) then
+            allocate( b0_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
+            allocate( db0_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
+            allocate( ddb0_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
+            allocate( b0_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
+            allocate( db0_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
+            allocate( ddb0_3D_Rloc(lm_max,nRstart3D:nRstop3D) )
+            bytes_allocated = bytes_allocated + &
+            &                 3*(lmStop-lmStart+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
+            bytes_allocated = bytes_allocated + &
+            &                 3*lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
+            b0_3D_LMloc(:,:)  =zero
+            db0_3D_LMloc(:,:)  =zero
+            db0_3D_LMloc(:,:)  =zero
+            b0_3D_Rloc(:,:)  =zero
+            db0_3D_Rloc(:,:)  =zero
+            db0_3D_Rloc(:,:)  =zero
+         else
+            allocate( b0_3D_LMloc(1,1), db0_3D_LMloc(1,1), ddb0_3D_LMloc(1,1) )
+            allocate( b0_3D_Rloc(1,1), db0_3D_Rloc(1,1), ddb0_3D_Rloc(1,1) )
+         end if
          b_3D_LMloc(:,:)  =zero
          db_3D_LMloc(:,:) =zero
          ddb_3D_LMloc(:,:)=zero
@@ -231,6 +254,10 @@ contains
    subroutine finalize_fields
 
       if ( l_mag_3D ) then
+         if ( l_mag_B0 ) then
+            deallocate( b0_3D_Rloc, db0_3D_Rloc, ddb0_3D_Rloc )
+            deallocate( b0_3D_LMloc, db0_3D_LMloc, ddb0_3D_LMloc )
+         end if
          deallocate( aj_3D_Rloc, dj_3D_Rloc )
          deallocate( b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc )
          deallocate( aj_3D_LMloc, dj_3D_LMloc )

@@ -7,7 +7,7 @@ module update_psi_coll_smat
    use horizontal, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
        &                l_coriolis_imp, l_buo_imp, l_ek_pump,        &
-       &                l_non_rot, l_QG_basis
+       &                l_non_rot, l_mag_LF, l_QG_basis, damp_zon
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -67,13 +67,14 @@ contains
    end subroutine finalize_om_coll_smat
 !------------------------------------------------------------------------------
    subroutine update_om_coll_smat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc, &
-              &                   buo_Mloc, dpsidt, vp_bal, vort_bal, tscheme,   &
-              &                   lMat, timers)
+              &                   buo_Mloc, djxB_Mloc, dpsidt, vp_bal, vort_bal, &
+              &                   tscheme, lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       complex(cp),         intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: djxB_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),         intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -133,7 +134,15 @@ contains
             if ( vp_bal%l_calc ) then
                do n_r=1,n_r_max
                   vp_bal%rey_stress(n_r)=real(dpsidt%expl(n_m,n_r,tscheme%istage))
+                  vp_bal%lorentz_force(n_r)=0.0_cp
+                  if ( l_mag_LF ) then
+                     vp_bal%lorentz_force(n_r)=real(djxB_Mloc(n_m,n_r))
+                     vp_bal%rey_stress(n_r)=vp_bal%rey_stress(n_r) - real(djxB_Mloc(n_m,n_r))
+                  end if
                end do
+               !print*, "time step vp_calc, istage, l_mag_LF", tscheme%istage, l_mag_LF
+               !print*, "djxB_Mloc", real(djxB_Mloc(n_m,:))
+               !print*, "vp_bal%lorentz_force", vp_bal%lorentz_force
             end if
 
             call solve_full_mat(uphiMat(:,:), n_r_max, n_r_max,   &
@@ -237,14 +246,24 @@ contains
 
             if ( m == 0 ) then
                us_Mloc(n_m,n_r)=0.0_cp
-               up_Mloc(n_m,n_r)=uphi0(n_r)
-               om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
+               up_Mloc(n_m,n_r)=uphi0(n_r)*damp_zon
+               om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)*damp_zon
             else
                us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
                up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
             end if
          end do
       end do
+
+      if ( rank==0 .and. .False. ) then
+         print*, ""
+         print*, "Scheme, substage on number of stages::", tscheme%time_scheme, tscheme%istage, tscheme%nstages
+         !print*, "uphiMat(:,1)::", uphiMat(:,1)
+         print*, "Old::", dpsidt%old(nMstart,:,tscheme%istage)
+         print*, "Expl::", dpsidt%expl(nMstart,:,tscheme%istage)
+         print*, "Impl::", dpsidt%impl(nMstart,:,tscheme%istage)
+         print*, "final substage::", tscheme%istage, uphi0
+      end if
 
       !-- Roll the time arrays before filling again the first block
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)
@@ -519,6 +538,7 @@ contains
 
             if ( l_QG_basis ) then
                !-- Ekman Pumping should not be modified (only dependant on BCs)
+               !-- Added in psiMat(nR,nR_out) but the relation is between u_s and \psi
                psiMat(nR,nR_out_psi)= psiMat(nR,nR_out_psi) -             &
                &  tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*rscheme%rnorm*( &
                &  CorFac*ekpump(nR)*third*dm2*or1(nR)*                    &

@@ -19,7 +19,7 @@ module checkpoints
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &
        &                l_bridge_step, l_cheb_coll, scale_xi, l_3D,       &
-       &                l_heat_3D, l_mag_3D
+       &                l_heat_3D, l_mag_3D, l_path_rescale
    use radial_scheme, only: type_rscheme
    use radial_functions, only: rscheme, r, rscheme_3D, r_3D
    use chebyshev, only: type_cheb
@@ -490,6 +490,7 @@ contains
       character(len=72) :: rscheme_version_old
       character(len=10) :: tscheme_family_old
       real(cp) :: ratio1, ratio2
+      real(cp) :: epsilon_fac
       integer :: n_in, n_in_2, m, n_m, n_r_max_max, m_max_max
       integer :: norder_imp_lin_old, norder_exp_old, n_o, norder_imp_old
       logical :: l_coll_old, l_3D_old, l_heat_3D_old, l_mag_3D_old
@@ -499,6 +500,7 @@ contains
       integer :: n_r_max_3D_max
       integer :: l_max_old, m_max_3D_old, minc_3D_old, lm_max_old
 
+      epsilon_fac=1.0_cp
       if ( rank == 0 ) then
          inquire(file=start_file, exist=startfile_does_exist)
 
@@ -575,9 +577,17 @@ contains
          if ( ra /= ra_old )     &
             write(output_unit,   &
             &     '(/,'' ! New Rayleigh number (old/new):'',2ES16.6)') ra_old,ra
-         if ( ek /= ek_old )     &
+         if ( ek /= ek_old ) then
             write(output_unit,   &
             &     '(/,'' ! New Ekman number (old/new):'',2ES16.6)') ek_old,ek
+            if ( l_path_rescale ) epsilon_fac=ek/ek_old
+            write(output_unit,   &
+            &     '(/,'' ! Path Rescale used epsilon_fac:'',ES16.6)') epsilon_fac
+            write(output_unit,*) &
+            &     '! Warning: Make sure you have properly rescaled {Pm, Ra} as well!'
+            write(output_unit,*) &
+            &     '!   --> the scaling should resp. be {\eps^(1/2) Pm_0, \eps^(4/11) Ra_0}!'
+         end if
          if ( pr /= pr_old )     &
             write(output_unit,   &
             &     '(/,'' ! New Prandtl number (old/new):'',2ES16.6)') pr_old,pr
@@ -796,6 +806,9 @@ contains
          call map_field(work_old, work, rscheme_old, r_old, m2idx_old, scale_u, &
               &         n_m_max_old, n_r_max_old, n_r_max_max, lBc=.false.,     &
               &         l_phys_space=.true.)
+         !-- Rescaling of Velocity: Ro = Ro_0 eps^1/2
+         !--   --> see [Aubert et al., 2017]; eq.(2.27)
+         if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
       end if
       call scatter_from_rank0_to_mloc(work, us_Mloc)
 
@@ -805,6 +818,7 @@ contains
          call map_field(work_old, work, rscheme_old, r_old, m2idx_old, scale_u, &
               &         n_m_max_old, n_r_max_old, n_r_max_max, lBc=.false.,     &
               &         l_phys_space=.true.)
+         if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
       end if
       call scatter_from_rank0_to_mloc(work, up_Mloc)
 
@@ -816,6 +830,7 @@ contains
                call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
                     &         scale_u, n_m_max_old, n_r_max_old, n_r_max_max, &
                     &         lBc=.true., l_phys_space=l_coll_old)
+               if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
             end if
             if ( n_o <= tscheme%norder_exp ) then
                call scatter_from_rank0_to_mloc(work, dpsidt%expl(:,:,n_o))
@@ -829,6 +844,7 @@ contains
                call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
                     &         scale_u, n_m_max_old, n_r_max_old, n_r_max_max, &
                     &         lBc=.true., l_phys_space=l_coll_old)
+               if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
             end if
             if ( n_o <= tscheme%norder_imp_lin-1 ) then
                call scatter_from_rank0_to_mloc(work, dpsidt%impl(:,:,n_o))
@@ -841,6 +857,7 @@ contains
                   call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
                        &         scale_u, n_m_max_old, n_r_max_old, n_r_max_max, &
                        &         lBc=.false., l_phys_space=l_coll_old)
+                  if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                end if
                if ( n_o <= tscheme%norder_imp-1 ) then
                   call scatter_from_rank0_to_mloc(work, dpsidt%old(:,:,n_o))
@@ -857,6 +874,10 @@ contains
             call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
                  &         scale_t, n_m_max_old, n_r_max_old, n_r_max_max, &
                  &         lBc=.false., l_phys_space=.true.)
+            !-- Rescaling of Temperature: dC \propto Ra_0 eps^1/2
+            !--   --> see [Aubert et al., 2017]; eq.(4.3)
+            !-- BUT maybe in our Delta T setup we should use eq.(3.38) as based
+            if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
          end if
          !if ( l_heat_3D ) then 
          !   call restart_3D_from_2D(work,temp_3D_LMloc)
@@ -876,6 +897,7 @@ contains
                   call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
                        &         scale_t, n_m_max_old, n_r_max_old, n_r_max_max, &
                        &         lBc=.true., l_phys_space=l_coll_old)
+                  if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                end if
                if ( n_o <= tscheme%norder_exp ) then
          !if ( l_heat_3D ) then 
@@ -893,6 +915,7 @@ contains
                   call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
                        &         scale_t, n_m_max_old, n_r_max_old, n_r_max_max, &
                        &         lBc=.true., l_phys_space=l_coll_old)
+                  if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                end if
                if ( n_o <= tscheme%norder_imp_lin-1 ) then
          !if ( l_heat_3D ) then 
@@ -910,6 +933,7 @@ contains
                           &         scale_t, n_m_max_old, n_r_max_old,            &
                           &         n_r_max_max, lBc=.true.,                      &
                           &         l_phys_space=l_coll_old)
+                     if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                   end if
                   if ( n_o <= tscheme%norder_imp-1 ) then
          !if ( l_heat_3D ) then 
@@ -931,6 +955,9 @@ contains
             call map_field(work_old, work, rscheme_old, r_old, m2idx_old,   &
                  &         scale_xi, n_m_max_old, n_r_max_old, n_r_max_max, &
                  &         lBc=.false., l_phys_space=.true.)
+            !-- Rescaling of Chemicals: dC \propto Ra_0 eps^1/2
+            !--   --> see [Aubert et al., 2017]; eq.(4.3)
+            if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
          end if
          call scatter_from_rank0_to_mloc(work, xi_Mloc)
 
@@ -942,6 +969,7 @@ contains
                   call map_field(work_old, work, rscheme_old, r_old, m2idx_old,   &
                        &         scale_xi, n_m_max_old, n_r_max_old, n_r_max_max, &
                        &         lBc=.true., l_phys_space=l_coll_old)
+                  if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                end if
                if ( n_o <= tscheme%norder_exp ) then
                   call scatter_from_rank0_to_mloc(work, dxidt%expl(:,:,n_o))
@@ -955,6 +983,7 @@ contains
                   call map_field(work_old, work, rscheme_old, r_old, m2idx_old,   &
                        &         scale_xi, n_m_max_old, n_r_max_old, n_r_max_max, &
                        &         lBc=.true., l_phys_space=l_coll_old)
+                  if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                end if
                if ( n_o <= tscheme%norder_imp_lin-1 ) then
                   call scatter_from_rank0_to_mloc(work, dxidt%impl(:,:,n_o))
@@ -968,6 +997,7 @@ contains
                           &         scale_xi, n_m_max_old, n_r_max_old,           &
                           &         n_r_max_max, lBc=.false.,                     &
                           &         l_phys_space=l_coll_old)
+                     if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                   end if
                   if ( n_o <= tscheme%norder_imp-1 ) then
                      call scatter_from_rank0_to_mloc(work, dxidt%old(:,:,n_o))
@@ -989,6 +1019,10 @@ contains
                call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
                     &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
                     &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
+               !-- Rescaling of Temperature: dC \propto Ra_0 eps^1/2
+               !--   --> see [Aubert et al., 2017]; eq.(4.3)
+               !-- BUT maybe in our Delta T setup we should use eq.(3.38) as based
+               if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
             end if
             call scatter_from_rank0_to_lmloc(work, temp_3D_LMloc)
 
@@ -1001,6 +1035,7 @@ contains
                           &            lm2lmo,  scale_t, lm_max_old,              &
                           &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
                           &            l_phys_space=.true.)
+                     if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                   end if
                   if ( n_o <= tscheme%norder_exp ) then
                      call scatter_from_rank0_to_lmloc(work, dTdt_3D%expl(:,:,n_o))
@@ -1015,6 +1050,7 @@ contains
                           &            lm2lmo,  scale_t, lm_max_old,              &
                           &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
                           &            l_phys_space=.true.)
+                     if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                   end if
                   if ( n_o <= tscheme%norder_imp_lin-1 ) then
                      call scatter_from_rank0_to_lmloc(work, dTdt_3D%impl(:,:,n_o))
@@ -1028,6 +1064,7 @@ contains
                           &            lm2lmo,  scale_t, lm_max_old,             &
                           &            n_r_max_3D_old, n_r_max_3D_max,           &
                           &            lBc=.false., l_phys_space=.true.)
+                     if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                   end if
                   if ( n_o <= tscheme%norder_imp-1 ) then
                      call scatter_from_rank0_to_lmloc(work, dTdt_3D%old(:,:,n_o))
@@ -1044,6 +1081,7 @@ contains
                   call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
                        &         scale_t, n_m_max_old, n_r_max_old, n_r_max_3D_max, &
                        &         lBc=.false., l_phys_space=.true.)
+                  if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                end if
                call scatter_from_rank0_to_mloc(work, temp_Mloc)
 
@@ -1055,6 +1093,7 @@ contains
                         call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
                              &         scale_t, n_m_max_old, n_r_max_old, n_r_max_3D_max, &
                              &         lBc=.true., l_phys_space=l_coll_old)
+                        if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                      end if
                      if ( n_o <= tscheme%norder_exp ) then
                         call scatter_from_rank0_to_mloc(work, dTdt%expl(:,:,n_o))
@@ -1068,6 +1107,7 @@ contains
                         call map_field(work_old, work, rscheme_old, r_old, m2idx_old,  &
                              &         scale_t, n_m_max_old, n_r_max_old, n_r_max_3D_max, &
                              &         lBc=.true., l_phys_space=l_coll_old)
+                        if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                      end if
                      if ( n_o <= tscheme%norder_imp_lin-1 ) then
                         call scatter_from_rank0_to_mloc(work, dTdt%impl(:,:,n_o))
@@ -1081,6 +1121,7 @@ contains
                                 &         scale_t, n_m_max_old, n_r_max_old,            &
                                 &         n_r_max_3D_max, lBc=.true.,                      &
                                 &         l_phys_space=l_coll_old)
+                           if ( l_path_rescale ) work = work*sqrt(epsilon_fac)
                         end if
                         if ( n_o <= tscheme%norder_imp-1 ) then
                            call scatter_from_rank0_to_mloc(work, dTdt%old(:,:,n_o))
@@ -1104,6 +1145,9 @@ contains
                call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
                     &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
                     &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
+               !-- Rescaling of Magnetic: \lambda = \lambda_0 eps^1/4
+               !--   --> see [Aubert et al., 2017]; eq.(2.28)
+               if ( l_path_rescale ) work = work*epsilon_fac**real(1./4.,cp)
             end if
             call scatter_from_rank0_to_lmloc(work, b_3D_LMloc)
             !-- toroidal j field
@@ -1115,6 +1159,7 @@ contains
                call map_field_3D(work_old, work, rscheme_3D_old, r_3D_old,      &
                     &            lm2lmo,  scale_t, lm_max_old, n_r_max_3D_old,  &
                     &            n_r_max_3D_max, lBc=.false., l_phys_space=.true.)
+               if ( l_path_rescale ) work = work*epsilon_fac**real(1./4.,cp)
             end if
             call scatter_from_rank0_to_lmloc(work, aj_3D_LMloc)
 
@@ -1128,6 +1173,7 @@ contains
                           &            lm2lmo,  scale_t, lm_max_old,              &
                           &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
                           &            l_phys_space=.true.)
+                     if ( l_path_rescale ) work = work*epsilon_fac**real(1./4.,cp)
                   end if
                   if ( n_o <= tscheme%norder_exp ) then
                      call scatter_from_rank0_to_lmloc(work, dBdt_3D%expl(:,:,n_o))
@@ -1141,6 +1187,7 @@ contains
                           &            lm2lmo,  scale_t, lm_max_old,              &
                           &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
                           &            l_phys_space=.true.)
+                     if ( l_path_rescale ) work = work*epsilon_fac**real(1./4.,cp)
                   end if
                   if ( n_o <= tscheme%norder_exp ) then
                      call scatter_from_rank0_to_lmloc(work, djdt_3D%expl(:,:,n_o))
@@ -1156,6 +1203,7 @@ contains
                           &            lm2lmo,  scale_t, lm_max_old,              &
                           &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
                           &            l_phys_space=.true.)
+                     if ( l_path_rescale ) work = work*epsilon_fac**real(1./4.,cp)
                   end if
                   if ( n_o <= tscheme%norder_imp_lin-1 ) then
                      call scatter_from_rank0_to_lmloc(work, dBdt_3D%impl(:,:,n_o))
@@ -1169,6 +1217,7 @@ contains
                           &            lm2lmo,  scale_t, lm_max_old,              &
                           &            n_r_max_3D_old, n_r_max_3D_max, lBc=.true.,&
                           &            l_phys_space=.true.)
+                     if ( l_path_rescale ) work = work*epsilon_fac**real(1./4.,cp)
                   end if
                   if ( n_o <= tscheme%norder_imp_lin-1 ) then
                      call scatter_from_rank0_to_lmloc(work, djdt_3D%impl(:,:,n_o))
@@ -1183,6 +1232,7 @@ contains
                           &            lm2lmo,  scale_t, lm_max_old,             &
                           &            n_r_max_3D_old, n_r_max_3D_max,           &
                           &            lBc=.false., l_phys_space=.true.)
+                     if ( l_path_rescale ) work = work*epsilon_fac**real(1./4.,cp)
                   end if
                   if ( n_o <= tscheme%norder_imp-1 ) then
                      call scatter_from_rank0_to_lmloc(work, dBdt_3D%old(:,:,n_o))
@@ -1196,6 +1246,7 @@ contains
                           &            lm2lmo,  scale_t, lm_max_old,             &
                           &            n_r_max_3D_old, n_r_max_3D_max,           &
                           &            lBc=.false., l_phys_space=.true.)
+                     if ( l_path_rescale ) work = work*epsilon_fac**real(1./4.,cp)
                   end if
                   if ( n_o <= tscheme%norder_imp-1 ) then
                      call scatter_from_rank0_to_lmloc(work, djdt_3D%old(:,:,n_o))

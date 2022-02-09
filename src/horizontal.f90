@@ -183,7 +183,7 @@ contains
 
             do n_m=1,n_m_max
                m = idx2m(n_m)
-               write(file_handle, '(I5, 3es16.8)') m, hdif_T_global(n_m), &
+               write(file_handle, '(I5, 4es16.8)') m, hdif_T_global(n_m), &
                &                                      hdif_Xi_global(n_m),&
                &                                      hdif_V_global(n_m)
             end do
@@ -361,6 +361,7 @@ contains
             else
                if ( hdif_l >= 0 .and. l > hdif_l ) then
                   hdif_B(lm) = (hdif_mag**(real((l-hdif_l),cp)))
+                  if ( hdif_B(lm) > 1.e12 ) hdif_B(lm)=1.e12
                end if
             end if
 

@@ -2,12 +2,12 @@ module rloop_3D
 
    use precision_mod
    use parallel_mod
-   use constants, only: pi, ci, two
+   use constants, only: pi, ci, two, zero
    use nonlinear_lm_mod, only: nonlinear_lm_t
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
    use namelists, only: BuoFac, DyMagFac, tag, l_heat_3D, l_thw_3D, l_mag_3D, l_mag_LF, &
-   &                    l_QG_basis, r_cmb, r_icb
+   &                    l_QG_basis, r_cmb, r_icb, l_lin_solve, l_mag_B0
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max, l_max, n_r_max_3D
    use truncation, only: idx2m, n_m_max
    use courant_mod, only: courant_3D
@@ -52,18 +52,21 @@ contains
 
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
-   subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM, &
-              &               b_3D, db_3D, ddb_3D, aj_3D, dj_3D,       &
-              &               dbdt_3D, djdt_3D, dVxBhLM,               &
-              &               dpsidt_Rloc, dVsOm_Rloc, dtr_3D_Rloc,    &
-              &               dth_3D_Rloc, l_frame, zinterp, timers,   &
-              &               tscheme )
+   subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM,  &
+              &               buo_Rloc, b_3D, db_3D, ddb_3D, b0_3D,     &
+              &               db0_3D,ddb0_3D, aj_3D, dj_3D,dbdt_3D,     &
+              &               djdt_3D, djxB_Rloc, dVxBhLM, dpsidt_Rloc, &
+              &               dVsOm_Rloc, dtr_3D_Rloc, dth_3D_Rloc,     &
+              &               l_frame, zinterp, timers, tscheme )
 
       !-- Input variables
       complex(cp), intent(inout) :: temp(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: b_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: db_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: ddb_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: b0_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: db0_3D(lm_max, nRstart3D:nRstop3D)
+      complex(cp), intent(inout) :: ddb0_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: aj_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: dj_3D(lm_max, nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
@@ -80,6 +83,8 @@ contains
       complex(cp),       intent(out) :: dbdt_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp),       intent(out) :: djdt_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp),       intent(out) :: dVxBhLM(lm_max, nRstart3D:nRstop3D)
+      complex(cp),       intent(inout) :: buo_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),       intent(inout) :: djxB_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(inout) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(inout) :: dVsOm_Rloc(n_m_max, nRstart:nRstop)
       real(cp),          intent(out) :: dtr_3D_Rloc(nRstart3D:nRstop3D)
@@ -97,13 +102,13 @@ contains
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfz_tmp_Rloc(n_m_max,nRstart:nRstop)
-      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta, n_phi
+      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta!, n_phi
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
       character(len=144) :: frame_name
 
       !-- get thermal wind
-      if ( l_heat_3D .and. l_thw_3D ) then
+      if ( l_heat_3D .and. l_thw_3D .and. (.not. l_lin_solve) ) then
          do n_r=nRstart3D,nRstop3D
             !-- Take the gradient of the axisymmetric part
             call transform_axi_to_dth_grid_space(temp(1:l_max+1,n_r), dTdth(:,n_r))
@@ -154,12 +159,16 @@ contains
          !-- Transform temperature and magnetic-field from (l,m) to (theta,phi)
          call transform_to_grid_space(temp(:,n_r), b_3D(:,n_r),      &
               &                      db_3D(:,n_r), ddb_3D(:,n_r),    &
-              &                      aj_3D(:,n_r), dj_3D(:,n_r), n_r, gsa)
+              &                      b0_3D(:,n_r), db0_3D(:,n_r),    &
+              &                      ddb0_3D(:,n_r), aj_3D(:,n_r),   &
+              &                      dj_3D(:,n_r), n_r, gsa)
 
          !-- Courant condition
          if ( l_mag_3D .and. tscheme%istage == 1 ) then
             call courant_3D(n_r, dtr_3D_Rloc(n_r), dth_3D_Rloc(n_r),  &
+                 &          ur(:,:,n_r),  ut(:,:,n_r),  up(:,:,n_r),  &
                  &          gsa%Brc(:,:), gsa%Btc(:,:), gsa%Bpc(:,:), &
+                 &          gsa%Alphac(:,:), tscheme%courfac,         &
                  &          tscheme%alffac)
          end if
 
@@ -177,9 +186,15 @@ contains
                call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))!buo_tmp(:,:,n_r))!
             end if
             if ( l_mag_3D ) then
-               call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!Vx!
-               call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))!Vx!
-               call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!Vx!
+               if ( .not. l_mag_B0 ) then
+                  call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!Vx!
+                  call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))!Vx!
+                  call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!Vx!
+               else
+                  call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:)+gsa%B0rc(:,:))!jxBs(:,:,n_r))!Vx!
+                  call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:)+gsa%B0tc(:,:))!Vx!
+                  call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:)+gsa%B0pc(:,:))!jxBp(:,:,n_r))!Vx!
+               end if
             end if
          end if
 
@@ -225,7 +240,7 @@ contains
       end if
 
       !-- Compute z-derivative of the \phi-part of lorentz-force
-      if (  l_mag_LF .and. l_QG_basis ) then
+      if (  l_mag_LF .and. l_QG_basis .and. (.not. l_lin_solve) ) then
          runStart = MPI_Wtime()
          call zinterp%compute_zder(jxBp, djxBpdz)
          runStop = MPI_Wtime()
@@ -246,11 +261,12 @@ contains
       !-- Compute z-averaging of buoyancy and lorentz-force
       runStart = MPI_Wtime()
       !call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc)
-      if (  l_heat_3D )call zinterp%compute_zavg(buo_tmp, buo_tmp_Rloc)
-      if (  l_mag_LF ) call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc)
-      if (  l_mag_LF ) call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc)
-      if (  l_mag_LF .and. l_QG_basis ) &
-      &             call zinterp%compute_zavg(djxBpdz, lfz_tmp_Rloc)
+      if ( l_heat_3D ) call zinterp%compute_zavg(buo_tmp, buo_tmp_Rloc)
+      if ( l_mag_LF .and. (.not. l_lin_solve) ) then  !-- Non-Linear terms?
+        call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc)
+        call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc)
+        if ( l_QG_basis ) call zinterp%compute_zavg(djxBpdz, lfz_tmp_Rloc)
+      end if
       runStop = MPI_Wtime()
       if (runStop>runStart) then
          timers%interp = timers%interp+(runStop-runStart)
@@ -260,12 +276,11 @@ contains
 
 #ifdef aDEBUG
       block
-
          use truncation, only: n_r_max
          use truncation_3D, only: n_r_max_3D
          use radial_functions, only: r, r_3D
 
-         integer :: n_r, file_handle
+         integer :: file_handle, n_r
 
          open(newunit=file_handle, file='thw', status='new')
          do n_r=1,n_r_max_3D
@@ -273,16 +288,21 @@ contains
          end do
          close(file_handle)
 
-         open(newunit=file_handle, file='up', status='new')
-         do n_r=1,n_r_max_3D
-            write(file_handle, '(5ES20.12)') r_3D(n_r), up(5,1,n_r),up(5,4,n_r),up(5,8,n_r),up(5,16,n_r)
-         end do
-         close(file_handle)
+         !open(newunit=file_handle, file='up', status='new')
+         !do n_r=1,n_r_max_3D
+         !   write(file_handle, '(5ES20.12)') r_3D(n_r), up(5,1,n_r),up(5,4,n_r),up(5,8,n_r),up(5,16,n_r)
+         !end do
+         !close(file_handle)
 
          open(newunit=file_handle, file='buo', status='new')
          do n_r=1,n_r_max
             write(file_handle, '(4ES20.12)') r(n_r),  real(buo_tmp_Rloc(5,n_r)), real(buo_tmp_Rloc(6,n_r)), &
            &               real(buo_tmp_Rloc(1,n_r))
+         end do
+
+         open(newunit=file_handle, file='lfp0', status='new')
+         do n_r=1,n_r_max
+            write(file_handle, '(2ES193.12)') r(n_r),  real(lfp_tmp_Rloc(1,n_r))
          end do
          close(file_handle)
 
@@ -290,7 +310,6 @@ contains
          !&    access='stream')
          !write(file_handle) buo_tmp
          !close(file_handle)
-
       end block
 #endif
 
@@ -302,12 +321,16 @@ contains
             !-- Finish assembly the buoyancy:: no 1/s term because a s terms arises from Vx[Tg/r(s.e_s + z.e_z)].e_z
                dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*real(m,cp)* &
                &                    buo_tmp_Rloc(n_m,n_r)!!*or1(n_r)
+               !-- store z-avg 3D-buo for Force balance outputs
+               !buo_Rloc(n_m,n_r)=-BuoFac*ci*real(m,cp)*buo_tmp_Rloc(n_m,n_r)
             end if
-            if ( l_mag_LF ) then
-            !-- Finish assembling both parts of lorentz force and sum it with dpsidt and dVsOm
-            !--   --> <Vx(jxB).e_z> = (d_s (s <(jxB)_p>) - d_p <(jxB)_s>)/s
+            if ( l_mag_LF .and. (.not. l_lin_solve) ) then
+            !-- Finish assembling both r.h.s. parts of lorentz force and sum it with dpsidt and dVsOm
+            !--   --> <Vx(jxB).e_z> = (--d_s (s <(jxB)_p>) - d_p <(jxB)_s>)/s (d_s (-dVsom) is added later)
                if ( m == 0 ) then
                   dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)+DyMagFac*lfp_tmp_Rloc(n_m,n_r)
+                  !-- store z-avg 3D-lorentz for Force balance outputs on m=0
+                  djxB_Rloc(n_m,n_r)= DyMagFac*lfp_tmp_Rloc(n_m,n_r)
                else
                   dVsOm_Rloc(n_m,n_r)= dVsOm_Rloc(n_m,n_r)-DyMagFac*r(n_r)*&
                   &                  lfp_tmp_Rloc(n_m,n_r)
@@ -315,7 +338,7 @@ contains
                   &                    lfs_tmp_Rloc(n_m,n_r)*or1(n_r)
                   if ( l_QG_basis ) then
                   !-- Finish assembling add. lorentz force from the QG basis projection
-                  !-- --> \beta <zVx(jxB).e_s> = \beta ((d_p <z (jxB)_z>)/s - <z d_z (jxB)_p>)
+                  !-- --> \beta <zVx(jxB).e_s> = \beta (+(d_p <z (jxB)_z>)/s - <z d_z (jxB)_p>)
                   !-- But --> \beta <z (jxB)_z> has already been added to lfs_tmp_Rloc
                   !--         <z d_z (jxB)_p> stored in lfz_tmp_Rloc only need * \beta
                      dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-DyMagFac* &
@@ -328,20 +351,22 @@ contains
 
 #ifdef TOTO
       block
-
-         !use truncation, only: n_r_max, n_m_max
+         !use truncation, only: n_r_max!, n_m_max
          !use communications, only: allgather_from_Rloc
 
-         integer :: file_handle
-         !complex(cp) :: dpsidt_hat(n_m_max,n_r_max)
+         integer :: file_handle, n_r
+         !real(cp) :: dpsidt_hat(1,n_r_max)
 
-         !call allgather_from_Rloc(dpsidt_Rloc, dpsidt_hat, n_m_max)
+         !call allgather_from_Rloc(real(dpsidt_Rloc(1,:)), dpsidt_hat, n_m_max)
 
          !print*, dpsidt_hat(1,:)
+         print*, DyMagFac*lfp_tmp_Rloc(1,:)
 
-         !open(newunit=file_handle, file='dpsidt_rloc.dat', status='new', form='unformatted',&
-         !&    access='stream')
-         !write(file_handle) dpsidt_Rloc!lfp_tmp_Rloc!
+      if ( rank == 0 ) then
+         !open(newunit=file_handle, file='dpsidt_0.dat', status='new', form='formatted')
+         !do n_r=1,n_r_max
+         !   write(file_handle, '(2es20.12)') r(n_r), dpsidt_hat(1,n_r)
+         !end do
          !close(file_handle)
 
         open(newunit=file_handle, file='lfp_tmp_rloc.dat', status='new', form='unformatted',&
@@ -353,6 +378,7 @@ contains
          &    access='stream')
          write(file_handle) lfs_tmp_Rloc
          close(file_handle)
+      end if
       end block
 
       print*, 'ALL GOOD RAD_3D!**'
@@ -362,24 +388,35 @@ contains
 
    end subroutine radial_loop_3D
 !-------------------------------------------------------------------------------
-   subroutine transform_to_grid_space(temp, B, dB, ddB, aj, dj, n_r, gsa)
+   subroutine transform_to_grid_space(temp, B, dB, ddB, B0, dB0, ddB0, aj, dj, n_r, gsa)
 
       complex(cp), intent(inout) :: temp(lm_max)
       complex(cp), intent(inout) :: B(lm_max), dB(lm_max), ddB(lm_max)
+      complex(cp), intent(inout) :: B0(lm_max), dB0(lm_max), ddB0(lm_max)
       complex(cp), intent(inout) :: aj(lm_max), dj(lm_max)
       integer,     intent(in) :: n_r
       type(grid_space_arrays_t) :: gsa
+
+      complex(cp) :: j0(lm_max)
 
 #ifdef WITH_SHTNS
       if ( l_heat_3D ) then
          call scal_to_spat(temp, gsa%Tc)
       end if
 
-      if ( l_mag_3D ) then
+      if ( l_mag_3D .and. (.not. l_lin_solve) ) then
          call torpol_to_spat(B, dB, aj, n_r, gsa%Brc, gsa%Btc, gsa%Bpc)
          if (  l_mag_LF ) then
             call torpol_to_curl_spat(B, ddB, aj, dj, n_r, gsa%curlBrc, &
                  &                   gsa%curlBtc, gsa%curlBpc)
+         end if
+         if (  l_mag_B0 ) then
+            j0(:) = zero
+            call torpol_to_spat(B0, dB0, j0, n_r, gsa%B0rc, gsa%B0tc, gsa%B0pc)
+            if (  l_mag_LF ) then
+               call torpol_to_curl_spat(B0, ddB0, j0, j0, n_r, gsa%curlB0rc, &
+                    &                   gsa%curlB0tc, gsa%curlB0pc)
+            end if
          end if
       end if
 #endif
@@ -398,7 +435,7 @@ contains
               &           nl_lm%VTpLM)
       end if
 
-      if ( l_mag_3D ) then
+      if ( l_mag_3D .and. (.not. l_lin_solve) ) then
          call scal_to_SH(gsa%VxBr, nl_lm%VxBrLM)
          call scal_to_SH(gsa%VxBt, nl_lm%VxBtLM)
          call scal_to_SH(gsa%VxBp, nl_lm%VxBpLM)

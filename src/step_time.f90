@@ -15,13 +15,14 @@ module step_time
        &             temp_3D_LMloc, dtemp_3D_LMloc, temp_3D_Rloc, b_3D_LMloc,  &
        &             db_3D_LMloc, ddb_3D_LMloc, b_3D_Rloc, db_3D_Rloc,         &
        &             ddb_3D_Rloc, aj_3D_LMloc, dj_3D_LMloc, aj_3D_Rloc,        &
-       &             dj_3D_Rloc
+       &             dj_3D_Rloc, b0_3D_LMloc, db0_3D_LMloc, ddb0_3D_LMloc,     &
+       &             b0_3D_Rloc, db0_3D_Rloc, ddb0_3D_Rloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc,      &
        &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,       &
-       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,            &
+       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc, djxB_Mloc, &
        &                 dTdt_3D, dVrT_3D_LMloc, dVrT_3D_Rloc, dtempdt_3D_Rloc,&
        &                 dBdt_3D, djdt_3D, dVxBh_3D_LMloc, dVxBh_3D_Rloc,      &
-       &                 dbdt_3D_Rloc, djdt_3D_Rloc
+       &                 dbdt_3D_Rloc, djdt_3D_Rloc, buo_Rloc, djxB_Rloc
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
    use constants, only: half, one
@@ -44,7 +45,8 @@ module step_time
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance,      &
-       &                l_heat, l_chem, l_3D, l_heat_3D, l_mag_3D
+       &                l_heat, l_chem, l_3D, l_heat_3D, l_mag_3D,        &
+       &                l_mag_LF, l_mag_B0, l_lin_solve
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
    use outputs_3D, only: write_outputs_3D
@@ -227,20 +229,27 @@ contains
                !-- MPI transpositions from m-distributed to r-distributed
                !-------------------
                runStart = MPI_Wtime()
-               call transp_m2r(m2r_fields, us_Mloc, us_Rloc)
-               call transp_m2r(m2r_fields, up_Mloc, up_Rloc)
-               call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
-               if ( l_heat ) call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
-               if ( l_chem ) call transp_m2r(m2r_fields, xi_Mloc, xi_Rloc)
+               if ( .not. l_lin_solve ) then !-- Used only for Non-Linear terms
+                  call transp_m2r(m2r_fields, us_Mloc, us_Rloc)
+                  call transp_m2r(m2r_fields, up_Mloc, up_Rloc)
+                  call transp_m2r(m2r_fields, om_Mloc, om_Rloc)
+                  if ( l_heat ) call transp_m2r(m2r_fields, temp_Mloc, temp_Rloc)
+                  if ( l_chem ) call transp_m2r(m2r_fields, xi_Mloc, xi_Rloc)
+                  if ( l_mag_3D ) then
+                     call transp_lm2r(lm2r_fields, b_3D_LMloc, b_3D_Rloc)
+                     call transp_lm2r(lm2r_fields, db_3D_LMloc, db_3D_Rloc)
+                     call transp_lm2r(lm2r_fields, ddb_3D_LMloc, ddb_3D_Rloc)
+                     call transp_lm2r(lm2r_fields, aj_3D_LMloc, aj_3D_Rloc)
+                     call transp_lm2r(lm2r_fields, dj_3D_LMloc, dj_3D_Rloc)
+                     if ( l_mag_B0 ) then
+                        call transp_lm2r(lm2r_fields, b0_3D_LMloc, b0_3D_Rloc)
+                        call transp_lm2r(lm2r_fields, db0_3D_LMloc, db0_3D_Rloc)
+                        call transp_lm2r(lm2r_fields, ddb0_3D_LMloc, ddb0_3D_Rloc)
+                     end if
+                  end if
+               end if
                if ( l_heat_3D ) call transp_lm2r(lm2r_fields, temp_3D_LMloc, &
                                      &           temp_3D_Rloc)
-               if ( l_mag_3D ) then
-                  call transp_lm2r(lm2r_fields, b_3D_LMloc, b_3D_Rloc)
-                  call transp_lm2r(lm2r_fields, db_3D_LMloc, db_3D_Rloc)
-                  call transp_lm2r(lm2r_fields, ddb_3D_LMloc, ddb_3D_Rloc)
-                  call transp_lm2r(lm2r_fields, aj_3D_LMloc, aj_3D_Rloc)
-                  call transp_lm2r(lm2r_fields, dj_3D_LMloc, dj_3D_Rloc)
-               end if
 
                runStop = MPI_Wtime()
                if (runStop>runStart) then
@@ -251,66 +260,76 @@ contains
                !-------------------
                !-- Radial loop
                !-------------------
-               runStart = MPI_Wtime()
-               call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc, &
-                    &            dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc,           &
-                    &            dVsXi_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc, &
-                    &            dth_Rloc, timers, tscheme )
-               runStop = MPI_Wtime()
-               if (runStop>runStart) then
-                  timers%n_r_loops=timers%n_r_loops+1
-                  timers%r_loop   =timers%r_loop+(runStop-runStart)
+               if ( .not. l_lin_solve ) then !-- Non-Linear terms?
+                  runStart = MPI_Wtime()
+                  call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc, &
+                       &            dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc,           &
+                       &            dVsXi_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc, &
+                       &            dth_Rloc, timers, tscheme )
+                  runStop = MPI_Wtime()
+                  if (runStop>runStart) then
+                     timers%n_r_loops=timers%n_r_loops+1
+                     timers%r_loop   =timers%r_loop+(runStop-runStart)
+                  end if
                end if
 
                !-------------------
                !-- Radial loop 3-D
                !-------------------
                if ( l_3D ) then
-                  runStart = MPI_Wtime()
-                  call zinterp%prep_extension_QGto3D(us_Rloc, up_Rloc, om_Rloc)
-                  call zinterp%ext_QGto3D_vel(ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc)
-                  runStop = MPI_Wtime()
-                  if ( runStop>runStart ) then
-                     timers%n_interp=timers%n_interp+1
-                     timers%interp  =timers%interp+(runStop-runStart)
+                  if ( .not. l_lin_solve ) then !-- Used only for Non-Linear terms
+                     runStart = MPI_Wtime()
+                     call zinterp%prep_extension_QGto3D(us_Rloc, up_Rloc, om_Rloc)
+                     call zinterp%ext_QGto3D_vel(ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc)
+                     runStop = MPI_Wtime()
+                     if ( runStop>runStart ) then
+                        timers%n_interp=timers%n_interp+1
+                        timers%interp  =timers%interp+(runStop-runStart)
+                     end if
                   end if
-                  call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,    &
-                       &              temp_3D_Rloc, dtempdt_3D_Rloc, dVrT_3D_Rloc, &
-                       &              b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc,          &
-                       &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,        &
-                       &              djdt_3D_Rloc, dVxBh_3D_Rloc, dpsidt_Rloc,    &
-                       &              dVsOm_Rloc, dtr_3D_Rloc, dth_3D_Rloc,        &
-                       &              l_frame, zinterp, timers, tscheme)
+                  call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,     &
+                       &              temp_3D_Rloc, dtempdt_3D_Rloc, dVrT_3D_Rloc,  &
+                       &              buo_Rloc, b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc, &
+                       &              b0_3D_Rloc, db0_3D_Rloc, ddb0_3D_Rloc,        &
+                       &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,         &
+                       &              djdt_3D_Rloc, djxB_Rloc, dVxBh_3D_Rloc,       &
+                       &              dpsidt_Rloc, dVsOm_Rloc, dtr_3D_Rloc,         &
+                       &              dth_3D_Rloc, l_frame, zinterp, timers,        &
+                       &              tscheme)
                end if
 
                !------------------
                !-- MPI transpositions from r-distributed to m-distributed
                !------------------
                runStart = MPI_Wtime()
-               if ( l_heat ) then
-                  call transp_r2m(r2m_fields, dtempdt_Rloc, &
-                       &          dTdt%expl(:,:,tscheme%istage))
-                  call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
+               if ( .not. l_lin_solve ) then !-- Used only for Non-Linear terms
+                  if ( l_heat ) then
+                     call transp_r2m(r2m_fields, dtempdt_Rloc, &
+                          &          dTdt%expl(:,:,tscheme%istage))
+                     call transp_r2m(r2m_fields, dVsT_Rloc, dVsT_Mloc)
+                  end if
+                  if ( l_chem ) then
+                     call transp_r2m(r2m_fields, dxidt_Rloc, &
+                          &          dxidt%expl(:,:,tscheme%istage))
+                     call transp_r2m(r2m_fields, dVsXi_Rloc, dVsXi_Mloc)
+                  end if
+                  call transp_r2m(r2m_fields, dpsidt_Rloc, &
+                       &          dpsidt%expl(:,:,tscheme%istage))
+                  call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
+                  if ( l_mag_3D ) then
+                     call transp_r2lm(r2lm_fields, dBdt_3D_Rloc, &
+                          &           dBdt_3D%expl(:,:,tscheme%istage))
+                     call transp_r2lm(r2lm_fields, djdt_3D_Rloc, &
+                          &           djdt_3D%expl(:,:,tscheme%istage))
+                     call transp_r2lm(r2lm_fields, dVxBh_3D_Rloc, dVxBh_3D_LMloc)
+                     if ( l_mag_LF ) call transp_r2m(r2m_fields, djxB_Rloc, djxB_Mloc)
+                  end if
                end if
-               if ( l_chem ) then
-                  call transp_r2m(r2m_fields, dxidt_Rloc, &
-                       &          dxidt%expl(:,:,tscheme%istage))
-                  call transp_r2m(r2m_fields, dVsXi_Rloc, dVsXi_Mloc)
-               end if
-               call transp_r2m(r2m_fields, dpsidt_Rloc, &
-                    &          dpsidt%expl(:,:,tscheme%istage))
-               call transp_r2m(r2m_fields, dVsOm_Rloc, dVsOm_Mloc)
                if ( l_heat_3D ) then
                   call transp_r2lm(r2lm_fields, dtempdt_3D_Rloc, &
                        &           dTdt_3D%expl(:,:,tscheme%istage))
                   call transp_r2lm(r2lm_fields, dVrT_3D_Rloc, dVrT_3D_LMloc)
-               end if
-               if ( l_mag_3D ) then
-                  call transp_r2lm(r2lm_fields, dBdt_3D_Rloc, &
-                       &           dBdt_3D%expl(:,:,tscheme%istage))
-                  call transp_r2lm(r2lm_fields, djdt_3D_Rloc, &
-                       &           djdt_3D%expl(:,:,tscheme%istage))
-                  call transp_r2lm(r2lm_fields, dVxBh_3D_Rloc, dVxBh_3D_LMloc)
+                  !call transp_r2m(r2m_fields, buo_Rloc, buo_Mloc)
                end if
                runStop = MPI_Wtime()
                if (runStop>runStart) then
@@ -324,8 +343,8 @@ contains
                call finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc,      &
                     &                        us_Mloc, up_Mloc, om_Mloc,         &
                     &                        dVsT_Mloc, dVsXi_Mloc, dVsOm_Mloc, &
-                    &                        buo_Mloc, dTdt, dxidt, dpsidt,     &
-                    &                        tscheme, vp_bal, vort_bal)
+                    &                        buo_Mloc, djxB_Mloc, dTdt, dxidt,  &
+                    &                        dpsidt, tscheme, vp_bal, vort_bal)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%m_loop=timers%m_loop+(runStop-runStart)
@@ -381,11 +400,11 @@ contains
             !-- M-loop (update routines)
             !--------------------
             runStart = MPI_Wtime()
-            call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,   &
-                 &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,  &
-                 &     dom_Mloc, us_Mloc, up_Mloc, buo_Mloc, dTdt, dxidt,   &
-                 &     dpsidt, vp_bal, vort_bal, tscheme, lMat, l_log_next, &
-                 &     timers)
+            call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,     &
+                 &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,    &
+                 &     dom_Mloc, us_Mloc, up_Mloc, buo_Mloc, djxB_Mloc, dTdt, &
+                 &     dxidt, dpsidt, vp_bal, vort_bal, tscheme, lMat,        &
+                 &     l_log_next, timers)
             runStop = MPI_Wtime()
             if ( .not. lMat ) then
                if (runStop>runStart) then

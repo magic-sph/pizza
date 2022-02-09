@@ -114,6 +114,7 @@ module namelists
    logical,  public :: l_heat_3D       ! 3-D treatment of temperature
    logical,  public :: l_thw_3D        ! Computation of the 3D thermal wind contribution on u_phi-3D
    logical,  public :: l_mag_3D        ! Treatment of the magnetic field (3-D)
+   logical,  public :: l_mag_B0        ! With or without a Background field to the problem (Magnetoconvection)
    logical,  public :: l_mag_LF        ! Treatment of the Lorentz-Force
    logical,  public :: l_mag_alpha     ! With or without magnetic Alpha effect in magnetic advection
    logical,  public :: l_mag_pump      ! With or without Magnetic pumping
@@ -128,6 +129,8 @@ module namelists
    logical,  public :: l_coriolis_imp  ! Implicit treatment of Coriolis force
    logical,  public :: l_buo_imp       ! Implicit treatment of Buoyancy
    logical,  public :: l_QG_basis      ! Switch on the extra terms from the projection on a QG basis
+   logical,  public :: l_path_rescale  ! Switch on the rescaling of the checkpoint fields as in [Aubert et al., 2017]
+   logical,  public :: l_lin_solve     ! Switch off the non-Linear terms for studying the Onset of Convection
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb           ! Outer core radius
    real(cp), public :: r_icb           ! Inner core radius
@@ -136,6 +139,7 @@ module namelists
    real(cp), public :: hdif_temp       ! Hyperdiffusion amplitude on temperature
    real(cp), public :: hdif_comp       ! Hyperdiffusion amplitude on composition
    real(cp), public :: hdif_vel        ! Hyperdiffusion amplitude on velocity
+   real(cp), public :: damp_zon        ! Damping factor on non-axisymmetric azimuthal velocity
    real(cp), public :: hdif_mag        ! Hyperdiffusion amplitude on magnetic field
    integer,  public :: hdif_exp        ! Exponent of the hyperdiffusion profile
    integer,  public :: hdif_l          ! Latitudinal wavenumber for 3D hyper diffusion
@@ -163,9 +167,10 @@ contains
       &                time_scheme,cheb_method,l_rerror_fix,        &
       &                rerror_fac,time_scale,matrix_solve,          &
       &                corio_term,buo_term,bc_method,l_QG_basis,    &
-      &                hdif_temp,hdif_vel,hdif_comp,hdif_mag,       &
-      &                hdif_exp,hdif_l,hdif_m
-      !namelist/hdif/hdif_temp,hdif_vel,hdif_comp,hdif_mag,&
+      &                hdif_temp,hdif_vel,damp_zon,hdif_comp,       &
+      &                hdif_mag,hdif_exp,hdif_l,hdif_m,             &
+      &                l_path_rescale,l_lin_solve
+      !namelist/hdif/hdif_temp,hdif_vel,damp_zon,hdif_comp,hdif_mag,&
       !&             hdif_exp,hdif_l,hdif_m
       namelist/phys_param/ra,ek,pr,prmag,raxi,sc,radratio,g0,g1,g2,&
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
@@ -175,7 +180,7 @@ contains
       &                   xicond_fac,l_xi_3D,l_heat_3D,l_thw_3D,   &
       &                   l_mag_LF,l_mag_alpha,l_mag_pump,l_cyl,   &
       &                   l_mag_inertia,alpha_fac,mag_pump_fac,    &
-      &                   delta_fac
+      &                   delta_fac, l_mag_B0
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi,scale_B,init_B,amp_B
@@ -310,6 +315,7 @@ contains
       if ( prmag == 0.0_cp ) then
          l_mag_3D=.false.
          l_mag_LF=.false.
+         l_mag_B0=.false.
          l_mag_alpha=.false.
          l_mag_pump=.false.
          l_mag_inertia=.false.
@@ -355,10 +361,6 @@ contains
       r_cmb=one/(one-radratio)
       r_icb=r_cmb-one
 
-      !-- Control the add.terms from the projection of the vorticity eq. onto a QG basis
-      !-- Default is no additional terms l_QG_basis = .false.
-      if ( l_QG_basis ) l_cheb_coll=.true. ! Only implemented for coll. method yet
-
       !-- Determine Cheb method
       call capitalize(cheb_method)
       if ( index(cheb_method, 'COLL') /= 0 ) then
@@ -383,6 +385,16 @@ contains
          l_direct_solve = .false.
       end if
 
+      !-- Control the add.terms from the projection of the vorticity eq. onto a QG basis
+      !-- Default is no additional terms l_QG_basis = .false.
+      if ( l_QG_basis .or. l_lin_solve ) then
+         !write(output_unit, &
+         !&    '(" ! New-QG-projection approach only compatible with Collocations and Direct solver methods")')
+         l_cheb_coll=.true. ! Only implemented for coll. method yet
+         l_direct_solve=.true. ! Only implemented for direct_solve method yet
+         l_galerkin = .false. ! Incompatible with Galerkin BC method yet
+      end if
+
       !-- Warning:: Galerkin method can not handle inhomogeneous BCs (yet)
       if ( l_galerkin .and. index(cheb_method, 'COLL') == 0 .and. &
       &    ( maxval(abs(t_top(:))) > 0.0_cp .or.                  &
@@ -394,6 +406,12 @@ contains
       &           maxval(abs(xi_bot(:))) > 0.0_cp) ) then
          write(output_unit,*) '! Inhomogeneous Bot BCs not compatible with galerkin yet!'
          call abortRun('! Inhomogeneous BCs not compatible with chosen chebyshev solver !')
+      end if
+
+      if ( .not. ( damp_zon .eq. 1.0_cp ) ) then
+         if ( rank == 0 ) write(output_unit,*) '! Warning!:: damp_zon might be physically inconsistent!'
+         if ( damp_zon < 0.0_cp ) damp_zon = abs(damp_zon)
+         if ( damp_zon > 1.0_cp ) damp_zon = one/damp_zon
       end if
 
       !-- Implicit or Explicit treatment of Coriolis force
@@ -536,7 +554,7 @@ contains
       map_function     ='arcsin' ! By default Kosloff and Tal-Ezer mapping when l_newmap=.true.
       dtMax            =1.0e-5_cp
       courfac          =1.0e3_cp
-      l_cour_alf_damp  =.false. ! By default, use Christensen's (GJI, 1999) CFL
+      l_cour_alf_damp  =.true. ! By default, use Christensen's (GJI, 1999) CFL
       alffac           =1.0e3_cp
       dt_fac           =2.0_cp
       tEND             =0.0_cp    ! numerical time where run should end
@@ -556,9 +574,12 @@ contains
       buo_term         ='IMPLICIT' ! Implicit treatment of Buoyancy
       time_scale       ='VISC' ! viscous units
       l_QG_basis       =.false. ! No QG basis projection of the vorticity eq.
+      l_path_rescale   =.false. ! No rescaling of the checkpoint fields
+      l_lin_solve      =.false. ! No switching off of the non-linear terms
 
       !-- Hyperdiffusion
       hdif_vel         =0.0_cp
+      damp_zon         =1.0_cp
       hdif_temp        =0.0_cp
       hdif_comp        =0.0_cp
       hdif_mag         =0.0_cp
@@ -615,6 +636,7 @@ contains
       !-- treatment of magnetic field (3D)
       l_mag_3D = .false.
       l_mag_LF = .false.
+      l_mag_B0 = .false.
       l_mag_alpha = .false.
       alpha_fac   = 0.0_cp
       l_mag_pump = .false.
@@ -714,6 +736,8 @@ contains
       write(n_out,'(''  rerror_fac      ='',ES14.6,'','')') rerror_fac
       write(n_out,'(''  n_fft_optim_lev ='',i4,'','')') n_fft_optim_lev
       write(n_out,'(''  l_QG_basis      ='',l3,'','')') l_QG_basis
+      write(n_out,'(''  l_path_rescale  ='',l3,'','')') l_path_rescale
+      write(n_out,'(''  l_lin_solve     ='',l3,'','')') l_lin_solve
       length=length_to_blank(time_scale)
       write(n_out,*) " time_scale      = """,time_scale(1:length),""","
       write(n_out,*) "/"
@@ -721,6 +745,7 @@ contains
       write(n_out,*) "&hdif"
       length=length_to_blank(tag)
       write(n_out,'(''  hdif_vel        ='',ES14.6,'','')') hdif_vel
+      write(n_out,'(''  damp_zon        ='',ES14.6,'','')') damp_zon
       write(n_out,'(''  hdif_temp       ='',ES14.6,'','')') hdif_temp
       write(n_out,'(''  hdif_comp       ='',ES14.6,'','')') hdif_comp
       write(n_out,'(''  hdif_mag        ='',ES14.6,'','')') hdif_mag
@@ -756,6 +781,7 @@ contains
       & write(n_out,'(''  l_thw_3D        ='',l3,'','')') l_thw_3D
       write(n_out,'(''  l_mag_3D        ='',l3,'','')') l_mag_3D
       write(n_out,'(''  l_mag_LF        ='',l3,'','')') l_mag_LF
+      write(n_out,'(''  l_mag_B0        ='',l3,'','')') l_mag_B0
       write(n_out,'(''  l_mag_alpha     ='',l3,'','')') l_mag_alpha
       if ( l_mag_alpha ) &
       & write(n_out,'(''  alpha_fac       ='',ES14.6,'','')') alpha_fac

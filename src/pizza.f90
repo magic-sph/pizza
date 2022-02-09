@@ -145,7 +145,7 @@ program pizza
    local_bytes_used = bytes_allocated
    call initialize_fourier(n_phi_max, n_phi_max_3D, l_3D)
    call initialize_radial_loop(n_phi_max)
-   if ( l_3D ) call initialize_radial_loop_3D(lmP_max,lm_max)
+   if ( l_3D ) call initialize_radial_loop_3D(lm_max,lmP_max)
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('R loop', local_bytes_used)
    call initialize_mfunctions()

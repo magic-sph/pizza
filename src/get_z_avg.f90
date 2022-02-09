@@ -236,7 +236,7 @@ contains
                         &                               us_Rloc(n_m,n_r)
                      end if
                   else
-                     ekpump_m3D(n_m_3D,n_r)=0.0_cp
+                     ekpump_m3D(n_m_3D,n_r)=zero
                      !ekpump_m3D(n_m_3D,n_r)=-CorFac*                &
                      !&                                 ekpump(n_r)* &
                      !&                                 up_Rloc(n_m,n_r)
@@ -593,7 +593,7 @@ contains
       !close(1)
       !r_i3D(:) = r_i(:)
 
-      thwFac=BuoFac/CorFac
+      thwFac=BuoFac/CorFac !Ra/Pr/(2/Ek) = RaEkPr/2
 
       call allgather_from_rloc_3D(dTdth_Rloc,dTdth,n_theta_max)
 

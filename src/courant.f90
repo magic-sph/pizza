@@ -3,13 +3,14 @@ module courant_mod
    use parallel_mod
    use precision_mod
    use outputs, only: n_log_file
-   use namelists, only:  dt_fac, tag, l_3D, l_mag_3D, l_mag_LF, &
+   use namelists, only:  dt_fac, tag, l_3D, l_mag_3D, l_mag_LF, l_mag_alpha, &
        &                 l_cour_alf_damp, DyMagFac, BdiffFac!=1/pm=eta/nu, 
    use truncation, only: n_phi_max
    use truncation_3D, only: n_theta_max, n_phi_max_3D
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
    use radial_functions, only: delxr2, delxh2, delxr2_3D, delxh2_3D, &
-       &                       beta, r_3D, or2_3D
+       &                       beta, r_3D, or2_3D!, or1_3D
+   !use horizontal, only: cost, sint, osint1
    use useful, only: logWrite
    use constants, only: half, one, two
 
@@ -88,7 +89,7 @@ contains
 
    end subroutine courant
 !------------------------------------------------------------------------------
-   subroutine courant_3D(n_r,dtrkc_3D,dthkc_3D,br,bt,bp,alffac)
+   subroutine courant_3D(n_r,dtrkc_3D,dthkc_3D,vr,vt,vp,br,bt,bp,ac,courfac,alffac)
       !
       !  courant condition check: calculates Courant  for Alfven waves                     
       !  advection lengths in radial direction dtrkc_3D                      
@@ -101,9 +102,14 @@ contains
       !-- Input variable:
       integer,  intent(in) :: n_r             ! radial level
 
+      real(cp), intent(in) :: vr(n_phi_max_3D,n_theta_max)  ! radial 3D velocity
+      real(cp), intent(in) :: vt(n_phi_max_3D,n_theta_max)  ! longitudinal 3D velocity
+      real(cp), intent(in) :: vp(n_phi_max_3D,n_theta_max)  ! azimuthal 3D velocity
       real(cp), intent(in) :: br(n_phi_max_3D,n_theta_max)  ! radial 3D magnetic field
       real(cp), intent(in) :: bt(n_phi_max_3D,n_theta_max)  ! longitudinal 3D magnetic field
       real(cp), intent(in) :: bp(n_phi_max_3D,n_theta_max)  ! azimuthal 3D magnetic field
+      real(cp), intent(in) :: ac(n_phi_max_3D,n_theta_max)  ! Alpha-effect function (if any)
+      real(cp), intent(in) :: courfac         ! Courant factor
       real(cp), intent(in) :: alffac          ! Alfven factor
 
       !-- Output:
@@ -114,21 +120,25 @@ contains
       !-- Local  variables:
       integer :: n_theta
       integer :: n_phi
-      real(cp) :: valr2max,valh2max
+      real(cp) :: valr2max,valh2max!, valr2max2,valh2max2
       real(cp) :: valr,valr2
       real(cp) :: valri2,valhi2,valh2,valh2m
+      real(cp) :: vflr2,vflh2
       real(cp) :: r2, o_r_2_r, o_r_4_r, r4
-      real(cp) :: af2
+      real(cp) :: af2, cf2
 
       valr2max=0.0_cp
       valh2max=0.0_cp
+      !valr2max2=0.0_cp
+      !valh2max2=0.0_cp
       dtrkc_3D=1.0e10_cp
       dthkc_3D=1.0e10_cp
       af2=alffac*alffac
+      cf2=courfac*courfac
 
       if ( l_cour_alf_damp ) then
          valri2=(half*(one+BdiffFac))**2./delxr2_3D(n_r)
-         valhi2=(half*(one+BdiffFac))**2./delxh2_3D(n_r) 
+         valhi2=(half*(one+BdiffFac))**2./delxh2_3D(n_r)
       else
          valri2=0.0_cp
          valhi2=0.0_cp
@@ -148,36 +158,56 @@ contains
                valr =br(n_phi,n_theta)*br(n_phi,n_theta) * &
                &     DyMagFac*r4
                valr2=valr*valr/(valr+valri2)
-               valr2max=max(valr2max,o_r_4_r*af2*valr2)
+               vflr2=vr(n_phi,n_theta)*vr(n_phi,n_theta)*r4
+               if ( l_mag_alpha ) vflr2=vflr2 + &
+               &  ac(n_phi,n_theta)*ac(n_phi,n_theta)*r4
+               valr2max=max(valr2max,o_r_4_r*(af2*valr2 + cf2*vflr2))!))!
+               !valr2max2=max(valr2max2,o_r_4_r*(cf2*vflr2))
 
                valh2= ( bt(n_phi,n_theta)*bt(n_phi,n_theta) +  &
                &        bp(n_phi,n_theta)*bp(n_phi,n_theta) )* &
                &        DyMagFac*r2
                valh2m=valh2*valh2/(valh2+valhi2)
-               valh2max=max(valh2max,o_r_2_r*af2*valh2m)
+               vflh2= ( vt(n_phi,n_theta)*vt(n_phi,n_theta) +  &
+               &        vp(n_phi,n_theta)*vp(n_phi,n_theta) )* &
+               &        r2
+               if ( l_mag_alpha ) vflh2=vflh2 + &
+               &  two*ac(n_phi,n_theta)*ac(n_phi,n_theta)*r2
+               valh2max=max(valh2max,o_r_2_r*(af2*valh2m + cf2*vflh2))!))!
+               !valh2max2=max(valh2max2,o_r_2_r*(cf2*vflh2))
             end do
          end do
 
+         !print*, 'l_cour_alf_damp?:: ', l_cour_alf_damp
          !print*, 'n_r; r_3D(n_r)', n_r, '; ', r_3D(n_r)
-         !print*, 'DyMagFac; valhi2', DyMagFac, '; ', valhi2
-         !print*, 'br; btheta; bphi', r2*br(1,1), '; ', bt(1,1)/(or1_3D(n_r)*osint1(1)), '; ', bp(1,1)/(or1_3D(n_r)*osint1(1))
-         !print*, 'valr2max', valr, valr2max
-         !print*, 'valh2max', valh2, valh2max
-         !if (n_r == 2) stop
+         !print*, 'DyMagFac; valri2, valhi2', DyMagFac, '; ', valri2, '; ', valhi2
+         !print*, 'br; btheta; bphi', r2*br(2,2), '; ', bt(2,2)/(or1_3D(n_r)*osint1(2)), '; ', bp(2,2)/(or1_3D(n_r)*osint1(2))
+         !print*, 'valr2max', valr2 
+         !print*, 'valh2max', valh2
+         !print*, ''
+         !print*, 'vr; vtheta; vphi', r2*vr(2,2), '; ', vt(2,2)/(or1_3D(n_r)*osint1(2)), '; ', vp(2,2)/(or1_3D(n_r)*osint1(2))
+         !print*, 'vaflr2', vflr2
+         !print*, 'vaflh2', vflh2
+         !print*, ''
+         !print*, "COUR/ALF FAC==", 'valr2max, valh2max', valr2max, valh2max
+         !print*, "COUR=", 'vflr2max, vflh2max', valr2max2, valh2max2
+         !print*, ''
+         !if (n_r == 3) stop
 
          if ( valr2max /= 0.0_cp ) dtrkc_3D = min(dtrkc_3D,sqrt(delxr2_3D(n_r)/valr2max))
          if ( valh2max /= 0.0_cp ) dthkc_3D = min(dthkc_3D,sqrt(delxh2_3D(n_r)/valh2max))
 
       else
 
-         dtrkc_3D=min(dtrkc_3D,sqrt(delxr2_3D(n_r)/af2))
-         dthkc_3D=min(dthkc_3D,sqrt(delxr2_3D(n_r)/af2))
+         dtrkc_3D=min(dtrkc_3D,sqrt(delxr2_3D(n_r)/cf2))
+         dthkc_3D=min(dthkc_3D,sqrt(delxr2_3D(n_r)/cf2))
 
       end if   ! Magnetic field ?
 
       !print*, 'dtrkc_R', dtrkc_3D
       !print*, 'dthkc_H', dthkc_3D
-      !if (n_r == 2) stop
+      !print*, 'COURant LAYER OVER-----------------------------------------------------------------------------'
+      !if (n_r == 3) stop
 
    end subroutine courant_3D
 !------------------------------------------------------------------------------
