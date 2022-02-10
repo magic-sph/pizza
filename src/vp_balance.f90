@@ -145,8 +145,6 @@ contains
          write(this%n_vphi_bal_file) this%pump
          write(this%n_vphi_bal_file) this%visc
          write(this%n_vphi_bal_file) this%lorentz_force
-         !print*, "INSIDE vp_bal"
-         !print*, "this%lorentz_force", this%lorentz_force
       end if
 
    end subroutine write_outputs

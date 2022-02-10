@@ -22,6 +22,8 @@ module rloop_3D
    use time_schemes, only: type_tscheme
    use output_frames, only: open_snapshot_3D, close_snapshot_3D, &
        &                    write_bulk_snapshot_3D
+   !use fields, only: B0r_3D_Rloc, B0t_3D_Rloc, B0p_3D_Rloc, curlB0r_3D_Rloc, &
+   !    &             curlB0t_3D_Rloc, curlB0p_3D_Rloc
 
    implicit none
 
@@ -53,10 +55,10 @@ contains
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
    subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM,  &
-              &               buo_Rloc, b_3D, db_3D, ddb_3D, b0_3D,     &
-              &               db0_3D,ddb0_3D, aj_3D, dj_3D,dbdt_3D,     &
-              &               djdt_3D, djxB_Rloc, dVxBhLM, dpsidt_Rloc, &
-              &               dVsOm_Rloc, dtr_3D_Rloc, dth_3D_Rloc,     &
+              &               buo_Rloc, b_3D, db_3D, ddb_3D, aj_3D,     &
+              &               dj_3D, dbdt_3D, djdt_3D, djxB_Rloc,       &
+              &               dVxBhLM, dpsidt_Rloc, dVsOm_Rloc,         &
+              &               dtr_3D_Rloc, dth_3D_Rloc,                 &
               &               l_frame, zinterp, timers, tscheme )
 
       !-- Input variables
@@ -64,9 +66,6 @@ contains
       complex(cp), intent(inout) :: b_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: db_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: ddb_3D(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(inout) :: b0_3D(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(inout) :: db0_3D(lm_max, nRstart3D:nRstop3D)
-      complex(cp), intent(inout) :: ddb0_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: aj_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp), intent(inout) :: dj_3D(lm_max, nRstart3D:nRstop3D)
       real(cp),    intent(inout) :: ur(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
@@ -157,11 +156,10 @@ contains
       !!end if
 
          !-- Transform temperature and magnetic-field from (l,m) to (theta,phi)
-         call transform_to_grid_space(temp(:,n_r), b_3D(:,n_r),      &
-              &                      db_3D(:,n_r), ddb_3D(:,n_r),    &
-              &                      b0_3D(:,n_r), db0_3D(:,n_r),    &
-              &                      ddb0_3D(:,n_r), aj_3D(:,n_r),   &
-              &                      dj_3D(:,n_r), n_r, gsa)
+         call transform_to_grid_space(temp(:,n_r), b_3D(:,n_r),   &
+              &                      db_3D(:,n_r), ddb_3D(:,n_r), &
+              &                      aj_3D(:,n_r),  dj_3D(:,n_r), &
+              &                      n_r, gsa)
 
          !-- Courant condition
          if ( l_mag_3D .and. tscheme%istage == 1 ) then
@@ -186,15 +184,15 @@ contains
                call write_bulk_snapshot_3D(fh_temp, gsa%Tc(:,:))!buo_tmp(:,:,n_r))!
             end if
             if ( l_mag_3D ) then
-               if ( .not. l_mag_B0 ) then
+               !if ( .not. l_mag_B0 ) then
                   call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!Vx!
                   call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))!Vx!
                   call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!Vx!
-               else
-                  call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:)+gsa%B0rc(:,:))!jxBs(:,:,n_r))!Vx!
-                  call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:)+gsa%B0tc(:,:))!Vx!
-                  call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:)+gsa%B0pc(:,:))!jxBp(:,:,n_r))!Vx!
-               end if
+               !else
+               !   call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:)+B0r_3D_Rloc(:,:,n_r))!jxBs(:,:,n_r))!Vx!
+               !   call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:)+B0t_3D_Rloc(:,:,n_r))!Vx!
+               !   call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:)+B0p_3D_Rloc(:,:,n_r))!jxBp(:,:,n_r))!Vx!
+               !end if
             end if
          end if
 
@@ -333,7 +331,7 @@ contains
                   djxB_Rloc(n_m,n_r)= DyMagFac*lfp_tmp_Rloc(n_m,n_r)
                else
                   dVsOm_Rloc(n_m,n_r)= dVsOm_Rloc(n_m,n_r)-DyMagFac*r(n_r)*&
-                  &                  lfp_tmp_Rloc(n_m,n_r)
+                  &                   lfp_tmp_Rloc(n_m,n_r)
                   dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-DyMagFac*ci*real(m,cp)* &
                   &                    lfs_tmp_Rloc(n_m,n_r)*or1(n_r)
                   if ( l_QG_basis ) then
@@ -388,16 +386,13 @@ contains
 
    end subroutine radial_loop_3D
 !-------------------------------------------------------------------------------
-   subroutine transform_to_grid_space(temp, B, dB, ddB, B0, dB0, ddB0, aj, dj, n_r, gsa)
+   subroutine transform_to_grid_space(temp, B, dB, ddB, aj, dj, n_r, gsa)
 
       complex(cp), intent(inout) :: temp(lm_max)
       complex(cp), intent(inout) :: B(lm_max), dB(lm_max), ddB(lm_max)
-      complex(cp), intent(inout) :: B0(lm_max), dB0(lm_max), ddB0(lm_max)
       complex(cp), intent(inout) :: aj(lm_max), dj(lm_max)
       integer,     intent(in) :: n_r
       type(grid_space_arrays_t) :: gsa
-
-      complex(cp) :: j0(lm_max)
 
 #ifdef WITH_SHTNS
       if ( l_heat_3D ) then
@@ -409,14 +404,6 @@ contains
          if (  l_mag_LF ) then
             call torpol_to_curl_spat(B, ddB, aj, dj, n_r, gsa%curlBrc, &
                  &                   gsa%curlBtc, gsa%curlBpc)
-         end if
-         if (  l_mag_B0 ) then
-            j0(:) = zero
-            call torpol_to_spat(B0, dB0, j0, n_r, gsa%B0rc, gsa%B0tc, gsa%B0pc)
-            if (  l_mag_LF ) then
-               call torpol_to_curl_spat(B0, ddB0, j0, j0, n_r, gsa%curlB0rc, &
-                    &                   gsa%curlB0tc, gsa%curlB0pc)
-            end if
          end if
       end if
 #endif
@@ -441,7 +428,6 @@ contains
          call scal_to_SH(gsa%VxBp, nl_lm%VxBpLM)
          !-- In get_td --> ifdef SHTNS could be used instead and replace the 3 above lines by:
          !-- spat_to_qst(gsa%VxBr,gsa%VxBt, gsa%VxBp, nl_lm%VxBrLM, nl_lm%VxBtLM, nl_lm%VxBpLM)
-         !-- can also be done for the temperature!
       end if
 #endif
 

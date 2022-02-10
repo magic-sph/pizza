@@ -8,7 +8,8 @@ module init_fields
    use iso_fortran_env, only: output_unit
    use constants, only: zero, one, two, three, four, ci, pi, half, third, sq4pi
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
-   use communications, only: transp_r2m, r2m_fields, transp_r2lm, r2lm_fields
+   use communications, only: transp_r2m, r2m_fields, transp_r2lm, r2lm_fields, &
+       &               transp_lm2r, lm2r_fields
    use radial_functions, only: r, rscheme, or1, or2, beta, rscheme_3D, &
        &                       r_3D, or1_3D, tcond_3D
    use horizontal, only: theta
@@ -34,7 +35,7 @@ module init_fields
    use fieldsLast
    use precision_mod
 #ifdef WITH_SHTNS
-   use shtns, only: scal_to_SH
+   use shtns, only: scal_to_SH, torpol_to_spat, torpol_to_curl_spat
 #endif
 
    implicit none
@@ -132,7 +133,15 @@ contains
 
       if ( init_t /= 0 .and. l_heat_3D ) call initT_3D(temp_3D_LMloc, init_t, amp_t)
 
-      if ( init_B /= 0 .and. l_mag_3D ) call initB_3D(b_3D_LMloc, aj_3D_LMloc, init_B, amp_B)
+      if ( init_B /= 0 .and. l_mag_3D ) then
+         if ( l_mag_B0 ) then
+            b_3D_LMloc(:,:) = zero
+            aj_3D_LMloc(:,:) = zero
+            call initB0_3D(b0_3D_LMloc, aj0_3D_LMloc, init_B, amp_B)
+         else
+            call initB_3D(b_3D_LMloc, aj_3D_LMloc, init_B, amp_B)
+         end if
+      end if
 
       if ( init_u /= 0 ) call initU(us_Mloc, up_Mloc)
 
@@ -148,10 +157,6 @@ contains
               &      n_r_max_3D, rscheme_3D)
          call get_dr(aj_3D_LMloc, dj_3D_LMloc, lmStart, lmStop,&
               &      n_r_max_3D, rscheme_3D)
-         if ( l_mag_B0 ) then
-            call get_ddr(b0_3D_LMloc, db0_3D_LMloc, ddb0_3D_LMloc, lmStart, lmStop,&
-                 &      n_r_max_3D, rscheme_3D)
-         end if
       end if
       call get_dr(up_Mloc, work_Mloc, nMstart, nMstop, n_r_max, rscheme)
       do n_r=1,n_r_max
@@ -537,9 +542,7 @@ contains
    subroutine initB_3D(b_LMloc, aj_LMloc, init_B, amp_B)
       !
       ! Purpose of this subroutine is to initialize the magnetic field
-      ! according to the control parameters imagcon and init_B/2.
-      ! In addition CMB and ICB peak values are calculated for
-      ! magneto convection.
+      ! according to the control parameters amp_B and init_B.
       !
 
       !-- Input variables
@@ -561,7 +564,6 @@ contains
 
       integer :: lm, lm0, l1, m1
       integer :: lm10, lm20, lm30, lm11, lm44
-
 
       lm10 = lo_map%lm2(1,0)
       lm20 = lo_map%lm2(2,0)
@@ -705,20 +707,88 @@ contains
          end do
       end if
 
-      if ( l_mag_B0 ) then  ! Simple Background field
+   end subroutine initB_3D
+!----------------------------------------------------------------------------------
+   subroutine initB0_3D(b0_LMloc, aj0_LMloc, init_B0, amp_B0)
+      !
+      ! Purpose of this subroutine is to initialize a background magnetic field
+      ! according to the control parameters init_B.
+      ! Can be used for magneto convection or benchmark purposes
+      !
+
+      !-- Input variables
+      real(cp),    intent(in) :: amp_B0
+      integer,     intent(in) :: init_B0
+
+      !-- Output variables:
+      complex(cp), intent(inout) :: b0_LMloc(lmStart:lmStop, n_r_max_3D)
+      complex(cp), intent(inout) :: aj0_LMloc(lmStart:lmStop, n_r_max_3D)
+
+      !-- Local variables:
+      !-- poloidal and toroidal arrays for grid_space quantities computation
+      complex(cp) :: db0_LMloc(lmStart:lmStop, n_r_max_3D)
+      complex(cp) :: ddb0_LMloc(lmStart:lmStop, n_r_max_3D)
+      complex(cp) :: dj0_LMloc(lmStart:lmStop, n_r_max_3D)
+      complex(cp) :: b0_Rloc(lm_max,nRstart3D:nRstop3D)
+      complex(cp) :: db0_Rloc(lm_max,nRstart3D:nRstop3D)
+      complex(cp) :: ddb0_Rloc(lm_max,nRstart3D:nRstop3D)
+      complex(cp) :: aj0_Rloc(lm_max,nRstart3D:nRstop3D)
+      complex(cp) :: dj0_Rloc(lm_max,nRstart3D:nRstop3D)
+
+      integer :: n_r
+      real(cp) :: b_pol, b_tor
+
+      integer :: lm10
+
+      lm10 = lo_map%lm2(1,0)
+
+      if ( init_B0 == 2 ) then  ! l=1,m=0 analytical toroidal field
+      ! with a maximum of amp_B0 at mid-radius
+      ! between r_icb and r_cmb for an insulating
+      ! inner core and at r_cmb/2 for a conducting
+      ! inner core
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+!         if ( lmStartB(rank+1) <= lm10 .and. lmStopB(rank+1) >= lm10 ) then ! select processor
+            b_tor=-two*amp_B0*sqrt(third*pi)  ! minus sign makes phi comp. > 0
+            do n_r=1,n_r_max_3D
+               aj0_LMloc(lm10,n_r)=aj0_LMloc(lm10,n_r) + b_tor*r_3D(n_r)*sin(pi*(r_3D(n_r)-r_icb))
+            end do
+         end if
+         b0_LMloc(:,:) = zero
+
+      else  ! Simple Background field
       ! l=1,m0 poloidal field
       ! which is potential field at r_cmb
          if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
-            b_pol=amp_B*5.0_cp*half*sqrt(third*pi)*r_icb**2
+            b_pol=amp_B0*5.0_cp*half*sqrt(third*pi)*r_icb**2
             do n_r=1,n_r_max_3D
-               b0_3D_LMloc(lm10,n_r)=b0_3D_LMloc(lm10,n_r)+b_pol*(r_3D(n_r)/r_icb)**2 * &
+               b0_LMloc(lm10,n_r)=b0_LMloc(lm10,n_r)+b_pol*(r_3D(n_r)/r_icb)**2 * &
                &                     ( one - three/5.0_cp*(r_3D(n_r)/r_cmb)**2 )
-
             end do
-            b_LMloc(:,:) = zero
          end if
+         aj0_LMloc(:,:) = zero
       end if
 
-   end subroutine initB_3D
+      call get_dr(aj0_LMloc, dj0_LMloc, lmStart, lmStop,&
+           &      n_r_max_3D, rscheme_3D)
+      call get_ddr(b0_LMloc, db0_LMloc, ddb0_LMloc, lmStart, lmStop,&
+           &      n_r_max_3D, rscheme_3D)
+
+      call transp_lm2r(lm2r_fields, b0_LMloc, b0_Rloc)
+      call transp_lm2r(lm2r_fields, db0_LMloc, db0_Rloc)
+      call transp_lm2r(lm2r_fields, ddb0_LMloc, ddb0_Rloc)
+      call transp_lm2r(lm2r_fields, aj0_LMloc, aj0_Rloc)
+      call transp_lm2r(lm2r_fields, dj0_LMloc, dj0_Rloc)
+
+#ifdef WITH_SHTNS
+      do n_r=nRstart3D,nRstop3D
+         call torpol_to_spat(b0_Rloc(:,n_r), db0_Rloc(:,n_r), aj0_Rloc(:,n_r), n_r, &
+              &              B0r_3D_Rloc(:,:,n_r), B0t_3D_Rloc(:,:,n_r), B0p_3D_Rloc(:,:,n_r))
+         call torpol_to_curl_spat(b0_Rloc(:,n_r), ddb0_Rloc(:,n_r), aj0_Rloc(:,n_r), dj0_Rloc(:,n_r), &
+              &                   n_r, curlB0r_3D_Rloc(:,:,n_r), curlB0t_3D_Rloc(:,:,n_r), curlB0p_3D_Rloc(:,:,n_r))
+      end do
+#endif
+
+   end subroutine initB0_3D
 !----------------------------------------------------------------------------------
 end module init_fields

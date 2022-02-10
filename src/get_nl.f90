@@ -22,6 +22,8 @@ module grid_space_arrays_mod
    use blocking, only: nRstart3D, nRstop3D
    use truncation_3D, only: n_theta_max, n_phi_max_3D
    use radial_functions, only: or1_3D, r_3D, rgrav_3D, beta!, tcond_3D
+   use fields, only: B0r_3D_Rloc, B0t_3D_Rloc, B0p_3D_Rloc, curlB0r_3D_Rloc, &
+       &             curlB0t_3D_Rloc, curlB0p_3D_Rloc
    use horizontal, only: cost, sint, osint1
 
    implicit none
@@ -38,8 +40,6 @@ module grid_space_arrays_mod
       real(cp), pointer :: Tc(:,:)
       real(cp), pointer :: Brc(:,:), Btc(:,:), Bpc(:,:)
       real(cp), pointer :: curlBrc(:,:), curlBtc(:,:), curlBpc(:,:)
-      real(cp), pointer :: B0rc(:,:), B0tc(:,:), B0pc(:,:)
-      real(cp), pointer :: curlB0rc(:,:), curlB0tc(:,:), curlB0pc(:,:)
    contains
       procedure :: initialize
       procedure :: finalize
@@ -74,18 +74,6 @@ contains
             allocate( this%curlBpc(n_phi_max_3D,n_theta_max) )
             bytes_allocated=bytes_allocated + 3*n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL
          end if
-         if ( l_mag_B0 ) then
-            allocate( this%B0rc(n_phi_max_3D,n_theta_max) )
-            allocate( this%B0tc(n_phi_max_3D,n_theta_max) )
-            allocate( this%B0pc(n_phi_max_3D,n_theta_max) )
-            bytes_allocated=bytes_allocated + 3*n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL
-            if ( l_mag_LF ) then
-               allocate( this%curlB0rc(n_phi_max_3D,n_theta_max) )
-               allocate( this%curlB0tc(n_phi_max_3D,n_theta_max) )
-               allocate( this%curlB0pc(n_phi_max_3D,n_theta_max) )
-               bytes_allocated=bytes_allocated + 3*n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL
-            end if
-         end if
          if ( l_mag_alpha ) then
             allocate( this%Alphac(n_phi_max_3D,n_theta_max) )
             bytes_allocated=bytes_allocated + n_phi_max_3D*n_theta_max*SIZEOF_DEF_REAL
@@ -113,16 +101,6 @@ contains
             this%curlBpc(:,:)=0.0_cp
             this%Alphac(:,:)=0.0_cp !if ( l_mag_alpha )
          end if
-         if ( l_mag_B0 ) then
-            this%B0rc(:,:)=0.0_cp
-            this%B0tc(:,:)=0.0_cp
-            this%B0pc(:,:)=0.0_cp
-            if ( l_mag_LF ) then
-               this%curlB0rc(:,:)=0.0_cp
-               this%curlB0tc(:,:)=0.0_cp
-               this%curlB0pc(:,:)=0.0_cp
-            end if
-         end if
       end if
 
    end subroutine initialize
@@ -141,12 +119,6 @@ contains
          if ( l_mag_LF ) then
             deallocate( this%curlBrc, this%curlBtc, this%curlBpc )
             deallocate( this%Alphac )
-         end if
-         if ( l_mag_B0 ) then
-            deallocate( this%B0rc, this%B0tc, this%B0pc )
-            if ( l_mag_LF ) then
-               deallocate( this%curlB0rc, this%curlB0tc, this%curlB0pc )
-            end if
          end if
       end if
 
@@ -180,6 +152,7 @@ contains
       real(cp) :: rfunc!, bamp2, Afunc
 
       r2 = r_3D(n_r)*r_3D(n_r)
+      !print*, B0r_3D_Rloc(:,:,n_r)
 
       if ( l_heat_3D ) then
          if ( .not. l_lin_solve ) then  !-- Non-Linear terms?
@@ -244,18 +217,18 @@ contains
                   &    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) )!&&!
                   !&   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Btc(n_phi,n_theta)- &
                   !&   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Brc(n_phi,n_theta) )!&&!
-               else !-- Magneto-convection
+               else !-- Background field?
                   this%VxBr(n_phi,n_theta)=r2*(                   &
-                  &    vt(n_phi,n_theta)*this%B0pc(n_phi,n_theta)- &
-                  &    vp(n_phi,n_theta)*this%B0tc(n_phi,n_theta) )!
+                  &    vt(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r)- &
+                  &    vp(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r) )!
 
                   this%VxBt(n_phi,n_theta)=or1sn1*(               &
-                  &    vp(n_phi,n_theta)*this%B0rc(n_phi,n_theta)- &
-                  &    vr(n_phi,n_theta)*this%B0pc(n_phi,n_theta) )
+                  &    vp(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r)- &
+                  &    vr(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r) )
 
                   this%VxBp(n_phi,n_theta)=or1sn1*(         &
-                  &    vr(n_phi,n_theta)*this%B0tc(n_phi,n_theta)- &
-                  &    vt(n_phi,n_theta)*this%B0rc(n_phi,n_theta) )
+                  &    vr(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r)- &
+                  &    vt(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r) )
                end if
 
                if ( l_mag_alpha .and. r_3D(n_r)*sint(n_theta) >= r_icb ) then
@@ -283,20 +256,22 @@ contains
                   !--    <u x b>_s = \delta/Pm <u_p^2>.B_s  --> on VxBr and VxBt
                   !-- &  <u x b>_p = \delta/Pm <u_s^2>.B_p  --> on VxBp
                   !--              = terms coming from inertial waves
-                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + delta_fac*   &
-                  &                        (sint(n_theta)*vp(n_phi,n_theta))**2.*( &
-                  &                 or1sn1*this%Brc(n_phi,n_theta)*sint(n_theta) + &
-                  &                     r2*this%Btc(n_phi,n_theta)*cost(n_theta) )
+                  !--> Warning:: 1/r2 or 1/rsint is applied to the full product VxB;
+                  !--            the different quantities have already been rescaled
+                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + delta_fac*r2*(&
+                  &                        (sint(n_theta)*vp(n_phi,n_theta))**2.*(  &
+                  &                        this%Brc(n_phi,n_theta)*sint(n_theta) +  &
+                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) ) )
 
-                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta) + delta_fac*   &
-                  &                        (cost(n_theta)*vp(n_phi,n_theta))**2.*( &
-                  &                 or1sn1*this%Brc(n_phi,n_theta)*sint(n_theta) + &
-                  &                     r2*this%Btc(n_phi,n_theta)*cost(n_theta) )
+                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta)+delta_fac*or1sn1*(&
+                  &                        (cost(n_theta)*vp(n_phi,n_theta))**2.*(    &
+                  &                        this%Brc(n_phi,n_theta)*sint(n_theta) +    &
+                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) )  )
 
-                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + delta_fac*(  &
-                  &                ( (or1sn1*vr(n_phi,n_theta)*sint(n_theta) +     &
-                  &                    r2*vt(n_phi,n_theta)*cost(n_theta))**2. )*  &
-                  &                                      this%Bpc(n_phi,n_theta) )
+                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta)+delta_fac*or1sn1*(&
+                  &                       ( (vr(n_phi,n_theta)*sint(n_theta) +        &
+                  &                       vt(n_phi,n_theta)*cost(n_theta))**2. )*     &
+                  &                                      this%Bpc(n_phi,n_theta)    )
                end if
             end do
          end do   ! theta loop
@@ -306,48 +281,49 @@ contains
             !------ Get the Lorentz force:
             !------ We will only need to compute the z component of Vx(jxB)
             !$OMP PARALLEL DO default(shared) &
-            !$OMP& private(n_theta, n_phi, or1sn1)
+            !$OMP& private(n_theta, n_phi)
             do n_theta=1,n_theta_max
-               or1sn1=or1_3D(n_r)*osint1(n_theta)
+               !--> Warning:: 1/rsint or 1/r2 is only there if back-transformed are done later
+               !or1sn1=or1_3D(n_r)*osint1(n_theta)
                do n_phi=1,n_phi_max_3D
                   if ( .not. l_mag_B0 ) then
                      !---- jxBs= 1/(E*Pm) * ( curl(B)_p*B_z - curl(B)_z*B_p )
                      !--       = sint * jxBr + cost * jxBt
-                     jxBs(n_phi,n_theta)=sint(n_theta)*r2*(                    &!(&!
+                     jxBs(n_phi,n_theta)=sint(n_theta)*(&!r2*(                    &!
                      &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
                      &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) ) &
-                     &                  +cost(n_theta)*or1sn1*(                &!(&!
+                     &                  +cost(n_theta)*(&!or1sn1*(                &!
                      &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-  &
                      &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
 
                      !---- jxBp= 1/(E*Pm) * ( curl(B)_r*B_t - curl(B)_t*B_r )
-                     jxBp(n_phi,n_theta) =or1sn1*(                             &!(&!
+                     jxBp(n_phi,n_theta) =(&!or1sn1*(                             &!
                      &    this%curlBrc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
                      &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
-                  else !-- Magneto-convection
+                  else !-- Background field?
                      !---- j0xBs= sint * j0xBr + cost * j0xBt
-                     jxBs(n_phi,n_theta)=sint(n_theta)*r2*(                     &!(&!
-                     &   this%curlB0tc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
-                     &   this%curlB0pc(n_phi,n_theta)*this%Btc(n_phi,n_theta) ) &
-                     &                  +cost(n_theta)*or1sn1*(                 &!(&!
-                     &   this%curlB0pc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-  &
-                     &   this%curlB0rc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
+                     jxBs(n_phi,n_theta)=sint(n_theta)*(&!r2*(                     &!
+                     &   curlB0t_3D_Rloc(n_phi,n_theta,n_r)*this%Bpc(n_phi,n_theta)-  &
+                     &   curlB0p_3D_Rloc(n_phi,n_theta,n_r)*this%Btc(n_phi,n_theta) ) &
+                     &                  +cost(n_theta)*(&!or1sn1*(                 &!
+                     &   curlB0p_3D_Rloc(n_phi,n_theta,n_r)*this%Brc(n_phi,n_theta)-  &
+                     &   curlB0r_3D_Rloc(n_phi,n_theta,n_r)*this%Bpc(n_phi,n_theta) )
                      !---- + jxB0s= sint * j0xBr + cost * j0xBt
-                     jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta)+sint(n_theta)*r2*( &!(&!
-                     &   this%curlBtc(n_phi,n_theta)*this%B0pc(n_phi,n_theta)-  &
-                     &   this%curlBpc(n_phi,n_theta)*this%B0tc(n_phi,n_theta) ) &
-                     &                  +cost(n_theta)*or1sn1*(                 &!(&!
-                     &   this%curlBpc(n_phi,n_theta)*this%B0rc(n_phi,n_theta)-  &
-                     &   this%curlBrc(n_phi,n_theta)*this%B0pc(n_phi,n_theta) )
+                     jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta)+sint(n_theta)*(&!r2*( &!
+                     &   this%curlBtc(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r)-  &
+                     &   this%curlBpc(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r) ) &
+                     &                  +cost(n_theta)*(&!or1sn1*(                 &!
+                     &   this%curlBpc(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r)-  &
+                     &   this%curlBrc(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r) )
 
                      !---- j0xBp= j0_r*B_t - j0_t*B_r
-                     jxBp(n_phi,n_theta) =or1sn1*(                              &!(&!
-                     &    this%curlB0rc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
-                     &    this%curlB0tc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
+                     jxBp(n_phi,n_theta) =(&!or1sn1*(                              &!
+                     &    curlB0r_3D_Rloc(n_phi,n_theta,n_r)*this%Btc(n_phi,n_theta)- &
+                     &    curlB0t_3D_Rloc(n_phi,n_theta,n_r)*this%Brc(n_phi,n_theta) )
                      !---- + jxB0p= j0_r*B_t - j0_t*B_r
-                     jxBp(n_phi,n_theta) =jxBp(n_phi,n_theta)+or1sn1*(          &!(&!
-                     &    this%curlBrc(n_phi,n_theta)*this%B0tc(n_phi,n_theta)- &
-                     &    this%curlBtc(n_phi,n_theta)*this%B0rc(n_phi,n_theta) )
+                     jxBp(n_phi,n_theta) =jxBp(n_phi,n_theta)+(&!or1sn1*(          &!
+                     &    this%curlBrc(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r)- &
+                     &    this%curlBtc(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r) )
                   end if
 
                   if ( l_QG_basis ) then
@@ -357,10 +333,10 @@ contains
                      !-- jxBz = 1/(E*Pm) * ( curl(B)_p*B_s - curl(B)_s*B_p )
                      !--      = cost * jxBr - sint * jxBt
                      !-- Can be added to jxBs because it will get -1/s \partial_\phi later
-                     jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta) -(cost(n_theta)*r2*( &
+                     jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta) -(cost(n_theta)*(&!r2*( &
                      &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-     &
                      &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) )    &
-                     &                                -sint(n_theta)*or1sn1*(     &
+                     &                                -sint(n_theta)*(&!or1sn1*(     &
                      &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-     &
                      &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) ) )* &
                      &                          beta(n_r)*r_3D(n_r)*cost(n_theta)

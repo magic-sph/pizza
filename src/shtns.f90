@@ -41,8 +41,8 @@ contains
       nthreads = shtns_use_threads(0)
 
       norm = SHT_ORTHONORMAL + SHT_NO_CS_PHASE
-      layout = SHT_QUICK_INIT+SHT_PHI_CONTIGUOUS
-      !layout = SHT_GAUSS+SHT_PHI_CONTIGUOUS
+      !layout = SHT_QUICK_INIT+SHT_PHI_CONTIGUOUS
+      layout = SHT_GAUSS+SHT_PHI_CONTIGUOUS
       eps_polar = 1.e-10_cp
 
       sht_l = shtns_create(l_max, m_max_3D/minc_3D, minc_3D, norm)

@@ -140,9 +140,6 @@ contains
                      vp_bal%rey_stress(n_r)=vp_bal%rey_stress(n_r) - real(djxB_Mloc(n_m,n_r))
                   end if
                end do
-               !print*, "time step vp_calc, istage, l_mag_LF", tscheme%istage, l_mag_LF
-               !print*, "djxB_Mloc", real(djxB_Mloc(n_m,:))
-               !print*, "vp_bal%lorentz_force", vp_bal%lorentz_force
             end if
 
             call solve_full_mat(uphiMat(:,:), n_r_max, n_r_max,   &
@@ -254,16 +251,6 @@ contains
             end if
          end do
       end do
-
-      if ( rank==0 .and. .False. ) then
-         print*, ""
-         print*, "Scheme, substage on number of stages::", tscheme%time_scheme, tscheme%istage, tscheme%nstages
-         !print*, "uphiMat(:,1)::", uphiMat(:,1)
-         print*, "Old::", dpsidt%old(nMstart,:,tscheme%istage)
-         print*, "Expl::", dpsidt%expl(nMstart,:,tscheme%istage)
-         print*, "Impl::", dpsidt%impl(nMstart,:,tscheme%istage)
-         print*, "final substage::", tscheme%istage, uphi0
-      end if
 
       !-- Roll the time arrays before filling again the first block
       call tscheme%rotate_imex(dpsidt, nMstart, nMstop, n_r_max)

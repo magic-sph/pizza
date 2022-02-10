@@ -15,8 +15,7 @@ module step_time
        &             temp_3D_LMloc, dtemp_3D_LMloc, temp_3D_Rloc, b_3D_LMloc,  &
        &             db_3D_LMloc, ddb_3D_LMloc, b_3D_Rloc, db_3D_Rloc,         &
        &             ddb_3D_Rloc, aj_3D_LMloc, dj_3D_LMloc, aj_3D_Rloc,        &
-       &             dj_3D_Rloc, b0_3D_LMloc, db0_3D_LMloc, ddb0_3D_LMloc,     &
-       &             b0_3D_Rloc, db0_3D_Rloc, ddb0_3D_Rloc
+       &             dj_3D_Rloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc,      &
        &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,       &
        &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc, djxB_Mloc, &
@@ -241,11 +240,6 @@ contains
                      call transp_lm2r(lm2r_fields, ddb_3D_LMloc, ddb_3D_Rloc)
                      call transp_lm2r(lm2r_fields, aj_3D_LMloc, aj_3D_Rloc)
                      call transp_lm2r(lm2r_fields, dj_3D_LMloc, dj_3D_Rloc)
-                     if ( l_mag_B0 ) then
-                        call transp_lm2r(lm2r_fields, b0_3D_LMloc, b0_3D_Rloc)
-                        call transp_lm2r(lm2r_fields, db0_3D_LMloc, db0_3D_Rloc)
-                        call transp_lm2r(lm2r_fields, ddb0_3D_LMloc, ddb0_3D_Rloc)
-                     end if
                   end if
                end if
                if ( l_heat_3D ) call transp_lm2r(lm2r_fields, temp_3D_LMloc, &
@@ -290,7 +284,6 @@ contains
                   call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,     &
                        &              temp_3D_Rloc, dtempdt_3D_Rloc, dVrT_3D_Rloc,  &
                        &              buo_Rloc, b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc, &
-                       &              b0_3D_Rloc, db0_3D_Rloc, ddb0_3D_Rloc,        &
                        &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,         &
                        &              djdt_3D_Rloc, djxB_Rloc, dVxBh_3D_Rloc,       &
                        &              dpsidt_Rloc, dVsOm_Rloc, dtr_3D_Rloc,         &
