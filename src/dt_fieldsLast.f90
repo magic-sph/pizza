@@ -51,10 +51,18 @@ contains
       if ( l_finite_diff ) then
          call dpsidt%initialize(1, n_m_max, nRstart, nRstop, nold, nexp, nimp, &
               &                 l_allocate_exp=.true.)
-         if ( l_heat ) call dTdt%initialize(1, n_m_max, nRstart, nRstop, nold, &
-                            &               nexp, nimp, l_allocate_exp=.true.)
-         if ( l_chem ) call dxidt%initialize(1, n_m_max, nRstart, nRstop, nold, &
-                            &                nexp, nimp, l_allocate_exp=.true.)
+         if ( l_heat ) then
+            call dTdt%initialize(1, n_m_max, nRstart, nRstop, nold, &
+                &               nexp, nimp, l_allocate_exp=.true.)
+         else
+            call dTdt%initialize(1, 1, 1, 1, nold, nexp, nimp, l_allocate_exp=.true.)
+         end if
+         if ( l_chem ) then
+            call dxidt%initialize(1, n_m_max, nRstart, nRstop, nold, &
+                &                nexp, nimp, l_allocate_exp=.true.)
+         else
+            call dxidt%initialize(1, 1, 1, 1, nold, nexp, nimp, l_allocate_exp=.true.)
+         end if
       else
          call dpsidt%initialize(nMstart, nMstop, 1, n_r_max, nold, nexp, nimp)
          if ( l_heat ) call dTdt%initialize(nMstart, nMstop, 1, n_r_max, nold, nexp, nimp)
