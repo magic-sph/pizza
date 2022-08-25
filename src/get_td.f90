@@ -107,7 +107,7 @@ contains
          ! do lm=1,lm_max
          !    l   =lm2l(lm)
          !    lmP =lm2lmP(lm)
-         !    dbdt(lm)   = dLh(lm)*this%VxBpLM(lmP)
+         !    dBdt(lm)   = dLh(lm)*this%VxBpLM(lmP)
          !    dVxBhLM(lm)=-dLh(lm)*this%VxBtLM(lmP)*r_3D(n_r)!*r_3D(n_r)
          !    djdt(lm)   = dLh(lm)*this%VxBrLM(lmP)*or2_3D(n_r)!*or2_3D(n_r)
          ! end do

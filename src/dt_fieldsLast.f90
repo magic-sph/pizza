@@ -7,7 +7,7 @@ module fieldsLast
    use precision_mod
    use constants, only: zero
    use mem_alloc, only: bytes_allocated
-   use namelists, only: l_heat, l_chem, l_heat_3D, l_mag_3D, l_mag_LF
+   use namelists, only: l_heat, l_chem, l_heat_3D, l_mag_3D, l_mag_LF, l_leibniz
    use time_array
 
    implicit none
@@ -19,12 +19,14 @@ module fieldsLast
    complex(cp), public, allocatable :: dVsOm_Mloc(:,:)
    complex(cp), public, allocatable :: djxB_Mloc(:,:)
    complex(cp), public, allocatable :: buo_Mloc(:,:)
+   complex(cp), public, allocatable :: lf_Mloc(:,:)
    complex(cp), public, allocatable :: dpsidt_Rloc(:,:)
    complex(cp), public, allocatable :: dtempdt_Rloc(:,:)
    complex(cp), public, allocatable :: dxidt_Rloc(:,:)
    complex(cp), public, allocatable :: dVsT_Rloc(:,:)
    complex(cp), public, allocatable :: dVsXi_Rloc(:,:)
    complex(cp), public, allocatable :: dVsOm_Rloc(:,:)
+   complex(cp), public, allocatable :: lf_Rloc(:,:)
    complex(cp), public, allocatable :: buo_Rloc(:,:)
    complex(cp), public, allocatable :: djxB_Rloc(:,:)
 
@@ -91,10 +93,16 @@ contains
          allocate( dVsXi_Mloc(0,0) )
       end if
       if ( l_mag_LF ) then
-         allocate( djxB_Mloc(nMStart:nMstop,n_r_max) )
+         if ( l_leibniz ) then
+            allocate( djxB_Mloc(nMStart:nMstop,n_r_max) )
+            n_mloc_fields = n_mloc_fields + 1
+         else
+            allocate( djxB_Mloc(0,0) )
+         end if
+         allocate( lf_Mloc(nMStart:nMstop,n_r_max) )
          n_mloc_fields = n_mloc_fields + 1
       else
-         allocate( djxB_Mloc(0,0) )
+         allocate( lf_Mloc(0,0), djxB_Mloc(0,0) )
       end if
       allocate( dVsOm_Mloc(nMStart:nMstop,n_r_max) )
       n_mloc_fields = n_mloc_fields + 1
@@ -105,7 +113,8 @@ contains
       dVsOm_Mloc(:,:)=zero
       if ( l_heat ) dVsT_Mloc(:,:)=zero
       if ( l_chem ) dVsXi_Mloc(:,:)=zero
-      if ( l_mag_LF ) djxB_Mloc(:,:)=zero
+      if ( l_mag_LF ) lf_Mloc(:,:)=zero
+      if ( l_mag_LF .and. l_leibniz ) djxB_Mloc(:,:)=zero
 
       allocate( dpsidt_Rloc(n_m_max,nRstart:nRstop) )
       allocate( dVsOm_Rloc(n_m_max,nRstart:nRstop) )
@@ -131,10 +140,16 @@ contains
          allocate( buo_Rloc(0,0) )
       end if
       if ( l_mag_LF ) then
-         allocate( djxB_Rloc(n_m_max,nRstart:nRstop) )
+         if ( l_leibniz ) then
+            allocate( djxB_Rloc(n_m_max,nRstart:nRstop) )
+            n_rloc_fields = n_rloc_fields+1
+         else
+            allocate( djxB_Rloc(0,0) )
+         end if
+         allocate( lf_Rloc(n_m_max,nRstart:nRstop) )
          n_rloc_fields = n_rloc_fields+1
       else
-         allocate( djxB_Rloc(0,0) )
+         allocate( lf_Rloc(0,0), djxB_Rloc(0,0) )
       end if
       bytes_allocated = bytes_allocated + n_rloc_fields*(nRstop-nRStart+1)* &
       &                 n_m_max*SIZEOF_DEF_COMPLEX
@@ -150,7 +165,8 @@ contains
          dxidt_Rloc(:,:)=zero
       end if
       if ( l_heat_3D ) buo_Rloc(:,:)=zero
-      if ( l_mag_LF ) djxB_Rloc(:,:)=zero
+      if ( l_mag_LF ) lf_Rloc(:,:)=zero
+      if ( l_mag_LF .and. l_leibniz ) djxB_Rloc(:,:)=zero
 
    end subroutine initialize_fieldsLast
 !-------------------------------------------------------------------------------
@@ -226,7 +242,8 @@ contains
          call djdt_3D%finalize()
          deallocate( dVxBh_3D_LMloc, dVxBh_3D_Rloc, djdt_3D_Rloc, dbdt_3D_Rloc )
          if ( l_mag_LF ) then
-            deallocate( djxB_Mloc, djxB_Rloc )
+            if ( l_leibniz ) deallocate( djxB_Mloc, djxB_Rloc )
+            deallocate( lf_Mloc, lf_Rloc )
          end if
       end if
       if ( l_heat_3D ) then

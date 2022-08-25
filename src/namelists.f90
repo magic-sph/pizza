@@ -119,6 +119,7 @@ module namelists
    logical,  public :: l_mag_alpha     ! With or without magnetic Alpha effect in magnetic advection
    logical,  public :: l_mag_pump      ! With or without Magnetic pumping
    logical,  public :: l_mag_inertia   ! With or without magnetic Alpha^2 effect triggered by inertia waves
+   logical,  public :: l_leibniz       ! With or without liebniz rule of integration for the LF (finite-differences if not)
    logical,  public :: l_cyl           ! Accuracy of the schemes for the z-integrations
    logical,  public :: l_heat
    logical,  public :: l_chem
@@ -180,7 +181,7 @@ contains
       &                   xicond_fac,l_xi_3D,l_heat_3D,l_thw_3D,   &
       &                   l_mag_LF,l_mag_alpha,l_mag_pump,l_cyl,   &
       &                   l_mag_inertia,alpha_fac,mag_pump_fac,    &
-      &                   delta_fac, l_mag_B0
+      &                   delta_fac, l_mag_B0, l_leibniz
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi,scale_B,init_B,amp_B
@@ -637,6 +638,7 @@ contains
       l_mag_3D = .false.
       l_mag_LF = .false.
       l_mag_B0 = .false.
+      l_leibniz = .false.
       l_mag_alpha = .false.
       alpha_fac   = 0.0_cp
       l_mag_pump = .false.
@@ -782,6 +784,7 @@ contains
       write(n_out,'(''  l_mag_3D        ='',l3,'','')') l_mag_3D
       write(n_out,'(''  l_mag_LF        ='',l3,'','')') l_mag_LF
       write(n_out,'(''  l_mag_B0        ='',l3,'','')') l_mag_B0
+      write(n_out,'(''  l_leibniz       ='',l3,'','')') l_leibniz
       write(n_out,'(''  l_mag_alpha     ='',l3,'','')') l_mag_alpha
       if ( l_mag_alpha ) &
       & write(n_out,'(''  alpha_fac       ='',ES14.6,'','')') alpha_fac

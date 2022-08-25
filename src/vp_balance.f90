@@ -9,7 +9,7 @@ module vp_balance
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, m2idx
    use blocking, only: nMstart, nMstop, l_rank_has_m0
-   use namelists, only: ra, pr, ek, radratio, sc, raxi, tag
+   use namelists, only: ra, pr, ek, radratio, sc, raxi, tag, l_mag_LF
    use radial_functions, only: r
 
    implicit none
@@ -51,10 +51,15 @@ contains
          allocate( this%dvpdt(n_r_max) )
          allocate( this%visc(n_r_max) )
          allocate( this%pump(n_r_max) )
-         allocate( this%lorentz_force(n_r_max) )
+         if ( l_mag_LF ) then
+            allocate( this%lorentz_force(n_r_max) )
+            bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_REAL
+         else
+            allocate( this%lorentz_force(0) )
+         end if
          this%n_calls = 0
          this%l_calc = .false.
-         bytes_allocated = bytes_allocated+5*n_r_max*SIZEOF_DEF_REAL
+         bytes_allocated = bytes_allocated+4*n_r_max*SIZEOF_DEF_REAL
       end if
 
    end subroutine initialize
@@ -144,7 +149,7 @@ contains
          write(this%n_vphi_bal_file) this%rey_stress
          write(this%n_vphi_bal_file) this%pump
          write(this%n_vphi_bal_file) this%visc
-         write(this%n_vphi_bal_file) this%lorentz_force
+         if ( l_mag_LF) write(this%n_vphi_bal_file) this%lorentz_force
       end if
 
    end subroutine write_outputs

@@ -17,11 +17,12 @@ module step_time
        &             ddb_3D_Rloc, aj_3D_LMloc, dj_3D_LMloc, aj_3D_Rloc,        &
        &             dj_3D_Rloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc,      &
-       &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, dpsidt, dTdt,       &
-       &                 dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc, djxB_Mloc, &
-       &                 dTdt_3D, dVrT_3D_LMloc, dVrT_3D_Rloc, dtempdt_3D_Rloc,&
-       &                 dBdt_3D, djdt_3D, dVxBh_3D_LMloc, dVxBh_3D_Rloc,      &
-       &                 dbdt_3D_Rloc, djdt_3D_Rloc, buo_Rloc, djxB_Rloc
+       &                 dVsOm_Rloc, dVsOm_Mloc, buo_Mloc, lf_Mloc, dpsidt,    &
+       &                 dTdt, dxidt, dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,      &
+       &                 djxB_Mloc, dTdt_3D, dVrT_3D_LMloc, dVrT_3D_Rloc,      &
+       &                 dtempdt_3D_Rloc, dBdt_3D, djdt_3D, dVxBh_3D_LMloc,    &
+       &                 dVxBh_3D_Rloc, dbdt_3D_Rloc, djdt_3D_Rloc, buo_Rloc,  &
+       &                 lf_Rloc, djxB_Rloc
    use courant_mod, only: dt_courant
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
    use constants, only: half, one
@@ -45,7 +46,7 @@ module step_time
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance,      &
        &                l_heat, l_chem, l_3D, l_heat_3D, l_mag_3D,        &
-       &                l_mag_LF, l_mag_B0, l_lin_solve
+       &                l_mag_LF, l_leibniz, l_mag_B0, l_lin_solve
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
    use outputs_3D, only: write_outputs_3D
@@ -281,14 +282,13 @@ contains
                         timers%interp  =timers%interp+(runStop-runStart)
                      end if
                   end if
-                  call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,     &
-                       &              temp_3D_Rloc, dtempdt_3D_Rloc, dVrT_3D_Rloc,  &
-                       &              buo_Rloc, b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc, &
-                       &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,         &
-                       &              djdt_3D_Rloc, djxB_Rloc, dVxBh_3D_Rloc,       &
-                       &              dpsidt_Rloc, dVsOm_Rloc, dtr_3D_Rloc,         &
-                       &              dth_3D_Rloc, l_frame, zinterp, timers,        &
-                       &              tscheme)
+                  call radial_loop_3D(time, ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc,        &
+                       &              temp_3D_Rloc, dtempdt_3D_Rloc, dVrT_3D_Rloc,     &
+                       &              buo_Rloc, b_3D_Rloc, db_3D_Rloc, ddb_3D_Rloc,    &
+                       &              aj_3D_Rloc, dj_3D_Rloc, dbdt_3D_Rloc,            &
+                       &              djdt_3D_Rloc, lf_Rloc, djxB_Rloc, dVxBh_3D_Rloc, &
+                       &              dpsidt_Rloc, dtr_3D_Rloc, dth_3D_Rloc,           &
+                       &              l_frame, zinterp, timers, tscheme)
                end if
 
                !------------------
@@ -315,7 +315,10 @@ contains
                      call transp_r2lm(r2lm_fields, djdt_3D_Rloc, &
                           &           djdt_3D%expl(:,:,tscheme%istage))
                      call transp_r2lm(r2lm_fields, dVxBh_3D_Rloc, dVxBh_3D_LMloc)
-                     if ( l_mag_LF ) call transp_r2m(r2m_fields, djxB_Rloc, djxB_Mloc)
+                     if ( l_mag_LF ) then
+                        call transp_r2m(r2m_fields, lf_Rloc, lf_Mloc)
+                        if ( l_leibniz ) call transp_r2m(r2m_fields, djxB_Rloc, djxB_Mloc)
+                     end if
                   end if
                end if
                if ( l_heat_3D ) then
@@ -333,11 +336,12 @@ contains
                !-- Finish assembling the explicit terms
                !--------------------
                runStart = MPI_Wtime()
-               call finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc,      &
-                    &                        us_Mloc, up_Mloc, om_Mloc,         &
-                    &                        dVsT_Mloc, dVsXi_Mloc, dVsOm_Mloc, &
-                    &                        buo_Mloc, djxB_Mloc, dTdt, dxidt,  &
-                    &                        dpsidt, tscheme, vp_bal, vort_bal)
+               call finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc,       &
+                    &                        us_Mloc, up_Mloc, om_Mloc,          &
+                    &                        dVsT_Mloc, dVsXi_Mloc, dVsOm_Mloc,  &
+                    &                        buo_Mloc, lf_Mloc, djxB_Mloc, dTdt, &
+                    &                        dxidt, dpsidt, tscheme, vp_bal,     &
+                    &                        vort_bal)
                runStop = MPI_Wtime()
                if (runStop>runStart) then
                   timers%m_loop=timers%m_loop+(runStop-runStart)
@@ -393,10 +397,10 @@ contains
             !-- M-loop (update routines)
             !--------------------
             runStart = MPI_Wtime()
-            call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,     &
-                 &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,    &
-                 &     dom_Mloc, us_Mloc, up_Mloc, buo_Mloc, djxB_Mloc, dTdt, &
-                 &     dxidt, dpsidt, vp_bal, vort_bal, tscheme, lMat,        &
+            call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,  &
+                 &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc, &
+                 &     dom_Mloc, us_Mloc, up_Mloc, buo_Mloc, lf_Mloc, dTdt,&
+                 &     dxidt, dpsidt, vp_bal, vort_bal, tscheme, lMat,     &
                  &     l_log_next, timers)
             runStop = MPI_Wtime()
             if ( .not. lMat ) then
@@ -454,7 +458,6 @@ contains
       end block
 
       print*, 'ALL GOOD END END!**'
-
       stop
 #endif
 

@@ -5,8 +5,8 @@ module update_psi_coll_dmat
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
    use horizontal, only: hdif_V
-   use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, &
-       &                l_non_rot, l_ek_pump, l_mag_LF, l_buo_imp, damp_zon
+   use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, l_non_rot, &
+       &                l_ek_pump, l_mag_LF, l_leibniz, l_buo_imp, damp_zon
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, oheight
    use blocking, only: nMstart, nMstop, l_rank_has_m0
    use truncation, only: n_r_max, idx2m, m2idx
@@ -105,14 +105,14 @@ contains
    end subroutine finalize_om_coll_dmat
 !------------------------------------------------------------------------------
    subroutine update_om_coll_dmat(psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc, &
-              &                   buo_Mloc, djxB_Mloc, dpsidt, vp_bal, vort_bal, &
+              &                   buo_Mloc, lf_Mloc, dpsidt, vp_bal, vort_bal, &
               &                   tscheme, lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       complex(cp),         intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),         intent(in) :: djxB_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: lf_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),         intent(out) :: psi_Mloc(nMstart:nMstop,n_r_max)
@@ -173,8 +173,8 @@ contains
                   vp_bal%rey_stress(n_r)=real(dpsidt%expl(n_m,n_r,tscheme%istage))
                   vp_bal%lorentz_force(n_r)=0.0_cp
                   if ( l_mag_LF ) then
-                     vp_bal%lorentz_force(n_r)=real(djxB_Mloc(n_m,n_r))
-                     vp_bal%rey_stress(n_r)=vp_bal%rey_stress(n_r) - real(djxB_Mloc(n_m,n_r))
+                     vp_bal%lorentz_force(n_r)=real(lf_Mloc(n_m,n_r))
+                     vp_bal%rey_stress(n_r)=vp_bal%rey_stress(n_r) - real(lf_Mloc(n_m,n_r))
                   end if
                end do
             end if
@@ -413,8 +413,8 @@ contains
 
    end subroutine update_om_coll_dmat
 !------------------------------------------------------------------------------
-   subroutine finish_exp_psi_coll_dmat(us_Mloc, up_Mloc, om_Mloc, dVsOm_Mloc, &
-              &                        buo_Mloc, dpsi_exp_last, vort_bal)
+   subroutine finish_exp_psi_coll_dmat(us_Mloc, up_Mloc, om_Mloc, dVsOm_Mloc, buo_Mloc, &
+              &                        lf_Mloc, djxB_Mloc, dpsi_exp_last, vort_bal)
 
       !-- Input variables
       complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
@@ -422,6 +422,9 @@ contains
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: lf_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: djxB_Mloc(nMstart:nMstop,n_r_max)
+
 
       !-- Output variable
       complex(cp),         intent(inout) :: dpsi_exp_last(nMstart:nMstop,n_r_max)
@@ -430,22 +433,44 @@ contains
 
       !-- Local variables:
       integer :: n_r, n_m, m
+      complex(cp) :: dslf_Mloc(nMstart:nMstop,n_r_max)
    
       !-- Finish calculation of advection
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
            &       rscheme, nocopy=.true.)
+
+      !-- Finish calculation of the z-avg Lorentz-force
+      if ( l_mag_LF .and. l_leibniz ) then
+         call get_dr( djxB_Mloc, dslf_Mloc, nMstart, nMstop, n_r_max, rscheme, nocopy=.true. )
+      end if
 
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-&
-               &                        or1(n_r)*work_Mloc(n_m,n_r)
+               dpsi_exp_last(n_m,n_r)=     dpsi_exp_last(n_m,n_r)- &
+               &                      or1(n_r)*work_Mloc(n_m,n_r)
+
+               !-- Add z-avg Lorentz force on the r.h.s
+               if ( l_mag_LF ) then
+                  if ( l_leibniz ) then !-- if Leibniz rule of integration for LF
+                     !if ( n_r==1 .or. n_r==n_r_max ) dslf_Mloc(n_m,n_r) = zero
+                     lf_Mloc(n_m,n_r) = or1(n_r)*(dslf_Mloc(n_m,n_r) + lf_Mloc(n_m,n_r)) !-- 1/s(ds<sjxBp> + -dp<jxBs> + Leibniz)!
+                  end if
+                  if ( n_r==1 .or. n_r==n_r_max ) lf_Mloc(n_m,n_r) = zero
+                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)+ &
+                  &                            lf_Mloc(n_m,n_r)
+               end if
 
                !-- If the force balance is requested get the advection here
                if ( vort_bal%l_calc ) then
                   vort_bal%adv(n_m,n_r)=dpsi_exp_last(n_m,n_r)
+                  !vort_bal%lf(n_m,n_r)=zero
+                  if ( l_mag_LF ) then
+                     !vort_bal%lf(n_m,n_r)=lf_Mloc(n_m,n_r)
+                     vort_bal%adv(n_m,n_r)=vort_bal%adv(n_m,n_r) - lf_Mloc(n_m,n_r)
+                  end if
                   if ( .not. l_non_rot ) then
                      vort_bal%cor(n_m,n_r) =CorFac*beta(n_r)*us_Mloc(n_m,n_r)
                   end if

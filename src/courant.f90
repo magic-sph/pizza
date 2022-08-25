@@ -271,6 +271,9 @@ contains
       dt_rh=min(dt_r,dt_h)
       dt_2 =min(half*(one/dt_fac+one)*dt_rh,dtMax)
 
+      !print*, 'dt_R', 'dt_H', dt_r, ';' , dt_h
+      !print*, 'dt_RH', 'dt_2', dt_rh, ';' , dt_2
+
       if ( dt > dtMax ) then ! Timestep larger than dtMax from Namelist
     
          l_new_dt=.true.
@@ -308,6 +311,8 @@ contains
          dt_new=dt
     
       end if
+
+      !stop
 
    end subroutine dt_courant
 !-----------------------------------------------------------------------

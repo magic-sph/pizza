@@ -7,9 +7,10 @@ module rloop_3D
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
    use namelists, only: BuoFac, DyMagFac, tag, l_heat_3D, l_thw_3D, l_mag_3D, l_mag_LF, &
-   &                    l_QG_basis, r_cmb, r_icb, l_lin_solve, l_mag_B0
+   &                    l_cyl, l_QG_basis, r_cmb, r_icb, l_lin_solve, l_leibniz, beta_shift, l_mag_B0
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max, l_max, n_r_max_3D
-   use truncation, only: idx2m, n_m_max
+   use truncation, only: idx2m, n_m_max, n_r_max
+   use communications, only: scatter_from_rank0_to_rloc
    use courant_mod, only: courant_3D
 #ifdef WITH_SHTNS
    use shtns, only: scal_to_SH, scal_to_spat, torpol_to_spat, spat_to_qst, &
@@ -22,7 +23,7 @@ module rloop_3D
    use time_schemes, only: type_tscheme
    use output_frames, only: open_snapshot_3D, close_snapshot_3D, &
        &                    write_bulk_snapshot_3D
-   !use fields, only: B0r_3D_Rloc, B0t_3D_Rloc, B0p_3D_Rloc, curlB0r_3D_Rloc, &
+   use fields, only: B0r_3D_Rloc, B0t_3D_Rloc, B0p_3D_Rloc!, curlB0r_3D_Rloc, &
    !    &             curlB0t_3D_Rloc, curlB0p_3D_Rloc
 
    implicit none
@@ -56,10 +57,10 @@ contains
 !------------------------------------------------------------------------------
    subroutine radial_loop_3D( time, ur, ut, up, temp, dtempdt, dVrTLM,  &
               &               buo_Rloc, b_3D, db_3D, ddb_3D, aj_3D,     &
-              &               dj_3D, dbdt_3D, djdt_3D, djxB_Rloc,       &
-              &               dVxBhLM, dpsidt_Rloc, dVsOm_Rloc,         &
-              &               dtr_3D_Rloc, dth_3D_Rloc,                 &
-              &               l_frame, zinterp, timers, tscheme )
+              &               dj_3D, dbdt_3D, djdt_3D, lf_Rloc,         &
+              &               djxB_Rloc, dVxBhLM, dpsidt_Rloc,          &
+              &               dtr_3D_Rloc, dth_3D_Rloc, l_frame,        &
+              &               zinterp, timers, tscheme )
 
       !-- Input variables
       complex(cp), intent(inout) :: temp(lm_max, nRstart3D:nRstop3D)
@@ -83,9 +84,9 @@ contains
       complex(cp),       intent(out) :: djdt_3D(lm_max, nRstart3D:nRstop3D)
       complex(cp),       intent(out) :: dVxBhLM(lm_max, nRstart3D:nRstop3D)
       complex(cp),       intent(inout) :: buo_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),       intent(inout) :: lf_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(inout) :: djxB_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(inout) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp),       intent(inout) :: dVsOm_Rloc(n_m_max, nRstart:nRstop)
       real(cp),          intent(out) :: dtr_3D_Rloc(nRstart3D:nRstop3D)
       real(cp),          intent(out) :: dth_3D_Rloc(nRstart3D:nRstop3D)
       type(timers_type), intent(inout) :: timers
@@ -94,18 +95,28 @@ contains
       real(cp) :: buo_tmp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: jxBs(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: jxBp(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: jxBz(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: djxBpdz(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: djxBpds(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: runStart, runStop!, phi!, rsint
+      real(cp) :: runStart, runStop, phi, theta!, rsint
+      complex(cp) :: tmp_2D(n_m_max,n_r_max)!nRstart:nRstop)!
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfz_tmp_Rloc(n_m_max,nRstart:nRstop)
-      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta!, n_phi
+      complex(cp) :: lfpds_tmp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp) :: lfpdz_tmp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp) :: lfp_bc_tmp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp) :: lfp_h_tmp_Rloc(n_m_max,nRstart:nRstop)!n_r_max)
+      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta, n_phi
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
+      integer :: fh_jxbs, info_jxbs,fh_jxbp, info_jxbp
+      logical :: l_jxb_save
       character(len=144) :: frame_name
 
+      l_jxb_save=.False.
       !-- get thermal wind
       if ( l_heat_3D .and. l_thw_3D .and. (.not. l_lin_solve) ) then
          do n_r=nRstart3D,nRstop3D
@@ -136,6 +147,12 @@ contains
             call open_snapshot_3D(frame_name, time, fh_bt, info_bt)
             write(frame_name, '(A,I0,A,A)') 'frame_bp_3D_',frame_counter,'.',tag
             call open_snapshot_3D(frame_name, time, fh_bp, info_bp)
+            if ( l_mag_LF .and. l_jxb_save ) then
+               write(frame_name, '(A,I0,A,A)') 'frame_jxbs_3D_',frame_counter,'.',tag
+               call open_snapshot_3D(frame_name, time, fh_jxbs, info_jxbs)
+               write(frame_name, '(A,I0,A,A)') 'frame_jxbp_3D_',frame_counter,'.',tag
+               call open_snapshot_3D(frame_name, time, fh_jxbp, info_jxbp)
+            end if
          end if
       end if
 
@@ -161,19 +178,60 @@ contains
               &                      aj_3D(:,n_r),  dj_3D(:,n_r), &
               &                      n_r, gsa)
 
+            !!!-- Analytical B and VxB to benchmark Lorentz force if needed
+            !do n_theta=1,n_theta_max
+            !   do n_phi=1,n_phi_max_3D
+            !      phi = (n_phi-1)*two*pi/(n_phi_max_3D)
+            !!      gsa%Brc(n_phi,n_theta) = r_3D(n_r)*cos(phi)**2.*cost(n_theta)
+            !!      gsa%Btc(n_phi,n_theta) = r_3D(n_r)*sin(phi)**2.
+            !!      gsa%Bpc(n_phi,n_theta) =-r_3D(n_r)*sin(phi)**2.*cost(n_theta)
+            !!      gsa%curlBrc(n_phi,n_theta) = ( (r_3D(n_r)*sin(phi)**2.*sint(n_theta)**2. &
+            !!      &                             - r_3D(n_r)*sin(phi)**2.*cost(n_theta)**2.) &
+            !!      &                            - 2.0_cp*r_3D(n_r)*sin(phi)*cos(phi) )/(r_3D(n_r)*sint(n_theta))
+            !!      gsa%curlBtc(n_phi,n_theta) = ( (-r_3D(n_r)*2.0_cp*cos(phi)*sin(phi)*cost(n_theta))/sint(n_theta) &
+            !!      &                            + 2.0_cp*r_3D(n_r)*sin(phi)**2.*cost(n_theta) )/r_3D(n_r)
+            !!      gsa%curlBpc(n_phi,n_theta) = ( 2.0_cp*r_3D(n_r)*sin(phi)**2. &
+            !!      &                            + r_3D(n_r)*cos(phi)**2.*sint(n_theta) )/r_3D(n_r)
+            !      theta = acos(cost(n_theta))
+            !      gsa%Brc(n_phi,n_theta) = 5.0_cp/8.0_cp*(8.0_cp*r_cmb-6.0_cp*r_3D(n_r)-2.0_cp*r_icb**4/r_3D(n_r)**3) &
+            !      &                       *cost(n_theta)
+            !      gsa%Btc(n_phi,n_theta) = 5.0_cp/8.0_cp*(9.0_cp*r_3D(n_r)-8.0_cp*r_cmb-r_icb**4/r_3D(n_r)**3) &
+            !      &                       *sint(n_theta)
+            !      gsa%Bpc(n_phi,n_theta) = 5.0_cp*sin(pi*(r_3D(n_r)-r_icb))*sin(2.0_cp*theta)
+            !      gsa%curlBrc(n_phi,n_theta) = 5.0_cp/r_3D(n_r)*sin(pi*(r_3D(n_r)-r_icb))*(2.0_cp*cos(2.0_cp*theta) &
+            !      &                           +sin(2.0_cp*theta)*cost(n_theta)/sint(n_theta))
+            !      gsa%curlBtc(n_phi,n_theta) =-5.0_cp*(1.0_cp/r_3D(n_r)*sin(pi*(r_3D(n_r)-r_icb)) &
+            !      &                           + pi*cos(pi*(r_3D(n_r)-r_icb)))*sin(2.0_cp*theta)
+            !      gsa%curlBpc(n_phi,n_theta) = 15.0_cp/2.0_cp*sint(n_theta)
+            !   end do
+            !end do
+
+         !print*, '!---------------------------', 'NEW LINE', '---------------------------!'
+         !print*, 'br; btheta; bphi', gsa%Brc(2,2), '; ', gsa%Btc(2,2), '; ', gsa%Bpc(2,2)
+         !print*, 'b0r; b0theta; b0phi', B0r_3D_Rloc(2,2,n_r), '; ', B0t_3D_Rloc(2,2,n_r), '; ', B0p_3D_Rloc(2,2,n_r)
          !-- Courant condition
          if ( l_mag_3D .and. tscheme%istage == 1 ) then
+            if ( .not. l_mag_B0 ) then
             call courant_3D(n_r, dtr_3D_Rloc(n_r), dth_3D_Rloc(n_r),  &
                  &          ur(:,:,n_r),  ut(:,:,n_r),  up(:,:,n_r),  &
                  &          gsa%Brc(:,:), gsa%Btc(:,:), gsa%Bpc(:,:), &
                  &          gsa%Alphac(:,:), tscheme%courfac,         &
                  &          tscheme%alffac)
+            else
+               call courant_3D(n_r, dtr_3D_Rloc(n_r), dth_3D_Rloc(n_r),  &
+                    &          ur(:,:,n_r),  ut(:,:,n_r),  up(:,:,n_r),  &
+                    &          gsa%Brc(:,:)+B0r_3D_Rloc(:,:,n_r),        &
+                    &          gsa%Btc(:,:)+B0t_3D_Rloc(:,:,n_r),        &
+                    &          gsa%Bpc(:,:)+B0p_3D_Rloc(:,:,n_r),        &
+                    &          gsa%Alphac(:,:), tscheme%courfac,         &
+                    &          tscheme%alffac)
+            end if
          end if
 
 
          !-- Construct non-linear terms in physical space
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
-              &          buo_tmp(:,:,n_r),jxBs(:,:,n_r),jxBp(:,:,n_r))
+              &          buo_tmp(:,:,n_r),jxBs(:,:,n_r),jxBp(:,:,n_r),jxBz(:,:,n_r))
 
          !-- Write the snapshot on the grid (easier to handle)
          if ( l_frame .and. tscheme%istage==1 ) then
@@ -188,6 +246,10 @@ contains
                   call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!Vx!
                   call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))!Vx!
                   call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!Vx!
+               if ( l_mag_LF .and. l_jxb_save ) then
+                  call write_bulk_snapshot_3D(fh_jxbs, jxBs(:,:,n_r))
+                  call write_bulk_snapshot_3D(fh_jxbp, jxBp(:,:,n_r))
+               end if
                !else
                !   call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:)+B0r_3D_Rloc(:,:,n_r))!jxBs(:,:,n_r))!Vx!
                !   call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:)+B0t_3D_Rloc(:,:,n_r))!Vx!
@@ -196,7 +258,6 @@ contains
             end if
          end if
 
-
          !-- Transform back the non-linear terms to (l,m) space
          call transform_to_lm_space(gsa, nl_lm, dVrTLM(:,n_r))
 
@@ -204,15 +265,38 @@ contains
          call nl_lm%get_td(dtempdt(:,n_r),dVxBhLM(:,n_r),dbdt_3D(:,n_r), &
               &            djdt_3D(:,n_r), n_r )
 
+            !!-- Analytical jxB to benchmark Lorentz force if needed
             !jxBp(:,:,n_r) = 0.0_cp
+            !jxBs(:,:,n_r) = 0.0_cp
+            !jxBz(:,:,n_r) = 0.0_cp
             !do n_theta=1,n_theta_max
+            !   !if ( r_3D(n_r)*sint(n_theta) >= r_icb ) then
             !   do n_phi=1,n_phi_max_3D
-            !      !!phi = (n_phi-1)*two*pi/(n_phi_max_3D)
-            !      !jxBp(n_phi,n_theta,n_r) = sint(n_theta)*r_3D(n_r) + cost(n_theta)*cost(n_theta)
-            !      jxBp(n_phi,n_theta,n_r) =  r_3D(n_r)*cost(n_theta)*sin(pi*r_3D(n_r)*cost(n_theta))
-            !      !jxBp(n_phi,n_theta,n_r) =  exp(-r_3D(n_r)*cost(n_theta))
+            !      phi = (n_phi-1)*two*pi/(n_phi_max_3D)
+            !      !jxBs(n_phi,n_theta,n_r) = sin(phi)**2 * (r_3D(n_r)*sint(n_theta))*(r_cmb-r_3D(n_r)*sint(n_theta))* &
+            !      !&                        (r_3D(n_r)*sint(n_theta)-r_icb) * (r_3D(n_r)*cost(n_theta))**2
+            !      !jxBs(n_phi,n_theta,n_r) = sin(phi)**2*(r_3D(n_r)*sint(n_theta))*(r_3D(n_r)*cost(n_theta))**2
+            !      jxBs(n_phi,n_theta,n_r) = (r_3D(n_r)*sint(n_theta))*exp(-pi*r_3D(n_r)*cost(n_theta))
+            !      !if ( l_QG_basis ) jxBs(n_phi,n_theta,n_r) = jxBs(n_phi,n_theta,n_r) -                               &
+            !      if ( l_QG_basis ) jxBz(n_phi,n_theta,n_r) =                              &
+            !      !&                 sin(phi)*(r_3D(n_r)*sint(n_theta))!sinphi*s*z/beta * beta/z !directly
+            !      &                 sin(phi)**2 * (r_3D(n_r)*sint(n_theta))*(r_cmb-r_3D(n_r)*sint(n_theta))*          &
+            !      !&  (r_3D(n_r)*sint(n_theta)-r_icb) * (r_3D(n_r)*cost(n_theta))* &!*beta(n_r)*(r_3D(n_r)*cost(n_theta))!
+            !      !&  (-r_3D(n_r)*sint(n_theta)/(r_cmb**2 - (r_3D(n_r)*cost(n_theta))**2))*r_3D(n_r)*cost(n_theta)
+            !      !!&  (-r_3D(n_r)*sint(n_theta)/((r_cmb+beta_shift)**2 - (r_3D(n_r)*cost(n_theta))**2))*r_3D(n_r)*cost(n_theta)
+            !      &  (r_3D(n_r)*sint(n_theta)-r_icb) * (r_3D(n_r)*cost(n_theta))* (r_3D(n_r)*cost(n_theta))!z/beta * beta !directly
+            !      jxBp(n_phi,n_theta,n_r) =-(0.5_cp+cos(phi)+sin(4.*phi)) * (r_cmb**2-(r_3D(n_r)*sint(n_theta))**2)**2 * &
+            !      &                         cos(pi/2*r_3D(n_r)*cost(n_theta)/sqrt(r_cmb**2-(r_3D(n_r)*sint(n_theta))**2))* &!r_icb)* &!sqrt(r_cmb**2-r_icb**2))* &!
+            !      &                         pi/(r_3D(n_r)*sint(n_theta)*sqrt(r_cmb**2-(r_3D(n_r)*sint(n_theta))**2))!r_icb)!sqrt(r_cmb**2-r_icb**2))!
+            !      !jxBp(n_phi,n_theta,n_r) = (0.5_cp+cos(phi)+sin(4.*phi))*(r_3D(n_r)*sint(n_theta))*exp(-pi*r_3D(n_r)*cost(n_theta))
+            !      !jxBp(n_phi,n_theta,n_r) =  r_3D(n_r)*cost(n_theta)*sin(pi*r_3D(n_r)*cost(n_theta))
             !   end do
+            !   !end if
             !end do
+
+         if ( n_r==1 .and. (l_mag_LF .and. (.not. l_lin_solve) .and. l_leibniz) ) then  !-- Surface terms at CMB? --> No need if potential field
+            call zinterp%interp_1d(n_r,jxBp(:,:,n_r), tmp_2D)
+         end if
       end do
 
       runStop = MPI_Wtime()
@@ -256,14 +340,36 @@ contains
          !if ( rank == 0 ) print*, "After z_der:djxBpdz",  djxBpdz(1,1:10,2)
       end if
 
-      !-- Compute z-averaging of buoyancy and lorentz-force
+      !-- Compute z-averaging of buoyancy and lorentz force
       runStart = MPI_Wtime()
-      !call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc)
-      if ( l_heat_3D ) call zinterp%compute_zavg(buo_tmp, buo_tmp_Rloc)
+      !!call zinterp%compute_zder(jxBs, djxBpds)
+      !!call zinterp%compute_sder(jxBs, djxBpds)
+      !!call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc,2,.false.)
+      if ( l_heat_3D ) call zinterp%compute_zavg(buo_tmp, buo_tmp_Rloc,2,.false.)
       if ( l_mag_LF .and. (.not. l_lin_solve) ) then  !-- Non-Linear terms?
-        call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc)
-        call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc)
-        if ( l_QG_basis ) call zinterp%compute_zavg(djxBpdz, lfz_tmp_Rloc)
+         call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc,2,.true.)
+         call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc,2,.false.)!0)!
+         if ( l_leibniz ) then
+            call scatter_from_rank0_to_rloc(tmp_2D, lfp_h_tmp_Rloc, n_m_max)!, rank)
+            !print*, "After z_interp1d:: N_rank, lfp_h_tmp_Rloc", rank,"::", real(lfp_h_tmp_Rloc(1,:))
+            if ( l_cyl ) then
+               lfp_bc_tmp_Rloc(:,:) = lfp_tmp_Rloc(:,:)
+            else !-- set the boundary points to 0 when using low precision z-avg scheme
+               call zinterp%compute_zavg(jxBp, lfp_bc_tmp_Rloc,2,.true.)!0)!
+            end if
+         else !-- No leibniz rule
+            do n_r=nRstart3D,nRstop3D
+               do n_theta=1,n_theta_max
+                  jxBp(:,n_theta,n_r) = r_3D(n_r)*sint(n_theta)*jxBp(:,n_theta,n_r)
+               end do
+            end do
+            call zinterp%compute_sder(jxBp, djxBpds)
+            call zinterp%compute_zavg(djxBpds, lfpds_tmp_Rloc,2,.true.)!lfp_tmp_Rloc,1)!
+         end if
+         if ( l_QG_basis ) then
+            call zinterp%compute_zavg(jxBz, lfz_tmp_Rloc,2,.false.)
+            call zinterp%compute_zavg(djxBpdz, lfpdz_tmp_Rloc,2,.true.)
+         end if
       end if
       runStop = MPI_Wtime()
       if (runStop>runStart) then
@@ -280,29 +386,10 @@ contains
 
          integer :: file_handle, n_r
 
-         open(newunit=file_handle, file='thw', status='new')
-         do n_r=1,n_r_max_3D
-            write(file_handle, '(5ES20.12)') r_3D(n_r), work(5,1,n_r),work(5,4,n_r),work(5,8,n_r),work(5,16,n_r)
-         end do
-         close(file_handle)
-
-         !open(newunit=file_handle, file='up', status='new')
-         !do n_r=1,n_r_max_3D
-         !   write(file_handle, '(5ES20.12)') r_3D(n_r), up(5,1,n_r),up(5,4,n_r),up(5,8,n_r),up(5,16,n_r)
-         !end do
-         !close(file_handle)
-
-         open(newunit=file_handle, file='buo', status='new')
+         open(newunit=file_handle, file='buo', status='new', form='formatted')
          do n_r=1,n_r_max
-            write(file_handle, '(4ES20.12)') r(n_r),  real(buo_tmp_Rloc(5,n_r)), real(buo_tmp_Rloc(6,n_r)), &
-           &               real(buo_tmp_Rloc(1,n_r))
+            write(file_handle, *) r(n_r),  real(buo_tmp_Rloc(:,n_r))
          end do
-
-         open(newunit=file_handle, file='lfp0', status='new')
-         do n_r=1,n_r_max
-            write(file_handle, '(2ES193.12)') r(n_r),  real(lfp_tmp_Rloc(1,n_r))
-         end do
-         close(file_handle)
 
          !open(newunit=file_handle, file='buo_3D', status='new', form='unformatted',&
          !&    access='stream')
@@ -312,76 +399,177 @@ contains
 #endif
 
       !-- Finish assembling buoyancy and sum it with dpsidt
+      !DyMagFac = 1.0_cp
+      !lf_Rloc(:,:)=zero !--> should be encapsulated in l_mag_LF
+      !djxB_Rloc(:,:)=zero !--> should be encapsulated in l_leibniz
+      !dpsidt_Rloc(:,:)=zero
       do n_m=1,n_m_max
          m = idx2m(n_m)
          do n_r=nRstart,nRstop
             if ( l_heat_3D ) then
             !-- Finish assembly the buoyancy:: no 1/s term because a s terms arises from Vx[Tg/r(s.e_s + z.e_z)].e_z
                dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*real(m,cp)* &
-               &                    buo_tmp_Rloc(n_m,n_r)!!*or1(n_r)
-               !-- store z-avg 3D-buo for Force balance outputs
-               !buo_Rloc(n_m,n_r)=-BuoFac*ci*real(m,cp)*buo_tmp_Rloc(n_m,n_r)
+               &                     buo_tmp_Rloc(n_m,n_r)!!*or1(n_r)
+               !-- store z-avg 3D-buo for Force balance outputs! W: spurious at the moment
+               buo_Rloc(n_m,n_r)=zero!-BuoFac*ci*real(m,cp)*buo_tmp_Rloc(n_m,n_r)
             end if
             if ( l_mag_LF .and. (.not. l_lin_solve) ) then
-            !-- Finish assembling both r.h.s. parts of lorentz force and sum it with dpsidt and dVsOm
-            !--   --> <Vx(jxB).e_z> = (--d_s (s <(jxB)_p>) - d_p <(jxB)_s>)/s (d_s (-dVsom) is added later)
+            !-- Finish assembling both r.h.s. parts of lorentz force and sum it with dpsidt
+            !--   --> <Vx(jxB).e_z> = (+<d_s (s (jxB)_p)> - d_p <(jxB)_s>)/s
                if ( m == 0 ) then
+                  !-- LF on m=0 --> <(jxB).e_p> = <(jxB)_p>
                   dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)+DyMagFac*lfp_tmp_Rloc(n_m,n_r)
                   !-- store z-avg 3D-lorentz for Force balance outputs on m=0
-                  djxB_Rloc(n_m,n_r)= DyMagFac*lfp_tmp_Rloc(n_m,n_r)
+                  lf_Rloc(n_m,n_r)=DyMagFac*lfp_tmp_Rloc(n_m,n_r)
                else
-                  dVsOm_Rloc(n_m,n_r)= dVsOm_Rloc(n_m,n_r)-DyMagFac*r(n_r)*&
-                  &                   lfp_tmp_Rloc(n_m,n_r)
-                  dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-DyMagFac*ci*real(m,cp)* &
-                  &                    lfs_tmp_Rloc(n_m,n_r)*or1(n_r)
+                  !-- LF on m<>0 --> <Vx(jxB).e_z> = (+<d_s (s (jxB)_p)> - d_p <(jxB)_s>)/s
+                  if ( l_leibniz ) then
+                     djxB_Rloc(n_m,n_r)=DyMagFac*r(n_r)*lfp_tmp_Rloc(n_m,n_r)
+                     !lf_Rloc(n_m,n_r)=DyMagFac*(beta(n_r)*r(n_r)*(lfp_bc_tmp_Rloc(n_m,n_r)-lfp_h_tmp_Rloc(n_m,n_r)))!))!
+                     if ( n_r == 1 ) then !--> "unshifting beta" for a better Leibniz's rule accuracy
+                        lf_Rloc(n_m,n_r)=DyMagFac*(-r(n_r)/(r_cmb**2-r(n_r)**2+epsilon(1.0_cp)*(r(n_r)-r_icb)/r_icb) &
+                        &                   *r(n_r)*(lfp_bc_tmp_Rloc(n_m,n_r)-lfp_h_tmp_Rloc(n_m,n_r)))!))!
+                     else
+                        lf_Rloc(n_m,n_r)=DyMagFac*(-r(n_r)/(r_cmb**2-r(n_r)**2)*r(n_r)* &
+                        &                  (lfp_bc_tmp_Rloc(n_m,n_r)-lfp_h_tmp_Rloc(n_m,n_r)))!))!
+                     end if
+                     lf_Rloc(n_m,n_r)=lf_Rloc(n_m,n_r) - DyMagFac*ci*real(m,cp)*lfs_tmp_Rloc(n_m,n_r)
+                  else
+                     lf_Rloc(n_m,n_r)=DyMagFac*(lfpds_tmp_Rloc(n_m,n_r)           &
+                     &                         -ci*real(m,cp)*lfs_tmp_Rloc(n_m,n_r))*or1(n_r)
+                     !!-- if LF benchmark on m<>0
+                     !dpsidt_Rloc(n_m,n_r)=DyMagFac*(lfpds_tmp_Rloc(n_m,n_r)           &
+                     !&                             -ci*real(m,cp)*lfs_tmp_Rloc(n_m,n_r))*or1(n_r)
+                     !-- store z-avg 3D-lorentz for Force balance outputs on m<>0 (no need if NOT Leibniz because nothing directly added to dpsidt)
+                  !   !djxB_Rloc(n_m,n_r)=DyMagFac*(lfpds_tmp_Rloc(n_m,n_r)-ci*real(m,cp)*lfs_tmp_Rloc(n_m,n_r))*or1(n_r)
+                  end if
+                  !!-- LF WRONG implementation before --> (--d_s (s <(jxB)_p>) - d_p <(jxB)_s>)/s
+                  !!-- d_p <(jxB)_s>)/s part --> (d_s (-dVsom)/s is added later)
+                  !lf_Rloc(n_m,n_r)= lf_Rloc(n_m,n_r)-DyMagFac*ci*real(m,cp)* &
+                  !&                    lfs_tmp_Rloc(n_m,n_r)*or1(n_r)
+                  !-- --d_s (s <(jxB)_p>) part without the LEIBNIZ extra term from switching d_s . with <.>
+                  !djxB_Rloc(n_m,n_r)= -DyMagFac*r(n_r)*&
+                  !&                   lfp_tmp_Rloc(n_m,n_r)
+                  !-- store z-avg 3D-lorentz for Leibniz integration boundary in update_psi
+                  !--   --> \beta s ( <(jxB)_p> - 0.5 [(jxB)_p(h) + (jxB)_p(-h)] ) / s
+                  !djxB_Rloc(n_m,n_r)= DyMagFac*(beta(n_r)*(lfp_tmp_Rloc(n_m,n_r)))!-lfp_h_tmp_Rloc(n_m,n_r)))
                   if ( l_QG_basis ) then
                   !-- Finish assembling add. lorentz force from the QG basis projection
                   !-- --> \beta <zVx(jxB).e_s> = \beta (+(d_p <z (jxB)_z>)/s - <z d_z (jxB)_p>)
-                  !-- But --> \beta <z (jxB)_z> has already been added to lfs_tmp_Rloc
-                  !--         <z d_z (jxB)_p> stored in lfz_tmp_Rloc only need * \beta
-                     dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-DyMagFac* &
-                     &                    lfz_tmp_Rloc(n_m,n_r)*beta(n_r)
+                  !-- But --> \beta <z (jxB)_z> has already been added to lfs_tmp_Rloc !-- PROBLEMS with this
+                  !--     INSTEAD: --> only <z (jxB)_z> stored in lfz_tmp_Rloc
+                  !--        + <z d_z (jxB)_p> stored in lfpdz_tmp_Rloc and everything need * \beta
+                     if ( l_leibniz ) then
+                        lf_Rloc(n_m,n_r)=lf_Rloc(n_m,n_r)+DyMagFac*beta(n_r)*r(n_r)*( -lfpdz_tmp_Rloc(n_m,n_r) &
+      !lf_Rloc(n_m,n_r)=lf_Rloc(n_m,n_r)+DyMagFac*beta(n_r)*r(n_r)*( lfp_tmp_Rloc(n_m,n_r)-lfp_h_tmp_Rloc(n_m,n_r) &!!
+                        &                                                + ci*real(m,cp)*lfz_tmp_Rloc(n_m,n_r) )
+                        !if ( n_r == 1 ) then !--> "unshifting beta" for a better Leibniz's rule accuracy
+                        !    lf_Rloc(n_m,n_r)=lf_Rloc(n_m,n_r)+DyMagFac*                                                  &
+                        !    &                  r(n_r)/(r_cmb**2-r(n_r)**2+epsilon(1.0_cp)*(r(n_r)-r_icb)/r_icb)*r(n_r)*( &
+                        !    &                lfp_tmp_Rloc(n_m,n_r)-lfp_h_tmp_Rloc(n_m,n_r) + ci*real(m,cp)*lfz_tmp_Rloc(n_m,n_r) )
+                        !    !&               -lfpdz_tmp_Rloc(n_m,n_r) + ci*real(m,cp)*lfz_tmp_Rloc(n_m,n_r) )
+                        !else
+                        !    lf_Rloc(n_m,n_r)=lf_Rloc(n_m,n_r)+DyMagFac*r(n_r)/(r_cmb**2-r(n_r)**2)*r(n_r)*( &
+                        !    &                lfp_tmp_Rloc(n_m,n_r)-lfp_h_tmp_Rloc(n_m,n_r) + ci*real(m,cp)*lfz_tmp_Rloc(n_m,n_r) )
+                        !    !&               -lfpdz_tmp_Rloc(n_m,n_r) + ci*real(m,cp)*lfz_tmp_Rloc(n_m,n_r) )
+                        !end if
+                     else
+                        lf_Rloc(n_m,n_r)=lf_Rloc(n_m,n_r)+DyMagFac*beta(n_r)*( &
+                        &                          -lfpdz_tmp_Rloc(n_m,n_r) +  &
+                        &               ci*real(m,cp)*lfz_tmp_Rloc(n_m,n_r)   )
+                        !!-- if LF benchmark on m<>0
+                        !dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r) - DyMagFac* &
+                        !&                   lfpdz_tmp_Rloc(n_m,n_r)*beta(n_r) &
+                        !& + DyMagFac*ci*real(m,cp)*beta(n_r)*lfz_tmp_Rloc(n_m,n_r)
+                     end if
                   end if
+                  !if ( n_r==1 .or. n_r==n_r_max ) lf_Rloc(n_m,n_r) = zero
                end if
             end if
          end do
       end do
+      !print*, l_mag_LF, l_lin_solve
+      !lf_Rloc(:,:)= (4.0_cp,1.0_cp)
 
 #ifdef TOTO
       block
-         !use truncation, only: n_r_max!, n_m_max
+         use truncation, only: n_phi_max!, n_r_max!, n_m_max
+         use fourier, only: ifft
          !use communications, only: allgather_from_Rloc
 
-         integer :: file_handle, n_r
+         integer :: n_s, file_handle!, n_r, n_m
          !real(cp) :: dpsidt_hat(1,n_r_max)
+         real(cp) :: dpsidt_grid(n_phi_max,nRstart:nRstop)
 
          !call allgather_from_Rloc(real(dpsidt_Rloc(1,:)), dpsidt_hat, n_m_max)
 
-         !print*, dpsidt_hat(1,:)
-         print*, DyMagFac*lfp_tmp_Rloc(1,:)
+         !!-- if LF benchmark --> full LF (without leibniz) still stored in dpsidt_Rloc
+         do n_s=nRstart,nRstop
+         !-- Bring data on the grid
+            call ifft(dpsidt_Rloc(:,n_s), dpsidt_grid(:,n_s))
+         end do
 
       if ( rank == 0 ) then
-         !open(newunit=file_handle, file='dpsidt_0.dat', status='new', form='formatted')
-         !do n_r=1,n_r_max
-         !   write(file_handle, '(2es20.12)') r(n_r), dpsidt_hat(1,n_r)
-         !end do
-         !close(file_handle)
 
-        open(newunit=file_handle, file='lfp_tmp_rloc.dat', status='new', form='unformatted',&
-         &    access='stream')
-         write(file_handle) lfp_tmp_Rloc
+         open(newunit=file_handle, file='zavgVxjxBez_Rloc.dat', status='new', form='formatted')
+         do n_s=1,n_r_max
+            write(file_handle, *) r(n_s), dpsidt_grid(:,n_s)
+         end do
          close(file_handle)
 
-        open(newunit=file_handle, file='lfs_tmp_rloc.dat', status='new', form='unformatted',&
-         &    access='stream')
-         write(file_handle) lfs_tmp_Rloc
+         open(newunit=file_handle, file='Leibniz_extra.dat', status='new', form='formatted')
+         do n_s=1,n_r_max
+            !do n_m=1,n_m_max
+            !   print*, lf_Rloc(n_m,n_s)
+            !end do
+            write(file_handle, *) r(n_s), real(lf_Rloc(:,n_s)), aimag(lf_Rloc(:,n_s))
+         end do
+         close(file_handle)
+
+         !!-- if LF benchmark --> full LF (without leibniz) still stored in dpsidt_Rloc
+         open(newunit=file_handle, file='dpsidt_Rloc.dat', status='new', form='formatted')
+         !print*, n_m_max, size(dpsidt_Rloc), size(real(dpsidt_Rloc(:,4))), size(aimag(dpsidt_Rloc(:,4)))
+         !print*, dpsidt_Rloc(:2,4), dpsidt_Rloc(65,4)
+         !print*, real(dpsidt_Rloc(:2,4)), aimag(dpsidt_Rloc(:2,4))
+         do n_s=1,n_r_max
+            write(file_handle, *) r(n_s), real(dpsidt_Rloc(:,n_s)), aimag(dpsidt_Rloc(:,n_s))
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='dslfpds_tmp_rloc.dat', status='new', form='formatted')
+         do n_s=1,n_r_max
+            write(file_handle, *) r(n_s), real(lfpds_tmp_rloc(:,n_s)), aimag(lfpds_tmp_rloc(:,n_s))
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='dzlfpdz_tmp_rloc.dat', status='new', form='formatted')
+         do n_s=1,n_r_max
+            write(file_handle, *) r(n_s), real(lfpdz_tmp_rloc(:,n_s)), aimag(lfpdz_tmp_rloc(:,n_s))
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='lfz_tmp_rloc.dat', status='new', form='formatted')
+         do n_s=1,n_r_max
+            write(file_handle, *) r(n_s), real(lfz_tmp_rloc(:,n_s)), aimag(lfz_tmp_rloc(:,n_s))
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='lfp_tmp_rloc.dat', status='new', form='formatted')
+         do n_s=1,n_r_max
+            write(file_handle, *) r(n_s), real(lfp_tmp_rloc(:,n_s)), aimag(lfp_tmp_rloc(:,n_s))
+         end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='lfs_tmp_rloc.dat', status='new', form='formatted')
+         do n_s=1,n_r_max
+            write(file_handle, *) r(n_s), real(lfs_tmp_rloc(:,n_s)), aimag(lfs_tmp_rloc(:,n_s))
+         end do
          close(file_handle)
       end if
       end block
 
       print*, 'ALL GOOD RAD_3D!**'
-
-      stop
+      !stop
 #endif
 
    end subroutine radial_loop_3D

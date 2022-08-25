@@ -64,10 +64,12 @@ module z_functions
       procedure :: finalize
       procedure :: compute_zavg
       procedure :: cyl_avg
+      procedure :: compute_sder
       procedure :: compute_zder
       procedure :: prep_extension_QGto3D
       procedure :: ext_QGto3D_vel
       procedure :: compute_thermal_wind
+      procedure :: interp_1d
       procedure :: fill_zinterp_grid
    end type zfunc_type
 
@@ -245,9 +247,9 @@ contains
 
                if ( l_mag_pump ) then
                   !-- Mag_pump u_phi porportional to r^2 u_s
-                  mag_pump_upm3D(n_m_3D,n_r) = mag_pump_fac*us_Rloc(n_m,n_r)*r(n_r)**2.
+                  mag_pump_upm3D(n_m_3D,n_r) = us_Rloc(n_m,n_r)*r(n_r)**2.
                   !-- Mag_pump u_z porportional to omega_z
-                  mag_pump_uzm3D(n_m_3D,n_r) = mag_pump_fac*om_Rloc(n_m,n_r)
+                  mag_pump_uzm3D(n_m_3D,n_r) = om_Rloc(n_m,n_r)
                end if
             else
                usm3D_Rloc(n_m_3D,n_r) = zero
@@ -371,8 +373,8 @@ contains
                   if ( l_mag_pump ) then
                      vpm= alpha_r1*upm(n_phi,n_r) + alpha_r2*upm(n_phi,n_r-1)
                      vzm= alpha_r1*uzm(n_phi,n_r) + alpha_r2*uzm(n_phi,n_r-1)
-                     vpm= sfunc*dhfunc*vpm!*dhfunc
-                     vzm= sfunc* hfunc*vzm!*hfunc
+                     vpm= mag_pump_fac*sfunc*dhfunc*vpm!*dhfunc
+                     vzm= mag_pump_fac*sfunc* hfunc*vzm!*hfunc
                      !upmRloc(n_phi,n_th_NHS,n_r_r)= sfunc*dhfunc*vpm!*dhfunc
                      !upmRloc(n_phi,n_th_SHS,n_r_r)=-sfunc*dhfunc*vpm!*dhfunc
                      !uzmRloc(n_phi,n_th_NHS,n_r_r)= sfunc* hfunc*vzm!*hfunc
@@ -472,15 +474,18 @@ contains
 
    end subroutine ext_QGto3D_vel
 !--------------------------------------------------------------------------------
-   subroutine compute_zavg(this,work_Rloc,zavg_Rloc)
+   subroutine compute_zavg(this,work_Rloc,zavg_Rloc,mode,l_BC0)
+      !-- Compute bi-linear 2D interpolation + z-average from the physical-3D grid onto spectral-2D grid
 
       class(zfunc_type) :: this
 
       !-- Input variables
+      logical, intent(in) :: l_BC0
+      integer, intent(in) :: mode
       real(cp), intent(in) :: work_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
 
       !-- Output variables
-      complex(cp), intent(out) :: zavg_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp), intent(inout) :: zavg_Rloc(n_m_max,nRstart:nRstop)
 
       !-- Local variables
       integer :: n_r, n_phi, n_z, n_m_QG, n_m, m3D
@@ -492,7 +497,15 @@ contains
       real(cp) :: tmp(n_phi_max_3D,n_r_max)!nRstart:nRstop)!
 
       tmp(:,:)      =0.0_cp
-      zavg_Rloc(:,:)=zero
+      if ( mode == 0 ) then !-- only need m=0 shell
+         n_m = m2idx(0)
+         zavg_Rloc(n_m,:)=zero
+      else if ( mode == 1 ) then !-- every modes but m=0
+         n_m = m2idx(1)
+         zavg_Rloc(n_m:,:)=zero
+      else
+         zavg_Rloc(:,:)=zero
+      end if
 
       !-- z-average in spatial space
       if( l_cyl ) then !-- z-integration with a 4th-order scheme:: WARNING:: 3x slower!!
@@ -510,11 +523,28 @@ contains
                n_r_r = this%interp_zr_mat(n_z,n_r)
                czavg = this%interp_wt_mat(n_z,n_r)
                if ( n_r_r >= nRstart3D .and. n_r_r <= nRstop3D ) then
+                  if ( l_BC0 ) then
+                     !if ( (n_r == n_r_max .or. n_r == 1)  ) then
+                     !if ( (n_r == n_r_max .or. n_r == 1) .or. (n_r_r == n_r_max_3D .or. n_r_r == 1) ) then!) then!
+                     if ( (n_r == 1) .or. ( n_r_r == n_r_max_3D .or. n_r_r == 1) ) then!) then!
+                     !print*, tmp(:,n_r)
+                     !tmp(:,n_r) = 0.0_cp!tmp(:,n_r)
+                     !if(  (n_r_r == n_r_max_3D .or. n_r_r == 1) ) then
+                     !tmp(:,n_r) = tmp(:,n_r)
+                     else
                   do n_phi=1,n_phi_max_3D
                      tmp(n_phi,n_r) = tmp(n_phi,n_r) + czavg*              &
                      &                   (work_Rloc(n_phi,n_th_NHS,n_r_r)  &
                      &                  + work_Rloc(n_phi,n_th_SHS,n_r_r))
                   end do
+                     end if
+                  else
+                  do n_phi=1,n_phi_max_3D
+                     tmp(n_phi,n_r) = tmp(n_phi,n_r) + czavg*              &
+                     &                   (work_Rloc(n_phi,n_th_NHS,n_r_r)  &
+                     &                  + work_Rloc(n_phi,n_th_SHS,n_r_r))
+                  end do
+                  end if
                end if
             end do
          end do
@@ -528,24 +558,6 @@ contains
          !     &             MPI_SUM, MPI_COMM_WORLD, ierr)
          end do
 
-#ifdef TOTO
-      block
-         integer :: n_r, file_handle
-
-      if( rank == 0 ) then
-         open(newunit=file_handle, file='zavg_rloc.dat', status='new', form='formatted')
-         do n_r=1,n_r_max
-            write(file_handle, '(2es20.12)') r(n_r), tmp(1,n_r)
-         end do
-         close(file_handle)
-      endif
-      end block
-
-      if ( rank == 0) print*, 'ALL GOOD compute_avg!**'!
-
-      stop
-#endif
-
       !-- Transforms back to spectral space
       do n_r=nRstart,nRstop
          call fft(tmp(:,n_r), tmp_hat(:), l_3D=.true.)
@@ -557,14 +569,49 @@ contains
                n_m_QG = -1
             end if
             if ( n_m_QG > 0 ) then
-               zavg_Rloc(n_m_QG,n_r)=tmp_hat(n_m)
+               if ( mode == 0 ) then
+                  if ( n_m_QG == 1 ) zavg_Rloc(n_m_QG,n_r)=tmp_hat(n_m); exit
+               else if ( mode == 1 ) then
+                  if ( n_m_QG > 1 ) zavg_Rloc(n_m_QG,n_r)=tmp_hat(n_m)
+               else
+                  zavg_Rloc(n_m_QG,n_r)=tmp_hat(n_m)
+               end if
             end if
          end do
       end do
 
+#ifdef TOTO
+      block
+         use truncation, only: n_phi_max, n_m_max
+         integer :: n_r, file_handle
+
+         real(cp) :: zavg_tmp(n_phi_max,n_r_max)
+         real(cp) :: tmp_hat_hat(n_phi_max,nRstart:nRstop)
+         do n_r=nRstart,nRstop
+            call ifft(zavg_Rloc(:,n_r), tmp_hat_hat(:,n_r))
+         end do
+         call allgather_from_rloc(tmp_hat_hat,zavg_tmp,n_phi_max)
+
+      if( rank == 0 ) then
+         open(newunit=file_handle, file='zavg_rloc.dat', status='new', form='formatted')
+         do n_r=1,n_r_max
+            !write(file_handle, *) r(n_r), real(zavg_Rloc(:,n_r))
+            write(file_handle, *) r(n_r), zavg_tmp(:,n_r)!tmp_hat_hat(:,n_r)!tmp(:,n_r)!
+         end do
+         close(file_handle)
+      endif
+      end block
+
+      if ( rank == 0) print*, 'ALL GOOD compute_avg!**'!
+         call MPI_Barrier(MPI_COMM_WORLD, ierr)
+
+      stop
+#endif
+
    end subroutine compute_zavg
 !--------------------------------------------------------------------------------
    subroutine compute_thermal_wind(this, dTdth_Rloc, up_Rloc)
+      !-- Compute nearest neighbour interpolation from the physical-3D grid onto physical-3D grid
 
       !-- Input variables
       class(zfunc_type) :: this
@@ -593,7 +640,7 @@ contains
       !close(1)
       !r_i3D(:) = r_i(:)
 
-      thwFac=BuoFac/CorFac !Ra/Pr/(2/Ek) = RaEkPr/2
+      thwFac=BuoFac/CorFac !Ra/Pr/(2/Ek) = RaEk/2Pr
 
       call allgather_from_rloc_3D(dTdth_Rloc,dTdth,n_theta_max)
 
@@ -776,6 +823,7 @@ contains
    end subroutine cyl_avg
 !--------------------------------------------------------------------------------
    subroutine compute_zder(this,work_Rloc,zder_Rloc)
+      !-- Compute z-derivative on the physical-3D grid using finite differences
 
       class(zfunc_type) :: this
 
@@ -835,9 +883,9 @@ contains
 
       if( rank == 0 ) then
          open(newunit=file_handle, file='zder_rloc.dat', status='new', form='formatted')
-         write(file_handle, '(257es20.12)') 78374.0, theta(:n_theta_max/2)
+         write(file_handle, *) 78374.0, theta(:)
          do n_r=1,n_r_max_3D
-            write(file_handle, '(257es20.12)') r_3D(n_r), zder_Rloc(1,:n_theta_max/2,n_r)
+            write(file_handle, *) r_3D(n_r), zder_Rloc(1,:,n_r)
          end do
          close(file_handle)
       endif
@@ -850,6 +898,178 @@ contains
 #endif
 
    end subroutine compute_zder
+!--------------------------------------------------------------------------------
+   subroutine compute_sder(this,work_Rloc,sder_Rloc)
+      !-- Compute s-derivative on the physical-3D grid using finite differences
+
+      class(zfunc_type) :: this
+
+      !-- Input variables
+      real(cp), intent(in) :: work_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+
+      !-- Output variables
+      real(cp), intent(out) :: sder_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+
+      !-- Local variables
+      integer :: n_r, n_phi, n_th
+      real(cp) :: work_Rextended(n_theta_max,nRstart3D-1:nRstop3D+1)
+
+      sder_Rloc(:,:,:)=0.0_cp
+
+      !-- z-derivation on the 3D grid
+      !-- has to use finite difference::  ds = sin(theta)*dr + cos(theta)/r_3D*dtheta
+      !--     but the precision is not a problem as zavg scheme order is =1.8
+
+      !-- r-derivation first: ds = dr
+      do n_phi=1,n_phi_max_3D
+         call exchange_Nbound_from_Rloc_3D(work_Rloc(n_phi,:,:),           &
+              &                            work_Rextended, 1, n_theta_max)
+         do n_r=nRstart3D,nRstop3D
+            if ( n_r == 1 ) then
+               sder_Rloc(n_phi,:,n_r)=(work_Rextended(:,n_r+1) -           &
+               &         work_Rextended(:,n_r))/(r_3D(n_r+1) - r_3D(n_r))
+            else
+               sder_Rloc(n_phi,:,n_r)=(work_Rextended(:,n_r) -             &
+               &         work_Rextended(:,n_r-1))/(r_3D(n_r) - r_3D(n_r-1))
+            endif
+         end do
+      end do
+
+      !-- theta-derivation then: ds = sint*ds + cost*or1*dt
+      do n_r=nRstart3D,nRstop3D
+         do n_th=1,n_theta_max
+            if ( n_th == 1 ) then
+               sder_Rloc(:,n_th,n_r)=sint(n_th)*sder_Rloc(:,n_th,n_r) + &
+               &        cost(n_th)*or1_3D(n_r)*(work_Rloc(:,n_th,n_r) - &
+               &  work_Rloc(:,n_th+1,n_r))/(theta(n_th) - theta(n_th+1))
+            else if ( n_th == n_theta_max ) then
+               sder_Rloc(:,n_th,n_r)=sint(n_th)*sder_Rloc(:,n_th,n_r) +   &
+               &        cost(n_th)*or1_3D(n_r)*(work_Rloc(:,n_th-1,n_r) - &
+               &      work_Rloc(:,n_th,n_r))/(theta(n_th-1) - theta(n_th))
+            else
+               sder_Rloc(:,n_th,n_r)=sint(n_th)*sder_Rloc(:,n_th,n_r) +   &
+               &        cost(n_th)*or1_3D(n_r)*(work_Rloc(:,n_th-1,n_r) - &
+               &  work_Rloc(:,n_th+1,n_r))/(theta(n_th-1) - theta(n_th+1))
+            endif
+         end do
+      end do
+
+#ifdef TOTO
+      block
+         integer :: n_r, file_handle
+
+      if( rank == 0 ) then
+         open(newunit=file_handle, file='sder_rloc.dat', status='new', form='formatted')
+         write(file_handle, *) 78374.0, theta(:)
+         do n_r=1,n_r_max_3D
+            write(file_handle, *) r_3D(n_r), sder_Rloc(1,:,n_r)
+         end do
+         close(file_handle)
+      endif
+      end block
+
+      print*, 'Radius OUTPUT.dat', r_3D(n_r_max_3D/2), 'Latitude OUTPUT.dat', theta(n_theta_max/4)
+      print*, 'ALL GOOD s_derivative!**'
+
+      stop
+#endif
+
+   end subroutine compute_sder
+!--------------------------------------------------------------------------------
+   subroutine interp_1d(this,n_r,work_3D_Shell,interp_2D_Rloc)
+      !-- Compute linear 1D interpolation from a physical-3D shell grid onto spectral-2D grid
+
+      class(zfunc_type) :: this
+
+      !-- Input variables
+      integer, intent(in) :: n_r
+      real(cp), intent(in) :: work_3D_Shell(n_phi_max_3D,n_theta_max)
+
+      !-- Output variables
+      complex(cp), intent(out) :: interp_2D_Rloc(n_m_max,n_r_max)!nRstart:nRstop)
+
+      !-- Local variables
+      integer :: n_s, n_phi, n_th_NHS, n_th_SHS
+      integer :: n_m_QG, n_m, m3D
+
+      real(cp) :: s_r_NHS_0, s_r_NHS_1, alpha_r_NHS
+      real(cp) :: s_r_SHS_0, s_r_SHS_1, alpha_r_SHS
+      real(cp) :: tmp_NHS(n_phi_max_3D,n_r_max), tmp_SHS(n_phi_max_3D,n_r_max)
+      !real(cp) :: tmp(n_phi_max_3D,nRstart:nRstop)
+      complex(cp) :: tmp_hat(n_m_max)!,tmp_SHS_hat(n_m_max)
+
+      do n_s=1,n_r_max
+         !!do n_theta=1,n_theta_max/2--> better to compute directly from 3D-grid
+         n_th_NHS = n_theta_max/2-1
+         n_th_SHS = n_theta_max/2
+         do while ( r_3D(n_r)*sint(n_th_NHS) > r(n_s) .and. n_th_NHS > 1 )
+            n_th_NHS = n_th_NHS-1
+         end do
+         s_r_NHS_0=r_3D(n_r)*sint(n_th_NHS)
+         s_r_NHS_1=r_3D(n_r)*sint(n_th_NHS+1)
+         do while ( r_3D(n_r)*sint(n_th_SHS) > r(n_s) .and. n_th_SHS <= n_theta_max )
+            n_th_SHS = n_th_SHS+1
+         end do
+         s_r_SHS_0=r_3D(n_r)*sint(n_th_SHS)
+         s_r_SHS_1=r_3D(n_r)*sint(n_th_SHS-1)
+         !-- Compute coeffs for linear interpolation
+         !print*, 'n_s, n_th_NHS, n_th_SHS::', n_s, n_th_NHS, n_th_NHS
+         !print*, 's_r_NHS_0, s, s_r_NHS_1::', s_r_NHS_0, r(n_s), s_r_NHS_1
+         !print*, 's_r_SHS_0, s, s_r_SHS_1::', s_r_SHS_0, r(n_s), s_r_SHS_1
+         alpha_r_NHS = (r(n_s)-s_r_NHS_0)/(s_r_NHS_1-s_r_NHS_0)
+         alpha_r_SHS = (r(n_s)-s_r_SHS_0)/(s_r_SHS_1-s_r_SHS_0)
+         do n_phi=1,n_phi_max_3D
+            tmp_NHS(n_phi,n_s) = work_3D_Shell(n_phi,n_th_NHS)*(1.-alpha_r_NHS) &
+            &                  + work_3D_Shell(n_phi,n_th_NHS+1)*alpha_r_NHS
+            tmp_SHS(n_phi,n_s) = work_3D_Shell(n_phi,n_th_SHS)*(1.-alpha_r_SHS) &
+            &                  + work_3D_Shell(n_phi,n_th_SHS-1)*alpha_r_SHS
+            !-- Calculate the average to get only one array
+            tmp_NHS(n_phi,n_s) = half*(tmp_NHS(n_phi,n_s) + tmp_SHS(n_phi,n_s))
+         end do
+         !if (n_s==1 .or. n_s==n_r_max) tmp_NHS(:,n_s) = 0.0_cp
+      end do
+
+      !-- OB: does not work as we are only using this routine on 1 shell
+      !--     --> so only ONE proc here; need to be scattered outside
+      !call scatter_from_rank0_to_rloc(tmp_NHS, tmp, n_phi_max_3D)!, rank)
+
+      !-- Transforms back to spectral space
+      do n_s=1,n_r_max!nRstart,nRstop!
+         call fft(tmp_NHS(:,n_s), tmp_hat(:), l_3D=.true.)
+         !call fft(tmp_SHS(:,n_s), tmp_SHS_hat(:), l_3D=.true.)
+         do n_m=1,n_m_max_3D
+            m3D = idx2m3D(n_m)
+            if ( m3D < size(m2idx) ) then ! a little bit weird
+               n_m_QG = m2idx(m3D)
+            else
+               n_m_QG = -1
+            end if
+            if ( n_m_QG > 0 ) then
+               interp_2D_Rloc(n_m_QG,n_s)=tmp_hat(n_m)
+               !interp_2D_Rloc_SHS(n_m_QG,n_s)=tmp_SHS_hat(n_m)
+            end if
+         end do
+      end do
+
+#ifdef TOTO
+      block
+         integer :: n_s, file_handle
+
+      if( rank == 0 ) then
+         open(newunit=file_handle, file='interp_theta_rloc.dat', status='new', form='formatted')
+         do n_s=1,n_r_max
+            write(file_handle, *) r(n_s), real(interp_2D_Rloc(:,n_s))
+         end do
+         close(file_handle)
+      endif
+      end block
+
+      if ( rank == 0) print*, 'ALL GOOD interp_1d!**'!
+
+      !stop
+#endif
+
+   end subroutine interp_1d
 !--------------------------------------------------------------------------------
    subroutine fill_zinterp_grid(this)
 
@@ -964,7 +1184,7 @@ contains
          sLoop: do n_s=1,n_r_max
             if ( r(n_s) < r_icb ) exit sLoop
 
-            zmax = sqrt(r_cmb*r_cmb-r(n_s)*r(n_s)) ! zmax
+            zmax = sqrt(r_cmb*r_cmb+eps-r(n_s)*r(n_s)) ! zmax
             zmin = 0.0_cp
             nz = 2*int(n_r_max*(zmax-zmin)/(two*r_cmb)) ! Number of z points (one HS)
             nz = max(nz, 4)  ! Minimum to 4 for Simpson integration

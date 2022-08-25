@@ -43,8 +43,6 @@ module fields
    !-- Magnetic field 3-D:
    complex(cp), allocatable, public :: b_3D_LMloc(:,:), db_3D_LMloc(:,:), ddB_3D_LMloc(:,:)
    complex(cp), allocatable, public :: b_3D_Rloc(:,:), db_3D_Rloc(:,:), ddB_3D_Rloc(:,:)
-   complex(cp), allocatable, public :: b0_3D_LMloc(:,:)
-   complex(cp), allocatable, public :: aj0_3D_LMloc(:,:)
    complex(cp), allocatable, public :: work_b_LMloc(:,:)
    complex(cp), allocatable, public :: aj_3D_LMloc(:,:), dj_3D_LMloc(:,:)
    complex(cp), allocatable, public :: aj_3D_Rloc(:,:), dj_3D_Rloc(:,:)
@@ -230,15 +228,6 @@ contains
          aj_3D_Rloc(:,:)  =zero
          dj_3D_Rloc(:,:)  =zero
          if ( l_mag_B0 ) then
-            allocate( b0_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
-            allocate( aj0_3D_LMloc(lmStart:lmStop,n_r_max_3D) )
-            bytes_allocated = bytes_allocated + &
-            &                 3*(lmStop-lmStart+1)*n_r_max_3D*SIZEOF_DEF_COMPLEX
-            bytes_allocated = bytes_allocated + &
-            &                 3*lm_max*(nRstop3D-nRstart3D+1)*SIZEOF_DEF_COMPLEX
-            b0_3D_LMloc(:,:)  =zero
-            aj0_3D_LMloc(:,:) =zero
-
             allocate( B0r_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
             allocate( B0t_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
             allocate( B0p_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
@@ -254,8 +243,6 @@ contains
             curlB0r_3D_Rloc(:,:,:)=0.0_cp
             curlB0t_3D_Rloc(:,:,:)=0.0_cp
             curlB0p_3D_Rloc(:,:,:)=0.0_cp
-         else
-            allocate( b0_3D_LMloc(1,1), aj0_3D_LMloc(1,1) )
          end if
       else
          allocate( b_3D_Rloc(1,1), db_3D_Rloc(1,1), ddb_3D_Rloc(1,1) )
@@ -270,7 +257,6 @@ contains
 
       if ( l_mag_3D ) then
          if ( l_mag_B0 ) then
-            deallocate( b0_3D_LMloc,  aj0_3D_LMloc )
             deallocate( B0r_3D_Rloc, B0t_3D_Rloc, B0p_3D_Rloc )
             deallocate( curlB0r_3D_Rloc, curlB0t_3D_Rloc, curlB0p_3D_Rloc )
          end if

@@ -35,7 +35,7 @@ module communications
    &         my_reduce_mean, my_allreduce_maxloc, transp_lm2r,      &
    &         transp_r2lm, allgather_from_Rloc,                      &
    &         allgather_from_Rloc_3D, scatter_from_rank0_to_lmloc,   &
-   &         exchange_Nbound_from_Rloc_3D
+   &         scatter_from_rank0_to_rloc, exchange_Nbound_from_Rloc_3D
 
 contains
 
@@ -657,9 +657,72 @@ contains
               &        MPI_COMM_WORLD, ierr)
       end if
 
+      deallocate( rbuff, sbuff )
+
    end subroutine exchange_Nbound_from_Rloc_3D
 !------------------------------------------------------------------------------
+   subroutine scatter_from_rank0_to_rloc(arr_full, arr_Rloc, len_arr)!, N_rank)
+      !
+      ! This routine scatter a global array from rank 0 to a radial distributed array
+      !
+
+      !-- Input variable:
+      integer, intent(in) :: len_arr!N_rank,
+      complex(cp), intent(in) :: arr_full(len_arr, n_r_max)
+
+      !-- Output variable:
+      complex(cp), intent(out) :: arr_Rloc(len_arr,nRstart:nRstop)
+
+      !-- Local variables:
+      complex(cp), allocatable :: rbuff(:), sbuff(:)
+      integer, allocatable :: scounts(:)
+      integer, allocatable :: sdisp(:)
+      integer :: p, ii, n_r, n_m
+
+      allocate( rbuff(len_arr*nR_per_rank), sbuff(len_arr*n_r_max) )
+      allocate ( scounts(0:n_procs-1), sdisp(0:n_procs-1) )
+
+      do p=0,n_procs-1
+         scounts(p)=len_arr*radial_balance(p)%n_per_rank
+      end do
+
+      sdisp(0)=0
+      do p=1,n_procs-1
+         sdisp(p)=sdisp(p-1)+scounts(p-1)
+      end do
+
+      if ( rank == 0 ) then!N_rank ) then
+         do p = 0, n_procs-1
+            ii = sdisp(p)+1
+            do n_r=radial_balance(p)%nStart,radial_balance(p)%nStop
+               do n_m=1,len_arr
+                  sbuff(ii) = arr_full(n_m,n_r)
+                  ii=ii+1
+               end do
+            end do
+         end do
+      end if
+
+      call MPI_Scatterv(sbuff, scounts, sdisp, MPI_DEF_COMPLEX,         &
+           &            rbuff, len_arr*nR_per_rank, MPI_DEF_COMPLEX, 0, &
+           &            MPI_COMM_WORLD, ierr)
+
+      ii = 1
+      do n_r=nRstart,nRstop
+         do n_m=1,len_arr
+            arr_Rloc(n_m,n_r)=rbuff(ii)
+            ii = ii +1
+         end do
+      end do
+
+      deallocate( rbuff, sbuff, scounts, sdisp)
+
+   end subroutine scatter_from_rank0_to_rloc
+!------------------------------------------------------------------------------
    subroutine scatter_from_rank0_to_mloc(arr_full, arr_Mloc)
+      !
+      ! This routine scatter a global array from rank 0 to a m-distributed array
+      !
 
       !-- Input variable:
       complex(cp), intent(in) :: arr_full(n_m_max, n_r_max)
@@ -709,9 +772,14 @@ contains
          end do
       end do
 
+      deallocate( rbuff, sbuff, scounts, sdisp)
+
    end subroutine scatter_from_rank0_to_mloc
 !------------------------------------------------------------------------------
    subroutine scatter_from_rank0_to_lmloc(arr_full, arr_LMloc)
+      !
+      ! This routine scatter a global array from rank 0 to a lm-distributed array
+      !
 
       !-- Input variable:
       complex(cp), intent(in) :: arr_full(lm_max, n_r_max_3D)
@@ -763,6 +831,8 @@ contains
             ii = ii +1
          end do
       end do
+
+      deallocate( rbuff, sbuff, scounts, sdisp)
 
    end subroutine scatter_from_rank0_to_lmloc
 !------------------------------------------------------------------------------

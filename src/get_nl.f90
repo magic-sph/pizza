@@ -18,7 +18,7 @@ module grid_space_arrays_mod
    use mem_alloc, only: bytes_allocated
    use namelists, only: l_heat_3D, l_mag_3D, l_mag_LF, r_icb, r_cmb, &
    &                    l_mag_alpha, alpha_fac, l_mag_inertia,       &
-   &                    delta_fac, l_QG_basis, l_lin_solve, l_mag_B0
+   &                    delta_fac, l_QG_basis, l_lin_solve, l_mag_B0, beta_shift
    use blocking, only: nRstart3D, nRstop3D
    use truncation_3D, only: n_theta_max, n_phi_max_3D
    use radial_functions, only: or1_3D, r_3D, rgrav_3D, beta!, tcond_3D
@@ -124,7 +124,7 @@ contains
 
    end subroutine finalize
 !----------------------------------------------------------------------------
-   subroutine get_nl(this, vr, vt, vp, n_r, buo, jxBs, jxBp)
+   subroutine get_nl(this, vr, vt, vp, n_r, buo, jxBs, jxBp, jxBz)
       !
       !  calculates non-linear products in grid-space for radial
       !  level n_r and returns them in arrays wnlr1-3, snlr1-3, bnlr1-3
@@ -145,14 +145,14 @@ contains
       real(cp), intent(out) :: buo(n_phi_max_3D,n_theta_max)
       real(cp), intent(out) :: jxBs(n_phi_max_3D,n_theta_max)
       real(cp), intent(out) :: jxBp(n_phi_max_3D,n_theta_max)
+      real(cp), intent(out) :: jxBz(n_phi_max_3D,n_theta_max)
 
       !-- Local variables:
-      integer :: n_theta, n_phi
+      integer :: n_theta, n_phi, n_count
       real(cp) :: r2, or1sn1
-      real(cp) :: rfunc!, bamp2, Afunc
+      real(cp) :: rfunc, asign!, bamp2, Afunc
 
       r2 = r_3D(n_r)*r_3D(n_r)
-      !print*, B0r_3D_Rloc(:,:,n_r)
 
       if ( l_heat_3D ) then
          if ( .not. l_lin_solve ) then  !-- Non-Linear terms?
@@ -191,6 +191,10 @@ contains
          end do
          !$OMP END PARALLEL DO
       end if ! l_heat_3D?
+      !this%VTr(:,:) = 0.0_cp
+      !this%VTt(:,:) = 0.0_cp
+      !this%VTp(:,:) = 0.0_cp
+      !buo(:,:) = 0.0_cp
 
       if ( l_mag_3D .and. (.not. l_lin_solve) ) then
          !------ Get (V x B) , the curl of this is the dynamo term:
@@ -231,7 +235,7 @@ contains
                   &    vt(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r) )
                end if
 
-               if ( l_mag_alpha .and. r_3D(n_r)*sint(n_theta) >= r_icb ) then
+               if ( l_mag_alpha ) then !.and. r_3D(n_r)*sint(n_theta) >= r_icb ) then
                   !-- Following the form of (Chan etal., 2001; eq.25) --> only when nothing can prevent B from growing
                   !bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
                   !&       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
@@ -258,20 +262,21 @@ contains
                   !--              = terms coming from inertial waves
                   !--> Warning:: 1/r2 or 1/rsint is applied to the full product VxB;
                   !--            the different quantities have already been rescaled
-                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + delta_fac*r2*(&
+                  asign = abs(cost(n_theta))/cost(n_theta) !-- +/-1 sign
+                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + asign*delta_fac*r2*(&!
                   &                        (sint(n_theta)*vp(n_phi,n_theta))**2.*(  &
                   &                        this%Brc(n_phi,n_theta)*sint(n_theta) +  &
-                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) ) )
+                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) ) )/2.*pi
 
-                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta)+delta_fac*or1sn1*(&
+                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta)+asign*delta_fac*or1sn1*(&!
                   &                        (cost(n_theta)*vp(n_phi,n_theta))**2.*(    &
                   &                        this%Brc(n_phi,n_theta)*sint(n_theta) +    &
-                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) )  )
+                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) )  )/2.*pi
 
-                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta)+delta_fac*or1sn1*(&
+                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta)+asign*delta_fac*or1sn1*(&!
                   &                       ( (vr(n_phi,n_theta)*sint(n_theta) +        &
                   &                       vt(n_phi,n_theta)*cost(n_theta))**2. )*     &
-                  &                                      this%Bpc(n_phi,n_theta)    )
+                  &                                      this%Bpc(n_phi,n_theta)    )/2.*pi
                end if
             end do
          end do   ! theta loop
@@ -282,6 +287,7 @@ contains
             !------ We will only need to compute the z component of Vx(jxB)
             !$OMP PARALLEL DO default(shared) &
             !$OMP& private(n_theta, n_phi)
+            n_count=0
             do n_theta=1,n_theta_max
                !--> Warning:: 1/rsint or 1/r2 is only there if back-transformed are done later
                !or1sn1=or1_3D(n_r)*osint1(n_theta)
@@ -333,13 +339,16 @@ contains
                      !-- jxBz = 1/(E*Pm) * ( curl(B)_p*B_s - curl(B)_s*B_p )
                      !--      = cost * jxBr - sint * jxBt
                      !-- Can be added to jxBs because it will get -1/s \partial_\phi later
-                     jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta) -(cost(n_theta)*(&!r2*( &
+                     !jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta) -(cost(n_theta)*(&!r2*( & !-- W:: Seems to work with B-pot but troubles with jxB_ana!!!
+                     jxBz(n_phi,n_theta)=(cost(n_theta)*(&!
                      &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-     &
                      &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) )    &
                      &                                -sint(n_theta)*(&!or1sn1*(     &
                      &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-     &
                      &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) ) )* &
-                     &                          beta(n_r)*r_3D(n_r)*cost(n_theta)
+                     &                          r_3D(n_r)*cost(n_theta)!*beta(n_r)
+                     !&   (-r_3D(n_r)*sint(n_theta)/(r_cmb**2 - (r_3D(n_r)*cost(n_theta))**2))*r_3D(n_r)*cost(n_theta)
+                     !&   (-r_3D(n_r)*sint(n_theta)/((r_cmb+beta_shift)**2 - (r_3D(n_r)*cost(n_theta))**2))*r_3D(n_r)*cost(n_theta)
                   end if
                end do
             end do   ! theta loop

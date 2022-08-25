@@ -4,8 +4,9 @@ module update_psi_integ_dmat
    use parallel_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, ci, half
-   use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
-       &                l_ek_pump, ViscFac, ek, l_buo_imp, l_mag_LF, damp_zon
+   use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac,  &
+       &                l_ek_pump, ViscFac, ek, l_buo_imp, l_mag_LF, damp_zon, &
+       &                l_leibniz
    use horizontal, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, oheight, r
    use blocking, only: nMstart, nMstop, l_rank_has_m0
@@ -444,8 +445,8 @@ contains
 
    end subroutine update_psi_int_dmat
 !------------------------------------------------------------------------------
-   subroutine finish_exp_psi_int_dmat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
-              &                       dVsOm_Mloc, buo_Mloc, djxB_Mloc,     &
+   subroutine finish_exp_psi_int_dmat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc,      &
+              &                       dVsOm_Mloc, buo_Mloc, lf_Mloc, djxB_Mloc, &
               &                       dom_exp_last, vp_bal, vort_bal)
 
       !-- Input variables
@@ -455,7 +456,8 @@ contains
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(inout) :: dVsOm_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: buo_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp), intent(in) :: djxB_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: lf_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(inout) :: djxB_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       type(vp_bal_type),   intent(inout) :: vp_bal
@@ -465,6 +467,7 @@ contains
       !-- Local variables
       integer :: n_r, n_m, m, n_cheb
       real(cp) :: ekp_fac
+      complex(cp) :: dslf_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Finish calculation of advection
       call rscheme%costf1( dVsOm_Mloc, nMstart, nMstop, n_r_max )
@@ -476,6 +479,18 @@ contains
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
            &       rscheme, nocopy=.true., l_dct_in=.false.)
 
+      !-- Finish calculation of the z-avg Lorentz-force
+      if ( l_mag_LF .and. l_leibniz ) then
+         call rscheme%costf1( djxB_Mloc, nMstart, nMstop, n_r_max )
+         do n_cheb=n_cheb_max+1,n_r_max
+            do n_m=nMstart,nMstop
+               djxB_Mloc(n_m,n_cheb)=zero
+            end do
+         end do
+         call get_dr( djxB_Mloc, dslf_Mloc, nMstart, nMstop, n_r_max, &
+              &       rscheme, nocopy=.true., l_dct_in=.false.)
+      end if
+
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
@@ -484,9 +499,25 @@ contains
                dom_exp_last(n_m,n_r)=      dom_exp_last(n_m,n_r)-   &
                &                     or1(n_r)*work_Mloc(n_m,n_r)
 
+               !-- Add z-avg Lorentz force on the r.h.s
+               if ( l_mag_LF ) then
+                  if ( l_leibniz ) then !-- if Leibniz rule of integration for LF
+                     !if ( n_r==1 .or. n_r==n_r_max ) dslf_Mloc(n_m,n_r) = zero
+                     lf_Mloc(n_m,n_r) = or1(n_r)*(dslf_Mloc(n_m,n_r) + lf_Mloc(n_m,n_r)) !-- 1/s(ds<sjxBp> + -dp<jxBs> + Leibniz)!
+                  end if
+                  if ( n_r==1 .or. n_r==n_r_max ) lf_Mloc(n_m,n_r) = zero
+                  dom_exp_last(n_m,n_r)=dom_exp_last(n_m,n_r)+ &
+                  &                          lf_Mloc(n_m,n_r)
+               end if
+
                !-- Store the advection term when vorticity balance is requested
                if ( vort_bal%l_calc ) then
                   vort_bal%adv(n_m,n_r)=dom_exp_last(n_m,n_r)
+                  !vort_bal%lf(n_m,n_r)=zero
+                  if ( l_mag_LF ) then
+                     !vort_bal%lf(n_m,n_r)=lf_Mloc(n_m,n_r)
+                     vort_bal%adv(n_m,n_r)=vort_bal%adv(n_m,n_r) - lf_Mloc(n_m,n_r)
+                  end if
                end if
 
                !-- If Coriolis force is required it is added here:
@@ -512,8 +543,8 @@ contains
             vp_bal%rey_stress(n_r)=real(dom_exp_last(m2idx(0),n_r))
             vp_bal%lorentz_force(n_r)=0.0_cp
             if ( l_mag_LF ) then
-               vp_bal%lorentz_force(n_r)=real(djxB_Mloc(m2idx(0),n_r))
-               vp_bal%rey_stress(n_r)=vp_bal%rey_stress(n_r) - real(djxB_Mloc(m2idx(0),n_r))
+               vp_bal%lorentz_force(n_r)=real(lf_Mloc(m2idx(0),n_r))
+               vp_bal%rey_stress(n_r)=vp_bal%rey_stress(n_r) - real(lf_Mloc(m2idx(0),n_r))
              end if
          end do
       end if
