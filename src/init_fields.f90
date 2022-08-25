@@ -135,9 +135,7 @@ contains
 
       if ( init_B /= 0 .and. l_mag_3D ) then
          if ( l_mag_B0 ) then
-            b_3D_LMloc(:,:) = zero
-            aj_3D_LMloc(:,:) = zero
-            call initB0_3D(b0_3D_LMloc, aj0_3D_LMloc, init_B, amp_B)
+            call initB0_3D(b_3D_LMloc, aj_3D_LMloc, init_B, amp_B)
          else
             call initB_3D(b_3D_LMloc, aj_3D_LMloc, init_B, amp_B)
          end if
@@ -569,7 +567,7 @@ contains
       lm20 = lo_map%lm2(2,0)
       lm30 = lo_map%lm2(3,0)
       lm11 = lo_map%lm2(1,1)
-      lm44 = lo_map%lm2(3,1)
+      lm44 = lo_map%lm2(4,4)
 
       lm0=lm20 ! Default quadrupole field
 
@@ -709,7 +707,7 @@ contains
 
    end subroutine initB_3D
 !----------------------------------------------------------------------------------
-   subroutine initB0_3D(b0_LMloc, aj0_LMloc, init_B0, amp_B0)
+   subroutine initB0_3D(b_LMloc, aj_LMloc, init_B0, amp_B0)
       !
       ! Purpose of this subroutine is to initialize a background magnetic field
       ! according to the control parameters init_B.
@@ -721,13 +719,15 @@ contains
       integer,     intent(in) :: init_B0
 
       !-- Output variables:
-      complex(cp), intent(inout) :: b0_LMloc(lmStart:lmStop, n_r_max_3D)
-      complex(cp), intent(inout) :: aj0_LMloc(lmStart:lmStop, n_r_max_3D)
+      complex(cp), intent(inout) :: b_LMloc(lmStart:lmStop, n_r_max_3D)
+      complex(cp), intent(inout) :: aj_LMloc(lmStart:lmStop, n_r_max_3D)
 
       !-- Local variables:
       !-- poloidal and toroidal arrays for grid_space quantities computation
+      complex(cp) :: b0_LMloc(lmStart:lmStop, n_r_max_3D)
       complex(cp) :: db0_LMloc(lmStart:lmStop, n_r_max_3D)
       complex(cp) :: ddb0_LMloc(lmStart:lmStop, n_r_max_3D)
+      complex(cp) :: aj0_LMloc(lmStart:lmStop, n_r_max_3D)
       complex(cp) :: dj0_LMloc(lmStart:lmStop, n_r_max_3D)
       complex(cp) :: b0_Rloc(lm_max,nRstart3D:nRstop3D)
       complex(cp) :: db0_Rloc(lm_max,nRstart3D:nRstop3D)
@@ -738,11 +738,33 @@ contains
       integer :: n_r
       real(cp) :: b_pol, b_tor
 
-      integer :: lm10
+      integer :: lm10, lm20
+
+      !-- Set the values of the perturbation field to zero
+      if ( .not. l_start_file ) then
+         if( rank==0) print*, "l_start_file", l_start_file
+         b_LMloc(:,:) = zero
+         aj_LMloc(:,:) = zero
+      end if
+      if( rank==0) print*, "b_LMloc, aj_LMloc", b_LMloc(lmStart+2,2), aj_LMloc(lmStart+2,2)
 
       lm10 = lo_map%lm2(1,0)
+      lm20 = lo_map%lm2(2,0)
 
-      if ( init_B0 == 2 ) then  ! l=1,m=0 analytical toroidal field
+      b0_LMloc(:,:) = zero
+      aj0_LMloc(:,:) = zero
+      if ( init_B0 == 1 ) then  ! Simple Background field
+      ! l=1,m0 poloidal field
+      ! which is potential field at r_cmb
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+            b_pol=amp_B0*5.0_cp*half*sqrt(third*pi)*r_icb**2
+            do n_r=1,n_r_max_3D
+               b0_LMloc(lm10,n_r)=b0_LMloc(lm10,n_r)+b_pol*(r_3D(n_r)/r_icb)**2 * &
+               &                     ( one - three/5.0_cp*(r_3D(n_r)/r_cmb)**2 )
+            end do
+         end if
+
+      else if ( init_B0 == 2 ) then  ! l=1,m=0 analytical toroidal field
       ! with a maximum of amp_B0 at mid-radius
       ! between r_icb and r_cmb for an insulating
       ! inner core and at r_cmb/2 for a conducting
@@ -754,9 +776,36 @@ contains
                aj0_LMloc(lm10,n_r)=aj0_LMloc(lm10,n_r) + b_tor*r_3D(n_r)*sin(pi*(r_3D(n_r)-r_icb))
             end do
          end if
-         b0_LMloc(:,:) = zero
 
-      else  ! Simple Background field
+      else if ( init_B == 3 ) then
+         ! l=2,m=0 toroidal field and l=1,m=0 poloidal field
+         ! toroidal field has again its maximum of amp_B
+         ! at mid-radius between r_icb and r_cmb for an
+         ! insulating inner core and at r_cmb/2 for a
+         ! conducting inner core
+         ! The outer core poloidal field is defined by
+         ! a homogeneous  current density, its maximum at
+         ! the ICB is set to amp_B.
+         ! The inner core poloidal field is chosen accordingly.
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+            b_tor=-four*third*amp_B*sqrt(pi/5.0_cp)
+            b_pol= amp_B*sqrt(three*pi)/four
+            do n_r=1,n_r_max_3D
+               b0_LMloc(lm10,n_r)=b0_LMloc(lm10,n_r)+b_pol * (       &
+               &     r_3D(n_r)**3 - four*third*r_cmb*r_3D(n_r)**2  &
+               &     + third*r_icb**4/r_3D(n_r)                )
+            end do
+         end if
+
+         if( (lm20>=lmStart) .and. (lm20<=lmStop) ) then ! select processor
+            b_tor=-four*third*amp_B*sqrt(pi/5.0_cp)
+            b_pol=amp_B*sqrt(three*pi)/four
+            do n_r=1,n_r_max_3D
+               aj0_LMloc(lm20,n_r)=aj0_LMloc(lm20,n_r) + b_tor*r_3D(n_r)*sin(pi*(r_3D(n_r)-r_icb))
+            end do
+         end if
+
+      else  ! Simple Background field !--> Same as init_B = 1 for the moment!!!
       ! l=1,m0 poloidal field
       ! which is potential field at r_cmb
          if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
@@ -766,12 +815,12 @@ contains
                &                     ( one - three/5.0_cp*(r_3D(n_r)/r_cmb)**2 )
             end do
          end if
-         aj0_LMloc(:,:) = zero
+
       end if
 
-      call get_dr(aj0_LMloc, dj0_LMloc, lmStart, lmStop,&
-           &      n_r_max_3D, rscheme_3D)
       call get_ddr(b0_LMloc, db0_LMloc, ddb0_LMloc, lmStart, lmStop,&
+           &       n_r_max_3D, rscheme_3D)
+      call get_dr(aj0_LMloc, dj0_LMloc, lmStart, lmStop,&
            &      n_r_max_3D, rscheme_3D)
 
       call transp_lm2r(lm2r_fields, b0_LMloc, b0_Rloc)

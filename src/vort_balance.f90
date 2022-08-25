@@ -12,7 +12,7 @@ module vort_balance
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
    use blocking, only: nMstart, nMstop, nm_per_rank, m_balance
    use namelists, only: ra, pr, ek, radratio, sc, raxi, tag, r_cmb, r_icb, &
-       &                bl_cut, l_2D_SD
+       &                bl_cut, l_2D_SD, l_mag_LF
    use radial_functions, only: r, height
    use integration, only: simps
    use useful, only: cc2real, getMSD2
@@ -29,6 +29,7 @@ module vort_balance
       complex(cp), allocatable :: pump(:,:)
       complex(cp), allocatable :: dwdt(:,:)
       complex(cp), allocatable :: buo(:,:)
+      complex(cp), allocatable :: lf(:,:)
       type(mean_sd_2D_type) :: visc2D
       type(mean_sd_2D_type) :: cor2D
       type(mean_sd_2D_type) :: pump2D
@@ -38,6 +39,7 @@ module vort_balance
       type(mean_sd_2D_type) :: iner2D
       type(mean_sd_2D_type) :: thwind2D
       type(mean_sd_2D_type) :: cia2D
+      type(mean_sd_2D_type) :: lf2D
       type(mean_sd_type) :: viscM
       type(mean_sd_type) :: pumpM
       type(mean_sd_type) :: buoM
@@ -47,6 +49,7 @@ module vort_balance
       type(mean_sd_type) :: inerM
       type(mean_sd_type) :: thwindM
       type(mean_sd_type) :: ciaM
+      type(mean_sd_type) :: lfM
       real(cp) :: timeLast
       real(cp) :: dt
       integer :: n_calls
@@ -79,6 +82,13 @@ contains
       allocate( this%dwdt(nMstart:nMstop,n_r_max) )
       allocate( this%pump(nMstart:nMstop,n_r_max) )
       allocate( this%buo(nMstart:nMstop,n_r_max) )
+      if ( l_mag_LF ) then
+         allocate( this%lf(nMstart:nMstop,n_r_max) )
+         bytes_allocated = bytes_allocated + n_r_max*(nMstop-nMstart+1)* &
+         &                 SIZEOF_DEF_COMPLEX
+      else
+         allocate( this%lf(0,0) )
+      end if
       bytes_allocated = bytes_allocated + 6*n_r_max*(nMstop-nMstart+1)* &
       &                 SIZEOF_DEF_COMPLEX
 
@@ -91,6 +101,7 @@ contains
       call this%iner2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
       call this%thwind2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
       call this%cia2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
+      call this%lf2D%initialize(nMstart,nMstop,n_r_max,l_2D_SD)
 
       do n_r=1,n_r_max
          do n_m=nMstart,nMstop
@@ -100,6 +111,7 @@ contains
             this%dwdt(n_m,n_r)=zero
             this%buo(n_m,n_r) =zero
             this%pump(n_m,n_r)=zero
+            this%lf(n_m,n_r) =zero
          end do
       end do
 
@@ -117,6 +129,7 @@ contains
       call this%inerM%initialize(nMstart,nMstop)
       call this%thwindM%initialize(nMstart,nMstop)
       call this%ciaM%initialize(nMstart,nMstop)
+      call this%lfM%initialize(nMstart,nMstop)
 
    end subroutine initialize
 !------------------------------------------------------------------------------
@@ -127,6 +140,7 @@ contains
 
       class(vort_bal_type) :: this
 
+      call this%lfM%finalize()
       call this%ciaM%finalize()
       call this%thwindM%finalize()
       call this%inerM%finalize()
@@ -145,7 +159,8 @@ contains
       call this%thwind2D%finalize()
       call this%iner2D%finalize()
       call this%cia2D%finalize()
-      deallocate( this%visc, this%cor, this%adv, this%dwdt, this%pump, this%buo )
+      call this%lf2D%finalize()
+      deallocate( this%visc, this%cor, this%adv, this%dwdt, this%pump, this%buo, this%lf )
 
    end subroutine finalize
 !------------------------------------------------------------------------------
@@ -274,6 +289,11 @@ contains
       call this%mean_sd_loc(time,this%pump,this%pump2D,this%pumpM)
 
       !------
+      !-- Lorentz force term
+      !------
+      if ( l_mag_LF ) call this%mean_sd_loc(time,this%lf,this%lf2D,this%lfM)
+
+      !------
       !-- Thermal wind balance
       !------
       !-- Make use of pump as a temporary array here
@@ -339,6 +359,7 @@ contains
       real(cp) :: ciaM_global(n_m_max), ciaSD_global(n_m_max)
       real(cp) :: thwindM_global(n_m_max), thwindSD_global(n_m_max)
       real(cp) :: inerM_global(n_m_max), inerSD_global(n_m_max)
+      real(cp) :: lfM_global(n_m_max), lfSD_global(n_m_max)
 
       !----------
       !-- Force balance integrated over radii (ascii file written by rank0)
@@ -404,6 +425,17 @@ contains
       call MPI_GatherV(this%inerM%SD, nm_per_rank, MPI_DEF_REAL,    &
            &           inerSD_global, recvcounts, displs,           &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+      if ( l_mag_LF ) then
+         call MPI_GatherV(this%lfM%mean, nm_per_rank, MPI_DEF_REAL,   &
+              &           lfM_global, recvcounts, displs,             &
+              &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+         call MPI_GatherV(this%lfM%SD, nm_per_rank, MPI_DEF_REAL,     &
+              &           lfSD_global, recvcounts, displs,            &
+              &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+      else
+         lfM_global(:)   =0.0_cp
+         lfSD_global(:)  =0.0_cp
+      end if
 
       if ( rank == 0 ) then
          open(newunit=file_handle, file='vort_terms_avg.'//tag)
@@ -419,8 +451,9 @@ contains
                thwindSD_global(n_m)=sqrt(thwindSD_global(n_m)/this%timeLast)
                inerSD_global(n_m)  =sqrt(inerSD_global(n_m)/this%timeLast)
                ciaSD_global(n_m)   =sqrt(ciaSD_global(n_m)/this%timeLast)
+               if ( l_mag_LF) lfSD_global(n_m)   =sqrt(lfSD_global(n_m)/this%timeLast)
 
-               write(file_handle, '(I5,18es16.8)') m,                      &
+               write(file_handle, '(I5,20es16.8)') m,                      &
                &                buoM_global(n_m), buoSD_global(n_m),       &
                &                corM_global(n_m), corSD_global(n_m),       &
                &                advM_global(n_m), advSD_global(n_m),       &
@@ -429,7 +462,8 @@ contains
                &                pumpM_global(n_m), pumpSD_global(n_m),     &
                &                thwindM_global(n_m), thwindSD_global(n_m), &
                &                inerM_global(n_m), inerSD_global(n_m),     &
-               &                ciaM_global(n_m), ciaSD_global(n_m)
+               &                ciaM_global(n_m), ciaSD_global(n_m),       &
+               &                lfM_global(n_m), lfSD_global(n_m)
             end if
          end do
          close(file_handle)
@@ -451,6 +485,7 @@ contains
                this%iner2D%SD(n_m,n_r)  =sqrt(this%iner2D%SD(n_m,n_r)/this%timeLast)
                this%thwind2D%SD(n_m,n_r)=sqrt(this%thwind2D%SD(n_m,n_r)/this%timeLast)
                this%cia2D%SD(n_m,n_r)   =sqrt(this%cia2D%SD(n_m,n_r)/this%timeLast)
+               if ( l_mag_LF) this%lf2D%SD(n_m,n_r)    =sqrt(this%lf2D%SD(n_m,n_r)/this%timeLast)
             end if
          end do
       end do
@@ -572,6 +607,12 @@ contains
            &                  MPI_DEF_REAL, istat, ierr)
       if ( this%cia2D%l_SD ) then
          call MPI_File_Write_all(fh, this%cia2D%SD, nm_per_rank*n_r_max,  &
+              &                  MPI_DEF_REAL, istat, ierr)
+      end if
+      call MPI_File_Write_all(fh, this%lf2D%mean, nm_per_rank*n_r_max,   &
+           &                  MPI_DEF_REAL, istat, ierr)
+      if ( this%lf2D%l_SD ) then
+         call MPI_File_Write_all(fh, this%lf2D%SD, nm_per_rank*n_r_max,  &
               &                  MPI_DEF_REAL, istat, ierr)
       end if
 
