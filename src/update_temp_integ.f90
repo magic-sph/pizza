@@ -4,7 +4,7 @@ module update_temp_integ
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, one, ci, half
    use namelists, only: kbott, ktopt, tadvz_fac, BuoFac, r_cmb, r_icb, &
-       &                TdiffFac, l_non_rot, l_buo_imp, l_galerkin
+       &                TdiffFac, l_non_rot, l_buo_imp, l_galerkin, l_mag_B0
    use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, rgrav, r
    use blocking, only: nMstart, nMstop
@@ -146,7 +146,7 @@ contains
       if ( lMat ) lTMat(:)=.false.
 
       !-- Assemble first buoyancy part from T^{n}
-      if ( l_buo_imp ) then
+      if ( l_buo_imp .and. ( .not. l_mag_B0 ) ) then
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -229,7 +229,7 @@ contains
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Finish assembling buoyancy 
-      if ( l_buo_imp ) then
+      if ( l_buo_imp .and. ( .not. l_mag_B0 ) ) then
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
@@ -270,7 +270,7 @@ contains
       real(cp) :: h2
 
       !-- If buoyancy is treated explicitly
-      if ( .not. l_buo_imp ) then
+      if ( .not. l_buo_imp .and. ( .not. l_mag_B0 ) ) then
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)

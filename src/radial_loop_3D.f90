@@ -117,6 +117,7 @@ contains
       character(len=144) :: frame_name
 
       l_jxb_save=.False.
+      buo_tmp(:,:,:) = 0.0_cp
       !-- get thermal wind
       if ( l_heat_3D .and. l_thw_3D .and. (.not. l_lin_solve) ) then
          do n_r=nRstart3D,nRstop3D
@@ -165,9 +166,14 @@ contains
       !      do n_theta=1,n_theta_max
       !         do n_phi=1,n_phi_max_3D
       !            phi = (n_phi-1)*two*pi/(n_phi_max_3D)
-      !            ur(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi+pi*0.25_cp)
-      !            ut(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*cost(n_theta)
-      !            up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi)
+      !            !ur(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi+pi*0.25_cp)
+      !            !ut(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*cost(n_theta)
+      !            !up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi)
+      !            if ( r_3D(n_r)*sint(n_theta) > r_icb ) then
+      !               ur(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))!*sint(n_theta)*cos(4*phi+pi*0.25_cp)
+      !               ut(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))!*cost(n_theta)
+      !               up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))!*sint(n_theta)*cos(4*phi)
+      !            end if
       !        end do
       !      end do
       !!end if
@@ -178,7 +184,7 @@ contains
               &                      aj_3D(:,n_r),  dj_3D(:,n_r), &
               &                      n_r, gsa)
 
-            !!!-- Analytical B and VxB to benchmark Lorentz force if needed
+            !!-- Analytical B and VxB to benchmark Lorentz force if needed
             !do n_theta=1,n_theta_max
             !   do n_phi=1,n_phi_max_3D
             !      phi = (n_phi-1)*two*pi/(n_phi_max_3D)
@@ -207,6 +213,7 @@ contains
             !end do
 
          !print*, '!---------------------------', 'NEW LINE', '---------------------------!'
+         !print*, 'alphaFac', gsa%Alphac(2,2), gsa%Alphac(5,7)
          !print*, 'br; btheta; bphi', gsa%Brc(2,2), '; ', gsa%Btc(2,2), '; ', gsa%Bpc(2,2)
          !print*, 'b0r; b0theta; b0phi', B0r_3D_Rloc(2,2,n_r), '; ', B0t_3D_Rloc(2,2,n_r), '; ', B0p_3D_Rloc(2,2,n_r)
          !-- Courant condition
@@ -243,7 +250,7 @@ contains
             end if
             if ( l_mag_3D ) then
                !if ( .not. l_mag_B0 ) then
-                  call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!Vx!
+                  call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!!
                   call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))!Vx!
                   call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!Vx!
                if ( l_mag_LF .and. l_jxb_save ) then
@@ -347,9 +354,11 @@ contains
       !!call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc,2,.false.)
       if ( l_heat_3D ) call zinterp%compute_zavg(buo_tmp, buo_tmp_Rloc,2,.false.)
       if ( l_mag_LF .and. (.not. l_lin_solve) ) then  !-- Non-Linear terms?
+         lf_Rloc(:,:)=zero !-- Initialisation of z-avg Lorentz force
          call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc,2,.true.)
          call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc,2,.false.)!0)!
          if ( l_leibniz ) then
+            djxB_Rloc(:,:)=zero
             call scatter_from_rank0_to_rloc(tmp_2D, lfp_h_tmp_Rloc, n_m_max)!, rank)
             !print*, "After z_interp1d:: N_rank, lfp_h_tmp_Rloc", rank,"::", real(lfp_h_tmp_Rloc(1,:))
             if ( l_cyl ) then
@@ -400,13 +409,13 @@ contains
 
       !-- Finish assembling buoyancy and sum it with dpsidt
       !DyMagFac = 1.0_cp
-      !lf_Rloc(:,:)=zero !--> should be encapsulated in l_mag_LF
-      !djxB_Rloc(:,:)=zero !--> should be encapsulated in l_leibniz
+      !lf_Rloc(:,:)=zero !--> should be encapsulated in l_mag_LF -> Done!
+      !djxB_Rloc(:,:)=zero !--> should be encapsulated in l_leibniz -> Done!
       !dpsidt_Rloc(:,:)=zero
       do n_m=1,n_m_max
          m = idx2m(n_m)
          do n_r=nRstart,nRstop
-            if ( l_heat_3D ) then
+            if ( l_heat_3D .and. ( .not. l_mag_B0 ) ) then
             !-- Finish assembly the buoyancy:: no 1/s term because a s terms arises from Vx[Tg/r(s.e_s + z.e_z)].e_z
                dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*real(m,cp)* &
                &                     buo_tmp_Rloc(n_m,n_r)!!*or1(n_r)

@@ -157,22 +157,28 @@ contains
             do n_phi=1,n_phi_max_3D
                valr =br(n_phi,n_theta)*br(n_phi,n_theta) * &
                &     DyMagFac*r4
+               if ( l_mag_alpha ) valr=valr + &
+               &  ac(n_phi,n_theta)*ac(n_phi,n_theta) * &
+               &  br(n_phi,n_theta)*br(n_phi,n_theta) * &
+               &  DyMagFac*r4
                valr2=valr*valr/(valr+valri2)
                vflr2=vr(n_phi,n_theta)*vr(n_phi,n_theta)*r4
-               if ( l_mag_alpha ) vflr2=vflr2 + &
-               &  ac(n_phi,n_theta)*ac(n_phi,n_theta)*r4
                valr2max=max(valr2max,o_r_4_r*(af2*valr2 + cf2*vflr2))!))!
                !valr2max2=max(valr2max2,o_r_4_r*(cf2*vflr2))
 
                valh2= ( bt(n_phi,n_theta)*bt(n_phi,n_theta) +  &
                &        bp(n_phi,n_theta)*bp(n_phi,n_theta) )* &
                &        DyMagFac*r2
+               if ( l_mag_alpha ) valh2=valh2 + &
+               &  one*ac(n_phi,n_theta)*ac(n_phi,n_theta) *   &
+               &    ( bt(n_phi,n_theta)*bt(n_phi,n_theta) +   &
+               &      bp(n_phi,n_theta)*bp(n_phi,n_theta)  )* &
+               &  DyMagFac*r2
                valh2m=valh2*valh2/(valh2+valhi2)
                vflh2= ( vt(n_phi,n_theta)*vt(n_phi,n_theta) +  &
                &        vp(n_phi,n_theta)*vp(n_phi,n_theta) )* &
                &        r2
-               if ( l_mag_alpha ) vflh2=vflh2 + &
-               &  two*ac(n_phi,n_theta)*ac(n_phi,n_theta)*r2
+
                valh2max=max(valh2max,o_r_2_r*(af2*valh2m + cf2*vflh2))!))!
                !valh2max2=max(valh2max2,o_r_2_r*(cf2*vflh2))
             end do

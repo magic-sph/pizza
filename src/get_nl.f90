@@ -150,7 +150,7 @@ contains
       !-- Local variables:
       integer :: n_theta, n_phi, n_count
       real(cp) :: r2, or1sn1
-      real(cp) :: rfunc, asign!, bamp2, Afunc
+      real(cp) :: rfunc, asign, bamp2!, Afunc
 
       r2 = r_3D(n_r)*r_3D(n_r)
 
@@ -172,24 +172,26 @@ contains
             !$OMP END PARALLEL DO
          end if
 
-         !$OMP PARALLEL DO default(shared) &
-         !$OMP& private(n_theta, n_phi)
          !-- Assemble g/r * T on the spherical grid (1/r comes from the decomposition of Tg.e_r = Tg(s/r.e_s + z/r.e_z))
          !-- and the s factor cancels afterward because of the z-compotent of the curl in cylindrical coord.
-         do n_theta=1,n_theta_max
-            do n_phi=1,n_phi_max_3D
-               buo(n_phi,n_theta)=this%Tc(n_phi,n_theta)*rgrav_3D(n_r)* &
-               &                  or1_3D(n_r)
-               if ( l_QG_basis ) then
-                  !-- Additional buoyancy term from the QG basis projection: -\beta/s z^2 Tg.r (.e_z part of the curl)
-                  !-- Can be simplified with z = cost.r , s = sint.r so that z^2/(sr) = cost^2/sint
-                  buo(n_phi,n_theta)=buo(n_phi,n_theta) - this%Tc(n_phi,n_theta)* &
-                  &                                      rgrav_3D(n_r)*beta(n_r)* &
-                  &                  cost(n_theta)*cost(n_theta)*osint1(n_theta)
-               end if
+         if ( .not. l_mag_B0 ) then
+         !$OMP PARALLEL DO default(shared) &
+         !$OMP& private(n_theta, n_phi)
+            do n_theta=1,n_theta_max
+               do n_phi=1,n_phi_max_3D
+                  buo(n_phi,n_theta)=this%Tc(n_phi,n_theta)*rgrav_3D(n_r)* &
+                  &                  or1_3D(n_r)
+                  if ( l_QG_basis ) then
+                     !-- Additional buoyancy term from the QG basis projection: -\beta/s z^2 Tg.r (.e_z part of the curl)
+                     !-- Can be simplified with z = cost.r , s = sint.r so that z^2/(sr) = cost^2/sint
+                     buo(n_phi,n_theta)=buo(n_phi,n_theta) - this%Tc(n_phi,n_theta)* &
+                     &                                      rgrav_3D(n_r)*beta(n_r)* &
+                     &                  cost(n_theta)*cost(n_theta)*osint1(n_theta)
+                  end if
+               end do
             end do
-         end do
          !$OMP END PARALLEL DO
+         end if ! l_mag_B0?
       end if ! l_heat_3D?
       !this%VTr(:,:) = 0.0_cp
       !this%VTt(:,:) = 0.0_cp
@@ -237,22 +239,22 @@ contains
 
                if ( l_mag_alpha ) then !.and. r_3D(n_r)*sint(n_theta) >= r_icb ) then
                   !-- Following the form of (Chan etal., 2001; eq.25) --> only when nothing can prevent B from growing
-                  !bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
-                  !&       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
-                  !&       this%Bpc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)
-                  rfunc = sin(pi*(r_3D(n_r)-r_icb))
+                  bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
+                  &       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
+                  &       this%Bpc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)
+                  rfunc = sin(pi*(r_3D(n_r)-r_icb))!*sin(pi*(r_3D(n_r)*sint()-r_icb))
                   !rfunc = 4.*r_3D(n_r)*sint(n_theta) *                   &
                   !&      ( r_cmb - r_3D(n_r)*sint(n_theta) ) / r_cmb**2.
                   this%Alphac(n_phi,n_theta) = alpha_fac*cost(n_theta)*rfunc
 
                   this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + r2*(              &
-                  &    this%Alphac(n_phi,n_theta)*this%Brc(n_phi,n_theta))!/(1. + bamp2) )
+                  &    this%Alphac(n_phi,n_theta)*this%Brc(n_phi,n_theta))/(1. + bamp2) )
 
                   this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta) + or1sn1*(          &
-                  &    this%Alphac(n_phi,n_theta)*this%Btc(n_phi,n_theta))!/(1. + bamp2) )
+                  &    this%Alphac(n_phi,n_theta)*this%Btc(n_phi,n_theta))/(1. + bamp2) )
 
                   this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + or1sn1*(          &
-                  &    this%Alphac(n_phi,n_theta)*this%Bpc(n_phi,n_theta))!/(1. + bamp2) )
+                  &    this%Alphac(n_phi,n_theta)*this%Bpc(n_phi,n_theta))/(1. + bamp2) )
                end if
 
                if ( l_mag_inertia ) then
@@ -262,21 +264,21 @@ contains
                   !--              = terms coming from inertial waves
                   !--> Warning:: 1/r2 or 1/rsint is applied to the full product VxB;
                   !--            the different quantities have already been rescaled
-                  asign = abs(cost(n_theta))/cost(n_theta) !-- +/-1 sign
-                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + asign*delta_fac*r2*(&!
-                  &                        (sint(n_theta)*vp(n_phi,n_theta))**2.*(  &
+                  asign = 1.0!abs(cost(n_theta))/cost(n_theta) !-- +/-1 sign
+                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta)+asign*delta_fac*r2*(&!
+                  &                        sint(n_theta)*(vp(n_phi,n_theta))**2.*(  &
                   &                        this%Brc(n_phi,n_theta)*sint(n_theta) +  &
-                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) ) )/2.*pi
+                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) ) )!/2.*pi
 
                   this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta)+asign*delta_fac*or1sn1*(&!
-                  &                        (cost(n_theta)*vp(n_phi,n_theta))**2.*(    &
+                  &                        cost(n_theta)*(vp(n_phi,n_theta))**2.*(    &
                   &                        this%Brc(n_phi,n_theta)*sint(n_theta) +    &
-                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) )  )/2.*pi
+                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) )  )!/2.*pi
 
                   this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta)+asign*delta_fac*or1sn1*(&!
                   &                       ( (vr(n_phi,n_theta)*sint(n_theta) +        &
                   &                       vt(n_phi,n_theta)*cost(n_theta))**2. )*     &
-                  &                                      this%Bpc(n_phi,n_theta)    )/2.*pi
+                  &                                      this%Bpc(n_phi,n_theta)    )!/2.*pi
                end if
             end do
          end do   ! theta loop
@@ -314,7 +316,7 @@ contains
                      &                  +cost(n_theta)*(&!or1sn1*(                 &!
                      &   curlB0p_3D_Rloc(n_phi,n_theta,n_r)*this%Brc(n_phi,n_theta)-  &
                      &   curlB0r_3D_Rloc(n_phi,n_theta,n_r)*this%Bpc(n_phi,n_theta) )
-                     !---- + jxB0s= sint * j0xBr + cost * j0xBt
+                     !---- + jxB0s= sint * jxB0r + cost * jxB0t
                      jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta)+sint(n_theta)*(&!r2*( &!
                      &   this%curlBtc(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r)-  &
                      &   this%curlBpc(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r) ) &
@@ -326,14 +328,14 @@ contains
                      jxBp(n_phi,n_theta) =(&!or1sn1*(                              &!
                      &    curlB0r_3D_Rloc(n_phi,n_theta,n_r)*this%Btc(n_phi,n_theta)- &
                      &    curlB0t_3D_Rloc(n_phi,n_theta,n_r)*this%Brc(n_phi,n_theta) )
-                     !---- + jxB0p= j0_r*B_t - j0_t*B_r
+                     !---- + jxB0p= j_r*B0_t - j_t*B0_r
                      jxBp(n_phi,n_theta) =jxBp(n_phi,n_theta)+(&!or1sn1*(          &!
                      &    this%curlBrc(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r)- &
                      &    this%curlBtc(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r) )
                   end if
 
                   if ( l_QG_basis ) then
-                     !-- Additional buoyancy term from the QG basis projection: +\beta/s z Vx(jxB)_s
+                     !-- Additional Lorentz force term from the QG basis projection: +\beta/s z Vx(jxB)_s
                      !-- Only need to compute the s component of Vx(jxB)
                      !-- Vx(jxB)_s = 1/s \partial_p jxB_z - \partial_z jxB_p (<- computed above)
                      !-- jxBz = 1/(E*Pm) * ( curl(B)_p*B_s - curl(B)_s*B_p )

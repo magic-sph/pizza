@@ -742,11 +742,9 @@ contains
 
       !-- Set the values of the perturbation field to zero
       if ( .not. l_start_file ) then
-         if( rank==0) print*, "l_start_file", l_start_file
          b_LMloc(:,:) = zero
          aj_LMloc(:,:) = zero
       end if
-      if( rank==0) print*, "b_LMloc, aj_LMloc", b_LMloc(lmStart+2,2), aj_LMloc(lmStart+2,2)
 
       lm10 = lo_map%lm2(1,0)
       lm20 = lo_map%lm2(2,0)
