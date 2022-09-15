@@ -111,7 +111,7 @@ contains
             this%dwdt(n_m,n_r)=zero
             this%buo(n_m,n_r) =zero
             this%pump(n_m,n_r)=zero
-            this%lf(n_m,n_r) =zero
+            if ( l_mag_LF ) this%lf(n_m,n_r) =zero
          end do
       end do
 

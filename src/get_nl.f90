@@ -150,7 +150,7 @@ contains
       !-- Local variables:
       integer :: n_theta, n_phi, n_count
       real(cp) :: r2, or1sn1
-      real(cp) :: rfunc, asign, bamp2!, Afunc
+      real(cp) :: rfunc, asign!, bamp2!, Afunc
 
       r2 = r_3D(n_r)*r_3D(n_r)
 
@@ -172,9 +172,9 @@ contains
             !$OMP END PARALLEL DO
          end if
 
+         !if ( .not. l_mag_B0 ) then
          !-- Assemble g/r * T on the spherical grid (1/r comes from the decomposition of Tg.e_r = Tg(s/r.e_s + z/r.e_z))
          !-- and the s factor cancels afterward because of the z-compotent of the curl in cylindrical coord.
-         if ( .not. l_mag_B0 ) then
          !$OMP PARALLEL DO default(shared) &
          !$OMP& private(n_theta, n_phi)
             do n_theta=1,n_theta_max
@@ -191,7 +191,7 @@ contains
                end do
             end do
          !$OMP END PARALLEL DO
-         end if ! l_mag_B0?
+         !end if ! l_mag_B0?
       end if ! l_heat_3D?
       !this%VTr(:,:) = 0.0_cp
       !this%VTt(:,:) = 0.0_cp
@@ -239,22 +239,22 @@ contains
 
                if ( l_mag_alpha ) then !.and. r_3D(n_r)*sint(n_theta) >= r_icb ) then
                   !-- Following the form of (Chan etal., 2001; eq.25) --> only when nothing can prevent B from growing
-                  bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
-                  &       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
-                  &       this%Bpc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)
-                  rfunc = sin(pi*(r_3D(n_r)-r_icb))!*sin(pi*(r_3D(n_r)*sint()-r_icb))
-                  !rfunc = 4.*r_3D(n_r)*sint(n_theta) *                   &
-                  !&      ( r_cmb - r_3D(n_r)*sint(n_theta) ) / r_cmb**2.
-                  this%Alphac(n_phi,n_theta) = alpha_fac*cost(n_theta)*rfunc
+                  !bamp2 = this%Brc(n_phi,n_theta)*this%Brc(n_phi,n_theta) + &
+                  !&       this%Btc(n_phi,n_theta)*this%Btc(n_phi,n_theta) + &
+                  !&       this%Bpc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)
+                  !rfunc = sin(pi*(r_3D(n_r)-r_icb))!*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))
+                  rfunc = 4.*r_3D(n_r)*sint(n_theta) *                   &
+                  &      ( r_cmb - r_3D(n_r)*sint(n_theta) ) / r_cmb**2.
+                  this%Alphac(n_phi,n_theta) = alpha_fac*rfunc*cost(n_theta)
 
                   this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + r2*(              &
-                  &    this%Alphac(n_phi,n_theta)*this%Brc(n_phi,n_theta))/(1. + bamp2) )
+                  &    this%Alphac(n_phi,n_theta)*this%Brc(n_phi,n_theta))!/(1. + bamp2)
 
                   this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta) + or1sn1*(          &
-                  &    this%Alphac(n_phi,n_theta)*this%Btc(n_phi,n_theta))/(1. + bamp2) )
+                  &    this%Alphac(n_phi,n_theta)*this%Btc(n_phi,n_theta))!/(1. + bamp2)
 
                   this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + or1sn1*(          &
-                  &    this%Alphac(n_phi,n_theta)*this%Bpc(n_phi,n_theta))/(1. + bamp2) )
+                  &    this%Alphac(n_phi,n_theta)*this%Bpc(n_phi,n_theta))!/(1. + bamp2)
                end if
 
                if ( l_mag_inertia ) then
@@ -323,6 +323,15 @@ contains
                      &                  +cost(n_theta)*(&!or1sn1*(                 &!
                      &   this%curlBpc(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r)-  &
                      &   this%curlBrc(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r) )
+                     !if ( l_mag_B0LFsmall ) then
+                        !---- + jxBs= sint * jxBr + cost * jxBt
+                        jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta)+sint(n_theta)*(&!r2*( &!
+                        &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
+                        &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) ) &
+                        &                  +cost(n_theta)*(&!or1sn1*(                &!
+                        &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-  &
+                        &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
+                     !end if
 
                      !---- j0xBp= j0_r*B_t - j0_t*B_r
                      jxBp(n_phi,n_theta) =(&!or1sn1*(                              &!
@@ -332,6 +341,12 @@ contains
                      jxBp(n_phi,n_theta) =jxBp(n_phi,n_theta)+(&!or1sn1*(          &!
                      &    this%curlBrc(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r)- &
                      &    this%curlBtc(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r) )
+                     !if ( l_mag_B0LFsmall ) then
+                        !---- + jxBp= j_r*B_t - j_t*B_r
+                        jxBp(n_phi,n_theta) =jxBp(n_phi,n_theta)+(&!or1sn1*(       &!
+                        &    this%curlBrc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
+                        &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
+                     !end if
                   end if
 
                   if ( l_QG_basis ) then

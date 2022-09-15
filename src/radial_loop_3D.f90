@@ -250,7 +250,7 @@ contains
             end if
             if ( l_mag_3D ) then
                !if ( .not. l_mag_B0 ) then
-                  call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!!
+                  call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!Vx!
                   call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))!Vx!
                   call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!Vx!
                if ( l_mag_LF .and. l_jxb_save ) then
@@ -376,7 +376,7 @@ contains
             call zinterp%compute_zavg(djxBpds, lfpds_tmp_Rloc,2,.true.)!lfp_tmp_Rloc,1)!
          end if
          if ( l_QG_basis ) then
-            call zinterp%compute_zavg(jxBz, lfz_tmp_Rloc,2,.false.)
+            call zinterp%compute_zavg(jxBz, lfz_tmp_Rloc,2,.true.)
             call zinterp%compute_zavg(djxBpdz, lfpdz_tmp_Rloc,2,.true.)
          end if
       end if
@@ -415,7 +415,7 @@ contains
       do n_m=1,n_m_max
          m = idx2m(n_m)
          do n_r=nRstart,nRstop
-            if ( l_heat_3D .and. ( .not. l_mag_B0 ) ) then
+            if ( l_heat_3D ) then!.and. ( .not. l_mag_B0 ) ) then
             !-- Finish assembly the buoyancy:: no 1/s term because a s terms arises from Vx[Tg/r(s.e_s + z.e_z)].e_z
                dpsidt_Rloc(n_m,n_r)= dpsidt_Rloc(n_m,n_r)-BuoFac*ci*real(m,cp)* &
                &                     buo_tmp_Rloc(n_m,n_r)!!*or1(n_r)
@@ -427,6 +427,7 @@ contains
             !--   --> <Vx(jxB).e_z> = (+<d_s (s (jxB)_p)> - d_p <(jxB)_s>)/s
                if ( m == 0 ) then
                   !-- LF on m=0 --> <(jxB).e_p> = <(jxB)_p>
+                  if ( n_r==1 .or. n_r==n_r_max ) lfp_tmp_Rloc(n_m,n_r) = zero
                   dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)+DyMagFac*lfp_tmp_Rloc(n_m,n_r)
                   !-- store z-avg 3D-lorentz for Force balance outputs on m=0
                   lf_Rloc(n_m,n_r)=DyMagFac*lfp_tmp_Rloc(n_m,n_r)
@@ -492,7 +493,7 @@ contains
                         !& + DyMagFac*ci*real(m,cp)*beta(n_r)*lfz_tmp_Rloc(n_m,n_r)
                      end if
                   end if
-                  !if ( n_r==1 .or. n_r==n_r_max ) lf_Rloc(n_m,n_r) = zero
+                  !if ( n_r==1 .or. n_r==n_r_max ) lf_Rloc(n_m,n_r) = zero !--> will be done after adding the d_s jxB_p part in all update_psi_* files
                end if
             end if
          end do

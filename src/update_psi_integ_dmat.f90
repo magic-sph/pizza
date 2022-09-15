@@ -513,9 +513,9 @@ contains
                !-- Store the advection term when vorticity balance is requested
                if ( vort_bal%l_calc ) then
                   vort_bal%adv(n_m,n_r)=dom_exp_last(n_m,n_r)
-                  !vort_bal%lf(n_m,n_r)=zero
                   if ( l_mag_LF ) then
-                     !vort_bal%lf(n_m,n_r)=lf_Mloc(n_m,n_r)
+                     !vort_bal%lf(n_m,n_r)=zero
+                     vort_bal%lf(n_m,n_r)=lf_Mloc(n_m,n_r)
                      vort_bal%adv(n_m,n_r)=vort_bal%adv(n_m,n_r) - lf_Mloc(n_m,n_r)
                   end if
                end if
@@ -541,8 +541,8 @@ contains
       if ( l_rank_has_m0 .and. vp_bal%l_calc ) then
          do n_r=1,n_r_max
             vp_bal%rey_stress(n_r)=real(dom_exp_last(m2idx(0),n_r))
-            vp_bal%lorentz_force(n_r)=0.0_cp
             if ( l_mag_LF ) then
+               !vp_bal%lorentz_force(n_r)=0.0_cp
                vp_bal%lorentz_force(n_r)=real(lf_Mloc(m2idx(0),n_r))
                vp_bal%rey_stress(n_r)=vp_bal%rey_stress(n_r) - real(lf_Mloc(m2idx(0),n_r))
              end if
