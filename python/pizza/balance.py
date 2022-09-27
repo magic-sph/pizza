@@ -94,18 +94,31 @@ class PizzaBalance(PizzaSetup):
                     if os.path.exists(pattern):
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                             nml='log.%s' % ending)
+            self.l_lf = (self.l_mag_3D == 'T')
+            print(self.l_lf)
 
             for k, file in enumerate(files):
                 print('reading %s' % file)
                 if k == 0:
-                    self.radius, self.time, self.vp, self.dvpdt, \
-                        self.rey_stress, self.ek_pump, self.visc = \
-                        self.read(file, endian)
+                    if self.l_lf:
+                        self.radius, self.time, self.vp, self.dvpdt, \
+                            self.rey_stress, self.ek_pump, self.visc, \
+                            self.lorentz_force = self.read(file, endian)
+                    else:
+                        self.radius, self.time, self.vp, self.dvpdt, \
+                            self.rey_stress, self.ek_pump, self.visc \
+                            = self.read(file, endian)
                 else:
-                    radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
-                                              self.read(file, endian)
-                    self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
-                             visc)
+                    if self.l_lf:
+                        radius, time, vp, dvpdt, rey_stress, ek_pump, visc, \
+                                          lorentz_force = self.read(file, endian)
+                        self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
+                                 visc, lorentz_force)
+                    else:
+                        radius, time, vp, dvpdt, rey_stress, ek_pump, visc \
+                                          = self.read(file, endian)
+                        self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
+                                 visc)
 
         # If no tag is specified, the most recent is plotted
         elif not all:
@@ -114,14 +127,24 @@ class PizzaBalance(PizzaSetup):
                 name = 'vphi_bal.%s' % self.tag
                 filename = os.path.join(datadir, name)
                 print('reading %s' % filename)
-                self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
-                    self.ek_pump, self.visc = self.read(filename, endian)
+                self.l_lf = (self.l_mag_3D == 'T')
+
+                if self.l_lf:
+                    self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
+                        self.ek_pump, self.visc, self.lorentz_force = self.read(filename, endian)
+                else:
+                    self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
+                        self.ek_pump, self.visc = self.read(filename, endian)
             else:
                 dat = scanDir('vphi_bal.*')
                 filename = dat[-1][1]
                 print('reading %s' % filename)
-                self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
-                    self.ek_pump, self.visc = self.read(filename, endian)
+                if self.l_lf:
+                    self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
+                        self.ek_pump, self.visc, self.lorentz_force = self.read(filename, endian)
+                else:
+                    self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
+                        self.ek_pump, self.visc = self.read(filename, endian)
 
         # If no tag is specified but all=True, all the directory is plotted
         else:
@@ -132,14 +155,25 @@ class PizzaBalance(PizzaSetup):
             for k, file in enumerate(files):
                 print('reading %s' % file)
                 if k == 0:
-                    self.radius, self.time, self.vp, self.dvpdt, \
-                        self.rey_stress, self.ek_pump, self.visc = \
-                        self.read(file, endian)
+                    if self.l_lf:
+                        self.radius, self.time, self.vp, self.dvpdt, \
+                            self.rey_stress, self.ek_pump, self.visc, \
+                            self.lorentz_force = self.read(file, endian)
+                    else:
+                        self.radius, self.time, self.vp, self.dvpdt, \
+                            self.rey_stress, self.ek_pump, self.visc \
+                            = self.read(file, endian)
                 else:
-                    radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
-                        self.read(file, endian)
-                    self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
-                             visc)
+                    if self.l_lf:
+                        radius, time, vp, dvpdt, rey_stress, ek_pump, visc, \
+                            lorentz_force = self.read(file, endian)
+                        self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
+                                 visc, lorentz_force)
+                    else:
+                        radius, time, vp, dvpdt, rey_stress, ek_pump, visc \
+                            = self.read(file, endian)
+                        self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
+                                 visc)
 
         if iplot:
             self.plot()
@@ -157,6 +191,7 @@ class PizzaBalance(PizzaSetup):
             self.rey_stress = interp_dct(self.rey_stress, nr_new)
             self.ek_pump = interp_dct(self.ek_pump, nr_new)
             self.visc = interp_dct(self.visc, nr_new)
+            if self.l_lf: self.lorentz_force = interp_dct(self.lorentz_force, nr_new)
 
             # We have a situation here:
             self.radius = radius
@@ -170,6 +205,8 @@ class PizzaBalance(PizzaSetup):
             out.ek_pump = np.concatenate((self.ek_pump, new.ek_pump[1:, :]),
                                          axis=0)
             out.visc = np.concatenate((self.visc, new.visc[1:, :]), axis=0)
+            if self.l_lf: out.lorentz_force = np.concatenate((self.lorentz_force,
+                                                new.lorentz_force[1:, :]), axis=0)
         else:
             out.time = np.concatenate((self.time, new.time), axis=0)
             out.vp = np.concatenate((self.vp, new.vp), axis=0)
@@ -178,10 +215,12 @@ class PizzaBalance(PizzaSetup):
                                             axis=0)
             out.ek_pump = np.concatenate((self.ek_pump, new.ek_pump), axis=0)
             out.visc = np.concatenate((self.visc, new.visc), axis=0)
+            if self.l_lf: out.lorentz_force = np.concatenate((self.lorentz_force, new.lorentz_force),
+                                              axis=0)
 
         return out
 
-    def add(self, time, radius, vp, dvpdt, rey_stress, ek_pump, visc):
+    def add(self, time, radius, vp, dvpdt, rey_stress, ek_pump, visc, lorentz_force):
         nr_new = vp.shape[-1]
         nr_max = self.vp.shape[-1]
         if nr_max != nr_new:
@@ -190,6 +229,9 @@ class PizzaBalance(PizzaSetup):
             self.rey_stress = interp_dct(self.rey_stress, nr_new)
             self.ek_pump = interp_dct(self.ek_pump, nr_new)
             self.visc = interp_dct(self.visc, nr_new)
+            if self.l_lf: self.lorentz_force = interp_dct(self.lorentz_force, nr_new)
+            #else:
+            #    self.lorentz_force = 0.0
 
             self.radius = radius
 
@@ -202,6 +244,8 @@ class PizzaBalance(PizzaSetup):
             self.ek_pump = np.concatenate((self.ek_pump, ek_pump[1:, :]),
                                           axis=0)
             self.visc = np.concatenate((self.visc, visc[1:, :]), axis=0)
+            if self.l_lf: self.lorentz_force = np.concatenate((self.lorentz_force,
+                                              lorentz_force[1:, :]), axis=0)
         else:
             self.time = np.concatenate((self.time, time), axis=0)
             self.vp = np.concatenate((self.vp, vp), axis=0)
@@ -210,6 +254,8 @@ class PizzaBalance(PizzaSetup):
                                              axis=0)
             self.ek_pump = np.concatenate((self.ek_pump, ek_pump), axis=0)
             self.visc = np.concatenate((self.visc, visc), axis=0)
+            if self.l_lf: self.lorentz_force = np.concatenate((self.lorentz_force, lorentz_force),
+                                               axis=0)
 
     def read(self, filename, endian):
         """
@@ -237,6 +283,7 @@ class PizzaBalance(PizzaSetup):
             rey_stress = file.fort_read('Float64')
             ek_pump = file.fort_read('Float64')
             visc = file.fort_read('Float64')
+            if self.l_lf: lorentz_force = file.fort_read('Float64')
             while 1:
                 try:
                     time = np.append(time, file.fort_read('Float64'))
@@ -246,6 +293,8 @@ class PizzaBalance(PizzaSetup):
                                             file.fort_read('Float64')))
                     ek_pump = np.vstack((ek_pump, file.fort_read('Float64')))
                     visc = np.vstack((visc, file.fort_read('Float64')))
+                    if self.l_lf: lorentz_force = np.vstack((lorentz_force,
+                                                  file.fort_read('Float64')))
                 except TypeError:
                     break
 
@@ -257,19 +306,29 @@ class PizzaBalance(PizzaSetup):
                 data[0:6]
             radius = data[6:7+n_r_max-1]
             data = data[7+n_r_max-1:]
-            nsteps = len(data)/(5*n_r_max+1)
+            if self.l_lf:
+                nsteps = len(data)/(6*n_r_max+1)
+            else:
+                nsteps = len(data)/(5*n_r_max+1)
 
-            data = data.reshape((int(nsteps), 5*n_r_max+1))
+            if self.l_lf:
+                data = data.reshape((int(nsteps), 6*n_r_max+1))
+            else:
+                data = data.reshape((int(nsteps), 5*n_r_max+1))
             time = data[:, 0]
             vp = data[:, 1:n_r_max+1]
             dvpdt = data[:, n_r_max+1:2*n_r_max+1]
             rey_stress = data[:, 2*n_r_max+1:3*n_r_max+1]
             ek_pump = data[:, 3*n_r_max+1:4*n_r_max+1]
             visc = data[:, 4*n_r_max+1:5*n_r_max+1]
+            if self.l_lf: lorentz_force = data[:, 5*n_r_max+1:6*n_r_max+1]
 
             file.close()
 
-        return radius, time, vp, dvpdt, rey_stress, ek_pump, visc
+        if self.l_lf:
+            return radius, time, vp, dvpdt, rey_stress, ek_pump, visc, lorentz_force
+        else:
+            return radius, time, vp, dvpdt, rey_stress, ek_pump, visc
 
     def write(self, filename):
         """
@@ -295,6 +354,7 @@ class PizzaBalance(PizzaSetup):
             self.rey_stress[i, :].tofile(out)
             self.ek_pump[i, :].tofile(out)
             self.visc[i, :].tofile(out)
+            if self.l_lf: self.lorentz_force[i, :].tofile(out)
 
         out.close()
 
@@ -323,8 +383,16 @@ class PizzaBalance(PizzaSetup):
         vim, vistd = avg_std(self.time[::nstep], self.visc[::nstep])
         ax.fill_between(self.radius, vim-vistd, vim+vistd, alpha=0.1)
         ax.plot(self.radius, vim, label='Viscosity')
-        tot = self.rey_stress[::nstep]+self.ek_pump[::nstep]+self.visc[::nstep]
-        ax.plot(self.radius, tot.mean(axis=0), label='Total')
+
+        if self.l_lf:
+            lfm, lfstd = avg_std(self.time[::nstep], self.lorentz_force[::nstep])
+            ax.fill_between(self.radius, lfm-lfstd, lfm+lfstd, alpha=0.1)
+            ax.plot(self.radius, lfm, label='Lorentz force')
+            tot = self.rey_stress[::nstep]+self.ek_pump[::nstep]+self.visc[::nstep]+self.lorentz_force[::nstep]
+            ax.plot(self.radius, tot.mean(axis=0), label='Total')
+        else:
+            tot = self.rey_stress[::nstep]+self.ek_pump[::nstep]+self.visc[::nstep]
+            ax.plot(self.radius, tot.mean(axis=0), label='Total')
 
         ax.set_xlim(self.radius[-1], self.radius[0])
         ax.legend(loc='best', frameon=False)

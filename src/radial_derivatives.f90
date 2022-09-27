@@ -32,17 +32,24 @@ module radial_der
       module procedure get_ddr_complex_2d
    end interface get_ddr
 
-   public :: get_ddr, get_dcheb, get_dr, initialize_der_arrays
+   public :: get_ddr, get_dcheb, get_dr, initialize_der_arrays, get_dr_FD, finalize_der_arrays
 
    real(cp) :: thr
+   real(cp), allocatable :: dr(:,:), dr_top(:), dr_bot(:)
 
 contains
 
 !------------------------------------------------------------------------------
-   subroutine initialize_der_arrays(l_rerror, rerror_fac)
+   subroutine initialize_der_arrays(l_rerror, rerror_fac, r)
 
+      real(cp), optional, intent(in) :: r(:)
       logical,  intent(in) :: l_rerror
       real(cp), intent(in) :: rerror_fac
+
+      !-- Local quantities:
+      real(cp) :: dr_spacing(3)
+      real(cp) :: taylor_exp(0:2,0:2)
+      integer :: n_r, od, n_r_max
 
       if ( l_rerror ) then
          thr = rerror_fac * epsilon(1.0_cp)
@@ -50,7 +57,59 @@ contains
          thr = 0.0_cp
       end if
 
+      if ( present(r) ) then
+         n_r_max = size(r)
+         allocate( dr(n_r_max,0:2), dr_top(0:2), dr_bot(0:2) )
+   
+         !
+         !-- Step 1: First derivative in the bulk
+         !
+         do n_r=2,n_r_max-1
+            do od=0,2
+               dr_spacing(od+1)=r(n_r-1+od)-r(n_r)
+            end do
+   
+            call populate_fd_weights(0.0_cp,dr_spacing,2,2,taylor_exp)
+   
+            do od=0,2
+               dr(n_r,od) =taylor_exp(od,1)
+            end do
+         end do
+   
+         !
+         !-- Step 2: First derivative for the outer points
+         !
+         do od=0,2
+            dr_spacing(od+1)=r(od+1)-r(1)
+         end do
+   
+         call populate_fd_weights(0.0_cp,dr_spacing,2,2,taylor_exp)
+   
+         do od=0,2
+            dr_top(od) =taylor_exp(od,1)
+         end do
+   
+         !
+         !-- Step 3: First derivative for the inner points
+         !
+         do od=0,2
+            dr_spacing(od+1)=r(n_r_max-od)-r(n_r_max)
+         end do
+   
+         call populate_fd_weights(0.0_cp,dr_spacing,2,2,taylor_exp)
+   
+         do od=0,2
+            dr_bot(od) =taylor_exp(od,1)
+         end do
+      end if
+
    end subroutine initialize_der_arrays
+!------------------------------------------------------------------------------
+   subroutine finalize_der_arrays
+
+      deallocate( dr, dr_top, dr_bot )
+
+   end subroutine finalize_der_arrays
 !------------------------------------------------------------------------------
    subroutine get_dcheb_complex_2d(f,df,nMstart,nMstop,n_r_max,n_cheb_max)
       !
@@ -675,5 +734,84 @@ contains
       end if
 
    end subroutine get_ddr_real_1d
+!------------------------------------------------------------------------------
+   subroutine get_dr_FD(f, df, nMstart, nMstop, n_r_max)
+
+      !-- Input variables
+      integer,     intent(in) :: nMstart, nMstop, n_r_max
+      complex(cp), intent(in) :: f(nMstart:nMstop,n_r_max)
+
+      !-- Output variable
+      complex(cp), intent(out) :: df(nMstart:nMstop,n_r_max)
+
+      !-- Local variables
+      integer :: n_r, od
+
+      !-- Initialise to zero:
+      do n_r=1,n_r_max
+         df(nMstart:nMstop,n_r) =zero
+      end do
+
+      !-- Bulk points for 1st derivative
+      do od=0,2
+         do n_r=2,n_r_max-1
+            df(nMstart:nMstop,n_r)=df(nMstart:nMstop,n_r)+dr(n_r,od)*f(nMstart:nMstop,n_r-1+od)
+         end do
+      end do
+
+      !-- Boundary points for 1st derivative
+      do od=0,2
+         df(nMstart:nMstop,1) = df(nMstart:nMstop,1)+dr_top(od)*f(nMstart:nMstop,od+1)
+         df(nMstart:nMstop,n_r_max) = df(nMstart:nMstop,n_r_max)+dr_bot(od)*f(nMstart:nMstop,n_r_max-od)
+      end do
+
+   end subroutine get_dr_FD           
+!!----------------------------------------------------------------------------
+   subroutine populate_fd_weights(z, x, nd, m, c)
+      !
+      ! Generation of Finite Difference Formulas on Arbitrarily
+      ! Spaced Grids, Bengt Fornberg, Mathematics of compuation, 51, 184, 1988, 699-706
+      !
+
+      !-- Input quantities:
+      real(cp), intent(in) :: z ! grid points where approximations are to be accurate
+      integer,  intent(in) :: nd ! dimension of ``x`` and ``c``
+      integer,  intent(in) :: m  ! highest deriative for which weights are sought
+      real(cp), intent(in) :: x(0:nd) ! grid point locations
+
+      !-- Output:
+      real(cp), intent(out) :: c(0:nd, 0:m) ! weights at grid locations x(0:n) for derivatives of order 0:m
+
+      !-- Local variables
+      real(cp) :: c1, c2, c3, c4, c5
+      integer :: i, j, k, mn
+
+      c1 = 1.0_cp
+      c4 = x(0) - z
+      c(:,:)  = 0.0_cp
+      c(0, 0) = 1.0_cp
+      do i=1, nd
+         mn = min(i, m)
+         c2 = 1.0_cp
+         c5 = c4
+         c4 = x(i) - z
+         do j=0, i-1
+            c3 = x(i) - x(j)
+            c2 = c2*c3
+            if (j == i-1) then
+               do k = mn, 1, -1
+                   c(i, k) = c1*(k*c(i-1, k-1) - c5*c(i-1, k))/c2
+               end do
+               c(i, 0) = -c1*c5*c(i-1, 0)/c2
+            endif
+            do k=mn, 1, -1
+               c(j, k) = (c4*c(j, k) - k*c(j, k-1))/c3
+            end do
+            c(j, 0) = c4*c(j, 0)/c3
+         end do
+         c1 = c2
+      end do
+
+   end subroutine populate_fd_weights
 !------------------------------------------------------------------------------
 end module radial_der

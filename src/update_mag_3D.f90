@@ -12,7 +12,7 @@ module update_mag_3D_mod
    use init_fields, only: bpeaktop, bpeakbot
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
-   use radial_der, only: get_ddr, get_dr
+   use radial_der, only: get_ddr, get_dr, get_dr_FD
    use fields, only:  work_b_LMloc, work_LMloc
    use constants, only: zero, one, two, sq4pi
    use useful, only: abortRun
@@ -278,6 +278,28 @@ contains
          end do
       end do
 
+#ifdef aDEBUG
+      block
+         integer :: l, m 
+
+      n_r=19!do n_r=1,n_r_max_3D
+         do lm=max(2,lmStart),lmStop
+         if ( n_r ==19 .and. rank == 0 ) then
+            l = lo_map%lm2l(lm)
+            m = lo_map%lm2m(lm)
+            if ( (b_3D(lm,n_r) .ne. zero) .and. (abs(real(b_3D(lm,n_r))) > 10.0_cp) ) then
+               print*, 'l, m, b_3D::', l, m, b_3D(lm,n_r)
+            end if
+            if ( (aj_3D(lm,n_r) .ne. zero) .and. (abs(real(aj_3D(lm,n_r))) > 10.0_cp) ) then
+               print*, 'l, m, aj_3D::', l, m, aj_3D(lm,n_r)
+            end if
+         end if
+         end do
+      !end do
+               !print*, ''
+      end block
+#endif
+
       !-- Bring magnetic vectors back to physical space
       call get_ddr(b_3D, db_3D, ddb_3D, lmStart, lmStop, &
            &       n_r_max_3D, rscheme_3D, l_dct=.false.)
@@ -301,10 +323,9 @@ contains
       complex(cp), intent(inout) :: dj_exp_last(lmStart:lmStop,n_r_max_3D)
 
       !-- Local variables
-      integer :: n_r, lm
+      integer :: n_r, lm!, l, m
 
-      call get_dr( dVxBh_LMloc, work_LMloc, lmStart, lmStop, &
-           &       n_r_max_3D, rscheme_3D, nocopy=.true. )
+      call get_dr_FD( dVxBh_LMloc, work_LMloc, lmStart, lmStop, n_r_max_3D)
 
       do n_r=1,n_r_max_3D
          do lm=max(2,lmStart),lmStop

@@ -11,7 +11,7 @@ module update_temp_3D_mod
    use blocking, only: lmStart, lmStop
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
-   use radial_der, only: get_ddr, get_dr
+   use radial_der, only: get_ddr, get_dr, get_dr_FD
    use fields, only:  work_LMloc
    use constants, only: zero, one, two, sq4pi
    use useful, only: abortRun
@@ -288,8 +288,36 @@ contains
       !-- Local variables
       integer :: n_r, lm
 
-      call get_dr( dVrT_LMloc,work_LMloc, lmStart, lmStop, &
-           &       n_r_max_3D, rscheme_3D, nocopy=.true. )
+      call get_dr_FD(dVrT_LMloc, work_LMloc, lmStart, lmStop, n_r_max_3D)
+
+!#ifdef aDEBUG
+      block
+         integer :: filehandle
+
+         if ( rank == 0 ) then
+            print*, "urT(lm=18)(r<10):: ", dVrT_LMloc(18,:10)
+            open(newunit=filehandle, file='test_urT', form='unformatted', access='stream')
+               write(filehandle) dVrT_LMloc(lmStart:lmStop,:)
+            close(filehandle)
+
+            open(newunit=filehandle, file='test_drurT', form='unformatted', access='stream')
+               write(filehandle) work_LMloc(lmStart:lmStop,:)
+            close(filehandle)
+
+            call get_dr( dVrT_LMloc,work_LMloc, lmStart, lmStop, &
+                 &       n_r_max_3D, rscheme_3D, nocopy=.true. )
+
+            open(newunit=filehandle, file='test_drurT_former', form='unformatted', access='stream')
+               write(filehandle) work_LMloc(lmStart:lmStop,:)
+            close(filehandle)
+
+      print*, 'ALL GOOD New get_dr!**'
+         end if
+
+      end block
+
+      stop
+!#endif
 
       do n_r=1,n_r_max_3D
          do lm=lmStart,lmStop

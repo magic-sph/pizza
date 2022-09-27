@@ -20,7 +20,7 @@ module grid_space_arrays_mod
    &                    l_mag_alpha, alpha_fac, l_mag_inertia,       &
    &                    delta_fac, l_QG_basis, l_lin_solve, l_mag_B0, beta_shift
    use blocking, only: nRstart3D, nRstop3D
-   use truncation_3D, only: n_theta_max, n_phi_max_3D
+   use truncation_3D, only: n_theta_max, n_phi_max_3D, n_r_max_3D
    use radial_functions, only: or1_3D, r_3D, rgrav_3D, beta!, tcond_3D
    use fields, only: B0r_3D_Rloc, B0t_3D_Rloc, B0p_3D_Rloc, curlB0r_3D_Rloc, &
        &             curlB0t_3D_Rloc, curlB0p_3D_Rloc
@@ -151,6 +151,9 @@ contains
       integer :: n_theta, n_phi, n_count
       real(cp) :: r2, or1sn1
       real(cp) :: rfunc, asign!, bamp2!, Afunc
+      real(cp) :: Bsavg(n_theta_max), Bpavg(n_theta_max)
+      real(cp) :: vpavg(n_theta_max)
+      real(cp) :: vsfluct2(n_theta_max), vpfluct2(n_theta_max)
 
       r2 = r_3D(n_r)*r_3D(n_r)
 
@@ -197,6 +200,38 @@ contains
       !this%VTt(:,:) = 0.0_cp
       !this%VTp(:,:) = 0.0_cp
       !buo(:,:) = 0.0_cp
+
+      if ( l_mag_inertia .and. (l_mag_3D .and. (.not. l_lin_solve)) ) then
+         !------ Get V and B phi averaged:
+         !$OMP PARALLEL DO default(shared) &
+         !$OMP& private(n_theta)
+         Bsavg(:) = 0.0_cp
+         Bpavg(:) = 0.0_cp
+         vpavg(:) = 0.0_cp
+         do n_theta=1,n_theta_max
+            do n_phi=1,n_phi_max_3D
+               Bsavg(n_theta) = Bsavg(n_theta) + ( this%Brc(n_phi,n_theta)*sint(n_theta) +    &
+               &                       this%Btc(n_phi,n_theta)*cost(n_theta) )
+               Bpavg(n_theta) = Bpavg(n_theta) + this%Bpc(n_phi,n_theta)
+               vpavg(n_theta) = vpavg(n_theta) + vp(n_phi,n_theta)
+            end do
+            Bsavg(n_theta) = Bsavg(n_theta)/n_phi_max_3D
+            Bpavg(n_theta) = Bpavg(n_theta)/n_phi_max_3D
+            vpavg(n_theta) = vpavg(n_theta)/n_phi_max_3D
+         end do
+         vsfluct2(:) = 0.0_cp
+         vpfluct2(:) = 0.0_cp
+         do n_theta=1,n_theta_max
+            do n_phi=1,n_phi_max_3D
+               vsfluct2(n_theta) = vsfluct2(n_theta) + ( vr(n_phi,n_theta)*sint(n_theta) +   &
+               &                                         vt(n_phi,n_theta)*cost(n_theta) )**2
+               vpfluct2(n_theta) = vpfluct2(n_theta) + (vp(n_phi,n_theta) - vpavg(n_theta))**2
+            end do
+            vsfluct2(n_theta) = vsfluct2(n_theta)/n_phi_max_3D
+            vpfluct2(n_theta) = vpfluct2(n_theta)/n_phi_max_3D
+         end do
+         !$OMP END PARALLEL DO
+      end if
 
       if ( l_mag_3D .and. (.not. l_lin_solve) ) then
          !------ Get (V x B) , the curl of this is the dynamo term:
@@ -264,21 +299,29 @@ contains
                   !--              = terms coming from inertial waves
                   !--> Warning:: 1/r2 or 1/rsint is applied to the full product VxB;
                   !--            the different quantities have already been rescaled
-                  asign = 1.0!abs(cost(n_theta))/cost(n_theta) !-- +/-1 sign
-                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta)+asign*delta_fac*r2*(&!
-                  &                        sint(n_theta)*(vp(n_phi,n_theta))**2.*(  &
-                  &                        this%Brc(n_phi,n_theta)*sint(n_theta) +  &
-                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) ) )!/2.*pi
+                  asign = 1.0_cp!abs(cost(n_theta))/cost(n_theta) !-- +/-1 sign
+                  if ( n_r == 1 .or. n_r == n_r_max_3D ) then
+                     delta_fac = 1.0_cp
+                  else
+                     delta_fac = 1.0_cp/sqrt(vpfluct2(n_theta) + vsfluct2(n_theta)+epsilon(1.0_cp))
+                  end if
+                  this%VxBr(n_phi,n_theta)=asign*delta_fac*r2*(&!this%VxBr(n_phi,n_theta)+
+                  &                        sint(n_theta)*vpfluct2(n_theta)*Bsavg(n_theta))!(  &
+                  !&                        sint(n_theta)*sqrt((vp(n_phi,n_theta)-vpavg(n_theta))**2.)*Bsavg(n_theta))!(  &
+                  !&                        this%Brc(n_phi,n_theta)*sint(n_theta) +  &
+                  !&                        this%Btc(n_phi,n_theta)*cost(n_theta) ) )
 
-                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta)+asign*delta_fac*or1sn1*(&!
-                  &                        cost(n_theta)*(vp(n_phi,n_theta))**2.*(    &
-                  &                        this%Brc(n_phi,n_theta)*sint(n_theta) +    &
-                  &                        this%Btc(n_phi,n_theta)*cost(n_theta) )  )!/2.*pi
+                  this%VxBt(n_phi,n_theta)=asign*delta_fac*or1sn1*(&!this%VxBt(n_phi,n_theta)+
+                  &                        cost(n_theta)*vpfluct2(n_theta)*Bsavg(n_theta))!(    &
+                  !&                        cost(n_theta)*sqrt((vp(n_phi,n_theta)-vpavg(n_theta))**2.)*Bsavg(n_theta))!(    &
+                  !&                        this%Brc(n_phi,n_theta)*sint(n_theta) +    &
+                  !&                        this%Btc(n_phi,n_theta)*cost(n_theta) )  )
 
-                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta)+asign*delta_fac*or1sn1*(&!
-                  &                       ( (vr(n_phi,n_theta)*sint(n_theta) +        &
-                  &                       vt(n_phi,n_theta)*cost(n_theta))**2. )*     &
-                  &                                      this%Bpc(n_phi,n_theta)    )!/2.*pi
+                  this%VxBp(n_phi,n_theta)=asign*delta_fac*or1sn1*(&!this%VxBp(n_phi,n_theta)+
+                  &                       ( vsfluct2(n_theta) )*Bpavg(n_theta))!        &
+                  !&                       ( sqrt((vr(n_phi,n_theta)*sint(n_theta) +        &
+                  !&                       vt(n_phi,n_theta)*cost(n_theta))**2.) )*     &
+                  !&                                      Bpavg(n_theta))!this%Bpc(n_phi,n_theta)    )
                end if
             end do
          end do   ! theta loop
@@ -353,19 +396,48 @@ contains
                      !-- Additional Lorentz force term from the QG basis projection: +\beta/s z Vx(jxB)_s
                      !-- Only need to compute the s component of Vx(jxB)
                      !-- Vx(jxB)_s = 1/s \partial_p jxB_z - \partial_z jxB_p (<- computed above)
-                     !-- jxBz = 1/(E*Pm) * ( curl(B)_p*B_s - curl(B)_s*B_p )
-                     !--      = cost * jxBr - sint * jxBt
-                     !-- Can be added to jxBs because it will get -1/s \partial_\phi later
-                     !jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta) -(cost(n_theta)*(&!r2*( & !-- W:: Seems to work with B-pot but troubles with jxB_ana!!!
-                     jxBz(n_phi,n_theta)=(cost(n_theta)*(&!
-                     &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-     &
-                     &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) )    &
-                     &                                -sint(n_theta)*(&!or1sn1*(     &
-                     &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-     &
-                     &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) ) )* &
-                     &                          r_3D(n_r)*cost(n_theta)!*beta(n_r)
-                     !&   (-r_3D(n_r)*sint(n_theta)/(r_cmb**2 - (r_3D(n_r)*cost(n_theta))**2))*r_3D(n_r)*cost(n_theta)
-                     !&   (-r_3D(n_r)*sint(n_theta)/((r_cmb+beta_shift)**2 - (r_3D(n_r)*cost(n_theta))**2))*r_3D(n_r)*cost(n_theta)
+                     if ( .not. l_mag_B0 ) then
+                        !-- jxBz = 1/(E*Pm) * ( curl(B)_p*B_s - curl(B)_s*B_p )
+                        !--      = cost * jxBr - sint * jxBt
+                        !-- Can be added to jxBs because it will get -1/s \partial_\phi later --> but problematic
+                        !jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta) -(cost(n_theta)*(&!r2*( & !-- W:: Seems to work with B-pot but troubles with jxB_ana!!!
+                        jxBz(n_phi,n_theta)=(cost(n_theta)*(&!
+                        &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-     &
+                        &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) )    &
+                        &                                -sint(n_theta)*(&!or1sn1*(     &
+                        &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-     &
+                        &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) ) )* &
+                        &                          r_3D(n_r)*cost(n_theta)!*beta(n_r)
+                        !&   (-r_3D(n_r)*sint(n_theta)/(r_cmb**2 - (r_3D(n_r)*cost(n_theta))**2))*r_3D(n_r)*cost(n_theta)
+                        !&   (-r_3D(n_r)*sint(n_theta)/((r_cmb+beta_shift)**2 - (r_3D(n_r)*cost(n_theta))**2))*r_3D(n_r)*cost(n_theta)
+                     else
+                        !-- j0xBz = cost * j0xBr - sint * j0xBt
+                        jxBz(n_phi,n_theta)=(cost(n_theta)*(&!
+                        &   curlB0t_3D_Rloc(n_phi,n_theta,n_r)*this%Bpc(n_phi,n_theta)-     &
+                        &   curlB0p_3D_Rloc(n_phi,n_theta,n_r)*this%Btc(n_phi,n_theta) )    &
+                        &                                -sint(n_theta)*(&!or1sn1*(     &
+                        &   curlB0p_3D_Rloc(n_phi,n_theta,n_r)*this%Brc(n_phi,n_theta)-     &
+                        &   curlB0r_3D_Rloc(n_phi,n_theta,n_r)*this%Bpc(n_phi,n_theta) ) )* &
+                        &                          r_3D(n_r)*cost(n_theta)!*beta(n_r)
+                        !-- + jxB0z = cost * jxB0r - sint * jxB0t
+                        jxBz(n_phi,n_theta)=jxBz(n_phi,n_theta)+(cost(n_theta)*(&!
+                        &   this%curlBtc(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r)-     &
+                        &   this%curlBpc(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r) )    &
+                        &                                -sint(n_theta)*(&!or1sn1*(     &
+                        &   this%curlBpc(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r)-     &
+                        &   this%curlBrc(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r) ) )* &
+                        &                          r_3D(n_r)*cost(n_theta)!*beta(n_r)
+                        !if ( l_mag_B0LFsmall ) then
+                           !-- + jxBz = cost * jxBr - sint * jxBt
+                           jxBz(n_phi,n_theta)=jxBz(n_phi,n_theta)+(cost(n_theta)*(&!
+                           &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-     &
+                           &   this%curlBpc(n_phi,n_theta)*this%Btc(n_phi,n_theta) )    &
+                           &                                -sint(n_theta)*(&!or1sn1*(     &
+                           &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-     &
+                           &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) ) )* &
+                           &                          r_3D(n_r)*cost(n_theta)!*beta(n_r)
+                        !end if
+                     end if
                   end if
                end do
             end do   ! theta loop
@@ -375,6 +447,31 @@ contains
       !this%VxBr(:,:) = 0.0_cp
       !this%VxBt(:,:) = 0.0_cp
       !this%VxBp(:,:) = 0.0_cp
+
+#ifdef aDEBUG
+         block
+            integer :: filehandle
+            real(cp) :: VxBs(n_phi_max_3D,n_theta_max)
+            real(cp) :: VxBp(n_phi_max_3D,n_theta_max)
+            if ( n_r == 12 ) then
+               print*, r_3D(n_r)
+               do n_theta=1,n_theta_max
+                  do n_phi=1,n_phi_max_3D     ! calculate V x B components
+                        asign = abs(cost(n_theta))/cost(n_theta) !-- +/-1 sign
+                        !VxBs(n_phi,n_theta)=asign*delta_fac*sqrt(vpfluct(n_theta))*Bsavg(n_theta)
+                        jxBs(n_phi,n_theta)=asign*delta_fac*sqrt(vpfluct(n_theta))*Bsavg(n_theta)
+                        !VxBp(n_phi,n_theta)=asign*delta_fac*sqrt(vsfluct(n_theta))*Bpavg(n_theta)
+                        jxBp(n_phi,n_theta)=asign*delta_fac*sqrt(vsfluct(n_theta))*Bpavg(n_theta)
+                  end do
+               end do   ! theta loop
+
+               !open(newunit=filehandle, file='test_VxB', form='unformatted', access='stream')
+               !   write(filehandle) VxBs, VxBp
+               !close(filehandle)
+            end if
+
+         end block
+#endif
 
    end subroutine get_nl
 !----------------------------------------------------------------------------

@@ -112,11 +112,11 @@ contains
       integer :: n_r, n_m, m, fh_temp, info_temp, n_theta, n_phi
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
-      integer :: fh_jxbs, info_jxbs,fh_jxbp, info_jxbp
+      integer :: fh_jxbs, info_jxbs, fh_jxbp, info_jxbp, fh_jxbz, info_jxbz
       logical :: l_jxb_save
       character(len=144) :: frame_name
 
-      l_jxb_save=.False.
+      l_jxb_save=.True.
       buo_tmp(:,:,:) = 0.0_cp
       !-- get thermal wind
       if ( l_heat_3D .and. l_thw_3D .and. (.not. l_lin_solve) ) then
@@ -153,6 +153,8 @@ contains
                call open_snapshot_3D(frame_name, time, fh_jxbs, info_jxbs)
                write(frame_name, '(A,I0,A,A)') 'frame_jxbp_3D_',frame_counter,'.',tag
                call open_snapshot_3D(frame_name, time, fh_jxbp, info_jxbp)
+               write(frame_name, '(A,I0,A,A)') 'frame_jxbz_3D_',frame_counter,'.',tag
+               call open_snapshot_3D(frame_name, time, fh_jxbz, info_jxbz)
             end if
          end if
       end if
@@ -170,9 +172,15 @@ contains
       !            !ut(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*cost(n_theta)
       !            !up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sint(n_theta)*cos(4*phi)
       !            if ( r_3D(n_r)*sint(n_theta) > r_icb ) then
-      !               ur(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))!*sint(n_theta)*cos(4*phi+pi*0.25_cp)
-      !               ut(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))!*cost(n_theta)
-      !               up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))!*sint(n_theta)*cos(4*phi)
+      !               !ur(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))!*sint(n_theta)*cos(4*phi+pi*0.25_cp)
+      !               !ut(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))!*cost(n_theta)
+      !               !up(n_phi,n_theta,n_r) = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))!*sint(n_theta)*cos(4*phi)
+      !            ur(n_phi,n_theta,n_r) = 10*sint(n_theta)*sin(pi*(r_3D(n_r)-r_icb))*sin(5*pi*(r_3D(n_r)*sint(n_theta)-r_icb))* &
+      !            &                       cos(8*phi+pi*0.25_cp)*r_3D(n_r)*sint(n_theta)*(r_cmb-r_3D(n_r)*sint(n_theta))/r_cmb**2
+      !            ut(n_phi,n_theta,n_r) = 10*cost(n_theta)*sin(3*pi*(r_3D(n_r)*sint(n_theta)-r_icb))*cos(8*phi)* &
+      !            &                       r_3D(n_r)*sint(n_theta)*(r_cmb-r_3D(n_r)*sint(n_theta))/r_cmb**2
+      !            up(n_phi,n_theta,n_r) =-10*sin(2*pi*(r_3D(n_r)*sint(n_theta)-r_icb))*4*r_3D(n_r)*sint(n_theta) * &
+      !            &                       ( r_cmb - r_3D(n_r)*sint(n_theta) )/r_cmb**2
       !            end if
       !        end do
       !      end do
@@ -242,6 +250,20 @@ contains
 
          !-- Write the snapshot on the grid (easier to handle)
          if ( l_frame .and. tscheme%istage==1 ) then
+#ifdef aDEBUG
+         block
+            integer :: filehandle
+            if ( n_r == 12 ) then
+               !print*, r_3D(n_r)
+               !         jxBs(n_phi,n_theta)=asign*delta_fac*sqrt(vpfluct(n_theta))*Bsavg(n_theta)
+               !         jxBp(n_phi,n_theta)=asign*delta_fac*sqrt(vsfluct(n_theta))*Bpavg(n_theta)
+               open(newunit=filehandle, file='test_VxB', form='unformatted', access='stream')
+                  write(filehandle) jxBs(:,:,n_r), jxBp(:,:,n_r)
+               close(filehandle)
+            end if
+
+         end block
+#endif
             call write_bulk_snapshot_3D(fh_ur, ur(:,:,n_r))
             call write_bulk_snapshot_3D(fh_ut, ut(:,:,n_r))
             call write_bulk_snapshot_3D(fh_up, up(:,:,n_r))
@@ -254,8 +276,9 @@ contains
                   call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))!Vx!
                   call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!Vx!
                if ( l_mag_LF .and. l_jxb_save ) then
-                  call write_bulk_snapshot_3D(fh_jxbs, jxBs(:,:,n_r))
-                  call write_bulk_snapshot_3D(fh_jxbp, jxBp(:,:,n_r))
+                  call write_bulk_snapshot_3D(fh_jxbs, gsa%VxBr(:,:))!jxBs(:,:,n_r))
+                  call write_bulk_snapshot_3D(fh_jxbp, gsa%VxBp(:,:))!jxBp(:,:,n_r))
+                  call write_bulk_snapshot_3D(fh_jxbz, gsa%VxBt(:,:))!jxBz(:,:,n_r))
                end if
                !else
                !   call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:)+B0r_3D_Rloc(:,:,n_r))!jxBs(:,:,n_r))!Vx!
@@ -324,6 +347,11 @@ contains
             call close_snapshot_3D(fh_br, info_br)
             call close_snapshot_3D(fh_bt, info_bt)
             call close_snapshot_3D(fh_bp, info_bp)
+            if ( l_mag_LF .and. l_jxb_save ) then
+               call close_snapshot_3D(fh_jxbs, info_jxbs)
+               call close_snapshot_3D(fh_jxbp, info_jxbp)
+               call close_snapshot_3D(fh_jxbz, info_jxbz)
+            end if
          end if
          frame_counter = frame_counter+1
       end if

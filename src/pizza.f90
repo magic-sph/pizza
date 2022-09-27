@@ -6,7 +6,7 @@ program pizza
    use iso_fortran_env, only: output_unit
    use step_time, only: time_loop
    use courant_mod, only: initialize_courant, finalize_courant
-   use radial_der, only: initialize_der_arrays
+   use radial_der, only: initialize_der_arrays, finalize_der_arrays
    use init_fields, only: get_start_fields
    use fields, only: initialize_fields, finalize_fields
    use fieldsLast, only: initialize_fieldsLast, finalize_fieldsLast, &
@@ -23,7 +23,7 @@ program pizza
    use outputs_3D, only: initialize_outputs_3D, finalize_outputs_3D
    use pre_calculations, only: preCalc
    use horizontal, only: initialize_mfunctions, finalize_mfunctions
-   use radial_functions, only: initialize_radial_functions, &
+   use radial_functions, only: initialize_radial_functions, r_3D, &
        &                       finalize_radial_functions
    use truncation, only: initialize_truncation, n_r_max, n_phi_max, & 
        &                 finalize_truncation, n_m_max
@@ -139,7 +139,6 @@ program pizza
    call memWrite('Fields', local_bytes_used)
    local_bytes_used = bytes_allocated
    call initialize_radial_functions()
-   call initialize_der_arrays(l_rerror_fix, rerror_fac)
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('Radial functions', local_bytes_used)
    local_bytes_used = bytes_allocated
@@ -162,6 +161,12 @@ program pizza
 
    !-- Pre calculations has to be done before matrix initialisation
    call preCalc(zinterp)
+
+   if ( l_3D ) then
+      call initialize_der_arrays( l_rerror_fix, rerror_fac, r_3D)
+   else
+      call initialize_der_arrays( l_rerror_fix, rerror_fac)
+   end if
 
    local_bytes_used = bytes_allocated
    if ( l_cheb_coll ) then
@@ -265,6 +270,7 @@ program pizza
    call finalize_courant()
    if ( l_3D ) call finalize_outputs_3D()
    call finalize_outputs()
+   if ( l_3D ) call finalize_der_arrays()
    call tscheme%finalize()
    if ( l_3D ) call zinterp%finalize()
    call finalize_truncation()
