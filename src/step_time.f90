@@ -165,7 +165,7 @@ contains
          call MPI_Allreduce(MPI_IN_PLACE,timers%tot,1,MPI_DEF_REAL, &
               &             MPI_MAX,MPI_COMM_WORLD,ierr)
          if ( timers%tot+run_time_init > run_time_requested ) then
-            write(message,'("! Run time limit exeeded !")')
+            write(message,'("! Run time limit exceeded !")')
             call logWrite(message, n_log_file)
             l_stop_time=.true.
          end if

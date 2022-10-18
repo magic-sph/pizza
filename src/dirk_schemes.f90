@@ -2,7 +2,7 @@ module dirk_schemes
 
    use precision_mod
    use parallel_mod
-   use constants, only: one, half, two
+   use constants, only: one, half, two, third, fourth, sixth, three
    use mem_alloc, only: bytes_allocated
    use useful, only: abortRun
    use time_schemes, only: type_tscheme
@@ -60,6 +60,22 @@ contains
          this%istage = 1
          courfac_loc = 1.35_cp
          this%l_assembly = .false. ! No assembly stage
+      else if ( index(time_scheme, 'SSP222') /= 0 ) then
+         this%time_scheme = 'SSP222'
+         this%nimp = 3
+         this%nexp = 3
+         this%nstages = 3
+         this%istage = 1
+         courfac_loc = 1.35_cp
+         this%l_assembly = .true.
+      else if ( index(time_scheme, 'LSDIRK222') /= 0 ) then
+         this%time_scheme = 'LSDIRK222'
+         this%nimp = 3
+         this%nexp = 3
+         this%nstages = 3
+         this%istage = 1
+         courfac_loc = 1.35_cp
+         this%l_assembly = .true.
       else if ( index(time_scheme, 'ARS232') /= 0 ) then
          this%time_scheme = 'ARS232'
          this%nimp = 3
@@ -76,6 +92,46 @@ contains
          this%istage = 1
          courfac_loc = 1.35_cp
          this%l_assembly = .true.
+      else if ( index(time_scheme, 'SSP322') /= 0 ) then
+         this%time_scheme = 'SSP322'
+         this%nimp = 4
+         this%nexp = 4
+         this%nstages = 4
+         this%istage = 1
+         courfac_loc = 1.35_cp
+         this%l_assembly = .true.
+      else if ( index(time_scheme, 'SSP332') /= 0 ) then
+         this%time_scheme = 'SSP332'
+         this%nimp = 4
+         this%nexp = 4
+         this%nstages = 4
+         this%istage = 1
+         courfac_loc = 1.35_cp
+         this%l_assembly = .true.
+      else if ( index(time_scheme, 'SSP433') /= 0 ) then
+         this%time_scheme = 'SSP433'
+         this%nimp = 5
+         this%nexp = 5
+         this%nstages = 5
+         this%istage = 1
+         courfac_loc = 1.35_cp
+         this%l_assembly = .true.
+      else if ( index(time_scheme, 'DP1-242') /= 0 ) then
+         this%time_scheme = 'DP1-242'
+         this%nimp = 4
+         this%nexp = 4
+         this%nstages = 4
+         this%istage = 1
+         courfac_loc = 1.35_cp
+         this%l_assembly = .false.
+      else if ( index(time_scheme, 'DP2-242') /= 0 ) then
+         this%time_scheme = 'DP2-242'
+         this%nimp = 4
+         this%nexp = 4
+         this%nstages = 4
+         this%istage = 1
+         courfac_loc = 1.35_cp
+         this%l_assembly = .false.
       else if ( index(time_scheme, 'LZ232') /= 0 ) then
          this%time_scheme = 'LZ232'
          this%nimp = 2
@@ -222,7 +278,7 @@ contains
       logical, intent(inout) :: lMatNext
 
       !-- Local variables
-      real(cp) :: wimp_old, del, gam, b1, b2
+      real(cp) :: wimp_old, del, gam, b1, b2, alpha, beta, eta, chat
 
       wimp_old = this%wimp_lin(1)
 
@@ -240,6 +296,35 @@ contains
                                     &             del, one-del, 0.0_cp], &
                                     &          [3,3],order=[2,1])
             this%l_imp_calc_rhs(1)=.false.
+         case ('SSP222')
+            gam = one - one / sqrt(two) 
+            this%wimp_lin(1) = gam
+            this%butcher_imp(:,:) = reshape([  0.0_cp,      0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,       gam  , 0.0_cp,  &
+                                    &          0.0_cp, one-two*gam, gam    ],&
+                                    &          [3,3],order=[2,1])
+            this%butcher_ass_imp(:) = [0.0_cp, half, half]
+            this%butcher_exp(:,:) = reshape([  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,     one, 0.0_cp], &
+                                    &          [3,3],order=[2,1])
+            this%butcher_ass_exp(:) = [0.0_cp, half, half]
+            this%l_imp_calc_rhs(1)=.false.
+         case ('LSDIRK222')
+            gam = one - one / sqrt(two) 
+            chat = one / ( two * gam )
+            this%wimp_lin(1) = gam
+            this%butcher_imp(:,:) = reshape([  0.0_cp,    0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,       gam, 0.0_cp,  &
+                                    &          0.0_cp,   one-gam, gam    ],&
+                                    &          [3,3],order=[2,1])
+            this%butcher_ass_imp(:) = [0.0_cp, one-gam, gam]
+            this%butcher_exp(:,:) = reshape([  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,    chat, 0.0_cp], &
+                                    &          [3,3],order=[2,1])
+            this%butcher_ass_exp(:) = [0.0_cp, one-gam, gam]
+            this%l_imp_calc_rhs(1)=.false.
          case ('ARS233')
             gam = (3.0_cp+sqrt(3.0_cp))/6.0_cp
             this%wimp_lin(1) = gam
@@ -254,6 +339,91 @@ contains
                                     &          [3,3], order=[2,1])
             this%butcher_ass_exp(:) = [0.0_cp, half, half]
             this%l_imp_calc_rhs(1)=.false.
+         case ('SSP322')
+            this%wimp_lin(1) = half
+            this%butcher_imp(:,:) = reshape([  0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,    half,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp,   -half,    half, 0.0_cp,  &
+                                    &          0.0_cp,  0.0_cp,    half, half], &
+                                    &          [4,4], order=[2,1])
+            this%butcher_ass_imp(:) = [0.0_cp, 0.0_cp, half, half]
+            this%butcher_exp(:,:) = reshape([  0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,  0.0_cp,     one, 0.0_cp], &
+                                    &          [4,4], order=[2,1])
+            this%butcher_ass_exp(:) = [0.0_cp, 0.0_cp, half, half]
+            this%l_imp_calc_rhs(1)=.false.
+         case ('SSP332')
+            gam = one - one / sqrt(two)
+            this%wimp_lin(1) = gam 
+            this%butcher_imp(:,:) = reshape([  0.0_cp,       0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,          gam,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp, one -two*gam,     gam, 0.0_cp,  &
+                                    &          0.0_cp,    half -gam,  0.0_cp,   gam], &
+                                    &          [4,4], order=[2,1])
+            this%butcher_ass_imp(:) = [0.0_cp, sixth, sixth, two*third]
+            this%butcher_exp(:,:) = reshape([  0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp,     one,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,  fourth,  fourth, 0.0_cp], &
+                                    &          [4,4], order=[2,1])
+            this%butcher_ass_exp(:) = [0.0_cp, sixth, sixth, two*third]
+            this%l_imp_calc_rhs(1)=.false.
+         case ('SSP433')
+            alpha = 0.24169426078821
+            beta = 0.06042356519705
+            eta = 0.12915286960590
+            this%wimp_lin(1) = alpha
+            this%butcher_imp(:,:) = reshape([  0.0_cp, 0.0_cp,     0.0_cp,              0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,  alpha,     0.0_cp,              0.0_cp, 0.0_cp, &
+                                    &          0.0_cp, -alpha,      alpha,              0.0_cp, 0.0_cp, &
+                                    &          0.0_cp, 0.0_cp, one -alpha,               alpha, 0.0_cp,  &
+                                    &          0.0_cp,   beta,        eta, half-beta-eta-alpha, alpha], &
+                                    &          [5,5], order=[2,1])
+            this%butcher_ass_imp(:) = [0.0_cp, 0.0_cp, sixth, sixth, two*third]
+            this%butcher_exp(:,:) = reshape([  0.0_cp, 0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp, 0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp, 0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp, 0.0_cp,     one,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp, 0.0_cp,  fourth,  fourth, 0.0_cp], &
+                                    &          [5,5], order=[2,1])
+            this%butcher_ass_exp(:) = [0.0_cp, 0.0_cp, sixth, sixth, two*third]
+            this%l_imp_calc_rhs(1)=.false.
+         case ('DP1-242')
+            this%wimp_lin(1) = half
+            this%butcher_imp(:,:) = reshape([  0.0_cp,    0.0_cp,   0.0_cp,      0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,      half,   0.0_cp,      0.0_cp, 0.0_cp, &
+                                    &          0.0_cp,     sixth,     half,      0.0_cp, 0.0_cp, &
+                                    &          0.0_cp,     -half,     half,        half, 0.0_cp,  &
+                                    &          0.0_cp, three*half,-three*half,     half,  half], &
+                                    &          [5,5], order=[2,1])
+            this%butcher_exp(:,:) = reshape([  0.0_cp, 0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp, 0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp,  third,  0.0_cp,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp,    one,  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,   half,  0.0_cp,    half, 0.0_cp], &
+                                    &          [5,5], order=[2,1])
+            this%l_imp_calc_rhs(1)=.false.
+            this%l_exp_calc(1)=.false. ! No need to calculte the explicit solve
+            this%l_exp_calc(3)=.false. ! No need to calculte the explicit solve
+         case ('DP2-242')
+            gam = third ! 1st possibility
+            this%wimp_lin(1) = gam 
+            this%butcher_imp(:,:) = reshape([  0.0_cp,    0.0_cp,   0.0_cp,     0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp,       gam,   0.0_cp,     0.0_cp, 0.0_cp, &
+                                    &          0.0_cp,      -gam,      gam,     0.0_cp, 0.0_cp, &
+                                    &          0.0_cp,    0.0_cp,  one-gam,        gam, 0.0_cp,  &
+                                    &          0.0_cp,    0.0_cp,     half,   half-gam,  gam], &
+                                    &          [5,5], order=[2,1])
+            this%butcher_exp(:,:) = reshape([  0.0_cp, 0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp, 0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp, 0.0_cp,  0.0_cp,  0.0_cp, 0.0_cp, &
+                                    &          0.0_cp, 0.0_cp,     one,  0.0_cp, 0.0_cp,  &
+                                    &          0.0_cp, 0.0_cp,    half,    half, 0.0_cp], &
+                                    &          [5,5], order=[2,1])
+            this%l_imp_calc_rhs(1)=.false.
+            this%l_exp_calc(1)=.false. ! No need to calculte the explicit solve
          case ('ARS232')
             gam = half * (two-sqrt(two))
             del = -two*sqrt(two)/3.0_cp

@@ -13,6 +13,8 @@ module constants
    real(cp), parameter :: four =4.0_cp ! 4
    real(cp), parameter :: half =0.5_cp ! 0.5
    real(cp), parameter :: third=one/three ! 1/3
+   real(cp), parameter :: fourth=0.25_cp ! 0.25
+   real(cp), parameter :: sixth=third/two ! 1/6
    complex(cp), parameter :: zero=(0.0_cp,0.0_cp) ! cmplx(0.0, 0.0)
    complex(cp), parameter :: ci=(0.0_cp,1.0_cp) ! cmplx(0.0, 1.0)
 

@@ -15,7 +15,7 @@ module time_schemes
       integer :: nexp
       integer :: nold
       integer :: nimp
-      character(len=8) :: time_scheme
+      character(len=10) :: time_scheme
       logical :: l_assembly
       real(cp), allocatable :: dt(:)
       real(cp), allocatable :: wimp_lin(:)

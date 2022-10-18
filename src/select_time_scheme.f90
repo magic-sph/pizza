@@ -20,6 +20,13 @@ contains
       call capitalize(scheme_name)
 
       if ( (index(scheme_name, 'ARS222') /= 0) .or. &
+      &    (index(scheme_name, 'SSP222') /= 0) .or. &
+      &    (index(scheme_name, 'LSDIRK222') /= 0) .or. &
+      &    (index(scheme_name, 'SSP322') /= 0) .or. &
+      &    (index(scheme_name, 'SSP332') /= 0) .or. &
+      &    (index(scheme_name, 'SSP433') /= 0) .or. &
+      &    (index(scheme_name, 'DP1-242') /= 0) .or. &
+      &    (index(scheme_name, 'DP2-242') /= 0) .or. &
       &    (index(scheme_name, 'ARS232') /= 0) .or. &
       &    (index(scheme_name, 'ARS233') /= 0) .or. &
       &    (index(scheme_name, 'ARS443') /= 0) .or. &
