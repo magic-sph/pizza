@@ -75,4 +75,34 @@ contains
 
    end subroutine get_openmp_blocks
 !-----------------------------------------------------------------------------
+   subroutine mpiio_setup(info)
+      !
+      ! This routine set ups the default MPI-IO configuration. This is based
+      ! on recommandations from IDRIS "Best practices for parallel IO and
+      ! MPI-IO hints"
+      !
+
+      integer, intent(out) :: info
+
+      call MPI_Info_create(info, ierr)
+
+      !-- Enable collective buffering
+      call MPI_Info_set(info, "romio_cb_write", "automatic", ierr)
+      call MPI_Info_set(info, "romio_cb_read", "automatic", ierr)
+
+      !-- Disable data sieving (let the filesystem handles it)
+      call MPI_Info_set(info, "romio_ds_write", "disable", ierr)
+      call MPI_Info_set(info, "romio_ds_read", "disable", ierr)
+
+      !-- Set the striping unit to 4M
+      call MPI_Info_set(info, "striping_unit", "4194304", ierr)
+
+      !-- Set the striping factor to 64
+      !call MPI_Info_set(info, "striping_factor", "64", ierr)
+
+      !-- Set the buffer size to 4M
+      call MPI_Info_set(info,"cb_buffer_size","4194304", ierr)
+
+   end subroutine  mpiio_setup
+!------------------------------------------------------------------------------
 end module parallel_mod

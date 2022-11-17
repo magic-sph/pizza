@@ -141,22 +141,10 @@ contains
       header_size = SIZEOF_INTEGER+7*SIZEOF_DEF_REAL+5*SIZEOF_INTEGER+ &
       &             3*n_r_max*SIZEOF_DEF_REAL+n_m_max*SIZEOF_INTEGER
 
-      call MPI_Info_create(info, ierr)
+      !-- MPI-IO setup
+      call mpiio_setup(info)
 
-      !-- Enable collective buffering
-      call MPI_Info_set(info, "romio_cb_write", "automatic", ierr)
-      call MPI_Info_set(info, "romio_cb_read", "automatic", ierr)
-
-      !-- Disable data sieving (let the filesystem handles it)
-      call MPI_Info_set(info, "romio_ds_write", "disable", ierr)
-      call MPI_Info_set(info, "romio_ds_read", "disable", ierr)
-
-      !-- Set the stripping unit to 4M
-      call MPI_Info_set(info, "stripping_unit", "4194304", ierr)
-
-      !-- Set the buffer size to 4M
-      call MPI_Info_set(info,"cb_buffer_size","4194304", ierr)
-
+      !-- Open file
       call MPI_File_Open(MPI_COMM_WORLD, filename, ior(MPI_MODE_WRONLY, &
            &             MPI_MODE_CREATE), info, fh, ierr)
 

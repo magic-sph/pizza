@@ -445,21 +445,8 @@ contains
       header_size = SIZEOF_INTEGER+6*SIZEOF_DEF_REAL+4*SIZEOF_INTEGER   &
       &             +n_r_max*SIZEOF_DEF_REAL
 
-      call MPI_Info_create(info, ierr)
-
-      !-- Enable collective buffering
-      call MPI_Info_set(info, "romio_cb_write", "automatic", ierr)
-      call MPI_Info_set(info, "romio_cb_read", "automatic", ierr)
-
-      !-- Disable data sieving (let the filesystem handles it)
-      call MPI_Info_set(info, "romio_ds_write", "disable", ierr)
-      call MPI_Info_set(info, "romio_ds_read", "disable", ierr)
-
-      !-- Set the stripping unit to 4M
-      call MPI_Info_set(info, "stripping_unit", "4194304", ierr)
-
-      !-- Set the buffer size to 4M
-      call MPI_Info_set(info,"cb_buffer_size","4194304", ierr)
+      !-- MPI-IO setup
+      call mpiio_setup(info)
 
       !-- Open file
       call MPI_File_Open(MPI_COMM_WORLD, forces_file, ior(MPI_MODE_WRONLY, &
