@@ -10,15 +10,15 @@ import scipy.interpolate as inp
 
 
 def my_interp2d(f, rad, radnew):
-    r = rad[::-1]
-    rnew = radnew[::-1]
+    r = rad
+    rnew = radnew
     fnew = np.zeros_like(f)
     for i in range(f.shape[0]):
-        val = f[i, ::-1]
+        val = f[i, :]
         tckp = inp.splrep(r, val)
         fnew[i, :] = inp.splev(rnew, tckp)
 
-    return fnew[:, ::-1]
+    return fnew
 
 
 class Frame:
@@ -235,7 +235,7 @@ class PizzaFields(PizzaSetup):
             print('read %s' % filename)
         return filename
 
-    def equat(self, field='vort', cm='seismic', levels=65, deminc=True,
+    def equat(self, field='vort', cm=None, levels=65, deminc=True,
               normed=True, vmax=None, vmin=None, normRad=False, stream=False,
               streamNorm='vel', streamDensity=1.5, cbar=True, label=None,
               streamColor='k'):
@@ -277,19 +277,42 @@ class PizzaFields(PizzaSetup):
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
             data = self.vortz
+            if cm is None:
+                try:
+                    import cmocean.cm as cmo
+                    cm = cmo.curl
+                except ModuleNotFoundError:
+                    cm = 'Spectral_r'
         elif field in ('temperature', 'Temperature', 'temp', 'Temp', 't', 'T'):
             data = self.temp
+            if cm is None:
+                try:
+                    import cmocean.cm as cmo
+                    cm = cmo.thermal
+                except ModuleNotFoundError:
+                    cm = 'magma'
         elif field in ('composition', 'Composition', 'xi', 'Xi', 'chem',
                        'Chem', 'comp', 'Comp'):
-            data = self.xi
+            if cm is None:
+                try:
+                    import cmocean.cm as cmo
+                    cm = cmo.haline
+                except ModuleNotFoundError:
+                    cm = 'viridis'
         elif field in ('tfluct', 'tempfluct'):
             data = self.temp-self.temp_m[0, :]
+            cm = 'PuOr'
         elif field in ('xifluct', 'chemfluct', 'compfluct'):
             data = self.xi-self.xi_m[0, :]
+            cm = 'PiYG'
         elif field in ('us', 'Us', 'ur', 'Ur', 'vs', 'Vs', 'Vr', 'vr'):
             data = self.us
+            if cm is None:
+                cm = 'seismic'
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
             data = self.uphi
+            if cm is None:
+                cm = 'seismic'
 
         if deminc:
             data = symmetrize(data, ms=self.minc)
@@ -325,18 +348,18 @@ class PizzaFields(PizzaSetup):
             else:
                 theta = np.linspace(0., 2*np.pi/self.minc, data.shape[0])
 
-            rad = np.linspace(self.radius[0], self.radius[-1], data.shape[1])
+            rad = np.linspace(self.radius[-1], self.radius[0], data.shape[1])
             rr, ttheta = np.meshgrid(rad, theta)
             if deminc:
-                u = symmetrize(self.us, self.minc)
-                v = symmetrize(self.uphi, self.minc)
+                u = symmetrize(self.us[:, ::-1], self.minc)
+                v = symmetrize(self.uphi[:, ::-1], self.minc)
             else:
                 u = self.us
                 v = self.uphi
             v /= self.radius
 
-            u = my_interp2d(u, self.radius, rad)
-            v = my_interp2d(v, self.radius, rad)
+            u = my_interp2d(u, self.radius[::-1], rad)
+            v = my_interp2d(v, self.radius[::-1], rad)
             speed = np.sqrt(u**2+v**2)
 
             if streamNorm == 'vel':
