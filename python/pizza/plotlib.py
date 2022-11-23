@@ -164,11 +164,6 @@ def equatContour(data, radius, minc=1, label=None, levels=65,
             cax = fig.add_axes([0.85, 0.5-0.7*h/2., 0.03, 0.7*h])
         fig.colorbar(im, cax=cax)
 
-    # Normalise data
-    if normed:
-        im.set_clim(-max(abs(data.max()), abs(data.min())),
-                    max(abs(data.max()), abs(data.min())))
-
     return fig, xx, yy
 
 
