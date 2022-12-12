@@ -1,5 +1,6 @@
 &grid
-   n_r_max    =32,
+   n_r_max    =33,
+   n_cheb_max =33,
    m_max      =32,
    minc       =1,
 /
