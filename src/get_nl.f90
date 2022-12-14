@@ -23,7 +23,7 @@ module grid_space_arrays_mod
    use truncation_3D, only: n_theta_max, n_phi_max_3D, n_r_max_3D
    use radial_functions, only: or1_3D, r_3D, rgrav_3D, beta!, tcond_3D
    use fields, only: B0r_3D_Rloc, B0t_3D_Rloc, B0p_3D_Rloc, curlB0r_3D_Rloc, &
-       &             curlB0t_3D_Rloc, curlB0p_3D_Rloc
+       &             curlB0t_3D_Rloc, curlB0p_3D_Rloc, B0_3D_Rloc
    use horizontal, only: cost, sint, osint1
 
    implicit none
@@ -148,11 +148,11 @@ contains
       real(cp), intent(out) :: jxBz(n_phi_max_3D,n_theta_max)
 
       !-- Local variables:
-      integer :: n_theta, n_phi, n_count
+      integer :: n_theta, n_phi, n_count, n_th_SHS
       real(cp) :: r2, or1sn1
-      real(cp) :: rfunc, asign!, bamp2!, Afunc
-      real(cp) :: Bsavg(n_theta_max), Bpavg(n_theta_max)
-      real(cp) :: vpavg(n_theta_max)
+      real(cp) :: rfunc, asign, bamp2!, Afunc
+      real(cp) :: Bsavg(n_theta_max), Bpavg(n_theta_max)!, Bavg(n_theta_max)
+      real(cp) :: vpavg(n_theta_max), vrmsavg(n_theta_max)
       real(cp) :: vsfluct2(n_theta_max), vpfluct2(n_theta_max)
 
       r2 = r_3D(n_r)*r_3D(n_r)
@@ -208,7 +208,8 @@ contains
          Bsavg(:) = 0.0_cp
          Bpavg(:) = 0.0_cp
          vpavg(:) = 0.0_cp
-         do n_theta=1,n_theta_max
+         do n_theta=1,n_theta_max!/2
+            !n_th_SHS=n_theta_max+1-n_theta
             do n_phi=1,n_phi_max_3D
                Bsavg(n_theta) = Bsavg(n_theta) + ( this%Brc(n_phi,n_theta)*sint(n_theta) +    &
                &                       this%Btc(n_phi,n_theta)*cost(n_theta) )
@@ -218,10 +219,15 @@ contains
             Bsavg(n_theta) = Bsavg(n_theta)/n_phi_max_3D
             Bpavg(n_theta) = Bpavg(n_theta)/n_phi_max_3D
             vpavg(n_theta) = vpavg(n_theta)/n_phi_max_3D
+            !Bsavg(n_th_SHS) = Bsavg(n_theta)/n_phi_max_3D
+            !Bpavg(n_th_SHS) = Bpavg(n_theta)/n_phi_max_3D
+            !vpavg(n_th_SHS) = vpavg(n_theta)/n_phi_max_3D
          end do
+         vrmsavg(:) = 1.0_cp
          vsfluct2(:) = 0.0_cp
          vpfluct2(:) = 0.0_cp
-         do n_theta=1,n_theta_max
+         do n_theta=1,n_theta_max!/2
+            !n_th_SHS=n_theta_max+1-n_theta
             do n_phi=1,n_phi_max_3D
                vsfluct2(n_theta) = vsfluct2(n_theta) + ( vr(n_phi,n_theta)*sint(n_theta) +   &
                &                                         vt(n_phi,n_theta)*cost(n_theta) )**2
@@ -229,6 +235,15 @@ contains
             end do
             vsfluct2(n_theta) = vsfluct2(n_theta)/n_phi_max_3D
             vpfluct2(n_theta) = vpfluct2(n_theta)/n_phi_max_3D
+            !vsfluct2(n_th_SHS) = vsfluct2(n_theta)/n_phi_max_3D
+            !vpfluct2(n_th_SHS) = vpfluct2(n_theta)/n_phi_max_3D
+            if ( n_r > 1 .and. n_r < n_r_max_3D .and. r_3D(n_r)*sint(n_theta) > r_icb ) then 
+               vrmsavg(n_theta) = sqrt( vpfluct2(n_theta) +                &
+               &                        vsfluct2(n_theta)+epsilon(1.0_cp) )
+               !vrmsavg(n_th_SHS) = vrmsavg(n_theta)
+            end if
+            !Bavg(n_theta) = sqrt( Bsavg(n_theta)**2 +                &
+            !&                     Bpavg(n_theta)**2+epsilon(1.0_cp) )
          end do
          !$OMP END PARALLEL DO
       end if
@@ -253,23 +268,36 @@ contains
                   !&   (vp(n_phi,n_theta) + vpm(n_phi,n_theta))*this%Brc(n_phi,n_theta)- &
                   !&   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Bpc(n_phi,n_theta) )!&&!
 
-                  this%VxBp(n_phi,n_theta)=or1sn1*(         &
+                  this%VxBp(n_phi,n_theta)=or1sn1*(                &
                   &    vr(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
                   &    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) )!&&!
                   !&   (vr(n_phi,n_theta) + vzm(n_phi,n_theta)*cost(n_theta))*this%Btc(n_phi,n_theta)- &
                   !&   (vt(n_phi,n_theta) - vzm(n_phi,n_theta)*sint(n_theta))*this%Brc(n_phi,n_theta) )!&&!
                else !-- Background field?
-                  this%VxBr(n_phi,n_theta)=r2*(                   &
+                  this%VxBr(n_phi,n_theta)=r2*(                          &
                   &    vt(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r)- &
                   &    vp(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r) )!
 
-                  this%VxBt(n_phi,n_theta)=or1sn1*(               &
+                  this%VxBt(n_phi,n_theta)=or1sn1*(                      &
                   &    vp(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r)- &
                   &    vr(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r) )
 
-                  this%VxBp(n_phi,n_theta)=or1sn1*(         &
+                  this%VxBp(n_phi,n_theta)=or1sn1*(                      &
                   &    vr(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r)- &
                   &    vt(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r) )
+                  !if ( l_mag_B0LFsmall ) then
+                     this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta)+r2*(&
+                     &    vt(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-       &
+                     &    vp(n_phi,n_theta)*this%Btc(n_phi,n_theta) )
+
+                     this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta)+or1sn1*(&
+                     &    vp(n_phi,n_theta)*this%Brc(n_phi,n_theta)-           &
+                     &    vr(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
+
+                     this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta)+or1sn1*(&
+                     &    vr(n_phi,n_theta)*this%Btc(n_phi,n_theta)-           &
+                     &    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
+                  !end if
                end if
 
                if ( l_mag_alpha ) then !.and. r_3D(n_r)*sint(n_theta) >= r_icb ) then
@@ -282,13 +310,13 @@ contains
                   &      ( r_cmb - r_3D(n_r)*sint(n_theta) ) / r_cmb**2.
                   this%Alphac(n_phi,n_theta) = alpha_fac*rfunc*cost(n_theta)
 
-                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + r2*(              &
+                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta) + r2*(&
                   &    this%Alphac(n_phi,n_theta)*this%Brc(n_phi,n_theta))!/(1. + bamp2)
 
-                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta) + or1sn1*(          &
+                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta) + or1sn1*( &
                   &    this%Alphac(n_phi,n_theta)*this%Btc(n_phi,n_theta))!/(1. + bamp2)
 
-                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + or1sn1*(          &
+                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta) + or1sn1*(&
                   &    this%Alphac(n_phi,n_theta)*this%Bpc(n_phi,n_theta))!/(1. + bamp2)
                end if
 
@@ -299,25 +327,35 @@ contains
                   !--              = terms coming from inertial waves
                   !--> Warning:: 1/r2 or 1/rsint is applied to the full product VxB;
                   !--            the different quantities have already been rescaled
-                  asign = 1.0_cp!abs(cost(n_theta))/cost(n_theta) !-- +/-1 sign
-                  if ( n_r == 1 .or. n_r == n_r_max_3D ) then
-                     delta_fac = 1.0_cp
+                  asign = abs(cost(n_theta))/cost(n_theta) !-- +/-1 sign
+                  !if ( r_3D(n_r)*sint(n_theta) > r_icb ) then
+                  !   rfunc = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb)) !-- Filter 2
+                  if ( r_3D(n_r)*sint(n_theta) > r_icb .and. abs(r_3D(n_r)*cost(n_theta)) <= 1.0_cp  ) then
+                     rfunc = sin(pi*(r_3D(n_r)-r_icb))*sin(pi*(r_3D(n_r)*sint(n_theta)-r_icb))* &
+                     &       cos(pi*(r_3D(n_r)*cost(n_theta)-r_cmb))**2 !-- Filter 3 to cut energy away from Boundaries
                   else
-                     delta_fac = 1.0_cp/sqrt(vpfluct2(n_theta) + vsfluct2(n_theta)+epsilon(1.0_cp))
+                     rfunc = 0.0_cp
                   end if
-                  this%VxBr(n_phi,n_theta)=asign*delta_fac*r2*(&!this%VxBr(n_phi,n_theta)+
+                  !-- Following the form of (Chan etal., 2001; eq.25) --> only when nothing can prevent B from growing
+                  !bamp2 = sqrt(this%Brc(n_phi,n_theta)**2 + this%Btc(n_phi,n_theta)**2 + this%Bpc(n_phi,n_theta)**2)
+                  if ( n_r == 1 .or. n_r == n_r_max_3D ) then
+                     delta_fac = 1.0_cp!/(1.0_cp + 1.0_cp*(bamp2/1.0_cp)**2)!B0_3D_Rloc(n_phi,n_theta,n_r))**2)!
+                  else
+                     delta_fac = 1.0_cp/vrmsavg(n_theta)!/(1.0_cp + 1.0_cp*(bamp2/1.0_cp)**2)!B0_3D_Rloc(n_phi,n_theta,n_r))**2)!
+                  end if
+                  this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta)+asign*rfunc*delta_fac*r2*(&!
                   &                        sint(n_theta)*vpfluct2(n_theta)*Bsavg(n_theta))!(  &
                   !&                        sint(n_theta)*sqrt((vp(n_phi,n_theta)-vpavg(n_theta))**2.)*Bsavg(n_theta))!(  &
                   !&                        this%Brc(n_phi,n_theta)*sint(n_theta) +  &
                   !&                        this%Btc(n_phi,n_theta)*cost(n_theta) ) )
 
-                  this%VxBt(n_phi,n_theta)=asign*delta_fac*or1sn1*(&!this%VxBt(n_phi,n_theta)+
+                  this%VxBt(n_phi,n_theta)=this%VxBt(n_phi,n_theta)+asign*rfunc*delta_fac*or1sn1*(&!
                   &                        cost(n_theta)*vpfluct2(n_theta)*Bsavg(n_theta))!(    &
                   !&                        cost(n_theta)*sqrt((vp(n_phi,n_theta)-vpavg(n_theta))**2.)*Bsavg(n_theta))!(    &
                   !&                        this%Brc(n_phi,n_theta)*sint(n_theta) +    &
                   !&                        this%Btc(n_phi,n_theta)*cost(n_theta) )  )
 
-                  this%VxBp(n_phi,n_theta)=asign*delta_fac*or1sn1*(&!this%VxBp(n_phi,n_theta)+
+                  this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta)+asign*rfunc*delta_fac*or1sn1*(&!
                   &                       ( vsfluct2(n_theta) )*Bpavg(n_theta))!        &
                   !&                       ( sqrt((vr(n_phi,n_theta)*sint(n_theta) +        &
                   !&                       vt(n_phi,n_theta)*cost(n_theta))**2.) )*     &

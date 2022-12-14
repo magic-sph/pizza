@@ -6,7 +6,7 @@ module fields
    use precision_mod
    use constants, only: zero
    use namelists, only: l_cheb_coll, l_heat, l_chem, l_heat_3D, l_mag_3D, &
-       &                l_3D, l_mag_B0
+       &                l_3D, l_mag_B0, l_mag_inertia, l_U0_3D
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
    use truncation_3D, only: lm_max, n_r_max_3D, n_theta_max, n_phi_max_3D
@@ -48,6 +48,7 @@ module fields
    complex(cp), allocatable, public :: aj_3D_Rloc(:,:), dj_3D_Rloc(:,:)
 
    !-- 3-D Backround magnetic field in the physical space
+   real(cp), allocatable, public :: B0_3D_Rloc(:,:,:)
    real(cp), allocatable, public :: B0r_3D_Rloc(:,:,:)
    real(cp), allocatable, public :: B0t_3D_Rloc(:,:,:)
    real(cp), allocatable, public :: B0p_3D_Rloc(:,:,:)
@@ -59,6 +60,10 @@ module fields
    real(cp), allocatable, public :: ur_3D_Rloc(:,:,:)
    real(cp), allocatable, public :: ut_3D_Rloc(:,:,:)
    real(cp), allocatable, public :: up_3D_Rloc(:,:,:)
+
+   real(cp), allocatable, public :: u0r_3D_Rloc(:,:,:)
+   real(cp), allocatable, public :: u0t_3D_Rloc(:,:,:)
+   real(cp), allocatable, public :: u0p_3D_Rloc(:,:,:)
  
    public :: initialize_fields, finalize_fields
 
@@ -179,6 +184,18 @@ contains
          ur_3D_Rloc(:,:,:)=0.0_cp
          ut_3D_Rloc(:,:,:)=0.0_cp
          up_3D_Rloc(:,:,:)=0.0_cp
+
+         if ( l_U0_3D ) then
+            allocate( u0r_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
+            allocate( u0t_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
+            allocate( u0p_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
+            bytes_allocated = bytes_allocated + 3*n_phi_max_3D*n_theta_max*&
+            &                 (nRstop3D-nRstart3D+1)*SIZEOF_DEF_REAL
+
+            u0r_3D_Rloc(:,:,:)=0.0_cp
+            u0t_3D_Rloc(:,:,:)=0.0_cp
+            u0p_3D_Rloc(:,:,:)=0.0_cp
+         end if
       end if 
 
       !-- 3-D temperature:
@@ -244,6 +261,13 @@ contains
             curlB0t_3D_Rloc(:,:,:)=0.0_cp
             curlB0p_3D_Rloc(:,:,:)=0.0_cp
          end if
+         if ( l_mag_inertia ) then
+            allocate( B0_3D_Rloc(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D) )
+            bytes_allocated = bytes_allocated + n_phi_max_3D*n_theta_max*&
+            &                 (nRstop3D-nRstart3D+1)*SIZEOF_DEF_REAL
+
+            B0_3D_Rloc(:,:,:)=0.0_cp
+         end if
       else
          allocate( b_3D_Rloc(1,1), db_3D_Rloc(1,1), ddb_3D_Rloc(1,1) )
          allocate( aj_3D_Rloc(1,1), dj_3D_Rloc(1,1) )
@@ -256,6 +280,7 @@ contains
    subroutine finalize_fields
 
       if ( l_mag_3D ) then
+         if ( l_mag_inertia ) deallocate( B0_3D_Rloc )
          if ( l_mag_B0 ) then
             deallocate( B0r_3D_Rloc, B0t_3D_Rloc, B0p_3D_Rloc )
             deallocate( curlB0r_3D_Rloc, curlB0t_3D_Rloc, curlB0p_3D_Rloc )
@@ -270,6 +295,9 @@ contains
          deallocate( temp_3D_Rloc )
       end if
       if ( l_3D ) then
+         if ( l_U0_3D ) then
+            deallocate( u0r_3D_Rloc, u0t_3D_Rloc, u0p_3D_Rloc )
+         end if
          deallocate( work_3D_Rloc, work_LMloc )
          deallocate( ur_3D_Rloc, ut_3D_Rloc, up_3D_Rloc )
       end if

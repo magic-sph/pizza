@@ -1255,6 +1255,7 @@ contains
             end if
          end if
       end if
+      !close(n_start_file)!call MPI_File_close(n_start_file, ierr)!-- shouldn't it be closed?
 
       if ( rank == 0 ) then
          call rscheme_old%finalize(no_work_array=.true.)

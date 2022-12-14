@@ -139,6 +139,7 @@ program pizza
    call memWrite('Fields', local_bytes_used)
    local_bytes_used = bytes_allocated
    call initialize_radial_functions()
+!  THERE WAS INITIALIZE DER ARRAYS
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('Radial functions', local_bytes_used)
    local_bytes_used = bytes_allocated

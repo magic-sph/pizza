@@ -7,7 +7,8 @@ module rloop_3D
    use grid_space_arrays_mod, only: grid_space_arrays_t
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
    use namelists, only: BuoFac, DyMagFac, tag, l_heat_3D, l_thw_3D, l_mag_3D, l_mag_LF, &
-   &                    l_cyl, l_QG_basis, r_cmb, r_icb, l_lin_solve, l_leibniz, beta_shift, l_mag_B0
+   &                    l_cyl, l_QG_basis, r_cmb, r_icb, l_lin_solve, l_leibniz,        &
+   &                    beta_shift, l_mag_B0, l_b_phiavg
    use truncation_3D, only: lm_max, lmP_max, n_phi_max_3D, n_theta_max, l_max, n_r_max_3D
    use truncation, only: idx2m, n_m_max, n_r_max
    use communications, only: scatter_from_rank0_to_rloc
@@ -33,6 +34,7 @@ module rloop_3D
    type(grid_space_arrays_t) :: gsa
    type(nonlinear_lm_t) :: nl_lm
    integer :: frame_counter=1
+   integer :: n_bavg_file
 
    public :: radial_loop_3D, initialize_radial_loop_3D, finalize_radial_loop_3D
 
@@ -43,8 +45,17 @@ contains
       integer, intent(in) :: lm_max
       integer, intent(in) :: lmP_max
 
+      character(len=144) :: file_name
+
       call gsa%initialize()
       call nl_lm%initialize(lm_max,lmP_max)
+
+      if ( rank == 0 ) then
+         if ( l_mag_3D .and. l_b_phiavg ) then
+            file_name = 'b_phiavg.'//tag
+            open(newunit=n_bavg_file, file=file_name, status='new')
+         end if
+       end if
 
    end subroutine initialize_radial_loop_3D
 !------------------------------------------------------------------------------
@@ -52,6 +63,9 @@ contains
 
       call nl_lm%finalize()
       call gsa%finalize()
+      if ( rank == 0 ) then
+         if ( l_mag_3D .and. l_b_phiavg ) close(n_bavg_file)
+      end if
 
    end subroutine finalize_radial_loop_3D
 !------------------------------------------------------------------------------
@@ -98,6 +112,7 @@ contains
       real(cp) :: jxBz(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: djxBpdz(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: djxBpds(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
+      real(cp) :: Br_phiAvg(n_theta_max)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop, phi, theta!, rsint
       complex(cp) :: tmp_2D(n_m_max,n_r_max)!nRstart:nRstop)!
@@ -248,6 +263,13 @@ contains
          call gsa%get_nl(ur(:,:,n_r), ut(:,:,n_r), up(:,:,n_r), n_r, &
               &          buo_tmp(:,:,n_r),jxBs(:,:,n_r),jxBp(:,:,n_r),jxBz(:,:,n_r))
 
+         !-- Compute and Write phi-Average of the 3D B field just below CMB
+         if ( tscheme%istage==1 ) then
+            if ( l_b_phiavg .and. n_r==4 ) then
+               call output_local_B_cmb(time, gsa%Brc(:,:), gsa%Bpc(:,:))
+            end if
+         end if
+
          !-- Write the snapshot on the grid (easier to handle)
          if ( l_frame .and. tscheme%istage==1 ) then
 #ifdef aDEBUG
@@ -261,7 +283,6 @@ contains
                   write(filehandle) jxBs(:,:,n_r), jxBp(:,:,n_r)
                close(filehandle)
             end if
-
          end block
 #endif
             call write_bulk_snapshot_3D(fh_ur, ur(:,:,n_r))
@@ -275,16 +296,16 @@ contains
                   call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:))!jxBs(:,:,n_r))!Vx!
                   call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:))!Vx!
                   call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:))!jxBp(:,:,n_r))!Vx!
+               !else
+               !   call write_bulk_snapshot_3D(fh_br, B0r_3D_Rloc(:,:,n_r))!jxBs(:,:,n_r))!Vx!gsa%Brc(:,:)+
+               !   call write_bulk_snapshot_3D(fh_bt, B0t_3D_Rloc(:,:,n_r))!Vx!gsa%Btc(:,:)+
+               !   call write_bulk_snapshot_3D(fh_bp, B0p_3D_Rloc(:,:,n_r))!jxBp(:,:,n_r))!Vx!gsa%Bpc(:,:)+
+               !end if
                if ( l_mag_LF .and. l_jxb_save ) then
                   call write_bulk_snapshot_3D(fh_jxbs, gsa%VxBr(:,:))!jxBs(:,:,n_r))
                   call write_bulk_snapshot_3D(fh_jxbp, gsa%VxBp(:,:))!jxBp(:,:,n_r))
                   call write_bulk_snapshot_3D(fh_jxbz, gsa%VxBt(:,:))!jxBz(:,:,n_r))
                end if
-               !else
-               !   call write_bulk_snapshot_3D(fh_br, gsa%Brc(:,:)+B0r_3D_Rloc(:,:,n_r))!jxBs(:,:,n_r))!Vx!
-               !   call write_bulk_snapshot_3D(fh_bt, gsa%Btc(:,:)+B0t_3D_Rloc(:,:,n_r))!Vx!
-               !   call write_bulk_snapshot_3D(fh_bp, gsa%Bpc(:,:)+B0p_3D_Rloc(:,:,n_r))!jxBp(:,:,n_r))!Vx!
-               !end if
             end if
          end if
 
@@ -305,8 +326,8 @@ contains
             !      phi = (n_phi-1)*two*pi/(n_phi_max_3D)
             !      !jxBs(n_phi,n_theta,n_r) = sin(phi)**2 * (r_3D(n_r)*sint(n_theta))*(r_cmb-r_3D(n_r)*sint(n_theta))* &
             !      !&                        (r_3D(n_r)*sint(n_theta)-r_icb) * (r_3D(n_r)*cost(n_theta))**2
-            !      !jxBs(n_phi,n_theta,n_r) = sin(phi)**2*(r_3D(n_r)*sint(n_theta))*(r_3D(n_r)*cost(n_theta))**2
-            !      jxBs(n_phi,n_theta,n_r) = (r_3D(n_r)*sint(n_theta))*exp(-pi*r_3D(n_r)*cost(n_theta))
+            !      jxBs(n_phi,n_theta,n_r) = sin(phi)**2*(r_3D(n_r)*sint(n_theta))*(r_3D(n_r)*cost(n_theta))**2
+            !      !jxBs(n_phi,n_theta,n_r) = (r_3D(n_r)*sint(n_theta))*exp(-pi*r_3D(n_r)*cost(n_theta))
             !      !if ( l_QG_basis ) jxBs(n_phi,n_theta,n_r) = jxBs(n_phi,n_theta,n_r) -                               &
             !      if ( l_QG_basis ) jxBz(n_phi,n_theta,n_r) =                              &
             !      !&                 sin(phi)*(r_3D(n_r)*sint(n_theta))!sinphi*s*z/beta * beta/z !directly
@@ -318,8 +339,8 @@ contains
             !      jxBp(n_phi,n_theta,n_r) =-(0.5_cp+cos(phi)+sin(4.*phi)) * (r_cmb**2-(r_3D(n_r)*sint(n_theta))**2)**2 * &
             !      &                         cos(pi/2*r_3D(n_r)*cost(n_theta)/sqrt(r_cmb**2-(r_3D(n_r)*sint(n_theta))**2))* &!r_icb)* &!sqrt(r_cmb**2-r_icb**2))* &!
             !      &                         pi/(r_3D(n_r)*sint(n_theta)*sqrt(r_cmb**2-(r_3D(n_r)*sint(n_theta))**2))!r_icb)!sqrt(r_cmb**2-r_icb**2))!
-            !      !jxBp(n_phi,n_theta,n_r) = (0.5_cp+cos(phi)+sin(4.*phi))*(r_3D(n_r)*sint(n_theta))*exp(-pi*r_3D(n_r)*cost(n_theta))
-            !      !jxBp(n_phi,n_theta,n_r) =  r_3D(n_r)*cost(n_theta)*sin(pi*r_3D(n_r)*cost(n_theta))
+            !      jxBp(n_phi,n_theta,n_r) = (0.5_cp+cos(phi)+sin(4.*phi))*(r_3D(n_r)*sint(n_theta))*exp(-pi*r_3D(n_r)*cost(n_theta))
+            !      !jxBp(n_phi,n_theta,n_r) =  (r_3D(n_r)*cost(n_theta))*sin(pi*r_3D(n_r)*cost(n_theta))
             !   end do
             !   !end if
             !end do
@@ -379,7 +400,7 @@ contains
       runStart = MPI_Wtime()
       !!call zinterp%compute_zder(jxBs, djxBpds)
       !!call zinterp%compute_sder(jxBs, djxBpds)
-      !!call zinterp%compute_zavg(jxBs, lfs_tmp_Rloc,2,.false.)
+      !!call zinterp%compute_zavg(jxBp, lfp_tmp_Rloc,2,.false.)
       if ( l_heat_3D ) call zinterp%compute_zavg(buo_tmp, buo_tmp_Rloc,2,.false.)
       if ( l_mag_LF .and. (.not. l_lin_solve) ) then  !-- Non-Linear terms?
          lf_Rloc(:,:)=zero !-- Initialisation of z-avg Lorentz force
@@ -672,5 +693,32 @@ contains
 #endif
 
    end subroutine transform_axi_to_dth_grid_space
+!------------------------------------------------------------------------------
+   subroutine output_local_B_cmb(time, Br_CMB, Bp_CMB)
+
+      !-- Input variable
+      real(cp), intent(in) :: time
+      real(cp), intent(in) :: Br_CMB(n_phi_max_3D,n_theta_max)
+      real(cp), intent(in) :: Bp_CMB(n_phi_max_3D,n_theta_max)
+
+      !-- Local variable
+      integer :: n_phi
+      real(cp) :: Br_CMB_phiAvg(n_theta_max), Bp_CMB_phiAvg(n_theta_max)
+      !character(len=10) :: length_theta
+
+      if ( rank == 0 ) then
+         Br_CMB_phiAvg(:) = 0.0_cp
+         Bp_CMB_phiAvg(:) = 0.0_cp
+         do n_phi=1, n_phi_max_3D
+            Br_CMB_phiAvg(:) = Br_CMB_phiAvg(:) + Br_CMB(n_phi,:)/n_phi_max_3D
+            Bp_CMB_phiAvg(:) = Bp_CMB_phiAvg(:) + Bp_CMB(n_phi,:)/n_phi_max_3D
+         end do
+
+         !write(length_theta, *) 2*n_theta_max
+         !write(n_bavg_file, '(1P, ES20.12, '//length_theta//'ES16.8)') time, Br_CMB_phiAvg, Bp_CMB_phiAvg
+         write(n_bavg_file, *) time, Br_CMB_phiAvg, Bp_CMB_phiAvg
+      end if
+
+   end subroutine output_local_B_cmb
 !------------------------------------------------------------------------------
 end module rloop_3D

@@ -94,7 +94,8 @@ module namelists
    real(cp), public :: scale_B
    logical,  public :: l_start_file     ! taking fields from startfile ?
    logical,  public :: l_reset_t ! Should we reset the time stored in the startfile?
-   character(len=72), public :: start_file  ! name of start_file           
+   character(len=72), public :: start_file  ! name of start_file
+   character(len=72), public :: start_file_b0  ! name of start_file for Background field
 
    integer,  public :: n_log_step
    integer,  public :: n_frames
@@ -108,6 +109,7 @@ module namelists
    logical,  public :: l_vort_balance    ! Calculate the vorticiy balance
    logical,  public :: l_2D_spectra      ! Calculate 2D spectra
    logical,  public :: l_2D_SD           ! Also store the standard deviation
+   logical,  public :: l_b_phiavg        ! Calculate the phi-avg of B3D at r_CMB
    logical,  public :: l_corr            ! Calculate the correlation
    real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
    logical,  public :: l_3D            ! Require 3-D functions
@@ -115,6 +117,7 @@ module namelists
    logical,  public :: l_thw_3D        ! Computation of the 3D thermal wind contribution on u_phi-3D
    logical,  public :: l_mag_3D        ! Treatment of the magnetic field (3-D)
    logical,  public :: l_mag_B0        ! With or without a Background field to the problem (Magnetoconvection)
+   logical,  public :: l_U0_3D         ! With or without a Velocity field to the problem (Magnetoconvection)
    logical,  public :: l_mag_LF        ! Treatment of the Lorentz-Force
    logical,  public :: l_mag_alpha     ! With or without magnetic Alpha effect in magnetic advection
    logical,  public :: l_mag_pump      ! With or without Magnetic pumping
@@ -181,14 +184,14 @@ contains
       &                   xicond_fac,l_xi_3D,l_heat_3D,l_thw_3D,   &
       &                   l_mag_LF,l_mag_alpha,l_mag_pump,l_cyl,   &
       &                   l_mag_inertia,alpha_fac,mag_pump_fac,    &
-      &                   delta_fac, l_mag_B0, l_leibniz
-      namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
-      &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
-      &                    scale_xi,scale_B,init_B,amp_B
+      &                   delta_fac, l_mag_B0, l_U0_3D, l_leibniz
+      namelist/start_field/l_start_file,start_file,start_file_b0,scale_t,&
+      &                    init_t,amp_t,scale_u,init_u,amp_u,l_reset_t,  &
+      &                    amp_xi,init_xi,scale_xi,scale_B,init_B,amp_B
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
       &                       l_vphi_balance,l_vort_balance,bl_cut,        &
-      &                       l_2D_spectra, l_2D_SD, l_corr
+      &                       l_2D_spectra, l_2D_SD, l_b_phiavg, l_corr
 
    !namelist/control/tag,n_times
 
@@ -410,9 +413,13 @@ contains
       end if
 
       if ( .not. ( damp_zon .eq. 1.0_cp ) ) then
-         if ( rank == 0 ) write(output_unit,*) '! Warning!:: damp_zon might be physically inconsistent!'
+         if ( rank == 0 ) write(output_unit,*) '! WARNING!:: damp_zon is probably physically inconsistent!'
          if ( damp_zon < 0.0_cp ) damp_zon = abs(damp_zon)
          if ( damp_zon > 1.0_cp ) damp_zon = one/damp_zon
+         if ( damp_zon == 0.0_cp ) then
+            write(output_unit,*) '! damp_zon = 0.0 --> Zonal wind has been totally suppressed!'
+            call abortRun('! damp_zon = 0.0 --> Zonal wind has been totally suppressed !')
+         end if
       end if
 
       !-- Implicit or Explicit treatment of Coriolis force
@@ -638,6 +645,7 @@ contains
       l_mag_3D = .false.
       l_mag_LF = .false.
       l_mag_B0 = .false.
+      l_U0_3D  = .false.
       l_leibniz = .false.
       l_mag_alpha = .false.
       alpha_fac   = 0.0_cp
@@ -650,6 +658,7 @@ contains
       l_reset_t        =.false.
       l_start_file     =.false.
       start_file       ="no_start_file"
+      start_file_b0    ="no_b0_start_file"
       init_t           =0
       scale_t          =1.0_cp
       amp_t            =0.0_cp
@@ -675,6 +684,7 @@ contains
       l_vort_balance   =.false.
       l_2D_spectra     =.false.
       l_2D_SD          =.false.
+      l_b_phiavg       =.false.
       l_corr           =.false.
       bl_cut           =1.0e-3_cp
 
@@ -784,6 +794,7 @@ contains
       write(n_out,'(''  l_mag_3D        ='',l3,'','')') l_mag_3D
       write(n_out,'(''  l_mag_LF        ='',l3,'','')') l_mag_LF
       write(n_out,'(''  l_mag_B0        ='',l3,'','')') l_mag_B0
+      write(n_out,'(''  l_U0_3D         ='',l3,'','')') l_U0_3D
       write(n_out,'(''  l_leibniz       ='',l3,'','')') l_leibniz
       write(n_out,'(''  l_mag_alpha     ='',l3,'','')') l_mag_alpha
       if ( l_mag_alpha ) &
@@ -856,6 +867,8 @@ contains
       write(n_out,'(''  l_reset_t       ='',l3,'','')') l_reset_t
       length=length_to_blank(start_file)
       write(n_out,*) " start_file      = """,start_file(1:length),""","
+     length=length_to_blank(start_file_b0)
+      write(n_out,*) " start_file_b0   = """,start_file_b0(1:length),""","
       write(n_out,'(''  scale_t         ='',ES14.6,'','')') scale_t
       write(n_out,'(''  init_t          ='',i7,'','')') init_t
       write(n_out,'(''  amp_t           ='',ES14.6,'','')') amp_t
@@ -883,6 +896,7 @@ contains
       write(n_out,'(''  bl_cut          ='',ES14.6,'','')') bl_cut
       write(n_out,'(''  l_2D_spectra    ='',l3,'','')') l_2D_spectra
       write(n_out,'(''  l_2D_SD         ='',l3,'','')') l_2D_SD
+      write(n_out,'(''  l_b_phiavg      ='',l3,'','')') l_b_phiavg
       write(n_out,'(''  l_corr          ='',l3,'','')') l_corr
       write(n_out,*) "/"
 

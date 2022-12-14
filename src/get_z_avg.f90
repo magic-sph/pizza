@@ -20,10 +20,11 @@ module z_functions
        &                    minc_3D, idx2m3D, n_phi_max_3D, lm_max
    use namelists, only: r_icb, r_cmb, l_ek_pump, ktopv, CorFac, ek, ra, &
        &                BuoFac, l_heat_3D, l_thw_3D, l_cyl, l_mag_pump, &
-       &                mag_pump_fac, l_QG_basis
+       &                mag_pump_fac, l_QG_basis, l_U0_3D
    use horizontal, only: theta, cost, sint
    use radial_functions, only: r, r_3D, beta, oheight, ekpump, or1_3D, &
        &                       rgrav_3D, rscheme_3D
+   use fields, only: u0r_3D_Rloc, u0t_3D_Rloc, u0p_3D_Rloc
 
    implicit none
 
@@ -210,9 +211,12 @@ contains
       complex(cp) :: mag_pump_upm3D(n_m_max_3D,nRstart:nRstop)
       complex(cp) :: mag_pump_uzm3D(n_m_max_3D,nRstart:nRstop)
 
+      !real(cp) :: filter(nRstart:nRstop)
+
       integer :: n_m_3D, n_m, n_r, m3D
 
       do n_r=nRstart,nRstop
+         !filter(n_r) = tanh(100.0_cp*(r_3D(n_r)-r_3D(n_r_max_3D)))
          do n_m_3D=1,n_m_max_3D
             m3D = idx2m3D(n_m_3D)
             if ( m3D < size(m2idx) ) then ! a little bit weird
@@ -260,6 +264,7 @@ contains
                mag_pump_uzm3D(n_m_3D,n_r) = zero
             end if
          end do
+         !ekpump_m3D(:,n_r) = filter(n_r)*ekpump_m3D(:,n_r)
       end do
 
          !:: if needed:::
@@ -292,6 +297,83 @@ contains
 
       !-- Boundary point: fix Ek-pumping to zero
       if ( rank == 0 ) this%ek_phys_Rloc(:,1)=0.0_cp
+
+#ifdef WORK_in_PROGRESS
+   !WARNING: Should be more of a tapering instead of a hard truncation (hyperdiffusion-like)
+   if ( l_U0_3D ) then
+      m_trunc = 10
+      do n_r=nRstart,nRstop
+         call ifft(usm3D_Rloc(:m_trunc,n_r), us_phys_Rloc_trunc(:,n_r), l_3D=.true.)
+         call ifft(upm3D_Rloc(:m_trunc,n_r), up_phys_Rloc_trunc(:,n_r), l_3D=.true.)
+
+         if( l_ek_pump ) &
+         &   call ifft(ekpump_m3D(:m_trunc,n_r), ek_phys_Rloc_trunc(:,n_r), l_3D=.true.)
+      end do
+      if ( rank == 0 ) ek_phys_Rloc_trunc(:,1)=0.0_cp
+
+      call allgather_from_rloc(ts_phys_Rloc_trunc,usr_tr,n_phi_max_3D)
+      call allgather_from_rloc(up_phys_Rloc_trunc,upp_tr,n_phi_max_3D)
+      if( l_ek_pump ) call allgather_from_rloc(ek_phys_Rloc_trunc,ekp_tr,n_phi_max_3D)
+
+      !-- Compute 3D velocity fields by a linear interpolation
+      do n_r_r=nRstart3D,nRstop3D
+         do n_th_NHS=1,n_theta_max/2
+            n_th_SHS=n_theta_max+1-n_th_NHS
+            s_r = r_3D(n_r_r)*sint(n_th_NHS)
+            z_r = r_3D(n_r_r)*cost(n_th_NHS)
+            if ( s_r >= r_icb ) then !-- Outside TC
+               n_r = 1
+               do while ( r(n_r) >= s_r )! .and. n_r < n_r_max )
+                  n_r = n_r+1
+               end do
+               alpha_r2 = (s_r-r(n_r))/(r(n_r-1)-r(n_r))
+               alpha_r1 = one - alpha_r2
+               z_eta = -s_r/(r_cmb*r_cmb-s_r*s_r)*z_r ! \beta * z
+               do n_phi=1,n_phi_max_3D
+                  vs = alpha_r1*usr(n_phi,n_r) + alpha_r2*usr(n_phi,n_r-1)
+                  !-- vz = beta*z*vs
+                  vz = z_eta*vs
+                  if ( l_ek_pump ) then
+                     !-- vz = beta*z*vs+ekpump
+                     vz = vz + z_r*(alpha_r1*ekp(n_phi,n_r) + & 
+                     &              alpha_r2*ekp(n_phi,n_r-1))
+                  end if
+                  vrr= vz*cost(n_th_NHS) + vs*sint(n_th_NHS)
+                  vth= vs*cost(n_th_NHS) - vz*sint(n_th_NHS)
+                  vph= alpha_r1*upp(n_phi,n_r) + alpha_r2*upp(n_phi,n_r-1)
+                  u0r_3D_Rloc(n_phi,n_th_NHS,n_r_r)= vrr
+                  u0r_3D_Rloc(n_phi,n_th_SHS,n_r_r)= vrr
+                  u0t_3D_Rloc(n_phi,n_th_NHS,n_r_r)= vth
+                  u0t_3D_Rloc(n_phi,n_th_SHS,n_r_r)=-vth
+                  u0p_3D_Rloc(n_phi,n_th_NHS,n_r_r)= vph
+                  u0p_3D_Rloc(n_phi,n_th_SHS,n_r_r)= vph
+               end do
+
+            else !-- Inside the tangent cylinder
+
+               do n_phi=1,n_phi_max_3D
+                  u0r_3D_Rloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
+                  u0r_3D_Rloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
+                  u0t_3D_Rloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
+                  u0t_3D_Rloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
+                  u0p_3D_Rloc(n_phi,n_th_NHS,n_r_r)=0.0_cp
+                  u0p_3D_Rloc(n_phi,n_th_SHS,n_r_r)=0.0_cp
+               end do
+
+            end if ! Inside/outside TC
+         end do
+      end do
+
+      !-- CMB values
+      if ( nRstart3D == 1 ) then
+         u0r_3D_Rloc(:,:,1) = 0.0_cp
+         if ( ktopv == 2 ) then !-- Rigid boundaries
+            u0t_3D_Rloc(:,:,1) = 0.0_cp
+            u0p_3D_Rloc(:,:,1) = 0.0_cp
+         end if
+      end if
+   end if
+#endif
 
    end subroutine prep_extension_QGto3D
 !--------------------------------------------------------------------------------
@@ -364,7 +446,7 @@ contains
                   vz = z_eta*vs
                   if ( l_ek_pump ) then
                      !-- vz = beta*z*vs+ekpump
-                     vz = vz + z_r*(alpha_r1*ekp(n_phi,n_r) + & 
+                     vz = vz + z_r*(alpha_r1*ekp(n_phi,n_r) + &
                      &              alpha_r2*ekp(n_phi,n_r-1))
                   end if
                   vrr= vz*cost(n_th_NHS) + vs*sint(n_th_NHS)
@@ -388,9 +470,9 @@ contains
                   !if( rank == 0 .and. (n_r_r==1 .and. n_phi==1 .and. n_th_NHS==n_theta_max/2-1) ) &
                   !& print*, "UNmodified vel_ r, th, phi =", vrr, vth, vph
                   ur_Rloc(n_phi,n_th_NHS,n_r_r)= vrr + cost(n_th_NHS)*vzm
-                  ur_Rloc(n_phi,n_th_SHS,n_r_r)= vrr - cost(n_th_NHS)*vzm
+                  ur_Rloc(n_phi,n_th_SHS,n_r_r)= vrr - cost(n_th_NHS)*vzm!+ cost(n_th_SHS)
                   ut_Rloc(n_phi,n_th_NHS,n_r_r)= vth - sint(n_th_NHS)*vzm
-                  ut_Rloc(n_phi,n_th_SHS,n_r_r)=-vth + sint(n_th_NHS)*vzm
+                  ut_Rloc(n_phi,n_th_SHS,n_r_r)=-vth + sint(n_th_NHS)*vzm!- sint(n_th_SHS)
                   up_Rloc(n_phi,n_th_NHS,n_r_r)= vph + vpm
                   up_Rloc(n_phi,n_th_SHS,n_r_r)= vph - vpm
                   !if( rank == 0 .and. (n_r_r==1 .and. n_phi==1 .and. n_th_NHS==n_theta_max/2-1) ) &
@@ -596,7 +678,7 @@ contains
          open(newunit=file_handle, file='zavg_rloc.dat', status='new', form='formatted')
          do n_r=1,n_r_max
             !write(file_handle, *) r(n_r), real(zavg_Rloc(:,n_r))
-            write(file_handle, *) r(n_r), zavg_tmp(:,n_r)!tmp_hat_hat(:,n_r)!tmp(:,n_r)!
+            write(file_handle, *) r(n_r), zavg_tmp(1,n_r)!tmp_hat_hat(:,n_r)!tmp(:,n_r)!
          end do
          close(file_handle)
       endif
@@ -996,7 +1078,7 @@ contains
       real(cp) :: s_r_SHS_0, s_r_SHS_1, alpha_r_SHS
       real(cp) :: tmp_NHS(n_phi_max_3D,n_r_max), tmp_SHS(n_phi_max_3D,n_r_max)
       !real(cp) :: tmp(n_phi_max_3D,nRstart:nRstop)
-      complex(cp) :: tmp_hat(n_m_max)!,tmp_SHS_hat(n_m_max)
+      complex(cp) :: tmp_hat(n_m_max_3D)!,tmp_SHS_hat(n_m_max_3D)
 
       do n_s=1,n_r_max
          !!do n_theta=1,n_theta_max/2--> better to compute directly from 3D-grid

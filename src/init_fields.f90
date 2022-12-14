@@ -9,14 +9,15 @@ module init_fields
    use constants, only: zero, one, two, three, four, ci, pi, half, third, sq4pi
    use blocking, only: nRstart, nRstop, nRstart3D, nRstop3D
    use communications, only: transp_r2m, r2m_fields, transp_r2lm, r2lm_fields, &
-       &               transp_lm2r, lm2r_fields
+       &               transp_lm2r, lm2r_fields, scatter_from_rank0_to_lmloc
    use radial_functions, only: r, rscheme, or1, or2, beta, rscheme_3D, &
        &                       r_3D, or1_3D, tcond_3D
    use horizontal, only: theta
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u,     &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_QG_basis,       &
        &                l_non_rot, l_reset_t, l_chem, l_heat, amp_xi, init_xi, &
-       &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac, l_mag_B0
+       &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac, l_mag_B0,&
+       &                l_mag_inertia, start_file_b0
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
@@ -24,7 +25,7 @@ module init_fields
    use blocking_lm, only: lo_map
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max
    use truncation_3D, only: n_r_max_3D, minc_3D, l_max, n_theta_max, &
-       &                    n_phi_max_3D, lm_max
+       &                    n_phi_max_3D, m_max_3D, lm_max
    use useful, only: logWrite, abortRun, gausslike_compact_center, &
        &             gausslike_compact_middle, gausslike_compact_edge
    use radial_der, only: get_dr, get_ddr
@@ -554,6 +555,14 @@ contains
       !-- Local variables:
       integer :: n_r
       real(cp) :: b_pol, b_tor
+      !-- poloidal and toroidal arrays for grid_space quantities computation
+      complex(cp) :: db_LMloc(lmStart:lmStop, n_r_max_3D)
+      complex(cp) :: b_Rloc(lm_max,nRstart3D:nRstop3D)
+      complex(cp) :: db_Rloc(lm_max,nRstart3D:nRstop3D)
+      complex(cp) :: aj_Rloc(lm_max,nRstart3D:nRstop3D)
+      real(cp) :: Br_shell(n_phi_max_3D,n_theta_max)
+      real(cp) :: Bt_shell(n_phi_max_3D,n_theta_max)
+      real(cp) :: Bp_shell(n_phi_max_3D,n_theta_max)
 
       real(cp) :: b1(n_r_max_3D)
       real(cp) :: bR, bI, rdm
@@ -705,6 +714,23 @@ contains
          end do
       end if
 
+      if ( l_mag_inertia ) then
+         call get_dr(b_LMloc, db_LMloc, lmStart, lmStop,&
+              &       n_r_max_3D, rscheme_3D)
+
+         call transp_lm2r(lm2r_fields, b_LMloc, b_Rloc)
+         call transp_lm2r(lm2r_fields, db_LMloc, db_Rloc)
+         call transp_lm2r(lm2r_fields, aj_LMloc, aj_Rloc)
+
+#ifdef WITH_SHTNS
+         do n_r=nRstart3D,nRstop3D
+            call torpol_to_spat(b_Rloc(:,n_r), db_Rloc(:,n_r), aj_Rloc(:,n_r), n_r, &
+                 &              Br_shell(:,:), Bt_shell(:,:), Bp_shell(:,:))
+            B0_3D_Rloc(:,:,n_r) = sqrt(Br_shell(:,:)**2 + Bt_shell(:,:)**2 + Bp_shell(:,:)**2)
+         end do
+#endif
+      end if
+
    end subroutine initB_3D
 !----------------------------------------------------------------------------------
    subroutine initB0_3D(b_LMloc, aj_LMloc, init_B0, amp_B0)
@@ -734,11 +760,19 @@ contains
       complex(cp) :: ddb0_Rloc(lm_max,nRstart3D:nRstop3D)
       complex(cp) :: aj0_Rloc(lm_max,nRstart3D:nRstop3D)
       complex(cp) :: dj0_Rloc(lm_max,nRstart3D:nRstop3D)
+      !-- arrays to read complex b0
+      integer :: llmm2lm(l_max+1,m_max_3D+1)
+      real(cp) :: load_head(8)
+      real(cp), allocatable :: work(:,:)!, work_left(:)
+      complex(cp) :: load_b0pol(lm_max, n_r_max_3D)
+      complex(cp) :: load_b0tor(lm_max, n_r_max_3D)
 
-      integer :: n_r
+      integer :: n_r, k, l, m, lm
+      integer :: n_start_file, l_max_old, l_max_f, lm_max_old, lm_max_f, n_r_max_old, n_r_max_f
       real(cp) :: b_pol, b_tor
 
       integer :: lm10, lm20
+      logical :: startfile_does_exist
 
       !-- Set the values of the perturbation field to zero
       if ( .not. l_start_file ) then
@@ -775,7 +809,7 @@ contains
             end do
          end if
 
-      else if ( init_B == 3 ) then
+      else if ( init_B0 == 3 ) then
          ! l=2,m=0 toroidal field and l=1,m=0 poloidal field
          ! toroidal field has again its maximum of amp_B
          ! at mid-radius between r_icb and r_cmb for an
@@ -802,6 +836,80 @@ contains
                aj0_LMloc(lm20,n_r)=aj0_LMloc(lm20,n_r) + b_tor*r_3D(n_r)*sin(pi*(r_3D(n_r)-r_icb))
             end do
          end if
+
+      else if ( init_B0 == -1 ) then  ! Read a file containing a background field of any complexity
+      ! b0 format:: Spherical harmonics and chebychev polynomials
+      !             (2*lm_max,2*n_r_max)=(complex stored in real array, bpol+btor)
+      ! !WARNING!:: Fortran format =' formatted' ('unformatted' is for binary files; not implemented yet)
+         if ( rank == 0 ) then
+            inquire(file=start_file_b0, exist=startfile_does_exist)
+
+            if ( startfile_does_exist ) then
+               open(newunit=n_start_file, file=start_file_b0, status='old', &
+               &    form='formatted', access='stream')
+               print*, "! Reading background field B0 stored in ", start_file_b0
+            else
+               call abortRun('! The restart file for B_0 does not exist !')
+            end if
+
+            read(n_start_file, *) load_head ! unknown length
+            l_max_old = int(load_head(1)) ! l_max from checkpoint
+            lm_max_old = int(load_head(2)) ! lm_max from checkpoint
+            n_r_max_old = int(load_head(4))! n_r_max from checkpoint
+            !print*, load_head(:8)
+            !print*, l_max_old, lm_max_old, n_r_max_old
+            !-- no need for reading the rest of the line apparently...
+            !allocate(work_left(2*n_r_max_old-8))
+            !read(n_start_file, *) work_left
+
+            !-- extracting bpol/btor from the file
+            allocate(work(2*lm_max_old, 2*n_r_max_old))
+            !read(n_start_file, *) work ! apparently no possible to get the full block at once
+            do lm=1,2*lm_max_old
+               read(n_start_file, *) work(lm,:)
+            end do
+            !print*, work(1,:8)
+            !print*, work(2,:8)
+            !print*, work(47,:8)
+            close(n_start_file)
+
+            !-- lookup table for converting lm to l,m from checkpoint file
+            lm=0
+            do m=0,m_max_3D
+               do l=m,l_max
+                  lm=lm+1
+                  llmm2lm(l+1,m+1)=lm
+               end do
+            end do
+
+            !-- adapting to the current resolution
+            l_max_f = min(l_max, l_max_old)
+            lm_max_f = min(lm_max, lm_max_old)
+            n_r_max_f = min(n_r_max_3D, n_r_max_old)
+            !-- De-sorting the coefficient for the Back transforms
+            k=1
+            do l=0,l_max_f!-- WARNING: must start at 0 because (l,m)=(0,0) is stored as well
+               do m=0,l
+                  lm = llmm2lm(l+1,m+1)
+                  !lm = lo_map%lm2(l,m)
+                  load_b0pol(lm,:n_r_max_f) = cmplx(work(k  ,             1:            n_r_max_f), &
+                  &                                 work(k+1,             1:            n_r_max_f), kind=cp)
+                  load_b0tor(lm,:n_r_max_f) = cmplx(work(k  , n_r_max_old+1:n_r_max_old+n_r_max_f), &
+                  &                                 work(k+1, n_r_max_old+1:n_r_max_old+n_r_max_f), kind=cp)
+                  k=k+2
+               end do
+            end do
+            deallocate(work)
+
+            !!WARNING:: costf1 function is distributed in lm!call rscheme_3D%costf1(load_b0pol,1, lm_max, n_r_max_3D)
+            !stop
+         end if
+         call scatter_from_rank0_to_lmloc(load_b0pol,  b0_LMloc)
+         call scatter_from_rank0_to_lmloc(load_b0tor, aj0_LMloc)
+
+         !-- bringing the loaded b0 to the physical radial grid
+         call rscheme_3D%costf1(b0_LMloc, lmStart, lmStop, n_r_max_3D)
+         call rscheme_3D%costf1(aj0_LMloc, lmStart, lmStop, n_r_max_3D)
 
       else  ! Simple Background field !--> Same as init_B = 1 for the moment!!!
       ! l=1,m0 poloidal field

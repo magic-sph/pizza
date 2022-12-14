@@ -4,14 +4,14 @@ module update_temp_3D_mod
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use truncation_3D, only: n_r_max_3D, lm_max, l_max
-   use radial_functions, only: or1_3D, or2_3D, rscheme_3D
+   use radial_functions, only: or1_3D, or2_3D, rscheme_3D, r_3D
    use horizontal, only: bott_LMloc, topt_LMloc
    use namelists, only: kbott, ktopt, TdiffFac
    use blocking_lm, only: lo_map, lo_sub_map, chunksize
    use blocking, only: lmStart, lmStop
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
-   use radial_der, only: get_ddr, get_dr, get_dr_FD
+   use radial_der, only: get_ddr, get_dr_FD, get_dr
    use fields, only:  work_LMloc
    use constants, only: zero, one, two, sq4pi
    use useful, only: abortRun
@@ -290,25 +290,44 @@ contains
 
       call get_dr_FD(dVrT_LMloc, work_LMloc, lmStart, lmStop, n_r_max_3D)
 
-!#ifdef aDEBUG
+      !call get_dr( dVrT_LMloc,work_LMloc, lmStart, lmStop, &
+      !     &       n_r_max_3D, rscheme_3D, nocopy=.true. )
+
+#ifdef aDEBUG
       block
+         use constants, only: pi
+         use radial_der, only: get_dr
+
          integer :: filehandle
 
+         do lm=lmStart,lmStop
+            !dVrT_LMloc(lm,:) = 0.5_cp*tanh(10.0_cp*(r_3D(:)-r_3D(n_r_max_3D))*(r_3D(1)-r_3D(:)))
+            !dVrT_LMloc(lm,:) = 4.*r_3D(:)*(r_3D(:)-r_3D(n_r_max_3D))*(r_3D(1)-r_3D(:))
+            dVrT_LMloc(lm,:) = r_3D(:)*sin(pi*r_3D(:))
+         end do
+         call get_dr_FD(dVrT_LMloc, work_LMloc, lmStart, lmStop, n_r_max_3D)
+
          if ( rank == 0 ) then
-            print*, "urT(lm=18)(r<10):: ", dVrT_LMloc(18,:10)
+            open(newunit=filehandle, file='rder_rloc.dat', status='new', form='formatted')
+            do n_r=1,n_r_max_3D
+               write(filehandle, *) r_3D(n_r), real(work_LMloc(1,n_r))
+            end do
+            close(filehandle)
+
+            print*, "lm, urT(lm=lmStart+18)(r<10):: ", lmStart+18, dVrT_LMloc(lmStart+18,:10)
             open(newunit=filehandle, file='test_urT', form='unformatted', access='stream')
-               write(filehandle) dVrT_LMloc(lmStart:lmStop,:)
+               write(filehandle) dVrT_LMloc
             close(filehandle)
 
             open(newunit=filehandle, file='test_drurT', form='unformatted', access='stream')
-               write(filehandle) work_LMloc(lmStart:lmStop,:)
+               write(filehandle) work_LMloc
             close(filehandle)
 
             call get_dr( dVrT_LMloc,work_LMloc, lmStart, lmStop, &
                  &       n_r_max_3D, rscheme_3D, nocopy=.true. )
 
             open(newunit=filehandle, file='test_drurT_former', form='unformatted', access='stream')
-               write(filehandle) work_LMloc(lmStart:lmStop,:)
+               write(filehandle) work_LMloc
             close(filehandle)
 
       print*, 'ALL GOOD New get_dr!**'
@@ -317,7 +336,7 @@ contains
       end block
 
       stop
-!#endif
+#endif
 
       do n_r=1,n_r_max_3D
          do lm=lmStart,lmStop
