@@ -17,7 +17,7 @@ module init_fields
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_QG_basis,       &
        &                l_non_rot, l_reset_t, l_chem, l_heat, amp_xi, init_xi, &
        &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac, l_mag_B0,&
-       &                l_mag_inertia, start_file_b0
+       &                amp_B0, init_B0, start_file_b0, l_mag_inertia
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
@@ -134,15 +134,12 @@ contains
 
       if ( init_t /= 0 .and. l_heat_3D ) call initT_3D(temp_3D_LMloc, init_t, amp_t)
 
-      if ( init_B /= 0 .and. l_mag_3D ) then
-         if ( l_mag_B0 ) then
-            call initB0_3D(b_3D_LMloc, aj_3D_LMloc, init_B, amp_B)
-         else
-            call initB_3D(b_3D_LMloc, aj_3D_LMloc, init_B, amp_B)
-         end if
-      end if
-
       if ( init_u /= 0 ) call initU(us_Mloc, up_Mloc)
+
+      if ( l_mag_3D ) then
+         if ( init_B /= 0 ) call initB_3D(b_3D_LMloc, aj_3D_LMloc, init_B, amp_B)
+         if ( init_B0 /= 0 .and. l_mag_B0 ) call initB0_3D(b_3D_LMloc, aj_3D_LMloc, init_B0, amp_B0)
+      end if
 
       !-- Reconstruct missing fields, dtemp_Mloc, om_Mloc, dB, dj, etc.
       if ( l_heat ) call get_dr(temp_Mloc, dtemp_Mloc, nMstart, nMstop, &
@@ -563,13 +560,22 @@ contains
       real(cp) :: Br_shell(n_phi_max_3D,n_theta_max)
       real(cp) :: Bt_shell(n_phi_max_3D,n_theta_max)
       real(cp) :: Bp_shell(n_phi_max_3D,n_theta_max)
+      !-- arrays and helpers to read complex b(t=0) from any code
+      integer :: llmm2lm(l_max+1,m_max_3D+1)
+      real(cp) :: load_head(8)
+      real(cp), allocatable :: work(:,:)
+      complex(cp) :: load_b0pol(lm_max, n_r_max_3D)
+      complex(cp) :: load_b0tor(lm_max, n_r_max_3D)
+      integer :: l_max_old, l_max_f, lm_max_old, lm_max_f
+      integer :: n_start_file, n_r_max_old, n_r_max_f
+      logical :: startfile_does_exist
 
       real(cp) :: b1(n_r_max_3D)
       real(cp) :: bR, bI, rdm
       real(cp) :: x
       integer :: bExp
 
-      integer :: lm, lm0, l1, m1
+      integer :: lm, l1, m1, k
       integer :: lm10, lm20, lm30, lm11, lm44
 
       lm10 = lo_map%lm2(1,0)
@@ -578,7 +584,6 @@ contains
       lm11 = lo_map%lm2(1,1)
       lm44 = lo_map%lm2(4,4)
 
-      lm0=lm20 ! Default quadrupole field
 
       if ( init_B < 0 ) then  ! l,m mixture, random init
       !-- Random noise initialization of all (l,m) modes exept (l=0,m=0):
@@ -605,6 +610,17 @@ contains
                b_LMloc(lm,n_r)=b_LMloc(lm,n_r) + cmplx(bR*b1(n_r),bI*b1(n_r),kind=cp)
             end do
          end do
+
+      else if ( init_B == 1 ) then  ! l=1,m0 poloidal field
+      ! which is potential field at r_cmb
+         if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
+!         if ( lmStartB(rank+1) <= lm10 .and. lmStopB(rank+1) >= lm10 ) then ! select processor
+            b_pol=amp_B*5.0_cp*half*sqrt(third*pi)*r_icb**2
+            do n_r=1,n_r_max_3D
+               b_LMloc(lm10,n_r)=b_LMloc(lm10,n_r)+b_pol*(r_3D(n_r)/r_icb)**2 * &
+               &               ( one - three/5.0_cp*(r_3D(n_r)/r_cmb)**2 )
+            end do
+         end if
 
       else if ( init_B == 2 ) then  ! l=1,m=0 analytical toroidal field
       ! with a maximum of amp_B at mid-radius
@@ -679,6 +695,7 @@ contains
 
       else if ( init_B == 6 ) then  ! l=1,m0 poloidal field
       ! which is potential field at r_cmb
+      ! SAME as init_B == 1: kept this one because for easier comparisons with MagIC 
          if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
 !         if ( lmStartB(rank+1) <= lm10 .and. lmStopB(rank+1) >= lm10 ) then ! select processor
             b_pol=amp_B*5.0_cp*half*sqrt(third*pi)*r_icb**2
@@ -687,6 +704,69 @@ contains
                &               ( one - three/5.0_cp*(r_3D(n_r)/r_cmb)**2 )
             end do
          end if
+
+      else if ( init_B == -1 ) then  ! Read a file containing a starting field of any complexity from any code
+      ! b0 format:: Spherical harmonics and chebychev polynomials
+      !             (2*lm_max,2*n_r_max)=(complex stored in real array, bpol+btor)
+      ! !WARNING!:: Fortran format =' formatted' ('unformatted' is for binary files; not implemented yet)
+         if ( rank == 0 ) then
+            inquire(file=start_file_b0, exist=startfile_does_exist)
+
+            if ( startfile_does_exist ) then
+               open(newunit=n_start_file, file=start_file_b0, status='old', &
+               &    form='formatted', access='stream')
+               print*, "! Init_B Starting from a B field stored in ", start_file_b0
+            else
+               call abortRun('! The restart file for B does not exist !')
+            end if
+
+            read(n_start_file, *) load_head ! unknown length
+            l_max_old = int(load_head(1)) ! l_max from checkpoint
+            lm_max_old = int(load_head(2)) ! lm_max from checkpoint
+            n_r_max_old = int(load_head(4))! n_r_max from checkpoint
+            !-- extracting bpol/btor from the file
+            allocate(work(2*lm_max_old, 2*n_r_max_old))
+            do lm=1,2*lm_max_old
+               read(n_start_file, *) work(lm,:)
+            end do
+            close(n_start_file)
+
+            !-- lookup table for converting lm to l,m from checkpoint file
+            lm=0
+            do m1=0,m_max_3D
+               do l1=m1,l_max
+                  lm=lm+1
+                  llmm2lm(l1+1,m1+1)=lm
+               end do
+            end do
+
+            !-- adapting to the current resolution
+            l_max_f = min(l_max, l_max_old)
+            lm_max_f = min(lm_max, lm_max_old)
+            n_r_max_f = min(n_r_max_3D, n_r_max_old)
+            !-- De-sorting the coefficient for the Back transforms
+            k=1
+            do l1=0,l_max_f!-- WARNING: must start at 0 because (l,m)=(0,0) is stored as well
+               do m1=0,l1
+                  lm = llmm2lm(l1+1,m1+1)
+                  !lm = lo_map%lm2(l,m)
+                  load_b0pol(lm,:n_r_max_f) = amp_B*cmplx(work(k  ,             1:            n_r_max_f), &
+                  &                                       work(k+1,             1:            n_r_max_f), kind=cp)
+                  load_b0tor(lm,:n_r_max_f) = amp_B*cmplx(work(k  , n_r_max_old+1:n_r_max_old+n_r_max_f), &
+                  &                                       work(k+1, n_r_max_old+1:n_r_max_old+n_r_max_f), kind=cp)
+                  k=k+2
+               end do
+            end do
+            deallocate(work)
+
+            !!WARNING:: costf1 function is distributed in lm!call rscheme_3D%costf1(load_b0pol,1, lm_max, n_r_max_3D)
+         end if
+         call scatter_from_rank0_to_lmloc(load_b0pol,  b_LMloc)
+         call scatter_from_rank0_to_lmloc(load_b0tor, aj_LMloc)
+
+         !-- bringing the loaded b0 to the physical radial grid
+         call rscheme_3D%costf1(b_LMloc, lmStart, lmStop, n_r_max_3D)
+         call rscheme_3D%costf1(aj_LMloc, lmStart, lmStop, n_r_max_3D)
 
       else if ( init_B == 1010 ) then  ! l=1,m=0 decay mode , radial bessel function of order 1 !
          if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
@@ -736,7 +816,7 @@ contains
    subroutine initB0_3D(b_LMloc, aj_LMloc, init_B0, amp_B0)
       !
       ! Purpose of this subroutine is to initialize a background magnetic field
-      ! according to the control parameters init_B.
+      ! according to the control parameters init_B0.
       ! Can be used for magneto convection or benchmark purposes
       !
 
@@ -749,6 +829,8 @@ contains
       complex(cp), intent(inout) :: aj_LMloc(lmStart:lmStop, n_r_max_3D)
 
       !-- Local variables:
+      integer :: n_r
+      real(cp) :: b_pol, b_tor
       !-- poloidal and toroidal arrays for grid_space quantities computation
       complex(cp) :: b0_LMloc(lmStart:lmStop, n_r_max_3D)
       complex(cp) :: db0_LMloc(lmStart:lmStop, n_r_max_3D)
@@ -766,10 +848,9 @@ contains
       real(cp), allocatable :: work(:,:)!, work_left(:)
       complex(cp) :: load_b0pol(lm_max, n_r_max_3D)
       complex(cp) :: load_b0tor(lm_max, n_r_max_3D)
-
-      integer :: n_r, k, l, m, lm
-      integer :: n_start_file, l_max_old, l_max_f, lm_max_old, lm_max_f, n_r_max_old, n_r_max_f
-      real(cp) :: b_pol, b_tor
+      integer ::  k, l, m, lm
+      integer :: l_max_old, l_max_f, lm_max_old, lm_max_f
+      integer :: n_start_file, n_r_max_old, n_r_max_f
 
       integer :: lm10, lm20
       logical :: startfile_does_exist
@@ -864,13 +945,11 @@ contains
 
             !-- extracting bpol/btor from the file
             allocate(work(2*lm_max_old, 2*n_r_max_old))
-            !read(n_start_file, *) work ! apparently no possible to get the full block at once
+            !read(n_start_file, *) work ! apparently not possible to get the full block at once
             do lm=1,2*lm_max_old
                read(n_start_file, *) work(lm,:)
             end do
-            !print*, work(1,:8)
             !print*, work(2,:8)
-            !print*, work(47,:8)
             close(n_start_file)
 
             !-- lookup table for converting lm to l,m from checkpoint file
@@ -892,17 +971,16 @@ contains
                do m=0,l
                   lm = llmm2lm(l+1,m+1)
                   !lm = lo_map%lm2(l,m)
-                  load_b0pol(lm,:n_r_max_f) = cmplx(work(k  ,             1:            n_r_max_f), &
-                  &                                 work(k+1,             1:            n_r_max_f), kind=cp)
-                  load_b0tor(lm,:n_r_max_f) = cmplx(work(k  , n_r_max_old+1:n_r_max_old+n_r_max_f), &
-                  &                                 work(k+1, n_r_max_old+1:n_r_max_old+n_r_max_f), kind=cp)
+                  load_b0pol(lm,:n_r_max_f) = amp_B0*cmplx(work(k  ,             1:            n_r_max_f), &
+                  &                                        work(k+1,             1:            n_r_max_f), kind=cp)
+                  load_b0tor(lm,:n_r_max_f) = amp_B0*cmplx(work(k  , n_r_max_old+1:n_r_max_old+n_r_max_f), &
+                  &                                        work(k+1, n_r_max_old+1:n_r_max_old+n_r_max_f), kind=cp)
                   k=k+2
                end do
             end do
             deallocate(work)
 
             !!WARNING:: costf1 function is distributed in lm!call rscheme_3D%costf1(load_b0pol,1, lm_max, n_r_max_3D)
-            !stop
          end if
          call scatter_from_rank0_to_lmloc(load_b0pol,  b0_LMloc)
          call scatter_from_rank0_to_lmloc(load_b0tor, aj0_LMloc)
@@ -911,7 +989,7 @@ contains
          call rscheme_3D%costf1(b0_LMloc, lmStart, lmStop, n_r_max_3D)
          call rscheme_3D%costf1(aj0_LMloc, lmStart, lmStop, n_r_max_3D)
 
-      else  ! Simple Background field !--> Same as init_B = 1 for the moment!!!
+      else  ! Simple Background field !--> Same as init_B0 = 1 for the moment!!!
       ! l=1,m0 poloidal field
       ! which is potential field at r_cmb
          if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor

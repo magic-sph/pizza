@@ -92,6 +92,9 @@ module namelists
    real(cp), public :: amp_B
    integer,  public :: init_B
    real(cp), public :: scale_B
+   real(cp), public :: amp_B0      ! Strength of the Background field (Magnetoconvection)
+   integer,  public :: init_B0
+   real(cp), public :: scale_B0
    logical,  public :: l_start_file     ! taking fields from startfile ?
    logical,  public :: l_reset_t ! Should we reset the time stored in the startfile?
    character(len=72), public :: start_file  ! name of start_file
@@ -187,7 +190,8 @@ contains
       &                   delta_fac, l_mag_B0, l_U0_3D, l_leibniz
       namelist/start_field/l_start_file,start_file,start_file_b0,scale_t,&
       &                    init_t,amp_t,scale_u,init_u,amp_u,l_reset_t,  &
-      &                    amp_xi,init_xi,scale_xi,scale_B,init_B,amp_B
+      &                    amp_xi,init_xi,scale_xi,scale_B,init_B,amp_B, &
+      &                    scale_B0, init_B0, amp_B0
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
       &                       l_vphi_balance,l_vort_balance,bl_cut,        &
@@ -671,6 +675,9 @@ contains
       init_B           =0
       scale_B          =1.0_cp
       amp_B            =0.0_cp
+      init_B0          =0
+      scale_B0         =1.0_cp
+      amp_B0           =0.0_cp
 
       !----- Output namelist
       n_log_step       =50
@@ -881,6 +888,9 @@ contains
       write(n_out,'(''  scale_B         ='',ES14.6,'','')') scale_B
       write(n_out,'(''  init_B          ='',i7,'','')') init_B
       write(n_out,'(''  amp_B           ='',ES14.6,'','')') amp_B
+      write(n_out,'(''  scale_B0        ='',ES14.6,'','')') scale_B0
+      write(n_out,'(''  init_B0         ='',i7,'','')') init_B0
+      write(n_out,'(''  amp_B0          ='',ES14.6,'','')') amp_B0
       write(n_out,*) "/"
 
       write(n_out,*) "&output_control"
