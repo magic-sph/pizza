@@ -17,7 +17,8 @@ module init_fields
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_QG_basis,       &
        &                l_non_rot, l_reset_t, l_chem, l_heat, amp_xi, init_xi, &
        &                l_heat_3D, l_mag_3D, amp_B, init_B, BdiffFac, l_mag_B0,&
-       &                amp_B0, init_B0, start_file_b0, l_mag_inertia
+       &                amp_B0, init_B0, lmax_trunc_B0, start_file_b0,         &
+       &                l_mag_inertia
    use outputs, only: n_log_file
    use parallel_mod, only: rank
    use algebra, only: prepare_full_mat, solve_full_mat
@@ -138,7 +139,8 @@ contains
 
       if ( l_mag_3D ) then
          if ( init_B /= 0 ) call initB_3D(b_3D_LMloc, aj_3D_LMloc, init_B, amp_B)
-         if ( init_B0 /= 0 .and. l_mag_B0 ) call initB0_3D(b_3D_LMloc, aj_3D_LMloc, init_B0, amp_B0)
+         if ( init_B0 /= 0 .and. l_mag_B0 ) call initB0_3D(b_3D_LMloc, aj_3D_LMloc, &
+                                                 &         init_B0, amp_B0, lmax_trunc_B0)
       end if
 
       !-- Reconstruct missing fields, dtemp_Mloc, om_Mloc, dB, dj, etc.
@@ -813,7 +815,7 @@ contains
 
    end subroutine initB_3D
 !----------------------------------------------------------------------------------
-   subroutine initB0_3D(b_LMloc, aj_LMloc, init_B0, amp_B0)
+   subroutine initB0_3D(b_LMloc, aj_LMloc, init_B0, amp_B0, lmax_trunc_B0)
       !
       ! Purpose of this subroutine is to initialize a background magnetic field
       ! according to the control parameters init_B0.
@@ -823,6 +825,7 @@ contains
       !-- Input variables
       real(cp),    intent(in) :: amp_B0
       integer,     intent(in) :: init_B0
+      integer,     intent(in) :: lmax_trunc_B0
 
       !-- Output variables:
       complex(cp), intent(inout) :: b_LMloc(lmStart:lmStop, n_r_max_3D)
@@ -849,7 +852,7 @@ contains
       complex(cp) :: load_b0pol(lm_max, n_r_max_3D)
       complex(cp) :: load_b0tor(lm_max, n_r_max_3D)
       integer ::  k, l, m, lm
-      integer :: l_max_old, l_max_f, lm_max_old, lm_max_f
+      integer :: l_max_old, l_max_f, lm_max_old
       integer :: n_start_file, n_r_max_old, n_r_max_f
 
       integer :: lm10, lm20
@@ -962,12 +965,11 @@ contains
             end do
 
             !-- adapting to the current resolution
-            l_max_f = min(l_max, l_max_old)
-            lm_max_f = min(lm_max, lm_max_old)
+            l_max_f = min(lmax_trunc_B0, l_max_old)
             n_r_max_f = min(n_r_max_3D, n_r_max_old)
             !-- De-sorting the coefficient for the Back transforms
             k=1
-            do l=0,l_max_f!-- WARNING: must start at 0 because (l,m)=(0,0) is stored as well
+            do l=0,l_max_f !-- WARNING: must start at 0 because (l,m)=(0,0) is stored as well
                do m=0,l
                   lm = llmm2lm(l+1,m+1)
                   !lm = lo_map%lm2(l,m)

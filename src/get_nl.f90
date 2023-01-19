@@ -18,7 +18,8 @@ module grid_space_arrays_mod
    use mem_alloc, only: bytes_allocated
    use namelists, only: l_heat_3D, l_mag_3D, l_mag_LF, r_icb, r_cmb, &
    &                    l_mag_alpha, alpha_fac, l_mag_inertia,       &
-   &                    delta_fac, l_QG_basis, l_lin_solve, l_mag_B0, beta_shift
+   &                    delta_fac, l_QG_basis, l_lin_solve, l_mag_B0,&
+   &                    l_lin_B0, beta_shift
    use blocking, only: nRstart3D, nRstop3D
    use truncation_3D, only: n_theta_max, n_phi_max_3D, n_r_max_3D
    use radial_functions, only: or1_3D, r_3D, rgrav_3D, beta!, tcond_3D
@@ -285,7 +286,7 @@ contains
                   this%VxBp(n_phi,n_theta)=or1sn1*(                      &
                   &    vr(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r)- &
                   &    vt(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r) )
-                  !if ( l_mag_B0LFsmall ) then
+                  if ( .not. l_lin_B0 ) then
                      this%VxBr(n_phi,n_theta)=this%VxBr(n_phi,n_theta)+r2*(&
                      &    vt(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-       &
                      &    vp(n_phi,n_theta)*this%Btc(n_phi,n_theta) )
@@ -297,7 +298,7 @@ contains
                      this%VxBp(n_phi,n_theta)=this%VxBp(n_phi,n_theta)+or1sn1*(&
                      &    vr(n_phi,n_theta)*this%Btc(n_phi,n_theta)-           &
                      &    vt(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
-                  !end if
+                  end if
                end if
 
                if ( l_mag_alpha ) then !.and. r_3D(n_r)*sint(n_theta) >= r_icb ) then
@@ -404,7 +405,7 @@ contains
                      &                  +cost(n_theta)*(&!or1sn1*(                 &!
                      &   this%curlBpc(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r)-  &
                      &   this%curlBrc(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r) )
-                     !if ( l_mag_B0LFsmall ) then
+                     if ( .not. l_lin_B0 ) then
                         !---- + jxBs= sint * jxBr + cost * jxBt
                         jxBs(n_phi,n_theta)=jxBs(n_phi,n_theta)+sint(n_theta)*(&!r2*( &!
                         &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-  &
@@ -412,7 +413,7 @@ contains
                         &                  +cost(n_theta)*(&!or1sn1*(                &!
                         &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-  &
                         &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) )
-                     !end if
+                     end if
 
                      !---- j0xBp= j0_r*B_t - j0_t*B_r
                      jxBp(n_phi,n_theta) =(&!or1sn1*(                              &!
@@ -422,12 +423,12 @@ contains
                      jxBp(n_phi,n_theta) =jxBp(n_phi,n_theta)+(&!or1sn1*(          &!
                      &    this%curlBrc(n_phi,n_theta)*B0t_3D_Rloc(n_phi,n_theta,n_r)- &
                      &    this%curlBtc(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r) )
-                     !if ( l_mag_B0LFsmall ) then
+                     if ( .not. l_lin_B0 ) then
                         !---- + jxBp= j_r*B_t - j_t*B_r
                         jxBp(n_phi,n_theta) =jxBp(n_phi,n_theta)+(&!or1sn1*(       &!
                         &    this%curlBrc(n_phi,n_theta)*this%Btc(n_phi,n_theta)- &
                         &    this%curlBtc(n_phi,n_theta)*this%Brc(n_phi,n_theta) )
-                     !end if
+                     end if
                   end if
 
                   if ( l_QG_basis ) then
@@ -465,7 +466,7 @@ contains
                         &   this%curlBpc(n_phi,n_theta)*B0r_3D_Rloc(n_phi,n_theta,n_r)-     &
                         &   this%curlBrc(n_phi,n_theta)*B0p_3D_Rloc(n_phi,n_theta,n_r) ) )* &
                         &                          r_3D(n_r)*cost(n_theta)!*beta(n_r)
-                        !if ( l_mag_B0LFsmall ) then
+                        if ( .not. l_lin_B0 ) then
                            !-- + jxBz = cost * jxBr - sint * jxBt
                            jxBz(n_phi,n_theta)=jxBz(n_phi,n_theta)+(cost(n_theta)*(&!
                            &   this%curlBtc(n_phi,n_theta)*this%Bpc(n_phi,n_theta)-     &
@@ -474,7 +475,7 @@ contains
                            &   this%curlBpc(n_phi,n_theta)*this%Brc(n_phi,n_theta)-     &
                            &   this%curlBrc(n_phi,n_theta)*this%Bpc(n_phi,n_theta) ) )* &
                            &                          r_3D(n_r)*cost(n_theta)!*beta(n_r)
-                        !end if
+                        end if
                      end if
                   end if
                end do

@@ -95,6 +95,7 @@ module namelists
    real(cp), public :: amp_B0      ! Strength of the Background field (Magnetoconvection)
    integer,  public :: init_B0
    real(cp), public :: scale_B0
+   integer,  public :: lmax_trunc_B0     ! When start_file_b0: l_max trunction for complex B0 field (Magnetoconvection)
    logical,  public :: l_start_file     ! taking fields from startfile ?
    logical,  public :: l_reset_t ! Should we reset the time stored in the startfile?
    character(len=72), public :: start_file  ! name of start_file
@@ -120,6 +121,7 @@ module namelists
    logical,  public :: l_thw_3D        ! Computation of the 3D thermal wind contribution on u_phi-3D
    logical,  public :: l_mag_3D        ! Treatment of the magnetic field (3-D)
    logical,  public :: l_mag_B0        ! With or without a Background field to the problem (Magnetoconvection)
+   logical,  public :: l_lin_B0        ! Linear or Quadratic products between B0 and bsmall (Magnetoconvection)
    logical,  public :: l_U0_3D         ! With or without a Velocity field to the problem (Magnetoconvection)
    logical,  public :: l_mag_LF        ! Treatment of the Lorentz-Force
    logical,  public :: l_mag_alpha     ! With or without magnetic Alpha effect in magnetic advection
@@ -187,11 +189,12 @@ contains
       &                   xicond_fac,l_xi_3D,l_heat_3D,l_thw_3D,   &
       &                   l_mag_LF,l_mag_alpha,l_mag_pump,l_cyl,   &
       &                   l_mag_inertia,alpha_fac,mag_pump_fac,    &
-      &                   delta_fac, l_mag_B0, l_U0_3D, l_leibniz
+      &                   delta_fac, l_mag_B0, l_lin_B0, l_U0_3D,  &
+      &                   l_leibniz
       namelist/start_field/l_start_file,start_file,start_file_b0,scale_t,&
       &                    init_t,amp_t,scale_u,init_u,amp_u,l_reset_t,  &
       &                    amp_xi,init_xi,scale_xi,scale_B,init_B,amp_B, &
-      &                    scale_B0, init_B0, amp_B0
+      &                    scale_B0, init_B0, amp_B0, lmax_trunc_B0
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
       &                       l_vphi_balance,l_vort_balance,bl_cut,        &
@@ -330,6 +333,8 @@ contains
       else
          l_mag_3D=.true.
       end if
+
+      if ( .not. l_mag_B0 ) l_lin_B0=.false.
 
       if ( .not. l_mag_alpha ) alpha_fac=0.0_cp
       if ( .not. l_mag_pump )  mag_pump_fac=0.0_cp
@@ -649,6 +654,7 @@ contains
       l_mag_3D = .false.
       l_mag_LF = .false.
       l_mag_B0 = .false.
+      l_lin_B0 = .true. ! Linear Magnetoconvection by default
       l_U0_3D  = .false.
       l_leibniz = .false.
       l_mag_alpha = .false.
@@ -678,6 +684,7 @@ contains
       init_B0          =0
       scale_B0         =1.0_cp
       amp_B0           =0.0_cp
+      lmax_trunc_B0    =10
 
       !----- Output namelist
       n_log_step       =50
@@ -801,6 +808,8 @@ contains
       write(n_out,'(''  l_mag_3D        ='',l3,'','')') l_mag_3D
       write(n_out,'(''  l_mag_LF        ='',l3,'','')') l_mag_LF
       write(n_out,'(''  l_mag_B0        ='',l3,'','')') l_mag_B0
+      if ( l_mag_B0 ) &
+      & write(n_out,'(''  l_lin_B0        ='',l3,'','')') l_lin_B0
       write(n_out,'(''  l_U0_3D         ='',l3,'','')') l_U0_3D
       write(n_out,'(''  l_leibniz       ='',l3,'','')') l_leibniz
       write(n_out,'(''  l_mag_alpha     ='',l3,'','')') l_mag_alpha
@@ -891,6 +900,8 @@ contains
       write(n_out,'(''  scale_B0        ='',ES14.6,'','')') scale_B0
       write(n_out,'(''  init_B0         ='',i7,'','')') init_B0
       write(n_out,'(''  amp_B0          ='',ES14.6,'','')') amp_B0
+      if ( init_B0 == -1 ) &
+      & write(n_out,'(''  lmax_trunc_B0   ='',i7,'','')') lmax_trunc_B0
       write(n_out,*) "/"
 
       write(n_out,*) "&output_control"
