@@ -129,6 +129,42 @@ def get_dr(f):
 
     return df
 
+def fourier_cheb_spectra(f, r, weight, n_cheb_max):
+    """
+    This routine computes spectra in the Fourier/Chebyshev domain. This makes use
+    of the Parseval relation:
+
+    \int |f(r,\phi)|^2 r w(r) dr dphi = \sum_m\sum_n \pi f_{mn}^2/(N_r-1)
+
+    (+ some factor 2 or 1/2 corrections for m=0 and n=0 modes
+
+    :param f: a complex input array (first dimension is m)
+    :type f: numpy.ndarray
+    :param r: the radius
+    :type f: numpy.ndarray
+    :param weight: a weighting function (typically the height of the container)
+    :type weight: numpy.ndarray
+    :param n_cheb_max: number of Chebyshev modes to be retained
+    :type n_cheb_max: int
+    :returns: the spectra in the (m,n) space
+    :rtype: numpy.ndarray
+    """
+    n_m_max = f.shape[0]
+    rin = r.min()
+    rout = r.max()
+    x = (r-(rout+rin)/2.) * 2./(rout-rin)
+    dat = f * (1.-x**2)**0.25 * np.sqrt(r) * np.sqrt(weight)
+    fcheb = costf(dat)
+    fcheb[:, 0] *= 0.5
+    fcheb[:, -1] *= 0.5
+    Ekcheb = 0.5*np.pi * abs(fcheb[:, :n_cheb_max])**2 / (len(r)-1.)
+    Ekcheb[:, 0] *= 2 # First Cheb mode has a factor of two
+    Ekcheb[1:, :] *= 2 # All Fourier modes with m > 0 needs to be multiplied by two
+
+    Ekcheb *= np.pi
+
+    return Ekcheb
+
 
 def intcheb(f):
     """
