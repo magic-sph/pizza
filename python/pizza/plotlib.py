@@ -121,7 +121,12 @@ def equatContour(data, radius, minc=1, label=None, levels=65,
             ax.contour(xx, yy, data, cs, colors=['k'], linewidths=[0.5],
                        extend='both')
     else:
-        cs = levels
+        if not normed:
+            cs = levels
+        else:
+            vmax = max(abs(data.max()), abs(data.min()))
+            vmin = -vmax
+            cs = np.linspace(vmin, vmax, levels)
         im = ax.contourf(xx, yy, data, cs, cmap=cmap)
         if contourLines:
             ax.contour(xx, yy, data, cs, colors=['k'], linewidths=[0.5])
