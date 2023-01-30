@@ -23,7 +23,7 @@ contains
 
       !-- Input variables
       character(len=*), intent(in) :: filename
-      complex(cp),      intent(in) :: arr_Rloc(nRstart:nRstop,n_r_max)
+      complex(cp),      intent(in) :: arr_Rloc(n_m_max,nRstart:nRstop)
       real(cp),         intent(in) :: time
 
       !-- Local variables
