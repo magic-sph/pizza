@@ -622,8 +622,8 @@ contains
             ! pow_3D_b = round_off(two*pi*pow_3D_b)
 
             tmp(:)=CorFac*pump(:)*ekpump(:)*height(:)*r(:)
-            pum  = rInt_R(tmp, r, rscheme)
-            pum  = round_off(two*pi*pum)
+            pum=rInt_R(tmp, r, rscheme)
+            pum=round_off(two*pi*pum)
          end if
 
 
