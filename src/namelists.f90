@@ -33,6 +33,7 @@ module namelists
    real(cp), public :: xicond_fac    ! Rescaling of the conducting composition
    real(cp), public :: beta_shift    ! Shift the upper bound of \beta
    real(cp), public :: beta_fac      ! Constant to modify the container (used for non-spherical containers)
+   real(cp), public :: amp_forcing   ! Amplitude of forcing (in case turbulence is forced)
    logical,  public :: l_finite_diff ! Shift to finite differences in radius
    logical,  public :: l_non_rot     ! Switch to do a non-rotatig annulus
    logical,  public :: l_temp_3D     ! 2D or 3D temperature background
@@ -42,6 +43,7 @@ module namelists
    integer,  public :: ktopt, kbott  ! Temperature boundary condition
    integer,  public :: ktopxi, kbotxi! Boundary conditions for chemical composition
    integer,  public :: ktopv, kbotv  ! Velocity boundary condition
+   integer,  public :: n_rings       ! Number of rings when turbulence is forced
    real(cp), public :: t_bot(3*n_t_bounds), xi_bot(3*n_t_bounds)
    real(cp), public :: t_top(3*n_t_bounds), xi_top(3*n_t_bounds)
    real(cp), public :: g0, g1, g2
@@ -148,10 +150,11 @@ contains
       namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
       namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,      &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
-      &                   l_temp_3D,tcond_fac,l_temp_advz,         &
+      &                   l_temp_3D,tcond_fac,l_temp_advz,n_rings, &
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
       &                   xi_bot,xi_top, l_xi_3D, xicond_fac,      &
-      &                   h_temp, h_xi, container, beta_fac
+      &                   h_temp, h_xi, container, beta_fac,       &
+      &                   amp_forcing
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi
@@ -547,6 +550,8 @@ contains
          xi_top(n)=0.0_cp
       end do
       container        ='sphere'
+      n_rings          =0
+      amp_forcing      =0.0_cp
 
       !----- Namelist start_field:
       l_reset_t        =.false.
@@ -660,6 +665,8 @@ contains
       write(n_out,*) " container       = """,container(1:length),""","
       write(n_out,'(''  beta_shift      ='',ES14.6,'','')') beta_shift
       write(n_out,'(''  beta_fac        ='',ES14.6,'','')') beta_fac
+      write(n_out,'(''  n_rings         ='',i3,'','')') n_rings
+      write(n_out,'(''  amp_forcing     ='',ES14.6,'','')') amp_forcing
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1
       write(n_out,'(''  g2              ='',ES14.6,'','')') g2

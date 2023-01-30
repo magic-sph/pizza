@@ -2,9 +2,10 @@ module rloop
 
    use precision_mod
    use parallel_mod
-   use constants, only: ci, one, half
+   use constants, only: ci, one, half, pi, two, zero
    use mem_alloc, only: bytes_allocated
-   use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem
+   use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem, n_rings, &
+       &                radratio, amp_forcing
    use radial_functions, only: or1, r, beta, dtcond, ekpump
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
@@ -23,6 +24,7 @@ module rloop
    real(cp), allocatable :: usT_grid(:), upT_grid(:)
    real(cp), allocatable :: usXi_grid(:), upXi_grid(:)
    real(cp), allocatable :: usOm_grid(:), upOm_grid(:)
+   complex(cp), allocatable :: forcing_Rloc(:,:)
 
    public :: radial_loop, initialize_radial_loop, finalize_radial_loop
 
@@ -30,11 +32,15 @@ contains
 
    subroutine initialize_radial_loop(n_phi_max)
 
-      !-- Input variable
-      integer, intent(in) :: n_phi_max
+      !-- Input variables
+      integer,  intent(in) :: n_phi_max
 
       !-- Local variable:
-      integer :: n_nphi_arrays
+      real(cp), allocatable :: r_rings(:), x(:), y(:), phi_ring(:)
+      real(cp) :: force(n_phi_max)
+      integer, allocatable :: n_phi_ring(:)
+      real(cp) :: ricb, rcmb, dr, dphi, xgrid, ygrid, phi
+      integer :: n_nphi_arrays, nr, np, Ntot, npump, Npumps
 
       allocate( us_grid(n_phi_max), up_grid(n_phi_max), om_grid(n_phi_max) )
       allocate( usOm_grid(n_phi_max), upOm_grid(n_phi_max) )
@@ -67,28 +73,85 @@ contains
          upXi_grid(:)=0.0_cp
       end if
 
-      end subroutine initialize_radial_loop
-   !------------------------------------------------------------------------------
-      subroutine finalize_radial_loop
+      if ( n_rings > 0 ) then
+         allocate(forcing_Rloc(n_m_max,nRstart:nRstop) )
+         forcing_Rloc(:,:)=zero
+         bytes_allocated = bytes_allocated+n_m_max*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
+         allocate(r_rings(n_rings), n_phi_ring(n_rings))
+         ricb=radratio/(one-radratio)
+         rcmb=one/(one-radratio)
+         dr=(rcmb-ricb)/(n_rings+1)
+         !-- Define rings
+         do nr=1,n_rings
+            r_rings(nr)=rcmb-dr-(nr-1)*dr
+         end do
 
-         if ( l_heat ) deallocate (usT_grid, upT_grid,  temp_grid )
-         if ( l_chem ) deallocate (usXi_grid, upXi_grid,  xi_grid )
-         deallocate( usOm_grid, upOm_grid, us_grid, up_grid, om_grid )
+         Ntot = 0
+         do nr=1,n_rings
+            n_phi_ring(nr) = int(r_rings(nr)*two*pi/dr)
+            if ( mod(n_phi_ring(nr),2)/=0 ) n_phi_ring(nr)=n_phi_ring(nr)+(-1)**(nr-1)
+            Ntot = Ntot + n_phi_ring(nr)
+         end do
 
-      end subroutine finalize_radial_loop
-   !------------------------------------------------------------------------------
-      subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc,   &
-                 &           dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc, dVsXi_Rloc, &
-                 &           dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc, dth_Rloc,     &
-                 &           timers, tscheme)
+         allocate(x(Ntot), y(Ntot))
+         Npumps=0
+         do nr=1,n_rings
+            allocate(phi_ring(n_phi_ring(nr)))
+            dphi = two*pi/n_phi_ring(nr)
+            do np=1,n_phi_ring(nr)
+               phi_ring(np)=(np-1)*dphi
+            end do
+            x(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*cos(phi_ring(:))
+            y(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*sin(phi_ring(:))
+            deallocate(phi_ring)
+            Npumps=Npumps+n_phi_ring(nr)
+         end do
 
-         !-- Input variables
-         complex(cp),         intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
-         complex(cp),         intent(in) :: up_Rloc(n_m_max, nRstart:nRstop)
-         complex(cp),         intent(in) :: om_Rloc(n_m_max, nRstart:nRstop)
-         complex(cp),         intent(in) :: temp_Rloc(n_m_max, nRstart:nRstop)
-         complex(cp),         intent(in) :: xi_Rloc(n_m_max, nRstart:nRstop)
-         class(type_tscheme), intent(in) :: tscheme
+         do nr=nRstart,nRstop
+            force(:)=0.0_cp
+            do np=1,n_phi_max
+               phi = (np-1)*two*pi/n_phi_max
+               xgrid=r(nr)*cos(phi)
+               ygrid=r(nr)*sin(phi)
+
+               do npump=1,Ntot
+                  force(np)=force(np)+amp_forcing*(-1)**npump *&
+                  &         exp(-(x(npump)-xgrid)**2/dr**2) *  &
+                  &         exp(-(y(npump)-ygrid)**2/dr**2)
+               end do
+               !if ( np == 1) print*, nr, force(np)
+            end do
+
+            call fft(force, forcing_Rloc(:,nr))
+         end do
+
+         deallocate(x, y)
+         deallocate(r_rings, n_phi_ring)
+      end if
+
+   end subroutine initialize_radial_loop
+!------------------------------------------------------------------------------
+   subroutine finalize_radial_loop
+
+      if ( n_rings > 0 ) deallocate( forcing_Rloc )
+      if ( l_heat ) deallocate (usT_grid, upT_grid,  temp_grid )
+      if ( l_chem ) deallocate (usXi_grid, upXi_grid,  xi_grid )
+      deallocate( usOm_grid, upOm_grid, us_grid, up_grid, om_grid )
+
+   end subroutine finalize_radial_loop
+!------------------------------------------------------------------------------
+   subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc,   &
+              &           dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc, dVsXi_Rloc, &
+              &           dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc, dth_Rloc,     &
+              &           timers, tscheme)
+
+      !-- Input variables
+      complex(cp),         intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: up_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: om_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: temp_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: xi_Rloc(n_m_max, nRstart:nRstop)
+      class(type_tscheme), intent(in) :: tscheme
 
       !-- Output variables
       complex(cp),       intent(out) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
@@ -204,6 +267,12 @@ contains
             end if
          end do
 
+         if ( amp_forcing > 0.0_cp ) then
+            do n_m=1,n_m_max
+               m = idx2m(n_m)
+               if ( m > 0 ) dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)+forcing_Rloc(n_m,n_r)
+            end do
+         end if
       end do
 
    end subroutine radial_loop

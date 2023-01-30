@@ -117,7 +117,6 @@ program pizza
    call memWrite('Radial functions', local_bytes_used)
    local_bytes_used = bytes_allocated
    call initialize_fourier(n_phi_max)
-   call initialize_radial_loop(n_phi_max)
    local_bytes_used = bytes_allocated-local_bytes_used
    call memWrite('R loop', local_bytes_used)
    call initialize_mfunctions()
@@ -131,6 +130,9 @@ program pizza
 
    !-- Pre calculations has to be done before matrix initialisation
    call preCalc()
+
+   !-- After radius has been determined
+   call initialize_radial_loop(n_phi_max)
 
    local_bytes_used = bytes_allocated
    if ( l_finite_diff ) then
