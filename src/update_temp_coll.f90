@@ -3,9 +3,8 @@ module update_temp_coll
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero
-   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, BuoFac
-   use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta, &
-       &                       rgrav
+   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac
+   use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta
    use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, m2idx
