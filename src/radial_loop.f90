@@ -67,28 +67,27 @@ contains
          upXi_grid(:)=0.0_cp
       end if
 
-      end subroutine initialize_radial_loop
-   !------------------------------------------------------------------------------
-      subroutine finalize_radial_loop
+   end subroutine initialize_radial_loop
+!------------------------------------------------------------------------------
+   subroutine finalize_radial_loop
 
-         if ( l_heat ) deallocate (usT_grid, upT_grid,  temp_grid )
-         if ( l_chem ) deallocate (usXi_grid, upXi_grid,  xi_grid )
-         deallocate( usOm_grid, upOm_grid, us_grid, up_grid, om_grid )
+      if ( l_heat ) deallocate (usT_grid, upT_grid,  temp_grid )
+      if ( l_chem ) deallocate (usXi_grid, upXi_grid,  xi_grid )
+      deallocate( usOm_grid, upOm_grid, us_grid, up_grid, om_grid )
 
-      end subroutine finalize_radial_loop
-   !------------------------------------------------------------------------------
-      subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc,   &
+   end subroutine finalize_radial_loop
+!------------------------------------------------------------------------------
+   subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc,   &
                  &           dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc, dVsXi_Rloc, &
                  &           dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc, dth_Rloc,     &
                  &           timers, tscheme)
 
-         !-- Input variables
-         complex(cp),         intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
-         complex(cp),         intent(in) :: up_Rloc(n_m_max, nRstart:nRstop)
-         complex(cp),         intent(in) :: om_Rloc(n_m_max, nRstart:nRstop)
-         complex(cp),         intent(in) :: temp_Rloc(n_m_max, nRstart:nRstop)
-         complex(cp),         intent(in) :: xi_Rloc(n_m_max, nRstart:nRstop)
-         class(type_tscheme), intent(in) :: tscheme
+      !-- Input variables
+      complex(cp),         intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: up_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: om_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: temp_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: xi_Rloc(n_m_max, nRstart:nRstop)
 
       !-- Output variables
       complex(cp),       intent(out) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
