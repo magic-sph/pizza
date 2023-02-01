@@ -4,8 +4,9 @@ module rloop
    use parallel_mod
    use constants, only: ci, one, half, pi, two, zero
    use mem_alloc, only: bytes_allocated
-   use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem, n_rings, &
-       &                radratio, amp_forcing, radius_forcing
+   use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem, n_rings,    &
+       &                radratio, amp_forcing, radius_forcing, dx_forcing, &
+       &                forcing_type
    use radial_functions, only: or1, r, beta, dtcond, ekpump
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
@@ -38,9 +39,9 @@ contains
       !-- Local variable:
       real(cp), allocatable :: r_rings(:), x(:), y(:), phi_ring(:)
       real(cp) :: force(n_phi_max)
+      real(cp) :: ricb, rcmb, dr, dphi, xgrid, ygrid, phi, dy_forcing, rad
       integer, allocatable :: n_phi_ring(:)
-      real(cp) :: ricb, rcmb, dr, dphi, xgrid, ygrid, phi
-      integer :: n_nphi_arrays, nr, np, Ntot, npump, Npumps
+      integer :: n_nphi_arrays, nr, np, Ntot, npump, Npumps, i, j, Nx, Ny
 
       allocate( us_grid(n_phi_max), up_grid(n_phi_max), om_grid(n_phi_max) )
       allocate( usOm_grid(n_phi_max), upOm_grid(n_phi_max) )
@@ -73,39 +74,85 @@ contains
          upXi_grid(:)=0.0_cp
       end if
 
-      if ( n_rings > 0 ) then
+      if ( n_rings > 0 .or. dx_forcing > 0.0_cp ) then
          allocate(forcing_Rloc(n_m_max,nRstart:nRstop) )
          forcing_Rloc(:,:)=zero
          bytes_allocated = bytes_allocated+n_m_max*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
-         allocate(r_rings(n_rings), n_phi_ring(n_rings))
          ricb=radratio/(one-radratio)
          rcmb=one/(one-radratio)
-         dr=(rcmb-ricb)/(n_rings+1)
-         !-- Define rings
-         do nr=1,n_rings
-            r_rings(nr)=rcmb-dr-(nr-1)*dr
-         end do
 
-         Ntot = 0
-         do nr=1,n_rings
-            n_phi_ring(nr) = int(r_rings(nr)*two*pi/dr)
-            if ( mod(n_phi_ring(nr),2)/=0 ) n_phi_ring(nr)=n_phi_ring(nr)+(-1)**(nr-1)
-            Ntot = Ntot + n_phi_ring(nr)
-         end do
+         if ( index(forcing_type, 'POLAR') == 1 ) then
 
-         allocate(x(Ntot), y(Ntot))
-         Npumps=0
-         do nr=1,n_rings
-            allocate(phi_ring(n_phi_ring(nr)))
-            dphi = two*pi/n_phi_ring(nr)
-            do np=1,n_phi_ring(nr)
-               phi_ring(np)=(np-1)*dphi
+            allocate(r_rings(n_rings), n_phi_ring(n_rings))
+            dr=(rcmb-ricb)/(n_rings+1)
+            !-- Define rings
+            do nr=1,n_rings
+               r_rings(nr)=rcmb-dr-(nr-1)*dr
             end do
-            x(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*cos(phi_ring(:))
-            y(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*sin(phi_ring(:))
-            deallocate(phi_ring)
-            Npumps=Npumps+n_phi_ring(nr)
-         end do
+
+            !-- Determine the number of vortices
+            Ntot = 0
+            do nr=1,n_rings
+               n_phi_ring(nr) = int(r_rings(nr)*two*pi/dr)
+               if ( mod(n_phi_ring(nr),2)/=0 ) n_phi_ring(nr)=n_phi_ring(nr)+(-1)**(nr-1)
+               Ntot = Ntot + n_phi_ring(nr)
+            end do
+
+            !-- Get the coordinates
+            allocate(x(Ntot), y(Ntot))
+            Npumps=0
+            do nr=1,n_rings
+               allocate(phi_ring(n_phi_ring(nr)))
+               dphi = two*pi/n_phi_ring(nr)
+               do np=1,n_phi_ring(nr)
+                  phi_ring(np)=(np-1)*dphi
+               end do
+               x(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*cos(phi_ring(:))
+               y(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*sin(phi_ring(:))
+               deallocate(phi_ring)
+               Npumps=Npumps+n_phi_ring(nr)
+            end do
+
+            deallocate(r_rings, n_phi_ring)
+
+         else if ( index(forcing_type, 'CARTESIAN') == 1 ) then
+
+            Nx=int(two*rcmb/dx_forcing+1)
+            Ny=Nx
+            dy_forcing=dx_forcing
+
+            ! Determine the number of vortices
+            Ntot = 0
+            do i=1,Nx
+               xgrid=-rcmb+(i-1)*dx_forcing
+               do j=1,Ny
+                  ygrid=-rcmb+(j-1)*dy_forcing
+                  rad=sqrt(xgrid*xgrid+ygrid*ygrid)
+                  if ( rad >= ricb+dx_forcing .and. rad <= rcmb-dx_forcing) Ntot=Ntot+1
+               end do
+            end do
+
+            !-- Get the coordinates
+            allocate(x(Ntot), y(Ntot))
+            npump=1
+            do i=1,Nx
+               xgrid=-rcmb+(i-1)*dx_forcing
+               do j=1,Ny
+                  ygrid=-rcmb+(j-1)*dy_forcing
+                  rad = sqrt(xgrid*xgrid+ygrid*ygrid)
+                  if ( rad >= ricb+dx_forcing .and. rad <= rcmb-dx_forcing) then
+                     x(npump)=xgrid
+                     y(npump)=ygrid
+                     npump=npump+1
+                  end if
+               end do
+            end do
+
+            !-- If number of vortices is odd remove one to make sur no bias is introduced
+            if ( mod(Ntot,2)/=0 ) Ntot=Ntot-1
+            !print*, 'Number of vortices:', Ntot
+         end if
+
 
          do nr=nRstart,nRstop
             force(:)=0.0_cp
@@ -126,7 +173,6 @@ contains
          end do
 
          deallocate(x, y)
-         deallocate(r_rings, n_phi_ring)
       end if
 
    end subroutine initialize_radial_loop

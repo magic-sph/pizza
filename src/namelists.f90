@@ -44,7 +44,9 @@ module namelists
    integer,  public :: ktopv, kbotv  ! Velocity boundary condition
    integer,  public :: n_rings       ! Number of rings when turbulence is forced
    real(cp), public :: amp_forcing   ! Amplitude of forcing (in case turbulence is forced)
+   real(cp), public :: dx_forcing    ! Grid spacing between two adjacent vortices in case of Cartesian forcing
    real(cp), public :: radius_forcing ! Radius of vorticity source (l_f in Lemasquerier et al. 2023)
+   character(len=72), public :: forcing_type ! Type of forcing: polar or Cartesian
    real(cp), public :: t_bot(3*n_t_bounds), xi_bot(3*n_t_bounds)
    real(cp), public :: t_top(3*n_t_bounds), xi_top(3*n_t_bounds)
    real(cp), public :: g0, g1, g2
@@ -149,13 +151,14 @@ contains
       &                matrix_solve,corio_term,buo_term,bc_method,  &
       &                mpi_transp,l_packed_transp,radial_scheme
       namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
-      namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,      &
-      &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,       &
-      &                   l_temp_3D,tcond_fac,l_temp_advz,n_rings, &
-      &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
-      &                   xi_bot,xi_top, l_xi_3D, xicond_fac,      &
-      &                   h_temp, h_xi, container, beta_fac,       &
-      &                   amp_forcing, radius_forcing
+      namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,       &
+      &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,        &
+      &                   l_temp_3D,tcond_fac,l_temp_advz,n_rings,  &
+      &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,     &
+      &                   xi_bot,xi_top, l_xi_3D, xicond_fac,       &
+      &                   h_temp, h_xi, container, beta_fac,        &
+      &                   amp_forcing, radius_forcing, forcing_type,&
+      &                   dx_forcing
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi
@@ -243,7 +246,6 @@ contains
          close(input_handle)
 
       end if
-
 
       !--- Stuff for the radial non-linear mapping
       call capitalize(map_function)
@@ -336,6 +338,9 @@ contains
 
       !-- Shape of the container (for QG computations)
       call capitalize(container)
+
+      !-- Type of forcing (Cartesian or Polar)
+      call capitalize(forcing_type)
 
       if ( index(container, 'SPHERE') == 0 .and. (.not. l_cheb_coll) .and. &
       &    (.not. l_finite_diff) ) then
@@ -554,6 +559,8 @@ contains
       n_rings          =0
       radius_forcing   =1.0e-2_cp
       amp_forcing      =0.0_cp
+      dx_forcing       =0.0_cp
+      forcing_type     ='polar'
 
       !----- Namelist start_field:
       l_reset_t        =.false.
@@ -669,7 +676,10 @@ contains
       write(n_out,'(''  beta_fac        ='',ES14.6,'','')') beta_fac
       write(n_out,'(''  n_rings         ='',i3,'','')') n_rings
       write(n_out,'(''  amp_forcing     ='',ES14.6,'','')') amp_forcing
+      write(n_out,'(''  dx_forcing      ='',ES14.6,'','')') dx_forcing
       write(n_out,'(''  radius_forcing  ='',ES14.6,'','')') radius_forcing
+      length=length_to_blank(forcing_type)
+      write(n_out,*) " forcing_type    = """,forcing_type(1:length),""","
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1
       write(n_out,'(''  g2              ='',ES14.6,'','')') g2
