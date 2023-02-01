@@ -33,7 +33,6 @@ module namelists
    real(cp), public :: xicond_fac    ! Rescaling of the conducting composition
    real(cp), public :: beta_shift    ! Shift the upper bound of \beta
    real(cp), public :: beta_fac      ! Constant to modify the container (used for non-spherical containers)
-   real(cp), public :: amp_forcing   ! Amplitude of forcing (in case turbulence is forced)
    logical,  public :: l_finite_diff ! Shift to finite differences in radius
    logical,  public :: l_non_rot     ! Switch to do a non-rotatig annulus
    logical,  public :: l_temp_3D     ! 2D or 3D temperature background
@@ -44,6 +43,8 @@ module namelists
    integer,  public :: ktopxi, kbotxi! Boundary conditions for chemical composition
    integer,  public :: ktopv, kbotv  ! Velocity boundary condition
    integer,  public :: n_rings       ! Number of rings when turbulence is forced
+   real(cp), public :: amp_forcing   ! Amplitude of forcing (in case turbulence is forced)
+   real(cp), public :: radius_forcing ! Radius of vorticity source (l_f in Lemasquerier et al. 2023)
    real(cp), public :: t_bot(3*n_t_bounds), xi_bot(3*n_t_bounds)
    real(cp), public :: t_top(3*n_t_bounds), xi_top(3*n_t_bounds)
    real(cp), public :: g0, g1, g2
@@ -154,7 +155,7 @@ contains
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,    &
       &                   xi_bot,xi_top, l_xi_3D, xicond_fac,      &
       &                   h_temp, h_xi, container, beta_fac,       &
-      &                   amp_forcing
+      &                   amp_forcing, radius_forcing
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
       &                    scale_xi
@@ -551,6 +552,7 @@ contains
       end do
       container        ='sphere'
       n_rings          =0
+      radius_forcing   =1.0e-2_cp
       amp_forcing      =0.0_cp
 
       !----- Namelist start_field:
@@ -667,6 +669,7 @@ contains
       write(n_out,'(''  beta_fac        ='',ES14.6,'','')') beta_fac
       write(n_out,'(''  n_rings         ='',i3,'','')') n_rings
       write(n_out,'(''  amp_forcing     ='',ES14.6,'','')') amp_forcing
+      write(n_out,'(''  radius_forcing  ='',ES14.6,'','')') radius_forcing
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1
       write(n_out,'(''  g2              ='',ES14.6,'','')') g2
@@ -706,7 +709,7 @@ contains
       write(n_out,'(''  n_checkpoints   ='',i5,'','')') n_checkpoints
       write(n_out,'('' n_checkpoint_step='',i5,'','')') n_checkpoint_step
       write(n_out,'(''  n_frames        ='',i5,'','')') n_frames
-      write(n_out,'(''  n_frame_step    ='',i5,'','')') n_frame_step
+      write(n_out,'(''  n_frame_step    ='',i6,'','')') n_frame_step
       write(n_out,'(''  n_specs         ='',i5,'','')') n_specs
       write(n_out,'(''  n_spec_step     ='',i5,'','')') n_spec_step
       write(n_out,'(''  l_vphi_balance  ='',l3,'','')') l_vphi_balance

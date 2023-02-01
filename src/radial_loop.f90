@@ -5,7 +5,7 @@ module rloop
    use constants, only: ci, one, half, pi, two, zero
    use mem_alloc, only: bytes_allocated
    use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem, n_rings, &
-       &                radratio, amp_forcing
+       &                radratio, amp_forcing, radius_forcing
    use radial_functions, only: or1, r, beta, dtcond, ekpump
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
@@ -115,9 +115,9 @@ contains
                ygrid=r(nr)*sin(phi)
 
                do npump=1,Ntot
-                  force(np)=force(np)+amp_forcing*(-1)**npump *&
-                  &         exp(-(x(npump)-xgrid)**2/dr**2) *  &
-                  &         exp(-(y(npump)-ygrid)**2/dr**2)
+                  force(np)=force(np)+amp_forcing*(-1)**npump           * &
+                  &         exp(-(x(npump)-xgrid)**2/radius_forcing**2) * &
+                  &         exp(-(y(npump)-ygrid)**2/radius_forcing**2)
                end do
                !if ( np == 1) print*, nr, force(np)
             end do
