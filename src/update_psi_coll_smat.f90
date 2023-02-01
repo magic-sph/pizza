@@ -187,7 +187,7 @@ contains
             rhs(2*n_r_max)=zero
             do n_r=2,n_r_max-1
                !-- Add buoyancy
-               if ( l_buo_imp ) then
+               if ( l_buo_imp .and. (l_heat .or. l_chem) ) then
                   if ( l_heat ) then
                      rhs(n_r)=work_Mloc(n_m,n_r)-tscheme%wimp_lin(1)*BuoFac*&
                      &        rgrav(n_r)*or1(n_r)*ci*real(m,cp)*temp_Mloc(n_m,n_r)

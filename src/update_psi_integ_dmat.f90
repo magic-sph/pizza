@@ -189,7 +189,6 @@ contains
       !-- If Ekman pumping is requested, normalisation is different
       !-- Hence buoyancy has to be multiplied by h^2
       if ( l_buo_imp ) then
-
          do n_r=1,n_r_max
             do n_m=nMstart,nMstop
                m = idx2m(n_m)
