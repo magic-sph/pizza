@@ -136,7 +136,9 @@ contains
                do j=1,Ny
                   ygrid=-rcmb+(j-1)*dy_forcing
                   rad=sqrt(xgrid*xgrid+ygrid*ygrid)
-                  if ( rad >= ricb+dx_forcing .and. rad <= rcmb-dx_forcing) Ntot=Ntot+1
+                  if ( rad >= ricb+half*dx_forcing .and. rad <= rcmb-half*dx_forcing) then
+                     Ntot=Ntot+1
+                  end if
                end do
             end do
 
