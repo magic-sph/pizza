@@ -6,7 +6,7 @@ module rloop
    use mem_alloc, only: bytes_allocated
    use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem, n_rings,    &
        &                radratio, amp_forcing, radius_forcing, dx_forcing, &
-       &                forcing_type
+       &                forcing_type, tag
    use radial_functions, only: or1, r, beta, dtcond, ekpump
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
@@ -15,6 +15,7 @@ module rloop
    use useful, only: cc22real
    use time_schemes, only: type_tscheme
    use timers_mod, only: timers_type
+   use output_frames, only: write_snapshot_rloc
 
    implicit none
 
@@ -182,6 +183,9 @@ contains
 
             call fft(force, forcing_Rloc(:,nr))
          end do
+
+         !-- Write a snapshot which contain the layout of the forcing
+         call write_snapshot_rloc('forcing.'//tag, 0.0_cp, forcing_Rloc)
 
          deallocate(x, y, amp)
       end if
