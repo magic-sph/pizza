@@ -37,7 +37,7 @@ contains
       integer,  intent(in) :: n_phi_max
 
       !-- Local variable:
-      real(cp), allocatable :: r_rings(:), x(:), y(:), phi_ring(:)
+      real(cp), allocatable :: r_rings(:), x(:), y(:), phi_ring(:), amp(:)
       real(cp) :: force(n_phi_max)
       real(cp) :: ricb, rcmb, dr, dphi, xgrid, ygrid, phi, dy_forcing, rad
       integer, allocatable :: n_phi_ring(:)
@@ -94,12 +94,13 @@ contains
             Ntot = 0
             do nr=1,n_rings
                n_phi_ring(nr) = int(r_rings(nr)*two*pi/dr)
+               !-- Make sure we get an even number per ring
                if ( mod(n_phi_ring(nr),2)/=0 ) n_phi_ring(nr)=n_phi_ring(nr)+(-1)**(nr-1)
                Ntot = Ntot + n_phi_ring(nr)
             end do
 
             !-- Get the coordinates
-            allocate(x(Ntot), y(Ntot))
+            allocate(x(Ntot), y(Ntot), amp(Ntot))
             Npumps=0
             do nr=1,n_rings
                allocate(phi_ring(n_phi_ring(nr)))
@@ -113,15 +114,22 @@ contains
                Npumps=Npumps+n_phi_ring(nr)
             end do
 
+            !-- Set amplitude array
+            do npump=1,Ntot
+               amp(npump)=(-1)**npump
+            end do
+
             deallocate(r_rings, n_phi_ring)
 
          else if ( index(forcing_type, 'CARTESIAN') == 1 ) then
 
             Nx=int(two*rcmb/dx_forcing+1)
             Ny=Nx
+            !-- Redefine dx (because of integer)
+            dx_forcing = two*rcmb/(Nx-1)
             dy_forcing=dx_forcing
 
-            ! Determine the number of vortices
+            !-- Determine the number of vortices
             Ntot = 0
             do i=1,Nx
                xgrid=-rcmb+(i-1)*dx_forcing
@@ -133,16 +141,17 @@ contains
             end do
 
             !-- Get the coordinates
-            allocate(x(Ntot), y(Ntot))
+            allocate(x(Ntot), y(Ntot), amp(Ntot))
             npump=1
             do i=1,Nx
                xgrid=-rcmb+(i-1)*dx_forcing
                do j=1,Ny
                   ygrid=-rcmb+(j-1)*dy_forcing
                   rad = sqrt(xgrid*xgrid+ygrid*ygrid)
-                  if ( rad >= ricb+dx_forcing .and. rad <= rcmb-dx_forcing) then
+                  if ( rad >= ricb+half*dx_forcing .and. rad <= rcmb-half*dx_forcing) then
                      x(npump)=xgrid
                      y(npump)=ygrid
+                     amp(npump)=(-1)**i*(-1)**j
                      npump=npump+1
                   end if
                end do
@@ -162,7 +171,7 @@ contains
                ygrid=r(nr)*sin(phi)
 
                do npump=1,Ntot
-                  force(np)=force(np)+amp_forcing*(-1)**npump           * &
+                  force(np)=force(np)+amp_forcing*amp(npump)            * &
                   &         exp(-(x(npump)-xgrid)**2/radius_forcing**2) * &
                   &         exp(-(y(npump)-ygrid)**2/radius_forcing**2)
                end do
@@ -172,7 +181,7 @@ contains
             call fft(force, forcing_Rloc(:,nr))
          end do
 
-         deallocate(x, y)
+         deallocate(x, y, amp)
       end if
 
    end subroutine initialize_radial_loop
