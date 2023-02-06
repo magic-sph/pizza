@@ -529,7 +529,10 @@ contains
             up2_3D = rInt_R(tmp, r, rscheme)
             up2_3D = round_off(pi*up2_3D)
 
-            tmp(:) = 4.0_cp/3.0_cp*us2_r(:)*r(:)*r(:)*r(:)*oheight(:)
+            !-- This only holds for spherical shells
+            !tmp(:) = 4.0_cp/3.0_cp*us2_r(:)*r(:)*r(:)*r(:)*oheight(:)
+            !-- For other geometries uz**2 reads
+            tmp(:)=us2_r(:)*beta(:)**2*r(:)*height(:)**3/12.0d0
             uz2_3D = rInt_R(tmp, r, rscheme)
             uz2_3D = round_off(pi*uz2_3D)
 
