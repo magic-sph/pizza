@@ -86,6 +86,8 @@ class PizzaMovie:
                 vmin = -max(abs(dat.max()), abs(dat.min()))
                 vmin = cut * vmin
                 vmax = -vmin
+                #vmin = dat.min()
+                #vmax = dat.max()
                 cs = np.linspace(vmin, vmax, levels)
 
                 fig, xx, yy = equatContour(dat, self.radius, minc=self.minc,

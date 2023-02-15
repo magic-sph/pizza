@@ -228,7 +228,7 @@ class PizzaRadial(PizzaSetup):
         ax.set_yscale('log')
         fig.tight_layout()
 
-        if self.l_non_rot == 'F':
+        if self.l_non_rot == 'F' or not self.l_non_rot:
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.plot(self.radius, self.qpot)

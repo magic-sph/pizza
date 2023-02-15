@@ -68,8 +68,9 @@ class PizzaAverages:
                                                   std=True)
             self.up2_avg, self.up2_std = avgField(ts.time[ind:], ts.up2[ind:],
                                                   std=True)
-            self.uz2_avg, self.uz2_std = avgField(ts.time[ind:], ts.uz2[ind:],
-                                                  std=True)
+            if self.l_3D:
+                self.uz2_avg, self.uz2_std = avgField(ts.time[ind:], ts.uz2[ind:],
+                                                      std=True)
             self.up2_axi_avg, self.up2_axi_std = avgField(ts.time[ind:],
                                                           ts.up2_axi[ind:],
                                                           std=True)

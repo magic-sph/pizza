@@ -153,7 +153,8 @@ def fourier_cheb_spectra(f, r, weight, n_cheb_max):
     rin = r.min()
     rout = r.max()
     x = (r-(rout+rin)/2.) * 2./(rout-rin)
-    dat = f * (1.-x**2)**0.25 * np.sqrt(r) * np.sqrt(weight)
+    # Abs is only here for round off error on first point
+    dat = f * (abs(1.-x**2))**0.25 * np.sqrt(r) * np.sqrt(weight)
     fcheb = costf(dat)
     fcheb[:, 0] *= 0.5
     fcheb[:, -1] *= 0.5

@@ -61,6 +61,11 @@ class PizzaSetup:
                 rhs = None
             elif valueInt.match(rhs):
                 rhs = int(rhs)
+            # Catch T and F for booleans
+            if rhs == 'T':
+                rhs = True
+            elif rhs == 'F':
+                rhs = False
             setattr(self, lhs, rhs)
 
         self.ra = float(self.ra)
