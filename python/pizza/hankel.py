@@ -1,6 +1,6 @@
 from scipy import optimize
 from scipy.special import jv, yn, hankel1
-from .libpizza import chebgrid, intcheb
+from .libpizza import chebgrid, intcheb, progressbar
 import numpy as np
 import time
 import os
@@ -262,8 +262,6 @@ class HankelAnnulus:
                 dat[mask] = vals
             self.kernels[k, :] = dat
 
-        print(abs(self.kernels).max())
-
     def hankel_mat(self):
         """
         This subroutine constructs the Hankel matrix from the zeroes and
@@ -393,6 +391,56 @@ class HankelAnnulus:
             f[k] = np.sum(fac*fhat*kernel) * np.pi**2/2.
 
         return f
+
+
+def weber_orr_spectra(f, r, weight, idx2m, storage_dir=None, file_save=None):
+    """
+    This routine computes the Weber-Orr spectra. It takes a complex array
+    of dimension (n_m_max, nroots) as input.
+
+    :param f: a a complex input array (first dimension is m
+    :type f: numpy.ndarray
+    :param r: the radius
+    :type f: numpy.ndarray
+    :param weight: a weighting function (typically the height of the container)
+    :type weight: numpy.ndarray
+    :param idx2m: an array which convert the index to ms
+    :type idx2m: numpy.ndarray
+    :param storage_dir: the directory where the Hankel transform are stored
+    :type storage_dir: char
+    :param file_save: filename to save the computation once done
+    :type file_save: char
+    """
+    rin = r.min()
+    rout = r.max()
+    nroots = len(r)
+    nms = f.shape[0]
+    Ek = np.zeros((nms, nroots), np.float64)
+    K = np.zeros_like(Ek)
+
+    if file_save is not None and os.path.exists(file_save):
+        with open(file_save, 'rb') as fi:
+            K, Ek = pickle.load(fi)
+    else:
+        for idx in progressbar(range(nms)):
+            m = idx2m[idx]
+            if storage_dir is not None:
+                h = HankelAnnulus(rin, rout, m, nroots,
+                                  storage_dir=storage_dir)
+            else:
+                h = HankelAnnulus(rin, rout, m, nroots)
+            fhat = h.HT(f[idx, :]*np.sqrt(weight))
+            if m == 0:
+                Ek[idx, :] = np.pi * h.spectra(fhat)
+            else:
+                Ek[idx, :] = 2.*np.pi * h.spectra(fhat)
+            K[idx, :] = h.kr
+
+    if file_save is not None:
+        with open(file_save, 'wb') as fi:
+            pickle.dump([K, Ek], fi)
+
+    return K, Ek
 
 
 if __name__ == '__main__':
