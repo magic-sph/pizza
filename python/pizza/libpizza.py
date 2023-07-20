@@ -103,7 +103,7 @@ def avgField(time, field, tstart=None, tstop=None, std=False):
 
 def get_dr(f):
     """
-    This routine calculates the first radial derivative of a input array using
+    This routine calculates the first radial derivative of an input array using
     Chebyshev recurrence relation.
 
     :param f: the input array
@@ -123,12 +123,79 @@ def get_dr(f):
 
     for i in range(Nr-3, -1, -1):
         df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
-
     df[..., :] = 2.*df[..., :]
-
     df = costf(df)
 
     return df
+
+
+def get_ddr(f):
+    """
+    This routine calculates the first and the second radial derivatives of an
+    input array using Chebyshev recurrence relation.
+
+    :param f: the input array
+    :type f: numpy.ndarray
+    :returns: the first and the second radial derivatives of f
+    :rtype: numpy.ndarray
+    """
+    Nr = f.shape[-1]
+    fhat = costf(f)
+
+    df = np.zeros_like(fhat)
+    ddf = np.zeros_like(fhat)
+    df[..., -1] = 0.
+    df[..., -2] = (Nr-1)*fhat[..., -1]
+    ddf[..., -1] = 0.
+    ddf[..., -2] = 0.
+
+    for i in range(Nr-3, -1, -1):
+        df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
+        ddf[..., i] = ddf[..., i+2]+2.*(i+1)*df[..., i+1]
+    df[..., :] = 2.*df[..., :]
+    ddf[..., :] = 4.*ddf[..., :]
+    df = costf(df)
+    ddf = costf(ddf)
+
+    return df, ddf
+
+
+def get_dddr(f):
+    """
+    This routine calculates the first, the second and the third radial 
+    derivatives of an input array using Chebyshev recurrence relation.
+
+    :param f: the input array
+    :type f: numpy.ndarray
+    :returns: the first, the second and the third radial derivatives of f
+    :rtype: numpy.ndarray
+    """
+    Nr = f.shape[-1]
+    fhat = costf(f)
+
+    df = np.zeros_like(fhat)
+    ddf = np.zeros_like(fhat)
+    dddf = np.zeros_like(fhat)
+    df[..., -1] = 0.
+    df[..., -2] = (Nr-1)*fhat[..., -1]
+    ddf[..., -1] = 0.
+    ddf[..., -2] = 0.
+    dddf[..., -1] = 0.
+    dddf[..., -2] = 0.
+
+    for i in range(Nr-3, -1, -1):
+        df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
+        ddf[..., i] = ddf[..., i+2]+2.*(i+1)*df[..., i+1]
+        dddf[..., i] = dddf[..., i+2]+2.*(i+1)*ddf[..., i+1]
+    df[..., :] = 2.*df[..., :]
+    ddf[..., :] = 4.*ddf[..., :]
+    dddf[..., :] = 8.*dddf[..., :]
+    df = costf(df)
+    ddf = costf(ddf)
+    dddf = costf(dddf)
+
+    return df, ddf, dddf
+
 
 def fourier_cheb_spectra(f, r, weight, n_cheb_max):
     """
