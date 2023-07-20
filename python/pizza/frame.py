@@ -291,6 +291,7 @@ class PizzaFields(PizzaSetup):
                     cm = cmo.thermal
                 except ModuleNotFoundError:
                     cm = 'magma'
+            normed = False
         elif field in ('composition', 'Composition', 'xi', 'Xi', 'chem',
                        'Chem', 'comp', 'Comp'):
             if cm is None:
@@ -299,6 +300,8 @@ class PizzaFields(PizzaSetup):
                     cm = cmo.haline
                 except ModuleNotFoundError:
                     cm = 'viridis'
+            data = self.xi
+            normed = False
         elif field in ('tfluct', 'tempfluct'):
             data = self.temp-self.temp_m[0, :]
             cm = 'PuOr'

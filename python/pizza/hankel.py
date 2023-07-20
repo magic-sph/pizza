@@ -1,5 +1,6 @@
 from scipy import optimize
-from scipy.special import jv, yn
+from scipy.special import jv, yn, hankel1
+from .libpizza import chebgrid, intcheb
 import numpy as np
 import time
 import os
@@ -27,24 +28,64 @@ def jnyn_zeros(rin, rout, m, nroots):
     """
 
     def f(x):
-        return jv(m, x*rout)*yn(m, x*rin)-jv(m, x*rin)*yn(m, x*rout)
+        return (jv(m, x*rout)*yn(m, x*rin)-jv(m, x*rin)*yn(m, x*rout)) / \
+                abs(hankel1(m, x*rin))
 
-    if m < 10:
+    if m <= 15:
         npoints = 1024
         x = np.linspace(0.1, 100, npoints)
     else:
-        npoints = 10*m
+        # Fit for the first root
+        xmin = int(1./rout*m)
+        # Fit for the fifth root
+        xmax = int(1.06/rout*m+30)
+        dx = 0.2
+        npoints = int((xmax-xmin)/dx)
         # Spacing between two m for first roots is like lambda(m+1)-lambda(m)\sim0.65
-        x = np.linspace(int(0.65*m), 2*m, npoints)
-    signs = np.sign(f(x))
+        x = np.linspace(xmin, xmax, npoints)
+    y = f(x)
+    mask = np.isnan(y)
+    improve_prec = False
+    if len(x[mask]) > 0:
+        improve_prec = True
+
+    if improve_prec:
+        print('Precision of scipy is not enough, using mpmath')
+        import mpmath as mp
+        def fmpmath(x):
+            return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) - \
+                    mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
+                    abs(mp.hankel1(m, x*rin))
+
+        xmax = x[mask][-1]
+        xmin = x[mask][0]
+        dx = 1.
+        lenx = int((xmax-xmin)/dx)
+        xprec = np.linspace(xmin, xmax, lenx)
+        yprec = np.zeros_like(xprec)
+        for i in range(len(xprec)):
+            yprec[i] = fmpmath(xprec[i])
+        y = np.hstack((yprec, y[~mask]))
+        x = np.hstack((xprec, x[~mask]))
+        npoints = len(x)
+    else:
+        xmax = x[0]
+
+    signs = np.sign(y)
     nroot = 0
     roots = np.zeros((nroots), np.float64)
     for i in range(npoints-1):
         if signs[i] + signs[i+1] == 0:
-            sol = optimize.root_scalar(f, bracket=[x[i], x[i+1]],
-                                       method='brentq')
+            if improve_prec and x[i] < xmax:
+                root = mp.findroot(fmpmath, x0=[x[i], x[i+1]])
+            else:
+                sol = optimize.root_scalar(f, bracket=[x[i], x[i+1]],
+                                           method='brentq')
+                root = sol.root
+                #print(root)
             if nroot < nroots:
-                roots[nroot] = sol.root
+                roots[nroot] = root
+
             nroot += 1
 
     # Only works if previous spacing between 2 roots is not far from next
@@ -52,24 +93,45 @@ def jnyn_zeros(rin, rout, m, nroots):
         spacing = roots[nroot-1] - roots[nroot-2]
         start = roots[nroot-1] + 0.5*spacing
         stop = roots[nroot-1] + 1.5*spacing
-        sol = optimize.root_scalar(f, bracket=[start, stop], method='brentq')
-        roots[nroot] = sol.root
+        if improve_prec and start < xmax:
+            root = mp.findroot(fmpmath, x0=[start, stop])
+        else:
+            sol = optimize.root_scalar(f, bracket=[start, stop], method='brentq')
+            root = sol.root
+        roots[nroot] = root
 
         nroot += 1
 
-    #plt.plot(x, f(x))
+    """
+    print(roots)
+    plt.plot(x, f(x))
     #plt.ylim(-10*f(x[-1]), 10*f(x[-1]))
-    #plt.plot(roots, f(roots), ls='None', marker='o', mfc='None')
-    #plt.show()
+    plt.plot(roots, f(roots), ls='None', marker='o', mfc='None')
+    if improve_prec:
+        print(xmin, xmax)
+        xmp = mp.linspace(xmin, xmax, 128)
+        yy = mp.linspace(0., 0., len(xmp))
+        for i in range(len(xmp)):
+            yy[i] = fmpmath(xmp[i])
+        i = 0
+        while roots[i] < xmax:
+            plt.plot(roots[i], fmpmath(roots[i]), ls='None', marker='o', mfc='None',
+                     mec='C2')
+            i += 1
+        plt.plot(xmp, yy)
+
+    plt.show()
 
     #print(f(roots))
+    """
 
     return roots
 
 
 class HankelAnnulus:
 
-    def __init__(self, rin, rout, m, nroots, storage_dir=None):
+    def __init__(self, rin, rout, m, nroots, storage_dir=None, grid_type='GL',
+                 verbose=False):
         """
         :param rin: inner radius
         :type rin: float
@@ -81,15 +143,23 @@ class HankelAnnulus:
         :type nroots: number of roots to be computed
         :param storage_dir: a directory when one case store the Hankel transforms
         :type storage_dir: char
+        :param grid_type: a parameter to select the collocation grid: 'GL' stands 
+                          for Gauss-Lobatto and allows a more accurate spectral
+                          integration. Possible alternatives are 'EQUI' for an
+                          equidistant grid, and 'ZER' for a grid built upon zeros
+                          of the transcendental equation.
+        :type grid_type: char
+        :param verbose: a boolean to trigger some printouts of infos
+        :type verbose: bool
         """
-
+        self.grid_type = grid_type                  
         compute = True
         store = False
         if storage_dir is not None:
-            filename = f'Hankel_{rin/rout:.2f}_{nroots:04d}_{m:04d}.pickle'
+            filename = f'WeberOrr_{rin/rout:.2f}_{nroots:04d}_{m:04d}.pickle'
             file = os.path.join(storage_dir, filename)
             if os.path.exists(file):
-                self._read(file)
+                self._read(file, verbose)
                 compute = False
             else:
                 store = True
@@ -104,34 +174,47 @@ class HankelAnnulus:
             self.roots = jnyn_zeros(rin, rout, m, nroots+1)
             roots_last = self.roots[-1]
             self.roots = self.roots[:-1]
-            # Remap the roots between rin and rout
-            self.grid = self.roots/roots_last * (rout-rin) + rin
-            #self.grid = np.linspace(rin, rout, nroots+2)
-            #self.grid = self.grid[1:-1]
 
-            self.kr = self.roots * (self.rout-self.rin) / 2. / np.pi
+            if self.grid_type == 'GL':
+                # Gauss-Lobatto grid
+                self.grid = chebgrid(nroots-1, rin, rout)
+            elif self.grid_type == 'EQUI':
+                # Equi-distant grid
+                self.grid = np.linspace(rin, rout, nroots+2)
+                self.grid = self.grid[1:-1]
+            else:
+                # Remap the roots between rin and rout
+                self.grid = self.roots/roots_last * (rout-rin) + rin
+
+            self.kr = self.roots # / 2. / np.pi
 
             # compute the Hankel matrix
-            self.hankel_mat()
+            #self.hankel_mat()
 
             # Inverse of Hankel matrix
-            self.Ainv = np.linalg.inv(self.A)
+            #self.Ainv = np.linalg.inv(self.A)
+            #self.Ainv = np.zeros((self.nroots, self.nroots), np.float64)
+
+            self.compute_kernels()
 
             if store:
                 self._store(storage_dir)
 
-    def _read(self, file):
+    def _read(self, file, verbose):
         """
         This routine is used to read the inverse matrix and the roots
 
         :param file: the pickle file which contains the structure
         :type file: char
+        :param verbose: a boolean to trigger some printouts of infos
+        :type verbose: bool
         """
         with open(file, 'rb') as f:
-            print(f'Reading {file}')
+            if verbose:
+                print(f'Reading {file}')
             self.rin,  self.rout, self.m, self.nroots = pickle.load(f)
             self.roots, self.grid, self.kr = pickle.load(f)
-            self.Ainv = pickle.load(f)[0]
+            self.kernels = pickle.load(f)[0]
 
     def _store(self, dir):
         """
@@ -141,13 +224,45 @@ class HankelAnnulus:
         :type dir: char
         """
 
-        filename = f'Hankel_{self.rin/self.rout:.2f}_{self.nroots:04d}_{self.m:04d}.pickle'
+        filename = f'WeberOrr_{self.rin/self.rout:.2f}_{self.nroots:04d}_{self.m:04d}.pickle'
         file = os.path.join(dir, filename)
 
         with open(file, 'wb') as f:
             pickle.dump([self.rin, self.rout, self.m, self.nroots], f)
             pickle.dump([self.roots, self.grid, self.kr], f)
-            pickle.dump([self.Ainv], f)
+            pickle.dump([self.kernels], f)
+
+    def compute_kernels(self):
+        """
+        This routine is used to store the kernels employed in the inverse
+        Weber-Orr transform.
+        """
+        self.kernels = np.zeros((len(self.grid), len(self.grid)), np.float64)
+
+        def f(root, grid):
+            return (jv(self.m, root*grid)*yn(self.m, root*self.rin) - \
+                    jv(self.m, root*self.rin)*yn(self.m, root*grid)) / \
+                    abs(hankel1(self.m, root*self.rin))
+
+        def fmpmath(root, grid):
+            import mpmath as mp
+            return (mp.besselj(self.m, root*grid)*mp.bessely(self.m, root*self.rin) - \
+                    mp.besselj(self.m, root*self.rin)*mp.bessely(self.m, root*grid)) / \
+                    abs(mp.hankel1(self.m, root*self.rin))
+        
+        for k, root in enumerate(self.roots):
+            dat = f(root, self.grid)
+            mask = np.isnan(dat)
+            if len(dat[mask]) > 0:
+                vals = np.zeros(len(dat[mask]), np.float64)
+                for i in range(len(self.grid[mask])):
+                    gr = self.grid[mask][i]
+                    val = fmpmath(root, gr)
+                    vals[i] = val
+                dat[mask] = vals
+            self.kernels[k, :] = dat
+
+        print(abs(self.kernels).max())
 
     def hankel_mat(self):
         """
@@ -155,11 +270,14 @@ class HankelAnnulus:
         the collocation grid
         """
         self.A = np.zeros((len(self.grid), len(self.grid)), np.float64)
+        fac = self.roots**2 * jv(self.m, self.roots*self.rout)**2 / \
+              (jv(self.m, self.roots*self.rin)**2 - 
+               jv(self.m, self.roots*self.rout)**2)
+        norm = abs(hankel1(self.m, self.roots*self.rin))
         for k, rk in enumerate(self.grid):
             kernel = jv(self.m, self.roots*rk)*yn(self.m, self.roots*self.rin) - \
                      jv(self.m, self.roots*self.rin)*yn(self.m, self.roots*rk)
-            fac = self.roots**2 * jv(self.m, self.roots*self.rout)**2 / \
-                  (jv(self.m, self.roots*self.rin)**2 - jv(self.m, self.roots*self.rout)**2)
+            kernel *= norm
             self.A[k, :] = fac * kernel * np.pi**2 / 2.
 
     def spectra(self, fhat):
@@ -169,8 +287,16 @@ class HankelAnnulus:
         :returns: the energy content as a function of the order
         :rtype: numpy.ndarray
         """
-        fac = self.roots**2 * jv(self.m, self.roots*self.rout)**2 / \
-              (jv(self.m, self.roots*self.rin)**2 - jv(self.m, self.roots*self.rout)**2)
+        fac = np.zeros_like(self.roots)
+        for k, root in enumerate(self.roots):
+            vmin = jv(self.m, root*self.rout)**2
+            vmax = jv(self.m, root*self.rin)**2
+
+            if vmin > 1e-10: # to prevent round-off errors
+                fac[k] = root**2 * vmax * abs(hankel1(self.m, root*self.rout))**2 / \
+                         (vmax - vmin)
+            else:
+                fac[k] = root**2 * abs(hankel1(self.m, root*self.rout))**2
         En = 0.5 * np.pi**2 * fac * abs(fhat)**2
 
         return En
@@ -182,10 +308,10 @@ class HankelAnnulus:
         :returns: the function in spectral space
         :rtype: numpy.ndarray
         """
-        if self.m <= 10:
-            fhat = self.Ainv@f
-        else:
-            fhat = self.HTsimps(f)
+        #if self.m <= 10 and hasattr(self, 'Ainv'):
+        #    fhat = self.Ainv@f
+        #else:
+        fhat = self.HTsimps(f)
         #from scipy.sparse.linalg import gmres
         #fhat, info = gmres(self.A, f, x0=fhat_guess)
 
@@ -193,7 +319,7 @@ class HankelAnnulus:
 
     def HTsimps(self, f):
         """
-        This is a Hankel transform based on integration (only for debug)
+        This is a Hankel transform based on integration
 
         :param f: the function defined in physical space
         :type f: numpy.ndarray
@@ -201,13 +327,13 @@ class HankelAnnulus:
         :rtype: numpy.ndarray
         """
         fhat = np.zeros_like(f)
-        for k, root in enumerate(self.roots):
-            kernel = jv(self.m, root*self.grid)*yn(self.m, root*self.rin) - \
-                     jv(self.m, root*self.rin)*yn(self.m, root*self.grid)
-            if k == 2:
-                plt.plot(self.grid, kernel * f.real * self.grid)
-                plt.show()
-            fhat[k] = simps(kernel * f * self.grid, self.grid)
+        if self.grid_type == 'GL':
+            for k in range(self.nroots):
+                fhat[k] = intcheb(self.kernels[k, :] * f * self.grid)
+                #fhat[k] = simps(self.kernels[k, :] * f * self.grid, self.grid)
+        else:
+            for k in range(self.nroots):
+                fhat[k] = simps(self.kernels[k, :] * f * self.grid, self.grid)
 
         return fhat
 
@@ -218,8 +344,12 @@ class HankelAnnulus:
         :returns: the function in physical space
         :rtype: numpy.ndarray
         """
-        if hasattr(self, 'A'):
-            f = self.A@fhat
+        #if hasattr(self, 'A'):
+        #    f = self.A@fhat
+        #else:
+        if self.m > 30:
+            import sys
+            sys.exit('Inverse transform is not accurate beyond m=30')
         else:
             f = self.iHTsum(fhat)
         
@@ -235,10 +365,11 @@ class HankelAnnulus:
         :rtype: numpy.ndarray
         """
         f = np.zeros_like(fhat)
+        norm = abs(hankel1(self.m, self.roots*self.rin))
         for k, rk in enumerate(self.grid):
             kernel = jv(self.m, self.roots*rk)*yn(self.m, self.roots*self.rin) - \
                      jv(self.m, self.roots*self.rin)*yn(self.m, self.roots*rk)
-            kernel /= jv(m, self.roots*self.rin)**2 + yn(m, self.roots*self.rin)**2
+            kernel /= norm
             f[k] = simps(kernel * fhat * self.roots, self.roots)
 
         return f
@@ -251,11 +382,14 @@ class HankelAnnulus:
         :rtype: numpy.ndarray
         """
         f = np.zeros_like(fhat)
+        fac = self.roots**2 * jv(self.m, self.roots*self.rout)**2 / \
+              (jv(self.m, self.roots*self.rin)**2 - \
+               jv(self.m, self.roots*self.rout)**2)
+        norm = abs(hankel1(self.m, self.roots*self.rin))
         for k, rk in enumerate(self.grid):
             kernel = jv(self.m, self.roots*rk)*yn(self.m, self.roots*self.rin) - \
                      jv(self.m, self.roots*self.rin)*yn(self.m, self.roots*rk)
-            fac = self.roots**2 * jv(self.m, self.roots*self.rout)**2 / \
-                 (jv(self.m, self.roots*self.rin)**2 - jv(self.m, self.roots*self.rout)**2)
+            kernel *= norm
             f[k] = np.sum(fac*fhat*kernel) * np.pi**2/2.
 
         return f

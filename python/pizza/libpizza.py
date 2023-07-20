@@ -5,6 +5,7 @@ from scipy.fftpack import dct
 import glob
 import os
 import re
+import sys
 
 
 def cc2real(f):
@@ -393,3 +394,33 @@ def getTotalRunTime(datadir='.'):
         totCpuTime += getCpuTime(file)
 
     return totCpuTime
+
+def progressbar(it, prefix="", size=60):
+    """
+    Fancy progress-bar for loops
+
+    .. code-block:: python
+
+           for i in progressbar(range(1000000)):
+               x = i
+
+    :type it: iterator
+    :param prefix: prefix string before progress bar
+    :type prefix: str
+    :param size: width of the progress bar (in points of xterm width)
+    :type size: int
+    :type size: int
+    """
+    count = len(it)
+    def _show(_i):
+        x = int(size*_i/count)
+        sys.stdout.write("{}[{}{}] {}/{}\r".format(prefix, "#"*x, "."*(size-x),
+                                                   _i, count))
+        sys.stdout.flush()
+
+    _show(0)
+    for i, item in enumerate(it):
+        yield item
+        _show(i+1)
+    sys.stdout.write("\n")
+    sys.stdout.flush()
