@@ -9,6 +9,72 @@ from scipy.integrate import simps
 import matplotlib.pyplot as plt
 
 
+def jnyn_zeros_guess(rin, rout, m, zeros_m_minus_one, nroots):
+    """
+    This subroutine determines the roots of the transcendental equation
+    when Dirichlet boundary conditions are considered. Number of roots
+    is specified by nroots. This makes use of the roots found for m-1
+    to determine the initial brackets.
+
+    :param rin: inner radius
+    :type rin: float
+    :param rout: outer radius
+    :type rout: float
+    :param zeros_m_minus_one: the zeros obtained at m-1
+    :type zeros_m_minus_one: numpy.ndarray
+    :param m: azimuthal wavenumber
+    :type m: integer
+    :param nroots: nroots
+    :type nroots: number of roots to be computed
+    :returns: a numpy array which contains the roots
+    :rtype: numpy.ndarray
+    """
+
+    def f(x):
+        return (jv(m, x*rout)*yn(m, x*rin)-jv(m, x*rin)*yn(m, x*rout)) / \
+                abs(hankel1(m, x*rin))
+
+    len0 = len(zeros_m_minus_one)
+
+    import mpmath as mp
+    def fmpmath(x):
+        return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) - \
+                mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
+                abs(mp.hankel1(m, x*rin))
+
+    roots = np.zeros(nroots, np.float64)
+    nroot = 0
+    while nroot < nroots:
+        if nroot < len0:
+            start = zeros_m_minus_one[nroot]
+        else:
+            spacing = roots[nroot-1]-roots[nroot-2]
+            start = roots[nroot-1]+0.5*spacing
+        if nroot < len0-1:
+            spacing =  zeros_m_minus_one[nroot+1]- zeros_m_minus_one[nroot]
+            stop = zeros_m_minus_one[nroot]+0.5*spacing
+        else:
+            spacing = roots[nroot-1]-roots[nroot-2]
+            stop = roots[nroot-1]+1.5*spacing
+
+        compute_mpmath = False
+        try:
+            sol = optimize.root_scalar(f, bracket=[start, stop], method='brentq')
+            if sol.converged and abs(sol.root) > 1e-1:
+                root = sol.root
+            else:
+                compute_mpmath = True
+        except ValueError:
+            compute_mpmath = True
+
+        if compute_mpmath:
+            root = mp.findroot(fmpmath, x0=[start, stop])
+        roots[nroot] = root
+        nroot += 1
+
+    return roots
+
+
 def jnyn_zeros(rin, rout, m, nroots):
     """
     This subroutine determines the roots of the transcendental equation
@@ -51,6 +117,7 @@ def jnyn_zeros(rin, rout, m, nroots):
 
     if improve_prec:
         print('Precision of scipy is not enough, using mpmath')
+
         import mpmath as mp
         def fmpmath(x):
             return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) - \
@@ -76,12 +143,15 @@ def jnyn_zeros(rin, rout, m, nroots):
     roots = np.zeros((nroots), np.float64)
     for i in range(npoints-1):
         if signs[i] + signs[i+1] == 0:
-            if improve_prec and x[i] < xmax:
+            if improve_prec and x[i] < 1.1*xmax:
                 root = mp.findroot(fmpmath, x0=[x[i], x[i+1]])
             else:
                 sol = optimize.root_scalar(f, bracket=[x[i], x[i+1]],
                                            method='brentq')
-                root = sol.root
+                if sol.converged and abs(sol.root) > 1e-1:
+                    root = sol.root
+                else:
+                    root = mp.findroot(fmpmath, x0=[x[i], x[i+1]])
                 #print(root)
             if nroot < nroots:
                 roots[nroot] = root
@@ -93,7 +163,7 @@ def jnyn_zeros(rin, rout, m, nroots):
         spacing = roots[nroot-1] - roots[nroot-2]
         start = roots[nroot-1] + 0.5*spacing
         stop = roots[nroot-1] + 1.5*spacing
-        if improve_prec and start < xmax:
+        if improve_prec and start < 1.1*xmax:
             root = mp.findroot(fmpmath, x0=[start, stop])
         else:
             sol = optimize.root_scalar(f, bracket=[start, stop], method='brentq')
@@ -171,7 +241,20 @@ class HankelAnnulus:
             self.nroots = nroots
 
             # Get the roots
-            self.roots = jnyn_zeros(rin, rout, m, nroots+1)
+            if storage_dir is not None:
+                filename = f'WeberOrr_{rin/rout:.2f}_{nroots:04d}_{m-1:04d}.pickle'
+                file = os.path.join(storage_dir, filename)
+                if os.path.exists(file):
+                    with open(file, 'rb') as fi:
+                        tmp = pickle.load(fi)
+                        roots_m_minus_1, grid_m_minus_1, k_m_minus_1 = \
+                            pickle.load(fi)
+                    self.roots = jnyn_zeros_guess(rin, rout, m, roots_m_minus_1,
+                                                  nroots+1)
+                else:
+                    self.roots = jnyn_zeros(rin, rout, m, nroots+1)
+            else:
+                self.roots = jnyn_zeros(rin, rout, m, nroots+1)
             roots_last = self.roots[-1]
             self.roots = self.roots[:-1]
 
