@@ -4,7 +4,7 @@ module courant_mod
    use precision_mod
    use outputs, only: n_log_file
    use namelists, only:  dt_fac, tag, l_3D, l_mag_3D, l_mag_LF, l_mag_alpha, &
-       &                 l_cour_alf_damp, DyMagFac, BdiffFac!=1/pm=eta/nu, 
+       &                 l_cour_alf_damp, DyMagFac, BdiffFac, l_fix_timestep!=1/pm=eta/nu, 
    use truncation, only: n_phi_max
    use truncation_3D, only: n_theta_max, n_phi_max_3D
    use blocking, only: nRstart3D, nRstop3D, nRstart, nRstop
@@ -283,33 +283,51 @@ contains
 
       if ( dt > dtMax ) then ! Timestep larger than dtMax from Namelist
     
-         l_new_dt=.true.
-         dt_new=dtMax
-         write(message,'(1P," ! COURANT: dt=dtMax =",ES12.4,A)') dtMax,&
-              &" ! Think about changing dtMax !"
-         call logWrite(message,n_log_file)
+         if ( l_fix_timestep ) then
+            l_new_dt=.false.
+            dt_new=dt
+            !if ( rank == 0 ) print*, 'time step should have been modified'
+         else
+            l_new_dt=.true.
+            dt_new=dtMax
+            write(message,'(1P," ! COURANT: dt=dtMax =",ES12.4,A)') dtMax,&
+                 &" ! Think about changing dtMax !"
+            call logWrite(message,n_log_file)
+         end if
     
       else if ( dt > dt_rh ) then ! Timestep decrease
     
-         l_new_dt=.true.
-         dt_new  =dt_2
-         write(message,'(1P," ! COURANT: dt=",ES11.4," > dt_r=",ES12.4, &
-              &       " and dt_h=",ES12.4)') dt,dt_r,dt_h
-         call logWrite(message,n_log_file)
-         if ( rank == 0 ) then
-            write(file_handle, '(1p, es20.12, es16.8)')  time, dt_new
+         if ( l_fix_timestep ) then
+            l_new_dt=.false.
+            dt_new=dt
+            !if ( rank == 0 ) print*, 'time step should have been modified'
+         else
+            l_new_dt=.true.
+            dt_new  =dt_2
+            write(message,'(1P," ! COURANT: dt=",ES11.4," > dt_r=",ES12.4, &
+                 &       " and dt_h=",ES12.4)') dt,dt_r,dt_h
+            call logWrite(message,n_log_file)
+            if ( rank == 0 ) then
+               write(file_handle, '(1p, es20.12, es16.8)')  time, dt_new
+            end if
          end if
     
       else if ( dt_fac*dt < dt_rh .and. dt < dtMax ) then ! Timestep increase
     
-         l_new_dt=.true.
-         dt_new=dt_2
-         write(message,'(" ! COURANT: ",F4.1,1P,"*dt=",ES11.4, &
-              &     " < dt_r=",ES12.4," and dt_h=",ES12.4)') &
-              &     dt_fac,dt_fac*dt,dt_r,dt_h
-         call logWrite(message,n_log_file)
-         if ( rank == 0 ) then
-            write(file_handle, '(1p, es20.12, es16.8)')  time, dt_new
+         if ( l_fix_timestep ) then
+            l_new_dt=.false.
+            dt_new=dt
+            !if ( rank == 0 ) print*, 'time step should have been modified'
+         else
+            l_new_dt=.true.
+            dt_new=dt_2
+            write(message,'(" ! COURANT: ",F4.1,1P,"*dt=",ES11.4, &
+                 &     " < dt_r=",ES12.4," and dt_h=",ES12.4)') &
+                 &     dt_fac,dt_fac*dt,dt_r,dt_h
+            call logWrite(message,n_log_file)
+            if ( rank == 0 ) then
+               write(file_handle, '(1p, es20.12, es16.8)')  time, dt_new
+            end if
          end if
 
       else 

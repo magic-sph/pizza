@@ -770,7 +770,9 @@ contains
          call rscheme_3D%costf1(b_LMloc, lmStart, lmStop, n_r_max_3D)
          call rscheme_3D%costf1(aj_LMloc, lmStart, lmStop, n_r_max_3D)
 
-      else if ( init_B == 1010 ) then  ! l=1,m=0 decay mode , radial bessel function of order 1 !
+      else if ( init_B == 1010 ) then  ! l=1,m=0 decay mode , radial bessel function of the first kind and order 0!!
+         ! WARNING:: the order of the bessel function used should match l
+         !           --> can build complex (l,m) using different bessel functions an p-roots: see Gillet 2011
          if( (lm10>=lmStart) .and. (lm10<=lmStop) ) then ! select processor
             do n_r=1,n_r_max_3D
                x = pi*r_3D(n_r)/r_cmb!pi*(r_3D(n_r)-r_icb+1e-4_cp)/(r_cmb-r_icb)!

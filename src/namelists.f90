@@ -121,7 +121,7 @@ module namelists
    logical,  public :: l_thw_3D        ! Computation of the 3D thermal wind contribution on u_phi-3D
    logical,  public :: l_mag_3D        ! Treatment of the magnetic field (3-D)
    logical,  public :: l_mag_B0        ! With or without a Background field to the problem (Magnetoconvection)
-   logical,  public :: l_lin_B0        ! Linear or Quadratic products between B0 and bsmall (Magnetoconvection)
+   logical,  public :: l_nl_B0         ! Linear or Quadratic products between B0 and bsmall (Magnetoconvection)
    logical,  public :: l_U0_3D         ! With or without a Velocity field to the problem (Magnetoconvection)
    logical,  public :: l_mag_LF        ! Treatment of the Lorentz-Force
    logical,  public :: l_mag_alpha     ! With or without magnetic Alpha effect in magnetic advection
@@ -140,6 +140,7 @@ module namelists
    logical,  public :: l_QG_basis      ! Switch on the extra terms from the projection on a QG basis
    logical,  public :: l_path_rescale  ! Switch on the rescaling of the checkpoint fields as in [Aubert et al., 2017]
    logical,  public :: l_lin_solve     ! Switch off the non-Linear terms for studying the Onset of Convection
+   logical,  public :: l_fix_timestep  ! Switch off the adaptative time-step. Warning: this can lead to a CFL break
    real(cp), public :: tadvz_fac
    real(cp), public :: r_cmb           ! Outer core radius
    real(cp), public :: r_icb           ! Inner core radius
@@ -178,7 +179,7 @@ contains
       &                corio_term,buo_term,bc_method,l_QG_basis,    &
       &                hdif_temp,hdif_vel,damp_zon,hdif_comp,       &
       &                hdif_mag,hdif_exp,hdif_l,hdif_m,             &
-      &                l_path_rescale,l_lin_solve
+      &                l_path_rescale,l_lin_solve, l_fix_timestep
       !namelist/hdif/hdif_temp,hdif_vel,damp_zon,hdif_comp,hdif_mag,&
       !&             hdif_exp,hdif_l,hdif_m
       namelist/phys_param/ra,ek,pr,prmag,raxi,sc,radratio,g0,g1,g2,&
@@ -189,7 +190,7 @@ contains
       &                   xicond_fac,l_xi_3D,l_heat_3D,l_thw_3D,   &
       &                   l_mag_LF,l_mag_alpha,l_mag_pump,l_cyl,   &
       &                   l_mag_inertia,alpha_fac,mag_pump_fac,    &
-      &                   delta_fac, l_mag_B0, l_lin_B0, l_U0_3D,  &
+      &                   delta_fac, l_mag_B0, l_nl_B0, l_U0_3D,   &
       &                   l_leibniz
       namelist/start_field/l_start_file,start_file,start_file_b0,scale_t,&
       &                    init_t,amp_t,scale_u,init_u,amp_u,l_reset_t,  &
@@ -333,8 +334,6 @@ contains
       else
          l_mag_3D=.true.
       end if
-
-      if ( .not. l_mag_B0 ) l_lin_B0=.false.
 
       if ( .not. l_mag_alpha ) alpha_fac=0.0_cp
       if ( .not. l_mag_pump )  mag_pump_fac=0.0_cp
@@ -593,6 +592,7 @@ contains
       l_QG_basis       =.false. ! No QG basis projection of the vorticity eq.
       l_path_rescale   =.false. ! No rescaling of the checkpoint fields
       l_lin_solve      =.false. ! No switching off of the non-linear terms
+      l_fix_timestep   =.false. ! Time step remains adaptative by default
 
       !-- Hyperdiffusion
       hdif_vel         =0.0_cp
@@ -654,7 +654,7 @@ contains
       l_mag_3D = .false.
       l_mag_LF = .false.
       l_mag_B0 = .false.
-      l_lin_B0 = .true. ! Linear Magnetoconvection by default
+      l_nl_B0  = .false. ! Linear Magnetoconvection by default
       l_U0_3D  = .false.
       l_leibniz = .false.
       l_mag_alpha = .false.
@@ -764,6 +764,7 @@ contains
       write(n_out,'(''  l_QG_basis      ='',l3,'','')') l_QG_basis
       write(n_out,'(''  l_path_rescale  ='',l3,'','')') l_path_rescale
       write(n_out,'(''  l_lin_solve     ='',l3,'','')') l_lin_solve
+      write(n_out,'(''  l_fix_timestep  ='',l3,'','')') l_fix_timestep
       length=length_to_blank(time_scale)
       write(n_out,*) " time_scale      = """,time_scale(1:length),""","
       write(n_out,*) "/"
@@ -809,7 +810,7 @@ contains
       write(n_out,'(''  l_mag_LF        ='',l3,'','')') l_mag_LF
       write(n_out,'(''  l_mag_B0        ='',l3,'','')') l_mag_B0
       if ( l_mag_B0 ) &
-      & write(n_out,'(''  l_lin_B0        ='',l3,'','')') l_lin_B0
+      & write(n_out,'(''  l_nl_B0         ='',l3,'','')') l_nl_B0
       write(n_out,'(''  l_U0_3D         ='',l3,'','')') l_U0_3D
       write(n_out,'(''  l_leibniz       ='',l3,'','')') l_leibniz
       write(n_out,'(''  l_mag_alpha     ='',l3,'','')') l_mag_alpha

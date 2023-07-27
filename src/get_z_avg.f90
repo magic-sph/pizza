@@ -298,6 +298,35 @@ contains
       !-- Boundary point: fix Ek-pumping to zero
       if ( rank == 0 ) this%ek_phys_Rloc(:,1)=0.0_cp
 
+#ifdef showekpump
+      block
+         use truncation, only: n_r_max
+         use radial_functions, only: r
+
+         integer :: file_handle, n_r
+
+         open(newunit=file_handle, file='ekpump', status='new', form='formatted')
+            do n_r=1,n_r_max
+               write(file_handle, *) r(n_r), oheight(n_r), beta(n_r), ekpump(n_r), real(ekpump_m3D(:,n_r)), aimag(ekpump_m3D(:,n_r))
+               !write(file_handle, *) r(n_r), real(om_Rloc(:,n_r)), aimag(om_Rloc(:,n_r))
+            end do
+         close(file_handle)
+
+         open(newunit=file_handle, file='om', status='new', form='unformatted',&
+         &    access='stream')
+            write(file_handle) om_Rloc
+         close(file_handle)
+         open(newunit=file_handle, file='up', status='new', form='unformatted',&
+         &    access='stream')
+            write(file_handle) up_Rloc
+         close(file_handle)
+         open(newunit=file_handle, file='us', status='new', form='unformatted',&
+         &    access='stream')
+            write(file_handle) us_Rloc
+         close(file_handle)
+      end block
+#endif
+
 #ifdef WORK_in_PROGRESS
    !WARNING: Should be more of a tapering instead of a hard truncation (hyperdiffusion-like)
    if ( l_U0_3D ) then
