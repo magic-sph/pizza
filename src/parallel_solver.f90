@@ -147,15 +147,19 @@ contains
 
       !-- Set 'out-of-bound' values to zero for safety
       do m=this%mMin, this%mMax
-         if ( this%nRMin == 1 ) this%low(m,this%nRMin)=0.0_cp
-         if ( this%nRMax == n_r_max ) this%up(m,this%nRMax) =0.0_cp
+         if ( this%nRMin == 1 ) this%low(m,this%nRMin)     =0.0_cp
+         if ( this%nRMax == n_r_max ) this%up(m,this%nRMax)=0.0_cp
       end do
 
       if ( rank == 0 ) then ! Rank 0 starts the flow
-         do nR=this%nRMin+1,this%nRMax
+         do nR=this%nRMin,this%nRMax
             do m=this%mMin,this%mMax
-               p=this%diag(m,nR)-this%low(m,nR)*this%up(m,nR-1)* &
-               & this%diag(m,nR-1)
+               if ( nR == 1 ) then
+                  p=this%diag(m,nR)
+               else
+                  p=this%diag(m,nR)-this%low(m,nR)*this%up(m,nR-1)* &
+                  & this%diag(m,nR-1)
+               end if
                this%diag(m,nR)=one/p
             end do
          end do

@@ -402,6 +402,7 @@ contains
             else
                sMat%up(n_m,1)=sMat%up(n_m,1)+sMat%low(n_m,1)
                !fd_fac_top(n_m)=two*(r(2)-r(1))*sMat%low(n_m,1)
+               !sMat%low(n_m,1)=0.0_cp
             end if
          end do
          !$omp end do
@@ -415,6 +416,7 @@ contains
                if ( m == 0 ) then
                   sMat%low(n_m,n_r_max)=sMat%up(n_m,n_r_max)+sMat%low(n_m,n_r_max)
                   !fd_fac_bot(n_m)=two*(r(n_r_max-1)-r(n_r_max))*sMat%up(n_m,n_r_max)
+                  !sMat%up(n_m,n_r_max)=0.0_cp
                else
                   sMat%diag(n_m,n_r_max)=one
                   sMat%up(n_m,n_r_max)  =0.0_cp
