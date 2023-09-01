@@ -112,7 +112,6 @@ contains
       real(cp) :: jxBz(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: djxBpdz(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: djxBpds(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: Br_phiAvg(n_theta_max)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: runStart, runStop, phi, theta!, rsint
       complex(cp) :: tmp_2D(n_m_max,n_r_max)!nRstart:nRstop)!
@@ -265,7 +264,7 @@ contains
 
          !-- Compute and Write phi-Average of the 3D B field just below CMB
          if ( tscheme%istage==1 ) then
-            if ( l_b_phiavg .and. n_r==4 ) then
+            if ( l_b_phiavg .and. n_r==int(n_r_max*0.92) ) then
                call output_local_B_cmb(time, gsa%Brc(:,:), gsa%Bpc(:,:))
             end if
          end if
