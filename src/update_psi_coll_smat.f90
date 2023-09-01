@@ -7,7 +7,7 @@ module update_psi_coll_smat
    use horizontal, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, BuoFac, &
        &                l_coriolis_imp, l_buo_imp, l_ek_pump, l_non_rot,     &
-       &                ChemFac, l_chem, l_heat
+       &                ChemFac, l_chem, l_heat, l_full_disk
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, &
        &                       rgrav, ekp_up, ekp_us, ekp_dusdp
    use blocking, only: nMstart, nMstop, l_rank_has_m0
@@ -271,12 +271,22 @@ contains
             m = idx2m(n_m)
 
             if ( m == 0 ) then
-               us_Mloc(n_m,n_r)=0.0_cp
+               us_Mloc(n_m,n_r)=zero
                up_Mloc(n_m,n_r)=uphi0(n_r)
                om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
             else
-               us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-               up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+               if ( l_full_disk .and. n_r==n_r_max ) then
+                  if ( m == 1 ) then
+                     us_Mloc(n_m,n_r)=ci*work_Mloc(n_m,n_r)
+                     up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+                  else
+                     us_Mloc(n_m,n_r)=zero
+                     up_Mloc(n_m,n_r)=zero
+                  end if
+               else
+                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+                  up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+               end if
             end if
          end do
       end do
@@ -415,6 +425,13 @@ contains
 
       if ( l_rank_has_m0 ) then ! Copy m=0 vorticity to save it before DCT
          om_Mloc(nm0,:)=cmplx(om0,0.0_cp,kind=cp)
+      end if
+
+      if ( l_full_disk ) then
+         do n_m=nMstart,nMstop
+            m=idx2m(n_m)
+            if ( m > 0 ) om_Mloc(n_m,n_r_max)=zero
+         end do
       end if
 
       if ( istage == 1 ) then
@@ -683,15 +700,28 @@ contains
             psiMat(n_r_max+1,nR_out)    =0.0_cp
             psiMat(n_r_max+1,nR_out_psi)=rscheme%rnorm*rscheme%drMat(1,nR_out)
          end if
-         if ( kbotv == 1 ) then
-            psiMat(2*n_r_max,nR_out)    =0.0_cp
-            psiMat(2*n_r_max,nR_out_psi)=rscheme%rnorm*(                 &
-            &                            rscheme%d2rMat(n_r_max,nR_out)- &
-            &                or1(n_r_max)*rscheme%drMat(n_r_max,nR_out) )
+
+         if ( l_full_disk ) then
+            if ( m == 1 ) then
+               psiMat(2*n_r_max,nR_out)    =0.0_cp
+               psiMat(2*n_r_max,nR_out_psi)=rscheme%rnorm*                 &
+               &                            rscheme%d2rMat(n_r_max,nR_out)
+            else
+               psiMat(2*n_r_max,nR_out)    =0.0_cp
+               psiMat(2*n_r_max,nR_out_psi)=rscheme%rnorm* &
+               &                            rscheme%drMat(n_r_max,nR_out)
+            end if
          else
-            psiMat(2*n_r_max,nR_out)    =0.0_cp
-            psiMat(2*n_r_max,nR_out_psi)=rscheme%rnorm* &
-            &                            rscheme%drMat(n_r_max,nR_out)
+            if ( kbotv == 1 ) then
+               psiMat(2*n_r_max,nR_out)    =0.0_cp
+               psiMat(2*n_r_max,nR_out_psi)=rscheme%rnorm*(                 &
+               &                            rscheme%d2rMat(n_r_max,nR_out)- &
+               &                or1(n_r_max)*rscheme%drMat(n_r_max,nR_out) )
+            else
+               psiMat(2*n_r_max,nR_out)    =0.0_cp
+               psiMat(2*n_r_max,nR_out_psi)=rscheme%rnorm* &
+               &                            rscheme%drMat(n_r_max,nR_out)
+            end if
          end if
       end do
 
@@ -888,16 +918,19 @@ contains
          else
             uphiMat(1,nR_out)=rscheme%rnorm*rscheme%rMat(1,nR_out)
          end if
-         if ( kbotv == 1 ) then !-- Free-slip
-            uphiMat(n_r_max,nR_out)=rscheme%rnorm*(                 &
-            &                        rscheme%drMat(n_r_max,nR_out)  &
-            &           -or1(n_r_max)*rscheme%rMat(n_r_max,nR_out))
+         if ( l_full_disk ) then
+            uphiMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
          else
-            uphiMat(n_r_max,nR_out)=rscheme%rnorm* &
-            &                       rscheme%rMat(n_r_max,nR_out)
+            if ( kbotv == 1 ) then !-- Free-slip
+               uphiMat(n_r_max,nR_out)=rscheme%rnorm*(                 &
+               &                        rscheme%drMat(n_r_max,nR_out)  &
+               &           -or1(n_r_max)*rscheme%rMat(n_r_max,nR_out))
+            else
+               uphiMat(n_r_max,nR_out)=rscheme%rnorm* &
+               &                       rscheme%rMat(n_r_max,nR_out)
+            end if
          end if
       end do
-
 
       if ( rscheme%n_max < n_r_max ) then ! fill with zeros !
          do nR_out=rscheme%n_max+1,n_r_max

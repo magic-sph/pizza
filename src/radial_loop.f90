@@ -6,10 +6,10 @@ module rloop
    use mem_alloc, only: bytes_allocated
    use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem, n_rings,    &
        &                radratio, amp_forcing, radius_forcing, dx_forcing, &
-       &                forcing_type, tag
-   use radial_functions, only: or1, r, beta, dtcond, ekpump
+       &                forcing_type, tag, l_full_disk
+   use radial_functions, only: or1, r, beta, dtcond, ekpump, m_R
    use blocking, only: nRstart, nRstop
-   use truncation, only: n_m_max, n_phi_max, idx2m, m2idx
+   use truncation, only: n_m_max, n_phi_max, idx2m, m2idx, n_r_max
    use courant_mod, only: courant
    use fourier, only: fft, ifft
    use useful, only: cc22real
@@ -181,7 +181,7 @@ contains
                !if ( np == 1) print*, nr, force(np)
             end do
 
-            call fft(force, forcing_Rloc(:,nr))
+            call fft(force, forcing_Rloc(:,nr), n_m_max)
          end do
 
          !-- Write a snapshot which contain the layout of the forcing
@@ -252,19 +252,19 @@ contains
          !-- Bring data on the grid
          !-----------------
          runStart = MPI_Wtime()
-         call ifft(us_Rloc(:,n_r), us_grid)
-         call ifft(up_Rloc(:,n_r), up_grid)
-         call ifft(om_Rloc(:,n_r), om_grid)
+         call ifft(us_Rloc(:,n_r), us_grid, m_R(n_r))
+         call ifft(up_Rloc(:,n_r), up_grid, m_R(n_r))
+         call ifft(om_Rloc(:,n_r), om_grid, m_R(n_r))
          runStop = MPI_Wtime()
-         if ( l_heat ) call ifft(temp_Rloc(:,n_r), temp_grid)
-         if ( l_chem ) call ifft(xi_Rloc(:,n_r), xi_grid)
+         if ( l_heat ) call ifft(temp_Rloc(:,n_r), temp_grid, m_R(n_r))
+         if ( l_chem ) call ifft(xi_Rloc(:,n_r), xi_grid, m_R(n_r))
          if ( runStop > runStart ) then
             timers%fft = timers%fft + (runStop-runStart)
             timers%n_fft_calls = timers%n_fft_calls + 3
          end if
 
          !-- Courant condition
-         if ( tscheme%istage == 1 ) then
+         if ( tscheme%istage == 1 .and. (.not. l_full_disk .or. n_r /= n_r_max) ) then
             call courant(n_r, dtr_Rloc(n_r), dth_Rloc(n_r), us_grid, up_grid, &
                  &       tscheme%courfac)
          end if
@@ -289,16 +289,16 @@ contains
 
          !-- Bring data back on the spectral domain
          runStart = MPI_Wtime()
-         call fft(upOm_grid, dpsidt_Rloc(:,n_r))
-         call fft(usOm_grid, dVsOm_Rloc(:,n_r))
+         call fft(upOm_grid, dpsidt_Rloc(:,n_r), m_R(n_r))
+         call fft(usOm_grid, dVsOm_Rloc(:,n_r), m_R(n_r))
          runStop = MPI_Wtime()
          if ( l_heat ) then
-            call fft(upT_grid, dtempdt_Rloc(:,n_r))
-            call fft(usT_grid, dVsT_Rloc(:,n_r))
+            call fft(upT_grid, dtempdt_Rloc(:,n_r), m_R(n_r))
+            call fft(usT_grid, dVsT_Rloc(:,n_r), m_R(n_r))
          end if
          if ( l_chem ) then
-            call fft(upXi_grid, dxidt_Rloc(:,n_r))
-            call fft(usXi_grid, dVsXi_Rloc(:,n_r))
+            call fft(upXi_grid, dxidt_Rloc(:,n_r), m_R(n_r))
+            call fft(usXi_grid, dVsXi_Rloc(:,n_r), m_R(n_r))
          end if
          if ( runStop > runStart ) then
             timers%fft = timers%fft + (runStop-runStart)
@@ -331,7 +331,8 @@ contains
          if ( amp_forcing > 0.0_cp ) then
             do n_m=1,n_m_max
                m = idx2m(n_m)
-               if ( m > 0 ) dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)+forcing_Rloc(n_m,n_r)
+               if ( m > 0 ) dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r) + &
+               &                                 forcing_Rloc(n_m,n_r)
             end do
          end if
       end do

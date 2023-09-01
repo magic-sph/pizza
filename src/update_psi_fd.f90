@@ -11,7 +11,8 @@ module update_psi_fd_mod
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
    use namelists, only: kbotv, ktopv, BuoFac, ChemFac, l_chem, l_heat, CorFac, &
-       &                l_coriolis_imp, ViscFac, r_cmb, l_ek_pump, l_non_rot
+       &                l_coriolis_imp, ViscFac, r_cmb, l_ek_pump, l_non_rot,  &
+       &                l_full_disk
    use radial_functions, only: or1, rgrav, rscheme, beta, ekpump, or2, r, dbeta, &
        &                       d2beta, d3beta, or3, ekp_up, ekp_us, ekp_dusdp
    use radial_der, only: get_dr_Rloc, get_ddddr_ghost, get_ddr_ghost, exch_ghosts, &
@@ -81,7 +82,6 @@ contains
       type(type_tarray), intent(inout) :: dpsidt
       real(cp),          intent(inout) :: lu_time
       integer,           intent(inout) :: n_lu_calls
-
 
       !-- Local variables
       integer :: n_m, m, n_m_start, n_m_stop, nR
@@ -193,11 +193,19 @@ contains
          do n_m=n_m_start,n_m_stop
             m = idx2m(n_m)
             if ( m == 0 ) cycle
-            if ( kbotv == 1 ) then ! Stress-free
-               psig(n_m,nRstop+1)=-(one+half*or1(n_r_max)*dr)/ &
-               &                (one-half*or1(n_r_max)*dr) * psig(n_m,nRstop-1)
+            if ( l_full_disk ) then
+               if ( m == 1 ) then
+                  psig(n_m,nRstop+1)=-psig(n_m,nRstop-1) ! ddw=0
+               else
+                  psig(n_m,nRstop+1)=psig(n_m,nRstop-1)  ! dw=0
+               end if
             else
-               psig(n_m,nRstop+1)=psig(n_m,nRstop-1) ! dw=0
+               if ( kbotv == 1 ) then ! Stress-free
+                  psig(n_m,nRstop+1)=-(one+half*or1(n_r_max)*dr)/ &
+                  &                (one-half*or1(n_r_max)*dr) * psig(n_m,nRstop-1)
+               else
+                  psig(n_m,nRstop+1)=psig(n_m,nRstop-1) ! dw=0
+               end if
             end if
             psig(n_m,nRstop+2)=zero
          end do
@@ -362,10 +370,23 @@ contains
                up_Rloc(n_m,nR)=up0g(nR)
                om_Rloc(n_m,nR)=dup0(nR)+or1(nR)*up0g(nR)
             else
-               us_Rloc(n_m,nR)=ci*real(m,cp)*or1(nR)*psig(n_m,nR)
-               om_Rloc(n_m,nR)=-(om_Rloc(n_m,nR)+(or1(nR)+beta(nR))*up_Rloc(n_m,nR)+&
-               &                 (beta(nR)*or1(nR)+dbeta(nR)-dm2*or2(nR))*psig(n_m,nR))
-               up_Rloc(n_m,nR)=-up_Rloc(n_m,nR)-beta(nR)*psig(n_m,nR)
+               if ( l_full_disk .and. nR==n_r_max ) then
+                  om_Rloc(n_m,nR)=zero
+                  if ( m == 1 ) then
+                     ! Only m=1 can cross the axis and psi=A*s, dpsi/ds=A
+                     us_Rloc(n_m,nR)=ci*up_Rloc(n_m,n_r_max)
+                     up_Rloc(n_m,nR)=-up_Rloc(n_m,nR)-beta(nR)*psig(n_m,nR)
+                  else
+                     us_Rloc(n_m,nR)=zero
+                     up_Rloc(n_m,nR)=zero
+                  end if
+               else
+                  us_Rloc(n_m,nR)=ci*real(m,cp)*or1(nR)*psig(n_m,nR)
+                  om_Rloc(n_m,nR)=-(om_Rloc(n_m,nR)+(or1(nR)+beta(nR))* &
+                  &                 up_Rloc(n_m,nR)+(beta(nR)*or1(nR)+  &
+                  &                 dbeta(nR)-dm2*or2(nR))*psig(n_m,nR))
+                  up_Rloc(n_m,nR)=-up_Rloc(n_m,nR)-beta(nR)*psig(n_m,nR)
+               end if
             end if
          end do
       end do
@@ -663,7 +684,7 @@ contains
       !$omp end do
       !$omp end parallel
 
-      !-- Boundary conditions
+      !-- Outer boundary condition
       if ( nRstart == 1) then
          do n_m=1,n_m_max
             m = idx2m(n_m)
@@ -688,27 +709,49 @@ contains
          end do
       end if
 
+      !-- Inner boundary condition
       if ( nRstop == n_r_max ) then
          do n_m=1,n_m_max
             m = idx2m(n_m)
             if ( m == 0 ) cycle
-            psiMat%diag(n_m,n_r_max)=one
-            psiMat%low1(n_m,n_r_max)=zero
-            psiMat%low2(n_m,n_r_max)=zero
-            psiMat%up1(n_m,n_r_max) =zero
-            psiMat%up2(n_m,n_r_max) =zero
+            if ( l_full_disk ) then
+               if ( m == 1 ) then
+                  !-- psi_{m=1} = 0 and omega_{m=1} = 0-> d2psi(m=1)/ds2=0
+                  psiMat%diag(n_m,n_r_max)=one
+                  psiMat%low1(n_m,n_r_max)=zero
+                  psiMat%low2(n_m,n_r_max)=zero
+                  psiMat%up1(n_m,n_r_max) =zero
+                  psiMat%up2(n_m,n_r_max) =zero
+                  psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) - &
+                  &                          psiMat%up2(n_m,n_r_max-1)
+               else ! psi=0 and dpsi/dr=0
+                  psiMat%diag(n_m,n_r_max)=one
+                  psiMat%low1(n_m,n_r_max)=zero
+                  psiMat%low2(n_m,n_r_max)=zero
+                  psiMat%up1(n_m,n_r_max) =zero
+                  psiMat%up2(n_m,n_r_max) =zero
+                  psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) + &
+                  &                          psiMat%up2(n_m,n_r_max-1)
+               end if
+            else
+               psiMat%diag(n_m,n_r_max)=one
+               psiMat%low1(n_m,n_r_max)=zero
+               psiMat%low2(n_m,n_r_max)=zero
+               psiMat%up1(n_m,n_r_max) =zero
+               psiMat%up2(n_m,n_r_max) =zero
 
-            if ( kbotv == 1 ) then ! free-slip
-               dr=r(n_r_max)-r(n_r_max-1)
-               fac=(one+half*or1(n_r_max)*dr)/(one-half*or1(n_r_max)*dr)
-               psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) - &
-               &                          fac*psiMat%up2(n_m,n_r_max-1)
-               psiMat%up1(n_m,n_r_max-1)=psiMat%up1(n_m,n_r_max-1) +   &
-               &                         two*psiMat%up2(n_m,n_r_max-1) &
-               &                         /(one-half*or1(n_r_max)*dr)
-            else ! no slip
-               psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) + &
-               &                          psiMat%up2(n_m,n_r_max-1)
+               if ( kbotv == 1 ) then ! free-slip
+                  dr=r(n_r_max)-r(n_r_max-1)
+                  fac=(one+half*or1(n_r_max)*dr)/(one-half*or1(n_r_max)*dr)
+                  psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) - &
+                  &                          fac*psiMat%up2(n_m,n_r_max-1)
+                  psiMat%up1(n_m,n_r_max-1)=psiMat%up1(n_m,n_r_max-1) +   &
+                  &                         two*psiMat%up2(n_m,n_r_max-1) &
+                  &                         /(one-half*or1(n_r_max)*dr)
+               else ! no slip
+                  psiMat%diag(n_m,n_r_max-1)=psiMat%diag(n_m,n_r_max-1) + &
+                  &                          psiMat%up2(n_m,n_r_max-1)
+               end if
             end if
          end do
       end if
@@ -753,7 +796,7 @@ contains
          &                         or1(nR)*rscheme%dr(nR,2) )
       end do
 
-      !-- Boundary conditions
+      !-- Outer boundary condition
       if ( nRstart== 1 ) then
          if ( ktopv == 1 ) then ! free slip -> duphi/dr - uphi/r = 0
             upMat%up(n_m,1)  =upMat%up(n_m,1)+upMat%low(n_m,1)
@@ -765,15 +808,23 @@ contains
          end if
       end if
 
+      !-- Inner boundary condition
       if ( nRstop == n_r_max ) then
-         if ( kbotv == 1 ) then ! free slip
-            upMat%low(n_m,n_r_max) =upMat%low(n_m,n_r_max)+upMat%up(n_m,n_r_max)
-            upMat%diag(n_m,n_r_max)=upMat%diag(n_m,n_r_max)+two*(r(n_r_max)-r(n_r_max-1))* &
-            &                       or1(n_r_max)*upMat%up(n_m,n_r_max)
-         else ! no slip
+         if ( l_full_disk ) then ! up=0
             upMat%diag(n_m,n_r_max)=1.0_cp
             upMat%low(n_m,n_r_max) =0.0_cp
             upMat%up(n_m,n_r_max)  =0.0_cp
+         else
+            if ( kbotv == 1 ) then ! free slip
+               upMat%low(n_m,n_r_max) =upMat%low(n_m,n_r_max)+upMat%up(n_m,n_r_max)
+               upMat%diag(n_m,n_r_max)=upMat%diag(n_m,n_r_max)+two*( &
+               &                       r(n_r_max)-r(n_r_max-1))*     &
+               &                       or1(n_r_max)*upMat%up(n_m,n_r_max)
+            else ! no slip
+               upMat%diag(n_m,n_r_max)=1.0_cp
+               upMat%low(n_m,n_r_max) =0.0_cp
+               upMat%up(n_m,n_r_max)  =0.0_cp
+            end if
          end if
       end if
 

@@ -51,6 +51,7 @@ module namelists
    real(cp), public :: t_top(3*n_t_bounds), xi_top(3*n_t_bounds)
    real(cp), public :: g0, g1, g2
    real(cp), public :: h_temp, h_xi  ! Volumetric heating / volumetric chemical input
+   real(cp), public :: rcut_m ! Radius for variable m
 
    !-- For the nonlinear mapping)
    real(cp), public :: alph1  ! Input parameter for non-linear map to define degree of spacing (0.0:2.0)
@@ -105,6 +106,8 @@ module namelists
    integer,  public :: n_specs
    integer,  public :: n_spec_step
    logical,  public :: l_galerkin
+   logical,  public :: l_full_disk       ! Is it a full disk or not?
+   logical,  public :: l_var_m           ! Does m varies with radius?
    logical,  public :: l_vphi_balance    ! Calculate the vphi force balance
    logical,  public :: l_vort_balance    ! Calculate the vorticiy balance
    logical,  public :: l_2D_spectra      ! Calculate 2D spectra
@@ -142,7 +145,8 @@ contains
 
       !-- Namelists:
 
-      namelist/grid/n_r_max,n_cheb_max,m_max,minc,fd_ratio,fd_stretch
+      namelist/grid/n_r_max,n_cheb_max,m_max,minc,fd_ratio,fd_stretch, &
+      &             l_var_m,rcut_m
       namelist/control/tag,n_time_steps,alpha,l_newmap,map_function,&
       &                alph1,alph2,dtMax,courfac,tEND,runHours,     &
       &                runMinutes,runSeconds,l_non_rot,dt_fac,      &
@@ -268,6 +272,12 @@ contains
       end if
 
       run_time_requested = runHours*3600+runMinutes*60+runSeconds
+
+      if ( radratio == 0.0_cp ) then
+         l_full_disk=.true.
+      else
+         l_full_disk=.false.
+      end if
 
       if ( ek < 0.0_cp ) l_non_rot=.true.
       if ( l_non_rot ) then
@@ -478,6 +488,8 @@ contains
       minc             =1
       fd_stretch       =0.3_cp
       fd_ratio         =0.1_cp
+      l_var_m          =.false.
+      rcut_m           =0.1_cp
 
       !-- Control namelist
       n_time_steps     =100
@@ -609,6 +621,8 @@ contains
       write(n_out,'(''  minc            ='',i5,'','')') minc
       write(n_out,'(''  fd_stretch      ='',ES14.6,'','')') fd_stretch
       write(n_out,'(''  fd_ratio        ='',ES14.6,'','')') fd_ratio
+      write(n_out,'(''  l_var_m         ='',l3,'','')') l_var_m
+      write(n_out,'(''  rcut_m          ='',ES14.6,'','')') rcut_m
       write(n_out,*) "/"
 
       write(n_out,*) "&control"

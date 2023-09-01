@@ -3,7 +3,7 @@ module update_xi_coll
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero, four, ci
-   use namelists, only: kbotxi, ktopxi, XidiffFac, ChemFac, l_heat
+   use namelists, only: kbotxi, ktopxi, XidiffFac, ChemFac, l_heat, l_full_disk
    use radial_functions, only: rscheme, or1, or2, dxicond, rgrav
    use horizontal, only: hdif_xi, botxi_Mloc, topxi_Mloc
    use blocking, only: nMstart, nMstop
@@ -313,10 +313,18 @@ contains
          else
             tMat(1,nR_out)=rscheme%rnorm*rscheme%drMat(1,nR_out)
          end if
-         if ( kbotxi == 1 ) then
-            tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
+         if ( l_full_disk ) then
+            if ( m == 0 ) then
+               tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            else
+               tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
+            end if
          else
-            tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            if ( kbotxi == 1 ) then
+               tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
+            else
+               tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            end if
          end if
       end do
 

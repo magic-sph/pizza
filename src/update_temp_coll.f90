@@ -3,7 +3,7 @@ module update_temp_coll
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero
-   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac
+   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, l_full_disk
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta
    use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
    use blocking, only: nMstart, nMstop
@@ -323,10 +323,18 @@ contains
          else
             tMat(1,nR_out)=rscheme%rnorm*rscheme%drMat(1,nR_out)
          end if
-         if ( kbott == 1 ) then
-            tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
+         if ( l_full_disk ) then
+            if ( m == 0 ) then
+               tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            else
+               tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
+            end if
          else
-            tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            if ( kbott == 1 ) then
+               tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
+            else
+               tMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            end if
          end if
       end do
 

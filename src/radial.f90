@@ -14,7 +14,7 @@ module radial_functions
        &                ktopt, kbott, t_bot, t_top, l_heat, l_chem, xi_bot,&
        &                xi_top, l_xi_3D, ktopxi, kbotxi, h_temp, h_xi,     &
        &                l_finite_diff, fd_stretch, fd_ratio, container,    &
-       &                beta_fac
+       &                beta_fac, l_full_disk, l_var_m, rcut_m
    use mem_alloc, only: bytes_allocated
    use radial_scheme, only: type_rscheme
    use chebyshev, only: type_cheb
@@ -27,6 +27,7 @@ module radial_functions
    private
  
    !-- arrays depending on r:
+   integer,  public, allocatable :: m_R(:)       ! m(r)
    real(cp), public, allocatable :: r(:)         ! radii
    real(cp), public, allocatable :: or1(:)       ! :math:`1/r`
    real(cp), public, allocatable :: or2(:)       ! :math:`1/r^2`
@@ -79,7 +80,9 @@ contains
       allocate( delxr2(n_r_max), delxh2(n_r_max), ekp_up(n_r_max) )
       allocate( tcond(n_r_max), dtcond(n_r_max), ekp_us(n_r_max) )
       allocate( xicond(n_r_max), dxicond(n_r_max), ekp_dusdp(n_r_max) )
-      bytes_allocated = bytes_allocated+21*n_r_max*SIZEOF_DEF_REAL
+      allocate( m_R(n_r_max) )
+      bytes_allocated = bytes_allocated+21*n_r_max*SIZEOF_DEF_REAL+ &
+      &                 SIZEOF_INTEGER
 
       if ( .not. l_finite_diff ) then
          allocate ( type_cheb :: rscheme )
@@ -102,7 +105,7 @@ contains
 
       call rscheme%finalize()
 
-      deallocate( tcond, dtcond, xicond, dxicond )
+      deallocate( m_R, tcond, dtcond, xicond, dxicond )
       deallocate( delxr2, delxh2, rgrav )
       deallocate( beta, dbeta, height, ekpump, oheight, d2beta, d3beta )
       deallocate( r, or1, or2, or3, ekp_up, ekp_us, ekp_dusdp )
@@ -116,7 +119,7 @@ contains
 
       integer :: n_r, file_handle
       character(len=100) :: file_name
-      real(cp) :: ratio1, ratio2, delmin, c1
+      real(cp) :: ratio1, ratio2, delmin
       real(cp) :: ek_pump_fac, fac, Lin, Lout
 
       if ( l_ek_pump .and. (.not. l_non_rot)) then
@@ -147,20 +150,38 @@ contains
          close(file_handle)
       end if
 
-      rgrav(:)=g0+g1*r(:)/r_cmb+g2*(r_cmb/r)**2
+      if ( l_full_disk ) then
+         or1(:n_r_max-1)=one/r(:n_r_max-1)       ! 1/r
+         or2(:n_r_max-1)=or1(:n_r_max-1)*or1(:n_r_max-1)  ! 1/r**2
+         or3(:n_r_max-1)=or1(:n_r_max-1)*or2(:n_r_max-1)  ! 1/r**3
+         or1(n_r_max)=0.0_cp
+         or2(n_r_max)=0.0_cp
+         or3(n_r_max)=0.0_cp
+      else
+         or1(:)=one/r(:)      ! 1/r
+         or2(:)=or1*or1(:)    ! 1/r**2
+         or3(:)=or2*or1(:)    ! 1/r**3
+      end if
 
-      or1(:)=one/r(:)      ! 1/r
-      or2(:)=or1*or1(:)    ! 1/r**2
-      or3(:)=or2*or1(:)    ! 1/r**3
+      rgrav(:)=g0+g1*r(:)/r_cmb+g2*r_cmb**2*or2(:)
+
+      !-- Determine the max. order for each radial level
+      if ( l_var_m ) then ! Nat's form from Marti et al. (2014)
+         m_R(:)=int(one+m_max*sqrt(r(:)/r_cmb/rcut_m))
+         do n_r=1,n_r_max
+            if ( m_R(n_r) > m_max ) m_R(n_r)=m_max
+         end do
+      else ! Default is constant l
+         m_R(:)=m_max
+      end if
 
       !-- arrays for Courant conditions
-      c1=(two*pi/(three*real(m_max,cp)))**2
-      delxh2(1)      =c1*r_cmb**2
-      delxh2(n_r_max)=c1*r_icb**2
+      delxh2(1)      =(two*pi/three/m_R(1)*r_cmb)**2
+      delxh2(n_r_max)=(two*pi/three/m_R(n_r_max)*r_icb)**2
       delxr2(1)      =(r(1)-r(2))**2
       delxr2(n_r_max)=(r(n_r_max-1)-r(n_r_max))**2
       do n_r=2,n_r_max-1
-         delxh2(n_r)=c1*r(n_r)**2
+         delxh2(n_r)=(two*pi/three/m_R(n_r)*r(n_r))**2
          delmin=min((r(n_r-1)-r(n_r)),(r(n_r)-r(n_r+1)))
          delxr2(n_r)=delmin*delmin
       end do
@@ -326,13 +347,13 @@ contains
             do n_r=2,n_r_max
                tcond(n_r) = (r_icb/(r_icb-r_cmb))*(one-r_cmb*asinh(h(n_r)/r(n_r))/h(n_r))
             end do
-         elseif ( ktop==2 .and. kbot==1 ) then
+         else if ( ktop==2 .and. kbot==1 ) then
             do n_r=2,n_r_max
                tcond(n_r) = one + f_top*r_cmb**2*(one/r_icb - asinh(h(n_r)/r(n_r))/h(n_r)) &
                &          + (epsc0/two)*(r_icb**2 - r(n_r)**2 - third*h(n_r)**2 +          &
                &             two*r_cmb**3*(one/r_icb-asinh(h(n_r)/r(n_r))/h(n_r)))
             end do
-         elseif ( ktop==1 .and. kbot==2 ) then
+         else if ( ktop==1 .and. kbot==2 ) then
             do n_r=2,n_r_max
                tcond(n_r) = f_bot*r_icb**2*(one/r_cmb - asinh(h(n_r)/r(n_r))/h(n_r)) &
                &          + (epsc0/two)*(r_cmb**2 - r(n_r)**2 - third*h(n_r)**2 +    &
@@ -347,27 +368,38 @@ contains
          endif
          call get_dr(tcond, dtcond, n_r_max, rscheme)
       else
-         !2D-tcond profiles -- Warning! In 2D, need a geometric factor
+         !-- 2D-tcond profiles -- Warning! In 2D, need a geometric factor
          !-- 2D heat sources to compensate for top/bottom fluxes
-         if ( ktop==1 .and. kbot==1 ) then
-            tcond(:) = cond_fac*(log(r(:)/r_cmb)/log(radratio))
-            dtcond(:)= cond_fac*(or1(:)/log(radratio))
-         elseif ( ktop==2 .and. kbot==1 ) then
-            tcond(:) =cond_fac*(f_bot + f_top*r_cmb*log(r(:)/r_icb) + 0.25_cp*epsc0*  &
-            &                   (r_icb**2 - r(:)**2 + two*r_cmb**2*log(r(:)/ r_icb)))
-            dtcond(:)=cond_fac*(f_top*r_cmb*or1(:)+half*epsc0*(r_cmb**2*or1(:) - r(:)))
-         elseif( ktop==1 .and. kbot==2 ) then
-            tcond(:) =cond_fac*(f_bot*r_icb*log(r(:)/r_cmb) + 0.25_cp*epsc0* &
-            &                    (r_cmb**2 - r(:)**2 + two*r_icb**2*log(r(:)/ r_cmb))+&
-            &                    f_top)
-            dtcond(:)=cond_fac*(f_bot*r_icb*or1(:)+half*epsc0*(r_icb**2*or1(:) - r(:)))
+         if ( l_full_disk ) then
+            tcond(:) = cond_fac*0.25_cp*epsc0*(r_cmb**2-r(:)**2)
+            dtcond(:)=-cond_fac*half*epsc0*r(:)
          else
-            epsc0 = -two*(r_cmb*f_top-r_icb*f_bot)/(r_cmb**2-r_icb**2)
-            if ( abs(epsc0)<tiny_number ) epsc0=0.0_cp
-            tcond(:) = cond_fac*( half*epsc0*( r_cmb**2*log(r(:)/r_cmb)-half*(r(:)**2- &
-            &                     r_cmb**2))+r_cmb*f_top*log(r(:)/r_cmb))
-            dtcond(:)=cond_fac*(f_top*r_cmb*or1(:)+half*epsc0*(r_cmb**2*or1(:)-r(:)))
-         endif
+            if ( ktop==1 .and. kbot==1 ) then
+               tcond(:) = cond_fac*(log(r(:)/r_cmb)/log(radratio))
+               dtcond(:)= cond_fac*(or1(:)/log(radratio))
+            else if ( ktop==2 .and. kbot==1 ) then
+               tcond(:) =cond_fac*(f_bot + f_top*r_cmb*log(r(:)/r_icb) + &
+               &                   0.25_cp*epsc0*(r_icb**2 - r(:)**2 +   &
+               &                   two*r_cmb**2*log(r(:)/ r_icb)))
+               dtcond(:)=cond_fac*(f_top*r_cmb*or1(:)+half*epsc0*(       &
+               &                   r_cmb**2*or1(:) - r(:)))
+            else if( ktop==1 .and. kbot==2 ) then
+               tcond(:) =cond_fac*(f_bot*r_icb*log(r(:)/r_cmb) +         &
+               &                   0.25_cp*epsc0*(r_cmb**2-r(:)**2+      &
+               &                   two*r_icb**2*log(r(:)/ r_cmb))+       &
+               &                   f_top)
+               dtcond(:)=cond_fac*(f_bot*r_icb*or1(:)+half*epsc0*(       &
+               &                   r_icb**2*or1(:) - r(:)))
+            else
+               epsc0 = -two*(r_cmb*f_top-r_icb*f_bot)/(r_cmb**2-r_icb**2)
+               if ( abs(epsc0)<tiny_number ) epsc0=0.0_cp
+               tcond(:) = cond_fac*(half*epsc0*(r_cmb**2*log(r(:)/r_cmb)-&
+               &                    half*(r(:)**2-r_cmb**2))+            &
+               &                    r_cmb*f_top*log(r(:)/r_cmb))
+               dtcond(:)=cond_fac*(f_top*r_cmb*or1(:)+half*epsc0*(       &
+               &                   r_cmb**2*or1(:)-r(:)))
+            endif
+         end if
          if (rank == 0) write(output_unit,*) &
          &         '! Warning: Sources introduced to balance surface heat flux'
          if (rank == 0) write(output_unit,'(''!      epsc0*pr='',ES16.6)') epsc0

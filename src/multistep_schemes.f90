@@ -503,7 +503,7 @@ contains
 
       !-- Local variables
       logical :: lMatNext
-      character(len=8) :: old_scheme
+      character(len=10) :: old_scheme
       integer :: old_order
 
       if (rank == 0 ) write(output_unit,*) '! Crank-Nicolson for this time-step'

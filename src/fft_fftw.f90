@@ -3,7 +3,7 @@ module fourier
    use iso_c_binding
    use namelists, only: fftw_plan_flag
    use constants, only: zero, half, two
-   use truncation, only: n_m_max, n_phi_max
+   use truncation, only: n_phi_max, n_m_max, idx2m
    use precision_mod
 
    implicit none
@@ -41,33 +41,45 @@ contains
 
    end subroutine finalize_fourier
 !------------------------------------------------------------------------------
-   subroutine fft(array_in, array_out)
+   subroutine fft(array_in, array_out, m_max)
 
+      integer,  intent(in) :: m_max
       real(cp), intent(inout) :: array_in(*)
       complex(cp), intent(out) :: array_out(*)
 
       complex(cp) :: tmp(n_phi_max/2+1)
-      integer :: n_m
+      integer :: n_m,m
       
       call fftw_execute_dft_r2c(plan_forward, array_in, tmp)
 
       do n_m=1,n_m_max
-         array_out(n_m) = tmp(n_m)/real(n_phi_max,cp)
+         m = idx2m(n_m)
+         if ( m <= m_max ) then
+            array_out(n_m)=tmp(n_m)/real(n_phi_max,cp)
+         else
+            array_out(n_m)=zero
+         end if
       end do
 
    end subroutine fft
 !------------------------------------------------------------------------------
-   subroutine ifft(array_in, array_out)
+   subroutine ifft(array_in, array_out, m_max)
 
+      integer,  intent(in) :: m_max
       complex(cp), intent(in) :: array_in(*)
 
       real(cp), intent(out) :: array_out(*)
 
       complex(cp) :: tmp(n_phi_max/2+1)
-      integer :: n_m
+      integer :: n_m,m
 
       do n_m=1,n_m_max
-         tmp(n_m)= array_in(n_m)
+         m = idx2m(n_m)
+         if ( m <= m_max ) then
+            tmp(n_m)=array_in(n_m)
+         else
+            tmp(n_m)=zero
+         end if
       end do
       do n_m=n_m_max+1,n_phi_max/2+1
          tmp(n_m)=zero

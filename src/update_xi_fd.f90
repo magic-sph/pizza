@@ -9,7 +9,7 @@ module update_xi_fd_mod
    use parallel_solvers, only: type_tri_par
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
-   use namelists, only: XiDiffFac, kbotxi, ktopxi
+   use namelists, only: XiDiffFac, kbotxi, ktopxi, l_full_disk
    use radial_functions, only: or1, or2, rscheme, r, beta, dxicond
    use radial_der, only: get_ddr_ghost, get_dr_Rloc, exch_ghosts, bulk_to_ghost
 
@@ -46,7 +46,7 @@ contains
 !---------------------------------------------------------------------------------
    subroutine prepare_xi_fd(tscheme, dxidt)
       !
-      ! This subroutine is used to assemble the r.h.s. of the xierature equation
+      ! This subroutine is used to assemble the r.h.s. of the composition equation
       ! when parallel F.D solvers are used. Boundary values are set here.
       !
 
@@ -57,14 +57,14 @@ contains
       type(type_tarray), intent(inout) :: dxidt
 
       !-- Local variables:
-      integer :: n_m_start, n_m_stop, nR, n_m
+      integer :: n_m_start, n_m_stop, nR, n_m, m
 
       if ( .not. lXimat_FD(1) ) then
          call get_xiMat_Rdist(tscheme, xiMat_FD)
          lXimat_FD(:)=.true.
       end if
 
-      !$omp parallel default(shared) private(n_m_start,n_m_stop, nR, n_m)
+      !$omp parallel default(shared) private(n_m_start,n_m_stop, nR, n_m, m)
       n_m_start=1; n_m_stop=n_m_max
       call get_openmp_blocks(n_m_start,n_m_stop)
       !$omp barrier
@@ -76,7 +76,7 @@ contains
       if ( nRstart == 1 ) then
          nR=1
          do n_m=n_m_start,n_m_stop
-            if ( ktopxi == 1 ) then ! Fixed xierature
+            if ( ktopxi == 1 ) then ! Fixed composition
                xi_ghost(n_m,nR)=zero
             end if
             xi_ghost(n_m,nR-1)=zero ! Set ghost zone to zero
@@ -86,8 +86,15 @@ contains
       if ( nRstop == n_r_max ) then
          nR=n_r_max
          do n_m=n_m_start,n_m_stop
-            if ( kbotxi == 1 ) then ! Fixed xierature
+            if ( l_full_disk ) then
+               m = idx2m(n_m)
+               if ( m > 0 ) then
                   xi_ghost(n_m,nR)=zero
+               end if
+            else
+               if ( kbotxi == 1 ) then ! Fixed composition
+                  xi_ghost(n_m,nR)=zero
+               end if
             end if
             xi_ghost(n_m,nR+1)=zero ! Set ghost zone to zero
          end do
@@ -107,9 +114,9 @@ contains
       complex(cp), intent(inout) :: xig(n_m_max,nRstart-1:nRstop+1)
 
       !-- Local variables
-      integer :: n_m, n_m_start, n_m_stop
+      integer :: n_m, n_m_start, n_m_stop, m
 
-      !$omp parallel default(shared) private(n_m_start, n_m_stop, n_m)
+      !$omp parallel default(shared) private(n_m_start, n_m_stop, n_m, m)
       n_m_start=1; n_m_stop=n_m_max
       call get_openmp_blocks(n_m_start,n_m_stop)
       !$omp barrier
@@ -130,10 +137,19 @@ contains
       !dr = r(n_r_max)-r(n_r_max-1)
       if ( nRstop == n_r_max ) then
          do n_m=n_m_start,n_m_stop
-            if (kbotxi == 1) then ! Fixed xierature at bottom
-               xig(n_m,nRstop+1)=two*xig(n_m,nRstop)-xig(n_m,nRstop-1)
+            if ( l_full_disk ) then
+               m = idx2m(n_m)
+               if ( m == 0 ) then
+                  xig(n_m,nRstop+1)=xig(n_m,nRstop-1)!+two*dr*bots(l,m)
+               else
+                  xig(n_m,nRstop+1)=two*xig(n_m,nRstop)-xig(n_m,nRstop-1)
+               end if
             else
-               xig(n_m,nRstop+1)=xig(n_m,nRstop-1)!+two*dr*bots(l,m)
+               if (kbotxi == 1) then ! Fixed composition at bottom
+                  xig(n_m,nRstop+1)=two*xig(n_m,nRstop)-xig(n_m,nRstop-1)
+               else
+                  xig(n_m,nRstop+1)=xig(n_m,nRstop-1)!+two*dr*bots(l,m)
+               end if
             end if
          end do
       end if
@@ -389,13 +405,25 @@ contains
       if ( nRstop == n_r_max ) then
          !$omp do
          do n_m=1,n_m_max
-            if ( kbotxi == 1 ) then
-               xiMat%diag(n_m,n_r_max)=one
-               xiMat%up(n_m,n_r_max)  =0.0_cp
-               xiMat%low(n_m,n_r_max) =0.0_cp
+            if ( l_full_disk ) then
+               m = idx2m(n_m)
+               if ( m == 0 ) then
+                  xiMat%low(n_m,n_r_max)=xiMat%up(n_m,n_r_max)+xiMat%low(n_m,n_r_max)
+                  !fd_fac_bot(n_m)=two*(r(n_r_max-1)-r(n_r_max))*xiMat%up(n_m,n_r_max)
+               else
+                  xiMat%diag(n_m,n_r_max)=one
+                  xiMat%up(n_m,n_r_max)  =0.0_cp
+                  xiMat%low(n_m,n_r_max) =0.0_cp
+               end if
             else
-               xiMat%low(n_m,n_r_max)=xiMat%up(n_m,n_r_max)+xiMat%low(n_m,n_r_max)
-               !fd_fac_bot(n_m)=two*(r(n_r_max-1)-r(n_r_max))*xiMat%up(n_m,n_r_max)
+               if ( kbotxi == 1 ) then
+                  xiMat%diag(n_m,n_r_max)=one
+                  xiMat%up(n_m,n_r_max)  =0.0_cp
+                  xiMat%low(n_m,n_r_max) =0.0_cp
+               else
+                  xiMat%low(n_m,n_r_max)=xiMat%up(n_m,n_r_max)+xiMat%low(n_m,n_r_max)
+                  !fd_fac_bot(n_m)=two*(r(n_r_max-1)-r(n_r_max))*xiMat%up(n_m,n_r_max)
+               end if
             end if
          end do
          !$omp end do

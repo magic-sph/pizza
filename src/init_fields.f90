@@ -8,7 +8,7 @@ module init_fields
    use constants, only: zero, one, two, three, ci, pi, half
    use blocking, only: nRstart, nRstop
    use communications, only: r2m_fields, r2m_single, m2r_single
-   use radial_functions, only: r, rscheme, or1, or2, beta, dbeta
+   use radial_functions, only: r, rscheme, or1, or2, beta, dbeta, m_R
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
        &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
@@ -321,7 +321,7 @@ contains
             end do
 
             !-- us_Rloc is used as a work r-distributed array here
-            call fft(phi_func, us_Rloc(:,n_r))
+            call fft(phi_func, us_Rloc(:,n_r), m_R(n_r))
          end do
 
          !-- MPI transpose is needed here
