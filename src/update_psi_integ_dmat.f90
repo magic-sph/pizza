@@ -6,7 +6,7 @@ module update_psi_integ_dmat
    use constants, only: one, zero, ci, half
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, ek, l_buo_imp, BuoFac, ChemFac,   &
-       &                l_heat, l_chem
+       &                l_heat, l_chem, l_full_disk
    use horizontal, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, ekp_us, r, rgrav, &
        &                       ekp_up, ekp_dusdp
@@ -24,7 +24,6 @@ module update_psi_integ_dmat
    use timers_mod, only: timers_type
    use chebsparselib, only: rmult2, intcheb1rmult1, intcheb2rmult2,    &
        &                    intcheb2rmult2laplrot, intcheb2rmult2lapl
-
 
    implicit none
    
@@ -359,7 +358,6 @@ contains
          call rscheme%costf1(uphi0, n_r_max)
       end if
 
-
       !-- If the matrix has been rebuilt one also needs to assemble
       !-- again the influence matrix
       if ( lMat ) then
@@ -397,8 +395,20 @@ contains
                   up_Mloc(n_m,n_r)=uphi0(n_r)
                   om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
                else ! om_Mloc is already defined at this stage
-                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-                  up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
+                  if ( l_full_disk .and. n_r==n_r_max) then
+                     if ( m == 1 ) then
+                        us_Mloc(n_m,n_r)=ci*work_Mloc(n_m,n_r)
+                        up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
+                        om_Mloc(n_m,n_r)=zero
+                     else
+                        us_Mloc(n_m,n_r)=zero
+                        up_Mloc(n_m,n_r)=zero
+                        om_Mloc(n_m,n_r)=zero
+                     end if
+                  else
+                     us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+                     up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
+                  end if
                end if
             end do
          end do
@@ -589,7 +599,6 @@ contains
             dom_exp_last(n_m,n_cheb)=zero
          end do
       end do
-
 
       !-- Matrix-vector multiplication by the operator \int\int r^2:
       do n_m=nMstart,nMstop
@@ -861,11 +870,15 @@ contains
                else ! Rigid
                   A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
                end if
-               if ( kbotv == 1 ) then ! Stress free
-                  A_mat%A1(2,n_r)=rscheme%rnorm*( rscheme%drMat(2,n_r) &
-                  &                  -or1(n_r_max)*rscheme%rMat(2,n_r) )
-               else ! Rigid
+               if ( l_full_disk ) then
                   A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
+               else
+                  if ( kbotv == 1 ) then ! Stress free
+                     A_mat%A1(2,n_r)=rscheme%rnorm*( rscheme%drMat(2,n_r) &
+                     &                  -or1(n_r_max)*rscheme%rMat(2,n_r) )
+                  else ! Rigid
+                     A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
+                  end if
                end if
             else
 
@@ -875,13 +888,17 @@ contains
                else
                   A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
                end if
-               if ( kbotv == 1 ) then
-                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*(             &
-                  &                               rscheme%drMat(2,n_r)-  &
-                  &                   or1(n_r_max)*rscheme%rMat(2,n_r) )
-
-               else
+               if ( l_full_disk ) then
                   A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
+               else
+                  if ( kbotv == 1 ) then
+                     A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*(             &
+                     &                               rscheme%drMat(2,n_r)-  &
+                     &                   or1(n_r_max)*rscheme%rMat(2,n_r) )
+
+                  else
+                     A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
+                  end if
                end if
             end if
          end do
@@ -901,7 +918,7 @@ contains
 
       !-- Cheb factor for boundary conditions
       do n_r=1,A_mat%ntau
-         A_mat%A1(n_r,1)                =rscheme%boundary_fac*A_mat%A1(n_r,1)
+         A_mat%A1(n_r,1)=rscheme%boundary_fac*A_mat%A1(n_r,1)
          if ( A_mat%nlines_band == n_r_max ) then
             A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
          end if
@@ -914,12 +931,12 @@ contains
 
       !-- Multiply the lines of the matrix by precond
       do n_r=1,A_mat%ntau
-         A_mat%A1(n_r,:) = A_mat%A1(n_r,:)*omMat_fac(n_r)
-         A_mat%A2(n_r,:) = A_mat%A2(n_r,:)*omMat_fac(n_r)
+         A_mat%A1(n_r,:)=A_mat%A1(n_r,:)*omMat_fac(n_r)
+         A_mat%A2(n_r,:)=A_mat%A2(n_r,:)*omMat_fac(n_r)
       end do
 
       do n_r=A_mat%ntau+1, A_mat%nlines
-         A_mat%A3(n_r-A_mat%ntau,:) = A_mat%A3(n_r-A_mat%ntau,:)* omMat_fac(n_r)
+         A_mat%A3(n_r-A_mat%ntau,:)=A_mat%A3(n_r-A_mat%ntau,:)* omMat_fac(n_r)
       end do
 
       do n_r=1,A_mat%nlines_band
@@ -1392,12 +1409,22 @@ contains
                   end if
                end if
 
-               if ( kbotv == 1 ) then
-                  bcBot(n_m)=bcBot(n_m)+fac*(rscheme%d2rMat(2,n_cheb)-or1(n_r_max)*&
-                  &                     rscheme%drMat(2,n_cheb))*psi_tmp(n_m,n_cheb)
+               if ( l_full_disk ) then
+                  if ( m == 1 ) then
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%d2rMat(2,n_cheb)* &
+                     &          psi_tmp(n_m,n_cheb)
+                  else
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(2,n_cheb)*  &
+                     &          psi_tmp(n_m,n_cheb)
+                  end if
                else
-                  bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(2,n_cheb)*  &
-                  &          psi_tmp(n_m,n_cheb)
+                  if ( kbotv == 1 ) then
+                     bcBot(n_m)=bcBot(n_m)+fac*(rscheme%d2rMat(2,n_cheb)-or1(n_r_max)*&
+                     &                     rscheme%drMat(2,n_cheb))*psi_tmp(n_m,n_cheb)
+                  else
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(2,n_cheb)*  &
+                     &          psi_tmp(n_m,n_cheb)
+                  end if
                end if
 
             end if
@@ -1468,12 +1495,22 @@ contains
                   end if
                end if
 
-               if ( kbotv == 1 ) then
-                  bcBot(n_m)=bcBot(n_m)+fac*(rscheme%d2rMat(2,n_cheb)-or1(n_r_max)*&
-                  &                     rscheme%drMat(2,n_cheb))*psi_tmp(n_m,n_cheb)
+               if ( l_full_disk ) then
+                  if ( m == 1 ) then
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%d2rMat(2,n_cheb)* &
+                     &          psi_tmp(n_m,n_cheb)
+                  else
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(2,n_cheb)*  &
+                     &          psi_tmp(n_m,n_cheb)
+                  end if
                else
-                  bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(2,n_cheb)*  &
-                  &          psi_tmp(n_m,n_cheb)
+                  if ( kbotv == 1 ) then
+                     bcBot(n_m)=bcBot(n_m)+fac*(rscheme%d2rMat(2,n_cheb)-or1(n_r_max)*&
+                     &                     rscheme%drMat(2,n_cheb))*psi_tmp(n_m,n_cheb)
+                  else
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(2,n_cheb)*  &
+                     &          psi_tmp(n_m,n_cheb)
+                  end if
                end if
 
             end if
