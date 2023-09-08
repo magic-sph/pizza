@@ -345,6 +345,84 @@ contains
                end if
             end do
 
+         case(13) ! Full disk, rigid m=1: u(ro)=u'(ro)=0 u(ri)=u''(ri)=0
+
+            kl = 4
+            ku = 0
+            call sten%initialize(kl, ku, n_r_max)
+
+            do i=1,n_r_max
+               dm = real(i-1,cp)
+               sten%dat(1,i)=one
+               if ( i == 1 .or. i==n_r_max ) sten%dat(1,i)=two*sten%dat(1,i)
+               if ( i < n_r_max ) then
+                  sten%dat(2,i) = -2.0_cp*(dm+1.0_cp)/(dm**2+5.0_cp &
+                  &               *dm+7.0_cp)
+                  if ( i == n_r_max-1 ) sten%dat(2,i)=two*sten%dat(2,i)
+               end if
+               if ( i < n_r_max-1 ) then
+                  sten%dat(3,i) = -2.0_cp*(dm+2.0_cp)*(dm**2+4.0_cp &
+                  &               *dm+6.0_cp)/((dm+3.0_cp)*(dm**2+5.0_cp*dm+7.0_cp &
+                  &               ))
+                  if ( i == n_r_max-2 ) sten%dat(3,i)=two*sten%dat(3,i)
+               end if
+               if ( i < n_r_max-2 ) then
+                  sten%dat(4,i) = 2.0_cp*(dm+1.0_cp)/(dm**2+5.0_cp &
+                  &               *dm+7.0_cp)
+                  if ( i == n_r_max-3 ) sten%dat(4,i)=two*sten%dat(4,i)
+               end if
+               if ( i < n_r_max-3 ) then
+                  sten%dat(5,i) = (dm+1.0_cp)*(dm**2+3.0_cp*dm &
+                  &               +3.0_cp)/((dm+3.0_cp)*(dm**2+5.0_cp*dm+7.0_cp &
+                  &               ))
+                  if ( i == n_r_max-4 ) sten%dat(5,i)=two*sten%dat(5,i)
+               end if
+            end do
+
+         case(14) ! Full disk, stress-free m=1: u(ro)=u''(ro)-1/ro*u'(ro)=0 u(ri)=u''(ri)=0
+
+            kl = 4
+            ku = 0
+            call sten%initialize(kl, ku, n_r_max)
+
+            do i=1,n_r_max
+               dm = real(i-1,cp)
+               sten%dat(1,i)=one
+               if ( i == 1 .or. i==n_r_max ) sten%dat(1,i)=two*sten%dat(1,i)
+               if ( i < n_r_max ) then
+                  sten%dat(2,i) = -6.0_cp*(eta-1.0_cp)*(dm+1.0_cp &
+                  &               )/(3.0_cp*eta*dm**2+15.0_cp*eta*dm+21.0_cp*eta &
+                  &               +4.0_cp*dm**4+40.0_cp*dm**3+149.0_cp*dm**2+245.0_cp &
+                  &               *dm+150.0_cp)
+                  if ( i == n_r_max-1 ) sten%dat(2,i)=two*sten%dat(2,i)
+               end if
+               if ( i < n_r_max-1 ) then
+                  sten%dat(3,i) = -2.0_cp*(dm+2.0_cp)*(3.0_cp*eta &
+                  &               *dm**2+12.0_cp*eta*dm+18.0_cp*eta+4.0_cp*dm**4+ &
+                  &               32.0_cp*dm**3+109.0_cp*dm**2+180.0_cp*dm+117.0_cp &
+                  &               )/((dm+3.0_cp)*(3.0_cp*eta*dm**2+15.0_cp*eta &
+                  &               *dm+21.0_cp*eta+4.0_cp*dm**4+40.0_cp*dm**3+149.0_cp &
+                  &               *dm**2+245.0_cp*dm+150.0_cp))
+                  if ( i == n_r_max-2 ) sten%dat(3,i)=two*sten%dat(3,i)
+               end if
+               if ( i < n_r_max-2 ) then
+                  sten%dat(4,i) = 6.0_cp*(eta-1.0_cp)*(dm+1.0_cp &
+                  &               )/(3.0_cp*eta*dm**2+15.0_cp*eta*dm+21.0_cp*eta &
+                  &               +4.0_cp*dm**4+40.0_cp*dm**3+149.0_cp*dm**2+245.0_cp &
+                  &               *dm+150.0_cp)
+                  if ( i == n_r_max-3 ) sten%dat(4,i)=two*sten%dat(4,i)
+               end if
+               if ( i < n_r_max-3 ) then
+                  sten%dat(5,i) = (dm+1.0_cp)*(3.0_cp*eta*dm** &
+                  &               2+9.0_cp*eta*dm+9.0_cp*eta+4.0_cp*dm**4+24.0_cp &
+                  &               *dm**3+53.0_cp*dm**2+51.0_cp*dm+18.0_cp)/((dm &
+                  &               +3.0_cp)*(3.0_cp*eta*dm**2+15.0_cp*eta*dm+21.0_cp &
+                  &               *eta+4.0_cp*dm**4+40.0_cp*dm**3+149.0_cp*dm**2+ &
+                  &               245.0_cp*dm+150.0_cp))
+                  if ( i == n_r_max-4 ) sten%dat(5,i)=two*sten%dat(5,i)
+               end if
+            end do
+
       end select
 
    end subroutine get_galerkin_stencil

@@ -4,7 +4,7 @@ module update_temp_integ
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, one, ci, half
    use namelists, only: kbott, ktopt, tadvz_fac, r_cmb, r_icb, &
-       &                TdiffFac, l_non_rot, l_galerkin
+       &                TdiffFac, l_non_rot, l_galerkin, l_full_disk
    use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
    use radial_functions, only: rscheme, or2, dtcond, tcond, r
    use blocking, only: nMstart, nMstop
@@ -34,7 +34,7 @@ module update_temp_integ
    type(type_bandmat_real), allocatable :: LHS_mat_gal(:)
    type(type_bordmat_real), allocatable :: Ass_mat_tau(:)
    type(type_bandmat_real), allocatable :: Ass_mat_gal(:)
-   type(type_bandmat_real) :: RHSE_mat(2), gal_sten
+   type(type_bandmat_real) :: RHSE_mat(2), gal_sten, gal_sten_m0
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
    real(cp), allocatable :: tempfac(:,:) ! Precondition matrix
    real(cp), allocatable :: assfac(:,:)
@@ -54,14 +54,24 @@ contains
 
       if ( l_galerkin ) then
          !-- Define Galerkin basis and stencils
-         if ( ktopt == 1 .and. kbott == 1 ) then
-            call get_galerkin_stencil(gal_sten, n_r_max, 1)
-         else if ( ktopt /= 1 .and. kbott /= 1 ) then
-            call get_galerkin_stencil(gal_sten, n_r_max, 2)
-         else if ( ktopt == 1 .and. kbott /= 1 ) then
-            call get_galerkin_stencil(gal_sten, n_r_max, 3)
-         else if ( ktopt /= 1 .and. kbott == 1 ) then
-            call get_galerkin_stencil(gal_sten, n_r_max, 4)
+         if ( l_full_disk ) then
+            if ( ktopt == 1 ) then
+               call get_galerkin_stencil(gal_sten, n_r_max, 1)
+               call get_galerkin_stencil(gal_sten_m0, n_r_max, 3)
+            else
+               call get_galerkin_stencil(gal_sten, n_r_max, 4)
+               call get_galerkin_stencil(gal_sten_m0, n_r_max, 2)
+            end if
+         else
+            if ( ktopt == 1 .and. kbott == 1 ) then
+               call get_galerkin_stencil(gal_sten, n_r_max, 1)
+            else if ( ktopt /= 1 .and. kbott /= 1 ) then
+               call get_galerkin_stencil(gal_sten, n_r_max, 2)
+            else if ( ktopt == 1 .and. kbott /= 1 ) then
+               call get_galerkin_stencil(gal_sten, n_r_max, 3)
+            else if ( ktopt /= 1 .and. kbott == 1 ) then
+               call get_galerkin_stencil(gal_sten, n_r_max, 4)
+            end if
          end if
       end if
 
@@ -143,6 +153,7 @@ contains
          end do
          deallocate( LHS_mat_gal )
          call destroy_galerkin_stencil(gal_sten)
+         if ( l_full_disk ) call destroy_galerkin_stencil(gal_sten_m0)
          if ( tscheme%l_assembly ) then
             do n_m=nMstart,nMstop
                call Ass_mat_gal(n_m)%finalize()
@@ -222,7 +233,15 @@ contains
             rhs = cshift(rhs, n_boundaries)
 
             !-- Transform from Galerkin space to Chebyshev space
-            call galerkin2cheb(gal_sten, rhs)
+            if ( l_full_disk ) then
+               if ( m == 0 ) then
+                  call galerkin2cheb(gal_sten_m0, rhs)
+               else
+                  call galerkin2cheb(gal_sten, rhs)
+               end if
+            else
+               call galerkin2cheb(gal_sten, rhs)
+            end if
          else
             call LHS_mat_tau(n_m)%solve(rhs, n_r_max)
          end if
@@ -322,7 +341,15 @@ contains
             rhs = cshift(rhs, n_boundaries)
 
             !-- Transform from Galerkin space to Chebyshev space
-            call galerkin2cheb(gal_sten, rhs)
+            if ( l_full_disk ) then
+               if ( m == 0 ) then
+                  call galerkin2cheb(gal_sten_m0, rhs)
+               else
+                  call galerkin2cheb(gal_sten, rhs)
+               end if
+            else
+               call galerkin2cheb(gal_sten, rhs)
+            end if
          else
             call Ass_mat_tau(n_m)%solve(rhs, n_r_max)
          end if
@@ -535,7 +562,15 @@ contains
       end do
 
       !-- Multiply by the Galerkin matrix and allocate Cmat
-      call band_band_product(Amat, gal_sten, Cmat, l_lhs=.true.)
+      if ( l_full_disk ) then
+         if ( m == 0 ) then
+            call band_band_product(Amat, gal_sten_m0, Cmat, l_lhs=.true.)
+         else
+            call band_band_product(Amat, gal_sten, Cmat, l_lhs=.true.)
+         end if
+      else
+         call band_band_product(Amat, gal_sten, Cmat, l_lhs=.true.)
+      end if
 
       !-- Remove first blank rows (careful remapping of kl, ku and room for LU factorisation)
       call Cmat%remove_leading_blank_rows(n_boundaries)
@@ -555,7 +590,7 @@ contains
                stencilA(n_band)=Cmat%dat(Cmat%kl+n_band,n_r+Cmat%ku+1-n_band)
            end if
          end do
-        tempMat_fac(n_r+n_boundaries)=one/maxval(abs(stencilA))
+         tempMat_fac(n_r+n_boundaries)=one/maxval(abs(stencilA))
       end do
       do n_r=1,Cmat%nlines
         do n_band=1,Cmat%nbands
@@ -648,10 +683,18 @@ contains
             else
                A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)
             end if
-            if ( kbott == 1 ) then
-               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
+            if ( l_full_disk ) then
+               if ( m == 0 ) then
+                  A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
+               else
+                  A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
+               end if
             else
-               A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
+               if ( kbott == 1 ) then
+                  A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
+               else
+                  A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
+               end if
             end if
          else
             if ( ktopt == 1 ) then
@@ -659,10 +702,18 @@ contains
             else
                A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(1,n_r)
             end if
-            if ( kbott == 1 ) then
-               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
+            if ( l_full_disk ) then
+               if ( m == 0 ) then
+                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
+               else
+                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
+               end if
             else
-               A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
+               if ( kbott == 1 ) then
+                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
+               else
+                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
+               end if
             end if
          end if
       end do

@@ -6,7 +6,7 @@ module update_psi_integ_smat
    use constants, only: one, zero, ci, half
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, l_coriolis_imp, ek, l_buo_imp,    &
-       &                l_galerkin, BuoFac, ChemFac, l_heat, l_chem
+       &                l_galerkin, BuoFac, ChemFac, l_heat, l_chem, l_full_disk
    use horizontal, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, ekp_us, r, &
        &                       rgrav, ekp_up, ekp_dusdp
@@ -46,7 +46,7 @@ module update_psi_integ_smat
    type(type_bandmat_complex), allocatable :: Ass_mat_gal(:)
    type(type_bandmat_complex), allocatable :: RHSIL_mat(:)
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
-   type(type_bandmat_real) :: RHSE_mat(3), gal_sten(2)
+   type(type_bandmat_real) :: RHSE_mat(3), gal_sten(2), gal_sten_m1
 
    public :: update_psi_int_smat, initialize_psi_integ_smat,    &
    &         finalize_psi_integ_smat, get_psi_rhs_imp_int_smat, &
@@ -67,24 +67,40 @@ contains
 
       if ( l_galerkin ) then
          !-- Define Galerkin basis and stencils
-         if ( ktopv == 1 .and. kbotv == 1 ) then ! Stress-free stress-free
-            call get_galerkin_stencil(gal_sten(1), n_r_max, 5)
-            call get_galerkin_stencil(gal_sten(2), n_r_max, 9)
-         else if ( ktopv /=1 .and. kbotv == 1 ) then
-            call get_galerkin_stencil(gal_sten(1), n_r_max, 7)
-            call get_galerkin_stencil(gal_sten(2), n_r_max, 11)
-         else if ( ktopv ==1 .and. kbotv /= 1 ) then
-            call get_galerkin_stencil(gal_sten(1), n_r_max, 6)
-            call get_galerkin_stencil(gal_sten(2), n_r_max, 10)
-         else if ( ktopv /=1 .and. kbotv /= 1 ) then ! Rigid/Rigid
-            call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
-            if ( l_non_rot ) then
-               call get_galerkin_stencil(gal_sten(2), n_r_max, 8)
-            else
-               call get_galerkin_stencil(gal_sten(2), n_r_max, 12)
+         if ( l_full_disk ) then
+            if ( ktopv == 1 ) then ! Stress-free
+               call get_galerkin_stencil(gal_sten(1), n_r_max, 6)
+               call get_galerkin_stencil(gal_sten(2), n_r_max, 10)
+               call get_galerkin_stencil(gal_sten_m1, n_r_max, 14)
+            else ! Rigid
+               call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
+               if ( l_non_rot ) then
+                  call get_galerkin_stencil(gal_sten(2), n_r_max, 8)
+                  call get_galerkin_stencil(gal_sten_m1, n_r_max, 13)
+               else
+                  call abortRun('This bc is not implemented yet')
+               end if
             end if
          else
-            call abortRun('This bc is not implemented yet')
+            if ( ktopv == 1 .and. kbotv == 1 ) then ! Stress-free stress-free
+               call get_galerkin_stencil(gal_sten(1), n_r_max, 5)
+               call get_galerkin_stencil(gal_sten(2), n_r_max, 9)
+            else if ( ktopv /=1 .and. kbotv == 1 ) then
+               call get_galerkin_stencil(gal_sten(1), n_r_max, 7)
+               call get_galerkin_stencil(gal_sten(2), n_r_max, 11)
+            else if ( ktopv ==1 .and. kbotv /= 1 ) then
+               call get_galerkin_stencil(gal_sten(1), n_r_max, 6)
+               call get_galerkin_stencil(gal_sten(2), n_r_max, 10)
+            else if ( ktopv /=1 .and. kbotv /= 1 ) then ! Rigid/Rigid
+               call get_galerkin_stencil(gal_sten(1), n_r_max, 1)
+               if ( l_non_rot ) then
+                  call get_galerkin_stencil(gal_sten(2), n_r_max, 8)
+               else
+                  call get_galerkin_stencil(gal_sten(2), n_r_max, 12)
+               end if
+            else
+               call abortRun('This bc is not implemented yet')
+            end if
          end if
       end if
 
@@ -214,6 +230,7 @@ contains
       if ( l_galerkin ) then
          call destroy_galerkin_stencil(gal_sten(1))
          call destroy_galerkin_stencil(gal_sten(2))
+         if ( l_full_disk ) call destroy_galerkin_stencil(gal_sten_m1)
          deallocate( LHS_mat_gal )
          if ( tscheme%l_assembly ) deallocate( Ass_mat_gal )
       else
@@ -377,7 +394,15 @@ contains
                !-- Put the four first zero lines at the end
                rhs = cshift(rhs, 4)
                !-- Transform from Galerkin space to Chebyshev space
-               call galerkin2cheb(gal_sten(2), rhs)
+               if ( l_full_disk ) then
+                  if ( m == 1 ) then
+                     call galerkin2cheb(gal_sten_m1, rhs)
+                  else
+                     call galerkin2cheb(gal_sten(2), rhs)
+                  end if
+               else
+                  call galerkin2cheb(gal_sten(2), rhs)
+               end if
             end if
          else
             call LHS_mat_tau(n_m)%solve(rhs,n_r_max)
@@ -453,10 +478,22 @@ contains
                   up_Mloc(n_m,n_r)=uphi0(n_r)
                   om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
                else
-                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-                  up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
-                  om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-or1(n_r)*work_Mloc(n_m,n_r)+ &
-                  &                real(m,cp)*real(m,cp)*or2(n_r)*psi_Mloc(n_m,n_r)
+                  if ( l_full_disk .and. n_r==n_r_max ) then
+                     if ( m == 1 ) then
+                        us_Mloc(n_m,n_r)=ci*work_Mloc(n_m,n_r)
+                        up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+                        om_Mloc(n_m,n_r)=zero
+                     else
+                        us_Mloc(n_m,n_r)=zero
+                        up_Mloc(n_m,n_r)=zero
+                        om_Mloc(n_m,n_r)=zero
+                     end if
+                  else
+                     us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+                     up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
+                     om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-or1(n_r)*work_Mloc(n_m,n_r)+ &
+                     &                real(m,cp)*real(m,cp)*or2(n_r)*psi_Mloc(n_m,n_r)
+                  end if
                end if
             end do
          end do
@@ -598,7 +635,15 @@ contains
                !-- Put the four first zero lines at the end
                rhs = cshift(rhs, 4)
                !-- Transform from Galerkin space to Chebyshev space
-               call galerkin2cheb(gal_sten(2), rhs)
+               if ( l_full_disk ) then
+                  if ( m == 1 ) then
+                     call galerkin2cheb(gal_sten_m1, rhs)
+                  else
+                     call galerkin2cheb(gal_sten(2), rhs)
+                  end if
+               else
+                  call galerkin2cheb(gal_sten(2), rhs)
+               end if
             end if
          else
             call Ass_mat_tau(n_m)%solve(rhs,n_r_max)
@@ -660,10 +705,22 @@ contains
                   up_Mloc(n_m,n_r)=uphi0(n_r)
                   om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
                else
-                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-                  up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
-                  om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-or1(n_r)*work_Mloc(n_m,n_r)+ &
-                  &                real(m,cp)*real(m,cp)*or2(n_r)*psi_Mloc(n_m,n_r)
+                  if ( l_full_disk .and. n_r==n_r_max ) then
+                     if ( m == 1 ) then
+                        us_Mloc(n_m,n_r)=ci*work_Mloc(n_m,n_r)
+                        up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+                        om_Mloc(n_m,n_r)=zero
+                     else
+                        us_Mloc(n_m,n_r)=zero
+                        up_Mloc(n_m,n_r)=zero
+                        om_Mloc(n_m,n_r)=zero
+                     end if
+                  else
+                     us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+                     up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)
+                     om_Mloc(n_m,n_r)=-om_Mloc(n_m,n_r)-or1(n_r)*work_Mloc(n_m,n_r)+ &
+                     &                real(m,cp)*real(m,cp)*or2(n_r)*psi_Mloc(n_m,n_r)
+                  end if
                end if
             end do
          end do
@@ -1167,7 +1224,15 @@ contains
          !-- Truncate the last N lines
          call Cmat%remove_last_rows(2)
       else
-         call band_band_product(Amat, gal_sten(2), Cmat, l_lhs=.true.)
+         if ( l_full_disk ) then
+            if ( m == 1 ) then
+               call band_band_product(Amat, gal_sten_m1, Cmat, l_lhs=.true.)
+            else
+               call band_band_product(Amat, gal_sten(2), Cmat, l_lhs=.true.)
+            end if
+         else
+            call band_band_product(Amat, gal_sten(2), Cmat, l_lhs=.true.)
+         end if
 
          !-- Remove first blank rows (careful remapping of kl, ku and room for LU factorisation)
          call Cmat%remove_leading_blank_rows(4)
@@ -1369,11 +1434,15 @@ contains
                else ! Rigid
                   A_mat%A1(1,n_r)=rscheme%rnorm*rscheme%rMat(1,n_r)
                end if
-               if ( kbotv == 1 ) then ! Stress free
-                  A_mat%A1(2,n_r)=rscheme%rnorm*( rscheme%drMat(2,n_r) &
-                  &                  -or1(n_r_max)*rscheme%rMat(2,n_r) )
-               else ! Rigid
+               if ( l_full_disk ) then
                   A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
+               else
+                  if ( kbotv == 1 ) then ! Stress free
+                     A_mat%A1(2,n_r)=rscheme%rnorm*( rscheme%drMat(2,n_r) &
+                     &                  -or1(n_r_max)*rscheme%rMat(2,n_r) )
+                  else ! Rigid
+                     A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
+                  end if
                end if
             else
 
@@ -1383,13 +1452,17 @@ contains
                else
                   A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
                end if
-               if ( kbotv == 1 ) then
-                  A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*(             &
-                  &                               rscheme%drMat(2,n_r)-  &
-                  &                   or1(n_r_max)*rscheme%rMat(2,n_r) )
-
-               else
+               if ( l_full_disk ) then
                   A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
+               else
+                  if ( kbotv == 1 ) then
+                     A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*(             &
+                     &                               rscheme%drMat(2,n_r)-  &
+                     &                   or1(n_r_max)*rscheme%rMat(2,n_r) )
+
+                  else
+                     A_mat%A2(2,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(2,n_r)
+                  end if
                end if
             end if
          end do
@@ -1410,11 +1483,19 @@ contains
                      A_mat%A1(3,n_r)=rscheme%rnorm*d3top(n_r)
                   end if
                end if
-               if ( kbotv == 1 ) then
-                  A_mat%A1(4,n_r)=rscheme%rnorm*(rscheme%d2rMat(2,n_r)-&
-                  &                  or1(n_r_max)*rscheme%drMat(2,n_r) )
+               if ( l_full_disk ) then
+                  if ( m == 1 ) then
+                     A_mat%A1(4,n_r)=rscheme%rnorm*rscheme%d2rMat(2,n_r)
+                  else
+                     A_mat%A1(4,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
+                  end if
                else
-                  A_mat%A1(4,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
+                  if ( kbotv == 1 ) then
+                     A_mat%A1(4,n_r)=rscheme%rnorm*(rscheme%d2rMat(2,n_r)-&
+                     &                  or1(n_r_max)*rscheme%drMat(2,n_r) )
+                  else
+                     A_mat%A1(4,n_r)=rscheme%rnorm*rscheme%drMat(2,n_r)
+                  end if
                end if
             else
                A_mat%A2(1,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%rMat(1,n_r)
@@ -1429,12 +1510,20 @@ contains
                      A_mat%A2(3,n_r-A_mat%ntau)=rscheme%rnorm*d3top(n_r)
                   end if
                end if
-               if ( kbotv == 1 ) then
-                  A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*(             &
-                  &                              rscheme%d2rMat(2,n_r)-  &
-                  &                  or1(n_r_max)*rscheme%drMat(2,n_r) )
+               if ( l_full_disk ) then
+                  if ( m == 1 ) then
+                     A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%d2rMat(2,n_r)
+                  else
+                     A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
+                  end if
                else
-                  A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
+                  if ( kbotv == 1 ) then
+                     A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*(             &
+                     &                              rscheme%d2rMat(2,n_r)-  &
+                     &                  or1(n_r_max)*rscheme%drMat(2,n_r) )
+                  else
+                     A_mat%A2(4,n_r-A_mat%ntau)=rscheme%rnorm*rscheme%drMat(2,n_r)
+                  end if
                end if
             end if
          end do
@@ -1442,7 +1531,7 @@ contains
 
       !-- Cheb factor for boundary conditions
       do n_r=1,A_mat%ntau
-         A_mat%A1(n_r,1)                =rscheme%boundary_fac*A_mat%A1(n_r,1)
+         A_mat%A1(n_r,1)=rscheme%boundary_fac*A_mat%A1(n_r,1)
          if ( A_mat%nlines_band == n_r_max ) then
             A_mat%A2(n_r,A_mat%nlines_band)=rscheme%boundary_fac*A_mat%A2(n_r,A_mat%nlines_band)
          end if
@@ -1455,12 +1544,12 @@ contains
 
       !-- Multiply the lines of the matrix by precond
       do n_r=1,A_mat%ntau
-         A_mat%A1(n_r,:) = A_mat%A1(n_r,:)*psiMat_fac(n_r)
-         A_mat%A2(n_r,:) = A_mat%A2(n_r,:)*psiMat_fac(n_r)
+         A_mat%A1(n_r,:)=A_mat%A1(n_r,:)*psiMat_fac(n_r)
+         A_mat%A2(n_r,:)=A_mat%A2(n_r,:)*psiMat_fac(n_r)
       end do
 
       do n_r=A_mat%ntau+1, A_mat%nlines
-         A_mat%A3(n_r-A_mat%ntau,:) = A_mat%A3(n_r-A_mat%ntau,:)* psiMat_fac(n_r)
+         A_mat%A3(n_r-A_mat%ntau,:)=A_mat%A3(n_r-A_mat%ntau,:)* psiMat_fac(n_r)
       end do
 
       do n_r=1,A_mat%nlines_band
