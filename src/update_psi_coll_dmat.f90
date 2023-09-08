@@ -6,7 +6,7 @@ module update_psi_coll_dmat
    use constants, only: one, zero, ci, half
    use horizontal, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, BuoFac, ChemFac, &
-       &                l_non_rot, l_ek_pump, l_buo_imp, l_heat, l_chem
+       &                l_non_rot, l_ek_pump, l_buo_imp, l_heat, l_chem, l_full_disk
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, &
        &                       rgrav, ekp_up, ekp_us, ekp_dusdp
    use blocking, only: nMstart, nMstop, l_rank_has_m0
@@ -420,8 +420,18 @@ contains
                up_Mloc(n_m,n_r)=uphi0(n_r)
                om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
             else
-               us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-               up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+               if ( l_full_disk .and. n_r==n_r_max) then
+                  if ( m == 1 ) then
+                     us_Mloc(n_m,n_r)=ci*work_Mloc(n_m,n_r)
+                     up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+                  else
+                     us_Mloc(n_m,n_r)=zero
+                     up_Mloc(n_m,n_r)=zero
+                  end if
+               else
+                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+                  up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+               end if
             end if
          end do
       end do
@@ -586,6 +596,13 @@ contains
 
       if ( l_rank_has_m0 ) then ! Copy m=0 vorticity to save it before DCT
          om_Mloc(nm0,:)=cmplx(om0,0.0_cp,kind=cp)
+      end if
+
+      if ( l_full_disk ) then
+         do n_m=nMstart,nMstop
+            m=idx2m(n_m)
+            if ( m > 0 ) om_Mloc(n_m,n_r_max)=zero
+         end do
       end if
 
       if ( istage == 1 ) then
@@ -780,11 +797,23 @@ contains
                us_Mloc(n_m,n_r)=0.0_cp
                om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
             else
-               us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-               up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
-               om_Mloc(n_m,n_r)=-(dom_Mloc(n_m,n_r)+(or1(n_r)+beta(n_r))* &
-               &                work_Mloc(n_m,n_r)+(or1(n_r)*beta(n_r)+   &
-               &                dbeta(n_r)-dm2*or2(n_r))*psi_Mloc(n_m,n_r))
+               if ( l_full_disk .and. n_r==n_r_max ) then
+                  if ( m == 1 ) then
+                     us_Mloc(n_m,n_r)=ci*work_Mloc(n_m,n_r)
+                     up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+                     om_Mloc(n_m,n_r)=zero
+                  else
+                     us_Mloc(n_m,n_r)=zero
+                     up_Mloc(n_m,n_r)=zero
+                     om_Mloc(n_m,n_r)=zero
+                  end if
+               else
+                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+                  up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+                  om_Mloc(n_m,n_r)=-(dom_Mloc(n_m,n_r)+(or1(n_r)+beta(n_r))* &
+                  &                work_Mloc(n_m,n_r)+(or1(n_r)*beta(n_r)+   &
+                  &                dbeta(n_r)-dm2*or2(n_r))*psi_Mloc(n_m,n_r))
+               end if
             end if
          end do
       end do
@@ -833,14 +862,12 @@ contains
       !----- Other points:
       do n_cheb=1,n_r_max
          do n_r=2,n_r_max-1
-
             omMat(n_r,n_cheb)= rscheme%rnorm * (                          &
             &                                  rscheme%rMat(n_r,n_cheb) - &
             &              tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*(      &
             &                                rscheme%d2rMat(n_r,n_cheb) + &
             &            or1(n_r)*            rscheme%drMat(n_r,n_cheb) - &
             &            dm2*or2(n_r)*         rscheme%rMat(n_r,n_cheb) ) )
-
          end do
       end do
 
@@ -914,13 +941,11 @@ contains
       !----- Other points:
       do n_cheb=1,n_r_max
          do n_r=2,n_r_max-1
-
             psiMat(n_r,n_cheb)= rscheme%rnorm * (                        &
             &                               rscheme%d2rMat(n_r,n_cheb) + &
             &      (or1(n_r)+beta(n_r))*     rscheme%drMat(n_r,n_cheb) + &
             &  (or1(n_r)*beta(n_r)+dbeta(n_r)-dm2*or2(n_r))*             &
             &                                 rscheme%rMat(n_r,n_cheb) )
-
          end do
       end do
 
@@ -978,13 +1003,17 @@ contains
          else
             uphiMat(1,nR_out)=rscheme%rnorm*rscheme%rMat(1,nR_out)
          end if
-         if ( kbotv == 1 ) then !-- Free-slip
-            uphiMat(n_r_max,nR_out)=rscheme%rnorm*(                 &
-            &                        rscheme%drMat(n_r_max,nR_out)  &
-            &           -or1(n_r_max)*rscheme%rMat(n_r_max,nR_out))
+         if ( l_full_disk ) then
+            uphiMat(n_r_max,nR_out)=rscheme%rnorm*rscheme%rMat(n_r_max,nR_out)
          else
-            uphiMat(n_r_max,nR_out)=rscheme%rnorm* &
-            &                       rscheme%rMat(n_r_max,nR_out)
+            if ( kbotv == 1 ) then !-- Free-slip
+               uphiMat(n_r_max,nR_out)=rscheme%rnorm*(                 &
+               &                        rscheme%drMat(n_r_max,nR_out)  &
+               &           -or1(n_r_max)*rscheme%rMat(n_r_max,nR_out))
+            else
+               uphiMat(n_r_max,nR_out)=rscheme%rnorm* &
+               &                       rscheme%rMat(n_r_max,nR_out)
+            end if
          end if
       end do
 
@@ -1052,12 +1081,20 @@ contains
          else
             assMat(2,nR_out)=rscheme%rnorm*rscheme%drMat(1,nR_out)
          end if
-         if ( kbotv == 1 ) then
-            assMat(n_r_max-1,nR_out)=rscheme%rnorm*(                 &
-            &                        rscheme%d2rMat(n_r_max,nR_out)- &
-            &            or1(n_r_max)*rscheme%drMat(n_r_max,nR_out) )
+         if ( l_full_disk ) then
+            if ( m == 1 ) then
+               assMat(n_r_max-1,nR_out)=rscheme%rnorm*rscheme%d2rMat(n_r_max,nR_out)
+            else
+               assMat(n_r_max-1,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            end if
          else
-            assMat(n_r_max-1,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            if ( kbotv == 1 ) then
+               assMat(n_r_max-1,nR_out)=rscheme%rnorm*(                 &
+               &                        rscheme%d2rMat(n_r_max,nR_out)- &
+               &            or1(n_r_max)*rscheme%drMat(n_r_max,nR_out) )
+            else
+               assMat(n_r_max-1,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            end if
          end if
       end do
 
@@ -1304,13 +1341,23 @@ contains
                   &          psi_tmp(n_m,n_cheb)
                end if
 
-               if ( kbotv == 1 ) then
-                  bcBot(n_m)=bcBot(n_m)+fac*(rscheme%d2rMat(n_r_max,n_cheb)-  &
-                  &          or1(n_r_max)*rscheme%drMat(n_r_max,n_cheb))*     &
-                  &          psi_tmp(n_m,n_cheb)
+               if ( l_full_disk ) then
+                  if ( m == 1 ) then
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%d2rMat(n_r_max,n_cheb)* &
+                     &          psi_tmp(n_m,n_cheb)
+                  else
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(n_r_max,n_cheb)*  &
+                     &          psi_tmp(n_m,n_cheb)
+                  end if
                else
-                  bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(n_r_max,n_cheb)*  &
-                  &          psi_tmp(n_m,n_cheb)
+                  if ( kbotv == 1 ) then
+                     bcBot(n_m)=bcBot(n_m)+fac*(rscheme%d2rMat(n_r_max,n_cheb)-  &
+                     &          or1(n_r_max)*rscheme%drMat(n_r_max,n_cheb))*     &
+                     &          psi_tmp(n_m,n_cheb)
+                  else
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(n_r_max,n_cheb)*  &
+                     &          psi_tmp(n_m,n_cheb)
+                  end if
                end if
 
             end if
@@ -1370,13 +1417,23 @@ contains
                   &          psi_tmp(n_m,n_cheb)
                end if
 
-               if ( kbotv == 1 ) then
-                  bcBot(n_m)=bcBot(n_m)+fac*(rscheme%d2rMat(n_r_max,n_cheb)- &
-                  &          or1(n_r_max)*rscheme%drMat(n_r_max,n_cheb))*    &
-                  &          psi_tmp(n_m,n_cheb)
+               if ( l_full_disk ) then
+                  if ( m == 1 ) then
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%d2rMat(n_r_max,n_cheb)* &
+                     &          psi_tmp(n_m,n_cheb)
+                  else
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(n_r_max,n_cheb)*  &
+                     &          psi_tmp(n_m,n_cheb)
+                  end if
                else
-                  bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(n_r_max,n_cheb)*  &
-                  &          psi_tmp(n_m,n_cheb)
+                  if ( kbotv == 1 ) then
+                     bcBot(n_m)=bcBot(n_m)+fac*(rscheme%d2rMat(n_r_max,n_cheb)- &
+                     &          or1(n_r_max)*rscheme%drMat(n_r_max,n_cheb))*    &
+                     &          psi_tmp(n_m,n_cheb)
+                  else
+                     bcBot(n_m)=bcBot(n_m)+fac*rscheme%drMat(n_r_max,n_cheb)*  &
+                     &          psi_tmp(n_m,n_cheb)
+                  end if
                end if
 
             end if

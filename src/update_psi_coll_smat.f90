@@ -643,11 +643,23 @@ contains
                us_Mloc(n_m,n_r)=0.0_cp
                om_Mloc(n_m,n_r)=om0(n_r)+or1(n_r)*uphi0(n_r)
             else
-               us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
-               up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
-               om_Mloc(n_m,n_r)=-(dom_Mloc(n_m,n_r)+(or1(n_r)+beta(n_r))* &
-               &                work_Mloc(n_m,n_r)+(or1(n_r)*beta(n_r)+   &
-               &                dbeta(n_r)-dm2*or2(n_r))*psi_Mloc(n_m,n_r))
+               if ( l_full_disk .and. n_r==n_r_max ) then
+                  if ( m == 1 ) then
+                     us_Mloc(n_m,n_r)=ci*work_Mloc(n_m,n_r)
+                     up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+                     om_Mloc(n_m,n_r)=zero
+                  else
+                     us_Mloc(n_m,n_r)=zero
+                     up_Mloc(n_m,n_r)=zero
+                     om_Mloc(n_m,n_r)=zero
+                  end if
+               else
+                  us_Mloc(n_m,n_r)=ci*real(m,cp)*or1(n_r)*psi_Mloc(n_m,n_r)
+                  up_Mloc(n_m,n_r)=-work_Mloc(n_m,n_r)-beta(n_r)*psi_Mloc(n_m,n_r)
+                  om_Mloc(n_m,n_r)=-(dom_Mloc(n_m,n_r)+(or1(n_r)+beta(n_r))* &
+                  &                work_Mloc(n_m,n_r)+(or1(n_r)*beta(n_r)+   &
+                  &                dbeta(n_r)-dm2*or2(n_r))*psi_Mloc(n_m,n_r))
+               end if
             end if
          end do
       end do
@@ -853,12 +865,20 @@ contains
          else
             assMat(2,nR_out)=rscheme%rnorm*rscheme%drMat(1,nR_out)
          end if
-         if ( kbotv == 1 ) then
-            assMat(n_r_max-1,nR_out)=rscheme%rnorm*(                 &
-            &                        rscheme%d2rMat(n_r_max,nR_out)- &
-            &            or1(n_r_max)*rscheme%drMat(n_r_max,nR_out) )
+         if ( l_full_disk ) then
+            if ( m == 1 ) then
+               assMat(n_r_max-1,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            else
+               assMat(n_r_max-1,nR_out)=rscheme%rnorm*rscheme%d2rMat(n_r_max,nR_out)
+            end if
          else
-            assMat(n_r_max-1,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            if ( kbotv == 1 ) then
+               assMat(n_r_max-1,nR_out)=rscheme%rnorm*(                 &
+               &                        rscheme%d2rMat(n_r_max,nR_out)- &
+               &            or1(n_r_max)*rscheme%drMat(n_r_max,nR_out) )
+            else
+               assMat(n_r_max-1,nR_out)=rscheme%rnorm*rscheme%drMat(n_r_max,nR_out)
+            end if
          end if
       end do
 
