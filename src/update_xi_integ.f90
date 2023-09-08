@@ -412,8 +412,8 @@ contains
             !-- Transform from Galerkin space to Chebyshev space
             if ( l_full_disk ) then
                if ( m == 0 ) then
-               else
                   call galerkin2cheb(gal_sten_m0, rhs)
+               else
                   call galerkin2cheb(gal_sten, rhs)
                end if
             else
