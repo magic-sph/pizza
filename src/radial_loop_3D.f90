@@ -35,6 +35,7 @@ module rloop_3D
    type(nonlinear_lm_t) :: nl_lm
    integer :: frame_counter=1
    integer :: n_bavg_file
+   integer :: n_r_bavg, n_bavg_rank
 
    public :: radial_loop_3D, initialize_radial_loop_3D, finalize_radial_loop_3D
 
@@ -50,7 +51,14 @@ contains
       call gsa%initialize()
       call nl_lm%initialize(lm_max,lmP_max)
 
-      if ( rank == 0 ) then
+      n_r_bavg = int(n_r_max_3D*0.08) ! 92\% of the 3D-radius for butterfly diagram
+      if( (n_r_bavg>=nrStart3D) .and. (n_r_bavg<=nrStop3D) ) then ! select processor
+         n_bavg_rank = rank
+      else
+         n_bavg_rank = -1
+      end if
+
+      if ( rank == n_bavg_rank ) then
          if ( l_mag_3D .and. l_b_phiavg ) then
             file_name = 'b_phiavg.'//tag
             open(newunit=n_bavg_file, file=file_name, status='new')
@@ -63,7 +71,7 @@ contains
 
       call nl_lm%finalize()
       call gsa%finalize()
-      if ( rank == 0 ) then
+      if ( rank == n_bavg_rank ) then
          if ( l_mag_3D .and. l_b_phiavg ) close(n_bavg_file)
       end if
 
@@ -113,7 +121,7 @@ contains
       real(cp) :: djxBpdz(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: djxBpds(n_phi_max_3D,n_theta_max,nRstart3D:nRstop3D)
       real(cp) :: dTdth(n_theta_max,nRstart3D:nRstop3D)
-      real(cp) :: runStart, runStop, phi, theta!, rsint
+      real(cp) :: runStart, runStop!, phi, theta!, rsint
       complex(cp) :: tmp_2D(n_m_max,n_r_max)!nRstart:nRstop)!
       complex(cp) :: buo_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfs_tmp_Rloc(n_m_max,nRstart:nRstop)
@@ -123,14 +131,14 @@ contains
       complex(cp) :: lfpdz_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_bc_tmp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp) :: lfp_h_tmp_Rloc(n_m_max,nRstart:nRstop)!n_r_max)
-      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta, n_phi
+      integer :: n_r, n_m, m, fh_temp, info_temp, n_theta!, n_phi
       integer :: fh_ur, info_ur, fh_ut, info_ut, fh_up, info_up
       integer :: fh_br, info_br, fh_bt, info_bt, fh_bp, info_bp
       integer :: fh_jxbs, info_jxbs, fh_jxbp, info_jxbp, fh_jxbz, info_jxbz
       logical :: l_jxb_save
       character(len=144) :: frame_name
 
-      l_jxb_save=.True.
+      l_jxb_save=.False.
       buo_tmp(:,:,:) = 0.0_cp
       !-- get thermal wind
       if ( l_heat_3D .and. l_thw_3D .and. (.not. l_lin_solve) ) then
@@ -264,8 +272,9 @@ contains
 
          !-- Compute and Write phi-Average of the 3D B field just below CMB
          if ( tscheme%istage==1 ) then
-            if ( l_b_phiavg .and. n_r==int(n_r_max*0.92) ) then
-               call output_local_B_cmb(time, gsa%Brc(:,:), gsa%Bpc(:,:))
+            if ( l_b_phiavg .and. n_r==n_r_bavg ) then
+               !call output_local_B_cmb(time, rank, gsa%Brc(:,:), gsa%Bpc(:,:))
+               if (rank == n_bavg_rank ) call output_local_B_cmb(time, gsa%Brc(:,:), gsa%Bpc(:,:))
             end if
          end if
 
@@ -705,7 +714,8 @@ contains
       real(cp) :: Br_CMB_phiAvg(n_theta_max), Bp_CMB_phiAvg(n_theta_max)
       !character(len=10) :: length_theta
 
-      if ( rank == 0 ) then
+      if ( rank == n_bavg_rank ) then
+         print*, 'Bp_CMB(4,4) =', Bp_CMB(4, 4)
          Br_CMB_phiAvg(:) = 0.0_cp
          Bp_CMB_phiAvg(:) = 0.0_cp
          do n_phi=1, n_phi_max_3D
