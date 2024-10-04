@@ -36,16 +36,18 @@ class Frame:
         try:
 
             file = npfile(filename, endian=endian)
-            self.version = file.fort_read('i4')
+            self.version = file.fort_read(np.int32)[0]
             self.time = file.fort_read(np.float64)
             self.ra, self.ek, self.pr, self.radratio, self.sc, \
                 self.raxi = file.fort_read(np.float64)
             self.n_r_max, self.n_m_max, self.m_max, self.minc, \
-                self.n_phi_max = file.fort_read('i4')
+                self.n_phi_max = file.fort_read(np.int32)
 
             self.radius = file.fort_read(np.float64)
             self.tcond = file.fort_read(np.float64)
-            self.idx2m = file.fort_read('i4')
+            if self.version >= 2:
+                self.xicond = file.fort_read(np.float64)
+            self.idx2m = file.fort_read(np.int32)
 
             self.field_m = file.fort_read(np.complex128)
             self.field_m = self.field_m.reshape((self.n_r_max, self.n_m_max))
@@ -55,9 +57,10 @@ class Frame:
         except:
 
             file = open(filename, 'rb')
-            self.version = np.fromfile(file, dtype='i4', count=1)[0]
+            self.version = np.fromfile(file, dtype=np.int32, count=1)[0]
             self.time, self.ra, self.ek, self.pr, self.radratio, self.sc, \
                 self.raxi = np.fromfile(file, dtype='7f8', count=1)[0]
+
             self.n_r_max, self.n_m_max, self.m_max, self.minc, \
                 self.n_phi_max = np.fromfile(file, dtype='5i4', count=1)[0]
 
@@ -65,7 +68,7 @@ class Frame:
                                       count=1)[0]
             self.tcond = np.fromfile(file, dtype='%if8' % self.n_r_max,
                                      count=1)[0]
-            if self.version == 2:
+            if self.version >= 2:
                 self.xicond = np.fromfile(file,
                                           dtype='%if8' % self.n_r_max,
                                           count=1)[0]
@@ -238,7 +241,7 @@ class PizzaFields(PizzaSetup):
     def equat(self, field='vort', cm=None, levels=65, deminc=True,
               normed=True, vmax=None, vmin=None, normRad=False, stream=False,
               streamNorm='vel', streamDensity=1.5, cbar=True, label=None,
-              streamColor='k'):
+              streamColor='k', pcolor=False, rasterized=True):
         """
         Display an equatorial planform of a scalar quantity
 
@@ -273,6 +276,11 @@ class PizzaFields(PizzaSetup):
         :type streamDensity: float
         :param streamColor: color of the streamlines
         :type streamColor: str
+        :param pcolor: when set to True, use pcolormesh instead of contourf
+        :type pcolor: bool
+        :param rasterized: when set to True, the rasterization for vector graphics
+                           is turned on
+        :type rasterized: bool
         """
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
@@ -324,7 +332,8 @@ class PizzaFields(PizzaSetup):
                                         levels=levels, cm=cm, deminc=deminc,
                                         normed=normed, vmax=vmax, vmin=vmin,
                                         normRad=normRad, cbar=cbar,
-                                        label=label)
+                                        label=label, pcolor=pcolor,
+                                        rasterized=rasterized)
 
         if stream:
             ax = self.fig.get_axes()[0]
@@ -359,16 +368,20 @@ class PizzaFields(PizzaSetup):
             else:
                 u = self.us
                 v = self.uphi
-            v /= self.radius
+
+            if self.radius[-1] > 0:
+                v /= self.radius
+            else: # Full disk
+                v[:, :-1] /= self.radius[:-1]
 
             u = my_interp2d(u, self.radius[::-1], rad)
             v = my_interp2d(v, self.radius[::-1], rad)
             speed = np.sqrt(u**2+v**2)
 
             if streamNorm == 'vel':
-                lw = 3.*speed.T/speed.max()
+                lw = 5.*speed.T/speed.max()
             else:
-                lw = 3.*abs(data.T)/abs(self.vortz).max()
+                lw = 5.*abs(data.T)/abs(self.vortz).max()
             ax1.streamplot(ttheta.T, rr.T, v.T, u.T, density=streamDensity,
                            linewidth=lw, color=streamColor)
             ax1.set_ylim(0., rad.max())
