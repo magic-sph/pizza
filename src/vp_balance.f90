@@ -157,10 +157,12 @@ contains
          call gather_from_Rloc(this%pump, pump_glob, 0)
          call gather_from_Rloc(this%visc, visc_glob, 0)
       else
-         dvpdt_glob = this%dvpdt
-         rey_glob = this%rey_stress
-         pump_glob = this%pump
-         visc_glob = this%visc
+         if ( l_rank_has_m0 ) then
+            dvpdt_glob = this%dvpdt
+            rey_glob = this%rey_stress
+            pump_glob = this%pump
+            visc_glob = this%visc
+         end if
       end if
 
       if ( l_rank_has_m0 ) then
