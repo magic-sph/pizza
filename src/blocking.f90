@@ -23,7 +23,7 @@ module blocking
    integer, public :: nMstart, nMstop, nm_per_rank
    logical, public :: l_rank_has_m0
 
-   public :: set_mpi_domains, destroy_mpi_domains
+   public :: set_mpi_domains, destroy_mpi_domains, getBlocks, load
 
 contains
 

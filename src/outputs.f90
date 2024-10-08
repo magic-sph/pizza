@@ -12,7 +12,8 @@ module outputs
    use namelists, only: tag, BuoFac, ra, pr, l_non_rot, l_vphi_balance, ek, &
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
        &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac,&
-       &                l_vort_balance, l_corr, l_heat, l_chem, ChemFac
+       &                l_vort_balance, l_corr, l_heat, l_chem, ChemFac,    &
+       &                l_energy_trans, m_max_transfer
    use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
@@ -20,6 +21,8 @@ module outputs
        &                       dxicond
    use blocking, only: nMstart, nMstop, nRstart, nRstop, l_rank_has_m0, &
        &               nm_per_rank, m_balance
+   use energy_transfer, only: calc_energy_transfer, initialize_transfer, &
+       &                      finalize_transfer
    use integration, only: rInt_R, simps
    use useful, only: round_off, cc2real, cc22real, getMSD2, abortRun
    use constants, only: pi, two, four, surf, vol_otc, one, tiny_number
@@ -137,6 +140,7 @@ contains
 
       if ( l_vphi_balance ) call vp_bal%initialize()
       if ( l_vort_balance ) call vort_bal%initialize()
+      if ( l_energy_trans ) call initialize_transfer(m_max_transfer)
 
    end subroutine initialize_outputs
 !------------------------------------------------------------------------------
@@ -154,8 +158,8 @@ contains
 
       call spec%finalize()
 
+      if ( l_energy_trans ) call finalize_transfer()
       if ( l_vort_balance ) call vort_bal%finalize()
-
       if ( l_vphi_balance ) call vp_bal%finalize()
 
       if ( rank == 0 ) then
@@ -237,8 +241,8 @@ contains
       logical,             intent(in) :: l_frame
       logical,             intent(in) :: l_vphi_bal_write
       logical,             intent(in) :: l_stop_time
-      complex(cp),         intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(inout) :: us_Mloc(nMstart:nMstop,n_r_max) ! inout because of energy_transfer
+      complex(cp),         intent(inout) :: up_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
@@ -307,6 +311,10 @@ contains
 
       if ( l_vphi_bal_write ) then
          call vp_bal%write_outputs(time, up_Mloc)
+      end if
+
+      if ( l_log .and. l_energy_trans ) then
+         call calc_energy_transfer(us_Mloc, up_Mloc, l_stop_time)
       end if
 
       if ( vort_bal%l_calc .or. (l_stop_time .and. l_vort_balance) ) then
