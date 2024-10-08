@@ -232,7 +232,8 @@ class PizzaFields(PizzaSetup):
             return
 
         if verbose:
-            print('read {}'.format(filename)
+            print('read {}'.format(filename))
+
         return filename
 
     def equat(self, field='vort', cm=None, levels=65, deminc=True,
