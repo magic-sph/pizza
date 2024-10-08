@@ -3,12 +3,12 @@ module useful
    use parallel_mod
    use precision_mod
    use constants, only: tiny_number, two, one, pi, three, half
-   
+
    implicit none
 
    private
 
-   public :: abortRun, logWrite, formatTime, polynomial_interpolation, & 
+   public :: abortRun, logWrite, formatTime, polynomial_interpolation, &
    &         l_correct_step, round_off, cc2real, cc22real, getMSD2,    &
    &         gausslike_compact_edge, gausslike_compact_center,         &
    &         gausslike_compact_middle
@@ -261,9 +261,9 @@ contains
    end function cc22real
 !----------------------------------------------------------------------------
    subroutine getMSD2(mean,SD,x,n,dt,totalTime)
-      ! This subroutine computes the mean and standard deviation according 
+      ! This subroutine computes the mean and standard deviation according
       ! to a method introduced by Donald Knuth (1962). I rederived his formulas
-      ! for a variable time step. On output SD still needs to be normalized with 
+      ! for a variable time step. On output SD still needs to be normalized with
       ! the totalTime and then you have to take the square root!!
       ! The input integer counts the number of calls. For n=1 initialisation
       ! is necessary.

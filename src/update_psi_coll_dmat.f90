@@ -22,7 +22,7 @@ module update_psi_coll_dmat
    use useful, only: abortRun
 
    implicit none
-   
+
    private
 
    logical,  allocatable :: lPsimat(:), lAssmat(:)
@@ -71,7 +71,7 @@ contains
       allocate( omPivot(n_r_max, nMstart:nMstop) )
       allocate( omMat_fac(n_r_max, 2, nMstart:nMstop) )
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*n_r_max*n_r_max* &
-      &                 SIZEOF_DEF_REAL+n_r_max*(nMstop-nMstart+1)*         & 
+      &                 SIZEOF_DEF_REAL+n_r_max*(nMstop-nMstart+1)*         &
       &                 SIZEOF_INTEGER+2*n_r_max*(nMstop-nMstart+1)*        &
       &                 SIZEOF_DEF_REAL
 
@@ -114,7 +114,7 @@ contains
       class(type_tscheme), intent(in) :: tscheme ! time scheme
 
       deallocate( influence_matrix_Mloc )
-      deallocate( psi2_Mloc, psi3_Mloc, om2_Mloc, om3_Mloc ) 
+      deallocate( psi2_Mloc, psi3_Mloc, om2_Mloc, om3_Mloc )
       deallocate( rhs_m0, rhs, psiMat_fac )
       deallocate( lPsimat, psiMat, uphiMat, psiPivot )
       deallocate( omMat_fac, omMat, omPivot )
@@ -193,7 +193,7 @@ contains
             end do
 
          else ! Non-axisymmetric components
-         
+
             if ( .not. lPsimat(n_m) ) then
                call get_omMat(tscheme, m, omMat(:,:,n_m), omPivot(:,n_m), &
                     &          omMat_fac(:,:,n_m), timers%lu, timers%n_lu_calls)
@@ -482,7 +482,7 @@ contains
 
       !-- Local variables:
       integer :: n_r, n_m, m
-   
+
       !-- Finish calculation of advection
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
            &       rscheme, nocopy=.true.)
@@ -697,7 +697,7 @@ contains
       type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
 
-      !-- Local variables 
+      !-- Local variables
       complex(cp) :: rhs1(n_r_max)
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
       real(cp) :: fac_bot, fac_top, dm2
@@ -1317,7 +1317,7 @@ contains
          bcBot(n_m)=0.0_cp
       end do
 
-      !-- Direct computation of the derivatives (input in Cheb space, output in 
+      !-- Direct computation of the derivatives (input in Cheb space, output in
       !-- physical space)
       do n_cheb=1,n_r_max
 
@@ -1393,7 +1393,7 @@ contains
          bcBot(n_m)=zero
       end do
 
-      !-- Direct computation of the derivatives (input in Cheb space, output in 
+      !-- Direct computation of the derivatives (input in Cheb space, output in
       !-- physical space)
       do n_cheb=1,n_r_max
 

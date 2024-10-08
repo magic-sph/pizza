@@ -45,10 +45,10 @@ contains
 
    subroutine solve_full_mat_real_rhs_complex(a,len_a,n,pivot,rhs)
       !
-      !  This routine does the backward substitution into a lu-decomposed real 
-      !  matrix a (to solve a * x = bc1) were bc1 is the right hand side  
-      !  vector. On return x is stored in bc1.                            
-      !                                                                     
+      !  This routine does the backward substitution into a lu-decomposed real
+      !  matrix a (to solve a * x = bc1) were bc1 is the right hand side
+      !  vector. On return x is stored in bc1.
+      !
 
       !-- Input variables:
       integer,  intent(in) :: n          ! dimension of problem
@@ -79,10 +79,10 @@ contains
 !-----------------------------------------------------------------------------
    subroutine solve_full_mat_real_rhs_real(a,len_a,n,pivot,rhs)
       !
-      !  This routine does the backward substitution into a lu-decomposed real 
-      !  matrix a (to solve a * x = bc1) were bc1 is the right hand side  
-      !  vector. On return x is stored in bc1.                            
-      !                                                                     
+      !  This routine does the backward substitution into a lu-decomposed real
+      !  matrix a (to solve a * x = bc1) were bc1 is the right hand side
+      !  vector. On return x is stored in bc1.
+      !
 
       !-- Input variables:
       integer,  intent(in) :: n          ! dimension of problem
@@ -104,10 +104,10 @@ contains
 !-----------------------------------------------------------------------------
    subroutine solve_full_mat_complex_rhs_complex(a,len_a,n,pivot,rhs)
       !
-      !  This routine does the backward substitution into a lu-decomposed real 
-      !  matrix a (to solve a * x = bc1) were bc1 is the right hand side  
-      !  vector. On return x is stored in bc1.                            
-      !                                                                     
+      !  This routine does the backward substitution into a lu-decomposed real
+      !  matrix a (to solve a * x = bc1) were bc1 is the right hand side
+      !  vector. On return x is stored in bc1.
+      !
 
       !-- Input variables:
       integer,  intent(in) :: n          ! dimension of problem

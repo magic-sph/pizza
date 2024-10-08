@@ -297,7 +297,7 @@ contains
                                     &          [3,3],order=[2,1])
             this%l_imp_calc_rhs(1)=.false.
          case ('SSP222')
-            gam = one - one / sqrt(two) 
+            gam = one - one / sqrt(two)
             this%wimp_lin(1) = gam
             this%butcher_imp(:,:) = reshape([  0.0_cp,      0.0_cp, 0.0_cp,  &
                                     &          0.0_cp,       gam  , 0.0_cp,  &
@@ -311,7 +311,7 @@ contains
             this%butcher_ass_exp(:) = [0.0_cp, half, half]
             this%l_imp_calc_rhs(1)=.false.
          case ('LSDIRK222')
-            gam = one - one / sqrt(two) 
+            gam = one - one / sqrt(two)
             chat = one / ( two * gam )
             this%wimp_lin(1) = gam
             this%butcher_imp(:,:) = reshape([  0.0_cp,    0.0_cp, 0.0_cp,  &
@@ -356,7 +356,7 @@ contains
             this%l_imp_calc_rhs(1)=.false.
          case ('SSP332')
             gam = one - one / sqrt(two)
-            this%wimp_lin(1) = gam 
+            this%wimp_lin(1) = gam
             this%butcher_imp(:,:) = reshape([  0.0_cp,       0.0_cp,  0.0_cp, 0.0_cp,  &
                                     &          0.0_cp,          gam,  0.0_cp, 0.0_cp, &
                                     &          0.0_cp, one -two*gam,     gam, 0.0_cp,  &
@@ -409,7 +409,7 @@ contains
             this%l_exp_calc(3)=.false. ! No need to calculte the explicit solve
          case ('DP2-242')
             gam = third ! 1st possibility
-            this%wimp_lin(1) = gam 
+            this%wimp_lin(1) = gam
             this%butcher_imp(:,:) = reshape([  0.0_cp,    0.0_cp,   0.0_cp,     0.0_cp, 0.0_cp,  &
                                     &          0.0_cp,       gam,   0.0_cp,     0.0_cp, 0.0_cp, &
                                     &          0.0_cp,      -gam,      gam,     0.0_cp, 0.0_cp, &
@@ -711,7 +711,7 @@ contains
 
       this%butcher_ass_imp(:) = this%dt(1)*this%butcher_ass_imp(:)
       this%butcher_ass_exp(:) = this%dt(1)*this%butcher_ass_exp(:)
-         
+
    end subroutine set_weights
 !------------------------------------------------------------------------------
    subroutine set_dt_array(this, dt_new, dt_min, time, n_log_file,  &
@@ -885,7 +885,7 @@ contains
 
       !-- Input variables
       type(type_tarray), intent(in) :: dfdt
-      
+
       !-- Ouput variable
       complex(cp), intent(out) :: rhs(dfdt%lm:dfdt%um,dfdt%nRstart:dfdt%nRstop)
 

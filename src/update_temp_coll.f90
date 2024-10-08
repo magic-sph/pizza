@@ -16,7 +16,7 @@ module update_temp_coll
    use time_array, only: type_tarray
 
    implicit none
-   
+
    private
 
    logical,  allocatable :: lTmat(:)
@@ -85,7 +85,7 @@ contains
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
-         
+
          if ( .not. lTmat(n_m) ) then
 #ifdef WITH_PRECOND_S
             call get_tempMat(tscheme, m, tMat(:,:,n_m), tPivot(:,n_m), &
@@ -166,7 +166,7 @@ contains
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
-            dtemp_exp_last(n_m,n_r)=dtemp_exp_last(n_m,n_r)         & 
+            dtemp_exp_last(n_m,n_r)=dtemp_exp_last(n_m,n_r)         &
             &                       -or1(n_r)*work_Mloc(n_m,n_r)    &
             &                       -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
             &                       tadvz_fac*beta(n_r)*tcond(n_r))

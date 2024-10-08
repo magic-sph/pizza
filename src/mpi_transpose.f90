@@ -20,7 +20,7 @@ module mpi_transp_mod
       procedure(transp_r2m_if), deferred :: transp_r2m
    end type type_mpitransp
 
-   interface 
+   interface
 
       subroutine create_if(this,n_fields)
          import
@@ -234,7 +234,7 @@ contains
 
       call MPI_Alltoallv(rbuff, this%rcounts, this%rdisp, MPI_DEF_COMPLEX, &
            &             sbuff, this%scounts, this%sdisp, MPI_DEF_COMPLEX, &
-           &             MPI_COMM_WORLD, ierr) 
+           &             MPI_COMM_WORLD, ierr)
 
       do p = 0, n_procs-1
          ii = this%sdisp(p)+1
@@ -289,7 +289,7 @@ contains
 
       call MPI_Alltoallv(sbuff, this%scounts, this%sdisp, MPI_DEF_COMPLEX, &
            &             rbuff, this%rcounts, this%rdisp, MPI_DEF_COMPLEX, &
-           &             MPI_COMM_WORLD, ierr) 
+           &             MPI_COMM_WORLD, ierr)
 
       do p = 0, n_procs-1
          ii = this%rdisp(p)+1

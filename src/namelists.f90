@@ -96,7 +96,7 @@ module namelists
    logical,  public :: l_start_file     ! taking fields from startfile ?
    logical,  public :: l_reset_t ! Should we reset the time stored in the startfile?
    logical,  public :: l_packed_transp
-   character(len=72), public :: start_file  ! name of start_file           
+   character(len=72), public :: start_file  ! name of start_file
 
    integer,  public :: n_log_step
    integer,  public :: n_frames
@@ -405,7 +405,7 @@ contains
             &    '(" ! Coriolis term will be treated explicitly")')
          end if
       end if
-      
+
       if ( l_finite_diff ) then
          l_buo_imp = .false.
          if ( rank == 0 ) then
@@ -419,7 +419,7 @@ contains
       if ( l_energy_trans .and. m_max_transfer < 0 ) m_max_transfer=m_max
 
       !-- Time unit
-      call capitalize(time_scale) 
+      call capitalize(time_scale)
       if ( l_non_rot ) then
          CorFac = 0.0_cp
          if ( l_heat ) then
@@ -479,8 +479,8 @@ contains
 !--------------------------------------------------------------------------------
    subroutine default_namelists
       !
-      !  Purpose of this subroutine is to set default parameters          
-      !  for the namelists.                                               
+      !  Purpose of this subroutine is to set default parameters
+      !  for the namelists.
       !
 
       !-- Local variable:
@@ -558,7 +558,7 @@ contains
       !----- Volumetric sources
       h_temp           =0.0_cp
       h_xi             =0.0_cp
-      !----- Boundary conditions        
+      !----- Boundary conditions
       ktopt            =1
       kbott            =1
       ktopxi           =1

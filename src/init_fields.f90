@@ -249,7 +249,7 @@ contains
       end do
 
       if ( init_prop > 0 ) then ! Initialize a peculiar m mode
-         
+
          m_pertu = init_prop
 
          if ( mod(m_pertu,minc) /= 0 ) then
@@ -371,7 +371,7 @@ contains
       end do
 
       if ( init_u > 0 ) then
-         
+
          m_pertu = init_u
 
          if ( mod(m_pertu,minc) /= 0 ) then

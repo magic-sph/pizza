@@ -34,7 +34,7 @@ module spectra
       real(cp) :: dt
       real(cp) :: timeLast
       logical :: l_calc
-   contains 
+   contains
       procedure :: initialize
       procedure :: finalize
       procedure :: write_spectra
@@ -359,22 +359,22 @@ contains
            &                 info, ierr)
 
       !-- Now finally write the fields
-      call MPI_File_Write_all(fh, this%us2%mean, nm_per_rank*n_r_max,  & 
+      call MPI_File_Write_all(fh, this%us2%mean, nm_per_rank*n_r_max,  &
            &                  MPI_DEF_REAL, istat, ierr)
       if ( this%us2%l_SD ) then
-         call MPI_File_Write_all(fh, this%us2%SD, nm_per_rank*n_r_max, & 
+         call MPI_File_Write_all(fh, this%us2%SD, nm_per_rank*n_r_max, &
               &                  MPI_DEF_REAL, istat, ierr)
       end if
       call MPI_File_Write_all(fh, this%up2%mean, nm_per_rank*n_r_max,  &
            &                  MPI_DEF_REAL, istat, ierr)
       if ( this%up2%l_SD ) then
-         call MPI_File_Write_all(fh, this%up2%SD, nm_per_rank*n_r_max, & 
+         call MPI_File_Write_all(fh, this%up2%SD, nm_per_rank*n_r_max, &
               &                  MPI_DEF_REAL, istat, ierr)
       end if
       call MPI_File_Write_all(fh, this%enst%mean, nm_per_rank*n_r_max, &
            &                  MPI_DEF_REAL, istat, ierr)
       if ( this%enst%l_SD ) then
-         call MPI_File_Write_all(fh, this%enst%SD, nm_per_rank*n_r_max,& 
+         call MPI_File_Write_all(fh, this%enst%SD, nm_per_rank*n_r_max,&
               &                  MPI_DEF_REAL, istat, ierr)
       end if
 

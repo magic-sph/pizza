@@ -5,7 +5,7 @@ module time_schemes
 
    implicit none
 
-   private 
+   private
 
    type, abstract, public :: type_tscheme
 
@@ -23,7 +23,7 @@ module time_schemes
       logical, allocatable :: l_imp_calc_rhs(:)
       real(cp) :: courfac ! Courant factor
 
-   contains 
+   contains
 
       procedure(initialize_if), deferred :: initialize
       procedure(finalize_if),  deferred :: finalize

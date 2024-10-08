@@ -104,7 +104,7 @@ contains
             errColloc = maxval(abs(sol(:)-sol_theo(:)))
 
             tStart = MPI_Wtime()
-            call solve_laplacian_integ_tau(n_r_max_loc, r_loc, rscheme, sol,    & 
+            call solve_laplacian_integ_tau(n_r_max_loc, r_loc, rscheme, sol,    &
                  &                         timeLuInt, timeSolveInt, bbot, btop, &
                  &                         epsh)
             tStop = MPI_Wtime()
@@ -377,7 +377,7 @@ contains
       do n_r=1,lenA
          i_r = n_r+n_boundaries
 
-         !-- Define the equations 
+         !-- Define the equations
          stencilA = rmult1(a,b,i_r-1,klA+kuA+1)-intcheb1(a,i_r-1,klA+kuA+1)
          stencilB = intcheb2rmult1(a,b,i_r-1,klB+kuB+1)
 
@@ -473,14 +473,14 @@ contains
       call Bmat%initialize(klB, kuB, n_r_max)
 
       allocate ( stencilA(klA+kuA+1), stencilB(klB+kuB+1) )
-      
+
       a = half*(r(1)-r(n_r_max))
       b = half*(r(1)+r(n_r_max))
 
       !-- Fill A4 banded-block
       do n_r=1,lenA
          i_r = n_r+n_boundaries
-         
+
          !-- Define the equations
          stencilA = rmult1(a,b,i_r-1,klA+kuA+1)-intcheb1(a,i_r-1,klA+kuA+1)
 
@@ -509,7 +509,7 @@ contains
       do n_r=1,lenA
          i_r = n_r+n_boundaries
 
-         !-- Define the equations 
+         !-- Define the equations
          stencilB = intcheb2rmult1(a,b,i_r-1,klB+kuB+1)
 
          !-- Roll the arrays for band storage
@@ -664,7 +664,7 @@ contains
       allocate ( stencilB(klB+kuB+1), stencilA(klA+kuA+1) )
 
       call get_galerkin_stencil(gal_sten, n_r_max, 2)
-      
+
       a = half*(r(1)-r(n_r_max))
       b = half*(r(1)+r(n_r_max))
 
@@ -766,7 +766,7 @@ contains
       call Amat%initialize(klA,kuA,n_boundaries,n_r_max)
       call Bmat%initialize(klB,kuB,n_r_max)
       allocate ( stencilB(klB+kuB+1), stencilA(klA+kuA+1) )
-      
+
       a = half*(r(1)-r(n_r_max))
       b = half*(r(1)+r(n_r_max))
 
@@ -908,7 +908,7 @@ contains
          nR_out_psi=nR_out+n_r_max
          do nR=2,n_r_max-1
             nR_psi=nR+n_r_max
-            mat(nR,nR_out)= rscheme%rnorm * rscheme%rMat(nR,nR_out) 
+            mat(nR,nR_out)= rscheme%rnorm * rscheme%rMat(nR,nR_out)
             mat(nR,nR_out_psi)= rscheme%rnorm *( rscheme%d2rMat(nR,nR_out)+&
             &                                  two*rscheme%rMat(nR,nR_out) )
 
@@ -1022,8 +1022,8 @@ contains
          i_r = n_r+A_mat%ntau
 
          !-- Define the equations
-         stencilA4 = intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
-         ! stencilA4 = intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+         stencilA4 = intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)
+         ! stencilA4 = intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)
 
          print*, n_r, maxval(abs(stencilA4)), minval(abs(stencilA4))
 
@@ -1042,8 +1042,8 @@ contains
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
 
-         stencilA4 = intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
-         ! stencilA4 = intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+         stencilA4 = intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)
+         ! stencilA4 = intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,A_mat%kl

@@ -122,7 +122,7 @@ contains
       if ( n_time_steps == 1 ) then
          n_time_steps_run=1 ! Output only, for example G-file/movie etc.
       else if ( n_time_steps == 2 ) then
-         n_time_steps_run=2 ! 
+         n_time_steps_run=2 !
       else
          n_time_steps_run=n_time_steps+1  ! Last time step for output only !
       end if
@@ -177,8 +177,8 @@ contains
 
          if ( n_time_step == 1 ) l_log=.true.
 
-         if ( l_stop_time ) then             
-            l_rst=.true.           
+         if ( l_stop_time ) then
+            l_rst=.true.
             l_log=.true.
          end if
 
@@ -293,7 +293,7 @@ contains
             end if
             lMatNext = .false.
 
-            !-- If the scheme is a multi-step scheme that is not Crank-Nicolson 
+            !-- If the scheme is a multi-step scheme that is not Crank-Nicolson
             !-- we have to use a different starting scheme
             call start_from_another_scheme(l_bridge_step,n_time_step, tscheme)
 
@@ -309,7 +309,7 @@ contains
                        &           timers)
                else
                   call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,       &
-                       &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,      & 
+                       &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,      &
                        &     dom_Mloc, us_Mloc, up_Mloc, dTdt, dxidt, dpsidt, vp_bal, &
                        &     vort_bal, tscheme, lMat, l_log_next, timers)
                end if
@@ -404,7 +404,7 @@ contains
       integer :: n_r, n_m, m
       complex(cp) :: psi_Rloc(n_m_max,nRstart:nRstop)
 
-      !-- If the scheme is a multi-step scheme that is not Crank-Nicolson 
+      !-- If the scheme is a multi-step scheme that is not Crank-Nicolson
       !-- we have to use a different starting scheme
       if ( l_bridge_step .and. tscheme%time_scheme /= 'CNAB2' .and.  &
            n_time_step <= tscheme%nold-1 .and. tscheme%family=='MULTISTEP' ) then

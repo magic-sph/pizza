@@ -15,10 +15,10 @@ module parallel_solvers
 
    private
 
-   type, public :: type_tri_par   
+   type, public :: type_tri_par
       integer :: nRMin
       integer :: nRMax
-      integer :: mMin 
+      integer :: mMin
       integer :: mMax
       real(cp), allocatable :: low(:,:)
       real(cp), allocatable :: diag(:,:)
@@ -176,7 +176,7 @@ contains
             end do
          end do
       end if
-      
+
       if ( rank < n_procs-1 ) then ! If this is not the last rank
          call MPI_Send(this%diag(this%mMin:this%mMax,this%nRMax), n_ms, MPI_DEF_REAL, &
               &        rank+1, tag, MPI_COMM_WORLD, ierr)
@@ -611,7 +611,7 @@ contains
       integer,     intent(inout) :: array_req(:)
       complex(cp), intent(inout) :: x(1:n_m_max, nRstart-1:nRstop+1)
       integer,     intent(inout) :: req
-      
+
       !-- Local variables
       integer :: mb, mu
 

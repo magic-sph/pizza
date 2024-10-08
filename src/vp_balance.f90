@@ -89,7 +89,7 @@ contains
       if ( l_rank_has_m0 ) then
          close(this%n_vphi_bal_file)
       end if
-      
+
    end subroutine finalize
 !------------------------------------------------------------------------------
    subroutine initialize_dvpdt(this, up, tscheme)

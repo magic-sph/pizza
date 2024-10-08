@@ -169,7 +169,7 @@ contains
             end do
 
          case(8) ! u(ri)=u'(ri)=u(ro)=u'(ro)=0
-            
+
             kl = 4
             ku = 0
             call sten%initialize(kl, ku, n_r_max)
@@ -188,7 +188,7 @@ contains
             end do
 
          case(9) ! u(ri)=u''(ri)+1/ri*u'(ri)=u(ro)=u''(ro)-1/ro*u'(ro)=0
-            
+
             kl = 4
             ku = 0
             call sten%initialize(kl, ku, n_r_max)
@@ -240,7 +240,7 @@ contains
             end do
 
          case(10) ! u(ri)=u'(ri)=u(ro)=u''(ro)-1/ro*u'(ro)=0
-            
+
             kl = 4
             ku = 0
             call sten%initialize(kl, ku, n_r_max)
@@ -274,7 +274,7 @@ contains
             end do
 
          case(11) ! u(ri)=u''(ri)-1/ri*u'(ri)=u(ro)=u'(ro)=0
-            
+
             kl = 4
             ku = 0
             call sten%initialize(kl, ku, n_r_max)

@@ -37,14 +37,14 @@ contains
    subroutine initialize(this, n_r_max, order, order_boundary, l_cheb_coll, &
               &          no_work_array)
       !
-      !  Purpose of this subroutine is to calculate and store several     
-      !  values that will be needed for a fast cosine transform of the    
-      !  first kind. The actual transform is performed by the             
-      !  subroutine costf1.                                               
+      !  Purpose of this subroutine is to calculate and store several
+      !  values that will be needed for a fast cosine transform of the
+      !  first kind. The actual transform is performed by the
+      !  subroutine costf1.
       !
 
       class(type_cheb) :: this
-      
+
       !-- Input variables
       integer, intent(in) :: n_r_max
       integer, intent(in) :: order ! This is going to be n_cheb_max
@@ -54,7 +54,7 @@ contains
 
       !-- Local variable
       logical :: l_work_array
-            
+
       this%rnorm = sqrt(two/real(n_r_max-1,kind=cp))
       this%n_max = order  ! n_cheb_max
       this%boundary_fac = half
@@ -211,7 +211,7 @@ contains
       !   .. note:: x(i) and y(i) are stored in the reversed order:
       !             x(1)=b, x(n+1)=a, y(1)=1, y(n+1)=-1
       !
-       
+
       !-- Input variables
       real(cp), intent(in) :: a,b   ! interval boundaries
       integer,  intent(in) :: n ! degree of Cheb polynomial to be represented by the grid points
@@ -221,11 +221,11 @@ contains
       !-- Output variables
       real(cp), intent(out) :: x(*) ! grid points in interval [a,b]
       real(cp), intent(out) :: y(*) ! grid points in interval [-1,1]
-       
+
       !-- Local variables:
       real(cp) :: bpa,bma
       integer :: k
-       
+
       bma=half*(b-a)
       bpa=half*(a+b)
 
@@ -243,7 +243,7 @@ contains
             x(k)=bma * y(k) + bpa
          end if
       end do
-        
+
    end subroutine cheb_grid
 !------------------------------------------------------------------------------
    subroutine get_der_mat(this, n_r_max, l_cheb_coll)
@@ -418,14 +418,14 @@ contains
 
       !-- Input variables:
       integer,  intent(in) :: nMstart
-      integer,  intent(in) :: nMstop 
+      integer,  intent(in) :: nMstop
       integer,  intent(in) :: n_r_max            ! number of columns in f,f2
-    
+
       !-- Output variables:
       complex(cp), intent(inout) :: f(nMstart:nMstop,n_r_max) ! data/coeff input
-    
+
       call this%chebt%costf(f,nMstart,nMstop,n_r_max)
-    
+
    end subroutine costf1_complex_2d
 !------------------------------------------------------------------------------
    subroutine costf1_real_1d(this,f,n_r_max)

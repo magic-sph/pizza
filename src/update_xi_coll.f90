@@ -16,7 +16,7 @@ module update_xi_coll
    use time_array, only: type_tarray
 
    implicit none
-   
+
    private
 
    logical,  allocatable :: lXimat(:)
@@ -85,7 +85,7 @@ contains
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
-         
+
          if ( .not. lXimat(n_m) ) then
 #ifdef WITH_PRECOND_S
             call get_xiMat(tscheme, m, xiMat(:,:,n_m), xiPivot(:,n_m), &
@@ -164,7 +164,7 @@ contains
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
-            dxi_exp_last(n_m,n_r)=dxi_exp_last(n_m,n_r)         & 
+            dxi_exp_last(n_m,n_r)=dxi_exp_last(n_m,n_r)         &
             &                     -or1(n_r)*work_Mloc(n_m,n_r)  &
             &                     -us_Mloc(n_m,n_r)*dxicond(n_r)
          end do

@@ -116,7 +116,7 @@ contains
          open(newunit=n_sig_file, file=file_name, status='unknown')
          write(n_sig_file,'(A3)') 'NOT'
          close(n_sig_file)
-      end if 
+      end if
 
       timeAvg_rad     = 0.0_cp
       timeAvg_spec    = 0.0_cp
@@ -555,7 +555,7 @@ contains
          rey_2D       = sqrt(two*(us2_2D+up2_2D)/surf)
          rey_zon_2D   = sqrt(two*up2_axi_2D/surf)
          rey_fluct_2D = sqrt(two*(us2_2D+up2_2D-up2_axi_2D)/surf)
-         
+
          if ( .not. l_non_rot ) then
             rey_3D       = sqrt(two*(us2_3D+up2_3D+uz2_3D)/vol_otc)
             rey_zon_3D   = sqrt(two*up2_axi_3D/vol_otc)

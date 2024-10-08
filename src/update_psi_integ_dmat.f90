@@ -26,7 +26,7 @@ module update_psi_integ_dmat
        &                    intcheb2rmult2laplrot, intcheb2rmult2lapl
 
    implicit none
-   
+
    private
 
    logical,  allocatable :: lPsimat(:) ! Do we need to rebuild the matrices?
@@ -126,7 +126,7 @@ contains
    subroutine finalize_psi_integ_dmat
       !
       ! Memory deallocation
-      ! 
+      !
 
       !-- Local variable
       integer :: n_m, m
@@ -580,7 +580,7 @@ contains
                if ( m == 0 ) then
                   dom_exp_last(n_m,n_r)= dom_exp_last(n_m,n_r) -  &
                   &                   ekp_fac*up_Mloc(n_m,n_r)
-               else 
+               else
                   dom_exp_last(n_m,n_r)=   dom_exp_last(n_m,n_r) -     &
                   &                  ekp_fac*(  om_Mloc(n_m,n_r) +     &
                   &              ekp_up(n_r)*   up_Mloc(n_m,n_r) +     &
@@ -663,7 +663,7 @@ contains
             end do
             call RHSI_mat%mat_vec_mul(rhs)
 
-            rhs(1)=zero 
+            rhs(1)=zero
             rhs(2)=zero
 
             do n_cheb=1,n_r_max
@@ -774,7 +774,7 @@ contains
 
          end if ! implicit buoyancy term?
 
-      end if ! implicit stage computation ? 
+      end if ! implicit stage computation ?
 
    end subroutine get_psi_rhs_imp_int_dmat
 !------------------------------------------------------------------------------
@@ -846,8 +846,8 @@ contains
             &                  3.0_cp*intcheb1rmult1(a,b,i_r-1,A_mat%nbands) )
          else
             stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-         &
-            &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        & 
-            &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+            &           tscheme%wimp_lin(1)*ViscFac*hdif_V(n_m)*        &
+            &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
          end if
 
          !-- Only the lower bands can contribute to the matrix A3
@@ -1019,9 +1019,9 @@ contains
 
          !-- Define the equations
          if ( l_non_rot ) then
-            stencilA4 = intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+            stencilA4 = intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
          else
-            stencilA4 = intcheb2rmult2laplrot(a,b,m,i_r-1,A_mat%nbands)  
+            stencilA4 = intcheb2rmult2laplrot(a,b,m,i_r-1,A_mat%nbands)
          end if
 
          !-- Only the lower bands can contribute to the matrix A3
@@ -1140,7 +1140,7 @@ contains
       a = half*(r_cmb-r_icb)
       b = half*(r_cmb+r_icb)
 
-      n_bounds = 2 
+      n_bounds = 2
 
       !-- Fill right-hand side matrix
       do n_r=1,B_mat%nlines
@@ -1381,7 +1381,7 @@ contains
          bcBot(n_m)=0.0_cp
       end do
 
-      !-- Direct computation of the derivatives (input in Cheb space, output in 
+      !-- Direct computation of the derivatives (input in Cheb space, output in
       !-- physical space)
       do n_cheb=1,n_r_max
 
@@ -1467,7 +1467,7 @@ contains
          bcBot(n_m)=zero
       end do
 
-      !-- Direct computation of the derivatives (input in Cheb space, output in 
+      !-- Direct computation of the derivatives (input in Cheb space, output in
       !-- physical space)
       do n_cheb=1,n_r_max
 

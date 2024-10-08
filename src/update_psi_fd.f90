@@ -110,7 +110,7 @@ contains
             m=idx2m(n_m)
             if ( m == 0 ) then
                if ( ktopv /= 1 ) up0_ghost(nR)=zero
-               up0_ghost(nR-1)=zero 
+               up0_ghost(nR-1)=zero
             else
                psi_ghost(n_m,nR)  =zero ! Non-penetration condition
                psi_ghost(n_m,nR-1)=zero ! Ghost zones set to zero
@@ -277,7 +277,7 @@ contains
            &               n_m_start, n_m_stop, nRstart, nRstop, rscheme)
       !$omp barrier
       !-- Warning: at this stage, us, up and om are used as temp arrays to store the
-      !-- derivatives of psi 
+      !-- derivatives of psi
 
       if ( istage == 1 ) then
          do nR=nRstart,nRstop
@@ -503,7 +503,7 @@ contains
       up0_Rloc(:)=work_Rloc(1,:)
 
       if ( ktopv /= 1 .and. nRstart==1 ) then
-         up0_Rloc(nRstart)=zero 
+         up0_Rloc(nRstart)=zero
       end if
 
       if ( kbotv /= 1 .and. nRstop==n_r_max ) then

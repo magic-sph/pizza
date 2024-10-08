@@ -29,7 +29,7 @@ contains
       !-- Local variable
       integer :: iproc
 
-      bytes_allocated = 0 ! 
+      bytes_allocated = 0 !
       n_ranks_print = min(n_procs-1, 6)
 
       if ( n_ranks_print > 0 ) then
@@ -167,7 +167,7 @@ contains
 
       do i=1,6
          if ( bytes_float < 1024.0_cp ) then
-            write(st, "(F8.3,A1,A,A)") bytes_float, ' ', units(i), suffix 
+            write(st, "(F8.3,A1,A,A)") bytes_float, ' ', units(i), suffix
             exit
          end if
          bytes_float = bytes_float / 1024.0_cp

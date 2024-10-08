@@ -36,7 +36,7 @@ contains
       class(type_tscheme), intent(in) :: tscheme
 
       n_tri=0
-      n_penta=1   
+      n_penta=1
       if ( l_heat ) then
          call initialize_temp_fd()
          lTmat_FD(:)=.false.

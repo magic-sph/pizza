@@ -68,7 +68,7 @@ contains
       integer, intent(in) :: n_points
 
       integer :: n_points_loc, check, p
-      
+
       n_points_loc = n_points/n_procs
 
       check = mod(n_points,n_procs)-1
