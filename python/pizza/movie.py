@@ -11,7 +11,8 @@ class PizzaMovie:
 
     def __init__(self, field='up', nvar='all', datadir='.', tag=None, step=1,
                  endian='l', levels=64, cmap='seismic', deminc=True, png=False,
-                 cut=1., bgcolor=None, dpi=100, normed=False, rm_hor_avg=False):
+                 cut=1., bgcolor=None, dpi=100, normed=False,
+                 rm_hor_avg=False):
 
         if png:
             plt.ioff()
@@ -33,9 +34,9 @@ class PizzaMovie:
 
         # Determine the file name pattern
         if tag is not None:
-            pattern = 'frame_%s_*.%s' % (st, tag)
+            pattern = 'frame_{}_*.{}'.format(st, tag)
         else:
-            pattern = 'frame_%s_*' % st
+            pattern = 'frame_{}_*'.format(st)
         pattern = os.path.join(datadir, pattern)
 
         # Assemble a list of files that match the pattern
@@ -51,7 +52,7 @@ class PizzaMovie:
 
         for k, file in enumerate(files):
             if png:
-                filename = 'movie/img%05d.png' % k
+                filename = 'movie/img{:05d}.png'.format(k)
                 if os.path.exists(filename) and k != 0:
                     continue
             f = Frame(file, endian=endian)
@@ -86,8 +87,8 @@ class PizzaMovie:
                 vmin = -max(abs(dat.max()), abs(dat.min()))
                 vmin = cut * vmin
                 vmax = -vmin
-                #vmin = dat.min()
-                #vmax = dat.max()
+                # vmin = dat.min()
+                # vmax = dat.max()
                 cs = np.linspace(vmin, vmax, levels)
 
                 fig, xx, yy = equatContour(dat, self.radius, minc=self.minc,
@@ -145,9 +146,9 @@ class PizzaMovie:
                 man.canvas.draw()
 
             if png:
-                filename = 'movie/img%05d.png' % k
-                print('write %s' % filename)
-                # st = 'echo %i' % ivar + ' > movie/imgmax'
+                filename = 'movie/img{:05d}.png'.format(k)
+                print('write {}'.format(filename))
+                # st = 'echo {}'.format(ivar) + ' > movie/imgmax'
                 if bgcolor is not None:
                     fig.savefig(filename, facecolor=bgcolor, dpi=dpi)
                 else:

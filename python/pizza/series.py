@@ -54,26 +54,27 @@ class PizzaTs(PizzaSetup):
         logFiles = scanDir(pattern)
 
         if tag is not None:
-            pattern = os.path.join(datadir, '%s.%s' % (self.field, tag))
+            pattern = os.path.join(datadir, '{}.{}'.format(self.field, tag))
             files = scanDir(pattern)
 
             #  Either the log.tag directly exists and the setup is easy to
             #  obtain
-            if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+            if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % tag)
+                                    nml='log.{}'.format(tag))
             #  Or the tag is a bit more complicated and we need to find
             #  the corresponding log file
             else:
-                st = os.path.join(datadir, r'%s\.(.*)' % self.field)
-                #  mask = re.compile(r'%s\.(.*)' % self.field)
+                st = os.path.join(datadir, r'{}\.(.*)'.format(self.field))
+                #  mask = re.compile(r'{}\.(.*)'.format(self.field))
                 mask = re.compile(st)
                 if mask.match(files[-1]):
                     ending = mask.search(files[-1]).groups(0)[0]
                     if logFiles.__contains__(os.path.join(
-                                             datadir, 'log.%s' % ending)):
+                                             datadir,
+                                             'log.{}'.format(ending))):
                         PizzaSetup.__init__(self, quiet=True, datadir=datadir,
-                                            nml='log.%s' % ending)
+                                            nml='log.{}'.format(ending))
 
             # Concatenate the files that correspond to the tag
             for k, file in enumerate(files):
@@ -93,11 +94,11 @@ class PizzaTs(PizzaSetup):
         elif not all:
             if len(logFiles) != 0:
                 PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
-                name = '%s.%s' % (self.field, self.tag)
+                name = '{}.{}'.format(self.field, self.tag)
                 filename = os.path.join(datadir, name)
                 data = fast_read(filename)
             else:
-                mot = '%s.*' % (self.field)
+                mot = '{}.*'.format(self.field)
                 dat = [(os.stat(i).st_mtime, i) for i in glob.glob(mot)]
                 dat.sort()
                 filename = dat[-1][1]
@@ -107,7 +108,7 @@ class PizzaTs(PizzaSetup):
         else:
             if len(logFiles) != 0:
                 PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
-            pattern = os.path.join(datadir, '%s.*' % (self.field))
+            pattern = os.path.join(datadir, '{}.*'.format(self.field))
             files = scanDir(pattern)
             for k, file in enumerate(files):
                 filename = file

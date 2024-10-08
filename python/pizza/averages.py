@@ -12,7 +12,8 @@ class PizzaAverages:
     the next time you use it you don't need to give ``tstart`` again.
     """
 
-    def __init__(self, tstart=None, tag=None, std=False, tstartHeat=None, l_3D=True):
+    def __init__(self, tstart=None, tag=None, std=False, tstartHeat=None,
+                 l_3D=True):
         """
         :param tstart: the starting time for averaging
         :type tstart: float
@@ -28,29 +29,24 @@ class PizzaAverages:
         self.l_3D = l_3D
 
         if os.path.exists('tInitAvg') and tstart is None:
-            file = open('tInitAvg', 'r')
-            st = file.readline().strip('\n')
-            tstart = float(st)
-            file.close()
+            with open('tInitAvg', 'r') as file:
+                st = file.readline().strip('\n')
+                tstart = float(st)
         elif tstart is not None:
-            file = open('tInitAvg', 'w')
-            file.write('%f' % tstart)
-            file.close()
+            with open('tInitAvg', 'w') as file:
+                file.write('{}'.format(tstart))
 
         if os.path.exists('tstartHeat') and tstartHeat is None:
-            file = open('tstartHeat', 'r')
-            st = file.readline().strip('\n')
-            tstartHeat = float(st)
-            file.close()
+            with open('tstartHeat', 'r') as file:
+                st = file.readline().strip('\n')
+                tstartHeat = float(st)
         else:
             if tstartHeat is None:
                 tstartHeat = tstart
-            file = open('tstartHeat', 'w')
-            file.write('%f' % tstartHeat)
-            file.close()
+            with open('tstartHeat', 'w') as file:
+                file.write('{}'.format(tstartHeat))
 
         print(tstart, tstartHeat)
-
 
         self.std = std
 
@@ -69,7 +65,8 @@ class PizzaAverages:
             self.up2_avg, self.up2_std = avgField(ts.time[ind:], ts.up2[ind:],
                                                   std=True)
             if self.l_3D:
-                self.uz2_avg, self.uz2_std = avgField(ts.time[ind:], ts.uz2[ind:],
+                self.uz2_avg, self.uz2_std = avgField(ts.time[ind:],
+                                                      ts.uz2[ind:],
                                                       std=True)
             self.up2_axi_avg, self.up2_axi_std = avgField(ts.time[ind:],
                                                           ts.up2_axi[ind:],
@@ -176,40 +173,41 @@ class PizzaAverages:
         """
         st_std = ''
         if self.l_3D:
-            st = '%.3e%9.2e%9.2e%9.2e%12.5e%12.5e%12.5e%12.5e' % \
-                (self.ra, self.ek, self.pr, self.radratio, self.us2_avg,
+            st = '{:.3e}{:9.2e}{:9.2e}{:9.2e}{:12.5e}{:12.5e}{:12.5e}{:12.5e}'.format(
+                 self.ra, self.ek, self.pr, self.radratio, self.us2_avg,
                  self.up2_avg, self.uz2_avg, self.up2_axi_avg)
         else:
-            st = '%.3e%9.2e%9.2e%12.5e%12.5e%12.5e' % \
-                (self.ra, self.pr, self.radratio, self.us2_avg,
+            st = '{:.3e}{:9.2e}{:9.2e}{:12.5e}{:12.5e}{:12.5e}'.format(
+                 self.ra, self.pr, self.radratio, self.us2_avg,
                  self.up2_avg, self.up2_axi_avg)
         if self.std:
-            st_std = '%12.5e%12.5e%12.5e%12.5e' % \
-                (self.us2_std, self.up2_std, self.uz2_std, self.up2_axi_avg)
+            st_std = '{:12.5e}{:12.5e}{:12.5e}{:12.5e}'.format(
+                 self.us2_std, self.up2_std, self.uz2_std, self.up2_axi_avg)
 
-        st += '%10.3e%10.3e%10.3e' % (self.rey_avg, self.rey_zon_avg,
-                                      self.rey_fluct_avg)
+        st += '{:10.3e}{:10.3e}{:10.3e}'.format(self.rey_avg, self.rey_zon_avg,
+                                                self.rey_fluct_avg)
 
         if self.std:
-            st_std += '%10.3e%10.3e%10.3e' % (self.rey_std, self.rey_zon_std,
-                                              self.rey_fluct_std)
-        st += '%10.3e%10.3e%10.3e%10.3e' % (self.nu_top_avg, self.nu_bot_avg,
-                                            self.nu_vol_avg, self.nu_shell_avg)
+            st_std += '{:10.3e}{:10.3e}{:10.3e}'.format(
+                 self.rey_std, self.rey_zon_std, self.rey_fluct_std)
+        st += '{:10.3e}{:10.3e}{:10.3e}{:10.3e}'.format(
+                 self.nu_top_avg, self.nu_bot_avg, self.nu_vol_avg,
+                 self.nu_shell_avg)
         if self.std:
-            st_std += '%10.3e%10.3e%10.3e%10.3e' % \
-                (self.nu_top_std, self.nu_bot_std, self.nu_vol_std,
+            st_std += '{:10.3e}{:10.3e}{:10.3e}{:10.3e}'.format(
+                 self.nu_top_std, self.nu_bot_std, self.nu_vol_std,
                  self.nu_shell_std)
 
-        st += '%12.5e%12.5e' % (self.power_avg, self.visc_avg)
+        st += '{:12.5e}{:12.5e}'.format(self.power_avg, self.visc_avg)
         if self.std:
-            st_std += '%12.5e%12.5e' % (self.power_std, self.visc_std)
+            st_std += '{:12.5e}{:12.5e}'.format(self.power_std, self.visc_std)
 
-        st += '%10.3e%10.3e%10.3e' % (self.lpeak_avg, self.lint_avg,
-                                      self.ldiss_avg)
+        st += '{:10.3e}{:10.3e}{:10.3e}'.format(self.lpeak_avg, self.lint_avg,
+                                                self.ldiss_avg)
 
         if self.std:
-            st_std += '%10.3e%10.3e%10.3e' % (self.lpeak_std, self.lint_std,
-                                              self.ldiss_std)
+            st_std += '{:10.3e}{:10.3e}{:10.3e}'.format(
+                 self.lpeak_std, self.lint_std, self.ldiss_std)
         st += st_std
         st += '\n'
 
