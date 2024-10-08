@@ -45,32 +45,33 @@ class PizzaRadial(PizzaSetup):
 
         if not all:
             if tag is not None:
-                pattern = os.path.join(datadir, '%s.%s' % (name, tag))
+                pattern = os.path.join(datadir, '{}.{}'.format(name, tag))
                 files = scanDir(pattern)
 
                 # Either the log.tag directly exists and the setup is easy to
                 # obtain
-                if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
                     PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                        nml='log.%s' % tag)
+                                        nml='log.{}'.format(tag))
                 # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'%s\/%s\.(.*)' % (datadir, name))
+                    mask = re.compile(r'{}\/{}\.(.*)'.format(datadir, name))
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
-                        pattern = os.path.join(datadir, 'log.%s' % ending)
+                        pattern = os.path.join(datadir,
+                                               'log.{}'.format(ending))
                         if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir,
                                                 quiet=True,
-                                                nml='log.%s' % ending)
+                                                nml='log.{}'.format(ending))
 
                 # Sum the files that correspond to the tag
-                mask = re.compile(r'%s\.(.*)' % name)
+                mask = re.compile(r'{}\.(.*)'.format(name))
                 for k, file in enumerate(files):
-                    print('reading %s' % file)
+                    print('reading {}'.format(file))
                     tag = mask.search(file).groups(0)[0]
-                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                    nml = PizzaSetup(nml='log.{}'.format(tag), datadir=datadir,
                                      quiet=True)
                     filename = file
                     if k == 0:
@@ -84,31 +85,31 @@ class PizzaRadial(PizzaSetup):
                                             nml.start_time)
 
             else:  # if all
-                pattern = os.path.join(datadir, '%s.*' % name)
+                pattern = os.path.join(datadir, '{}.*'.format(name))
                 files = scanDir(pattern)
                 filename = files[-1]
-                print('reading %s' % filename)
+                print('reading {}'.format(filename))
                 # Determine the setup
-                mask = re.compile(r'%s\.(.*)' % name)
+                mask = re.compile(r'{}\.(.*)'.format(name))
                 ending = mask.search(files[-1]).groups(0)[0]
-                if os.path.exists('log.%s' % ending):
+                if os.path.exists('log.{}'.format(ending)):
                     try:
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.%s' % ending)
+                                            nml='log.{}'.format(ending))
                     except AttributeError:
                         pass
 
                 data = fast_read(filename, skiplines=0)
         else:
-            pattern = os.path.join(datadir, '%s.*' % name)
+            pattern = os.path.join(datadir, '{}.*'.format(name))
             files = scanDir(pattern)
 
             # Determine the setup
-            mask = re.compile(r'%s\.(.*)' % name)
+            mask = re.compile(r'{}\.(.*)'.format(name))
             for k, file in enumerate(files):
-                print('reading %s' % file)
+                print('reading {}'.format(file))
                 tag = mask.search(file).groups(0)[0]
-                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                nml = PizzaSetup(nml='log.{}'.format(tag), datadir=datadir,
                                  quiet=True)
                 filename = file
                 if k == 0:
@@ -121,7 +122,7 @@ class PizzaRadial(PizzaSetup):
                         data = self.add(data, tmp, nml.stop_time,
                                         nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                nml='log.%s' % tag)
+                                nml='log.{}'.format(tag))
 
         self.radius = data[:, 0]
         self.us2_mean = data[:, 1]

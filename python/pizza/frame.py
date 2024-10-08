@@ -36,16 +36,16 @@ class Frame:
         try:
 
             file = npfile(filename, endian=endian)
-            self.version = file.fort_read('i4')
+            self.version = file.fort_read(np.int32)
             self.time = file.fort_read(np.float64)
             self.ra, self.ek, self.pr, self.radratio, self.sc, \
                 self.raxi = file.fort_read(np.float64)
             self.n_r_max, self.n_m_max, self.m_max, self.minc, \
-                self.n_phi_max = file.fort_read('i4')
+                self.n_phi_max = file.fort_read(np.int32)
 
             self.radius = file.fort_read(np.float64)
             self.tcond = file.fort_read(np.float64)
-            self.idx2m = file.fort_read('i4')
+            self.idx2m = file.fort_read(np.int32)
 
             self.field_m = file.fort_read(np.complex128)
             self.field_m = self.field_m.reshape((self.n_r_max, self.n_m_max))
@@ -54,29 +54,27 @@ class Frame:
 
         except:
 
-            file = open(filename, 'rb')
-            self.version = np.fromfile(file, dtype='i4', count=1)[0]
-            self.time, self.ra, self.ek, self.pr, self.radratio, self.sc, \
-                self.raxi = np.fromfile(file, dtype='7f8', count=1)[0]
-            self.n_r_max, self.n_m_max, self.m_max, self.minc, \
-                self.n_phi_max = np.fromfile(file, dtype='5i4', count=1)[0]
+            with open(filename, 'rb') as file:
+                self.version = np.fromfile(file, dtype=np.int32, count=1)[0]
+                self.time, self.ra, self.ek, self.pr, self.radratio, self.sc, \
+                    self.raxi = np.fromfile(file, dtype=np.float64, count=7)
+                self.n_r_max, self.n_m_max, self.m_max, self.minc, \
+                    self.n_phi_max = np.fromfile(file, dtype=np.int32, count=5)
 
-            self.radius = np.fromfile(file, dtype='%if8' % self.n_r_max,
-                                      count=1)[0]
-            self.tcond = np.fromfile(file, dtype='%if8' % self.n_r_max,
-                                     count=1)[0]
-            if self.version == 2:
-                self.xicond = np.fromfile(file,
-                                          dtype='%if8' % self.n_r_max,
-                                          count=1)[0]
+                self.radius = np.fromfile(file, dtype=np.float64,
+                                          count=self.n_r_max)
+                self.tcond = np.fromfile(file, dtype=np.float64,
+                                         count=self.n_r_max)
+                if self.version == 2:
+                    self.xicond = np.fromfile(file, dtype=np.float64,
+                                              count=self.n_r_max)
 
-            self.idx2m = np.fromfile(file, dtype='%ii4' % self.n_m_max,
-                                     count=1)[0]
+                self.idx2m = np.fromfile(file, dtype=np.int32,
+                                         count=self.n_m_max)
 
-            dt = np.dtype("(%i,%i)c16" % (self.n_r_max, self.n_m_max))
-            self.field_m = np.fromfile(file, dtype=dt, count=1)[0]
-            self.field_m = self.field_m.T
-            file.close()
+                dt = np.dtype("(%i,%i)c16" % (self.n_r_max, self.n_m_max))
+                self.field_m = np.fromfile(file, dtype=dt, count=1)[0]
+                self.field_m = self.field_m.T
 
     def write(self, filename):
         """
@@ -86,22 +84,20 @@ class Frame:
         :type filename: str
         """
 
-        out = open('%s' % filename, 'wb')
-        x = np.array([1], dtype="i4")
-        x.tofile(out)
-        x = np.array([self.time, self.ra, self.ek, self.pr, self.radratio,
-                      self.sc, self.raxi], dtype=np.float64)
-        x.tofile(out)
-        x = np.array([self.n_r_max, self.n_m_max, self.m_max, self.minc,
-                      self.n_phi_max], dtype='i4')
-        x.tofile(out)
+        with open(filename, 'wb') as out:
+            x = np.array([1], dtype=np.int32)
+            x.tofile(out)
+            x = np.array([self.time, self.ra, self.ek, self.pr, self.radratio,
+                          self.sc, self.raxi], dtype=np.float64)
+            x.tofile(out)
+            x = np.array([self.n_r_max, self.n_m_max, self.m_max, self.minc,
+                          self.n_phi_max], dtype=np.int32)
+            x.tofile(out)
 
-        self.radius.tofile(out)
-        self.tcond.tofile(out)
-        self.idx2m.tofile(out)
-        self.field_m.T.tofile(out)
-
-        out.close()
+            self.radius.tofile(out)
+            self.tcond.tofile(out)
+            self.idx2m.tofile(out)
+            self.field_m.T.tofile(out)
 
 
 class PizzaFields(PizzaSetup):
@@ -196,27 +192,27 @@ class PizzaFields(PizzaSetup):
 
         if tag is not None:
             if ivar is not None:
-                file = '%s_%i.%s' % (prefix, ivar, tag)
+                file = '{}_{}.{}'.format(prefix, ivar, tag)
                 filename = os.path.join(datadir, file)
             else:
-                files = scanDir('%s_*%s' % (prefix, tag))
+                files = scanDir('{}_*{}'.format(prefix, tag))
                 if len(files) != 0:
                     filename = os.path.join(datadir, files[-1])
                 else:
                     return
 
-            if os.path.exists('log.%s' % tag):
+            if os.path.exists('log.{}'.format(tag)):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % tag)
+                                    nml='log.{}'.format(tag))
         else:
             if ivar is not None:
-                files = scanDir('%s_%i.*' % (prefix, ivar))
+                files = scanDir('{}_{}.*'.format(prefix, ivar))
                 if len(files) != 0:
                     filename = os.path.join(datadir, files[-1])
                 else:
                     return
             else:
-                files = scanDir('%s_*' % prefix)
+                files = scanDir('{}_*'.format(prefix))
                 if len(files) != 0:
                     filename = os.path.join(datadir, files[-1])
                 else:
@@ -224,15 +220,15 @@ class PizzaFields(PizzaSetup):
             # Determine the setup
             mask = re.compile(r'.*\.(.*)')
             ending = mask.search(files[-1]).groups(0)[0]
-            if os.path.exists('log.%s' % ending):
+            if os.path.exists('log.{}'.format(ending)):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % ending)
+                                    nml='log.{}'.format(ending))
 
         if not os.path.exists(filename):
             return
 
         if verbose:
-            print('read %s' % filename)
+            print('read {}'.format(filename))
         return filename
 
     def equat(self, field='vort', cm=None, levels=65, deminc=True,

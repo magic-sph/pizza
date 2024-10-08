@@ -62,32 +62,34 @@ class PizzaSpectrum(PizzaSetup):
         if not all:
             if tag is not None:
                 if ispec is not None:
-                    self.name += '%i' % ispec
-                pattern = os.path.join(datadir, '%s.%s' % (self.name, tag))
+                    self.name += '{}'.format(ispec)
+                pattern = os.path.join(datadir, '{}.{}'.format(self.name, tag))
                 files = scanDir(pattern)
                 # Either the log.tag directly exists and the setup is easy
                 # to obtain
-                if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
                     PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                        nml='log.%s' % tag)
+                                        nml='log.{}'.format(tag))
                 # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'%s/%s\.(.*)' % (datadir, self.name))
+                    mask = re.compile(r'{}/{}\.(.*)'.format(datadir,
+                                                            self.name))
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
-                        pattern = os.path.join(datadir, 'log.%s' % ending)
+                        pattern = os.path.join(datadir,
+                                               'log.{}'.format(ending))
                         if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir,
                                                 quiet=True,
-                                                nml='log.%s' % ending)
+                                                nml='log.{}'.format(ending))
 
                 # Sum the files that correspond to the tag
-                mask = re.compile(r'%s\.(.*)' % self.name)
+                mask = re.compile(r'{}\.(.*)'.format(self.name))
                 for k, file in enumerate(files):
-                    print('reading %s' % file)
+                    print('reading {}'.format(file))
                     tag = mask.search(file).groups(0)[0]
-                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                    nml = PizzaSetup(nml='log.{}'.format(tag), datadir=datadir,
                                      quiet=True)
                     filename = file
                     if k == 0:
@@ -102,39 +104,39 @@ class PizzaSpectrum(PizzaSetup):
 
             else:
                 if ispec is not None:
-                    pattern = os.path.join(datadir, '%s%i*' % (self.name,
-                                                               ispec))
+                    pattern = os.path.join(datadir, '{}{}*'.format(self.name,
+                                                                   ispec))
                 else:
-                    pattern = os.path.join(datadir, '%s*' % self.name)
+                    pattern = os.path.join(datadir, '{}*'.format(self.name))
                 files = scanDir(pattern)
                 filename = files[-1]
-                print('reading %s' % filename)
+                print('reading {}'.format(filename))
                 # Determine the setup
                 if ispec is not None:
-                    mask = re.compile(r'%s%i\.(.*)' % (self.name, ispec))
+                    mask = re.compile(r'{}{}\.(.*)'.format(self.name, ispec))
 
                 else:
-                    mask = re.compile(r'%s\.(.*)' % self.name)
+                    mask = re.compile(r'{}\.(.*)'.format(self.name))
                 ending = mask.search(files[-1]).groups(0)[0]
-                if os.path.exists('log.%s' % ending):
+                if os.path.exists('log.{}'.format(ending)):
                     try:
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.%s' % ending)
+                                            nml='log.{}'.format(ending))
                     except AttributeError:
                         pass
 
                 data = fast_read(filename, skiplines=0)
 
         else:  # if all is requested
-            pattern = os.path.join(datadir, '%s.*' % self.name)
+            pattern = os.path.join(datadir, '{}.*'.format(self.name))
             files = scanDir(pattern)
 
             # Determine the setup
-            mask = re.compile(r'%s\.(.*)' % self.name)
+            mask = re.compile(r'{}\.(.*)'.format(self.name))
             for k, file in enumerate(files):
-                print('reading %s' % file)
+                print('reading {}'.format(file))
                 tag = mask.search(file).groups(0)[0]
-                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                nml = PizzaSetup(nml='log.{}'.format(tag), datadir=datadir,
                                  quiet=True)
                 filename = file
                 if k == 0:
@@ -147,14 +149,14 @@ class PizzaSpectrum(PizzaSetup):
                         data = self.add(data, tmp, nml.stop_time,
                                         nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                nml='log.%s' % tag)
+                                nml='log.{}'.format(tag))
 
             # Determine the setup
             mask = re.compile(r'.*\.(.*)')
             ending = mask.search(files[-1]).groups(0)[0]
-            if os.path.exists(os.path.join(datadir, 'log.%s' % ending)):
+            if os.path.exists(os.path.join(datadir, 'log.{}'.format(ending))):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % ending)
+                                    nml='log.{}'.format(ending))
 
         self.index = data[:, 0]
 
@@ -365,89 +367,91 @@ class Pizza2DSpectrum(PizzaSetup):
 
         if not all:
             if tag is not None:
-                pattern = os.path.join(datadir, '%s.%s' % (self.name, tag))
+                pattern = os.path.join(datadir, '{}.{}'.format(self.name, tag))
                 files = scanDir(pattern)
                 # Either the log.tag directly exists and the setup is
                 # easy to obtain
-                if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
                     PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                        nml='log.%s' % tag)
+                                        nml='log.{}'.format(tag))
                 # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'%s/%s\.(.*)' % (datadir, self.name))
+                    mask = re.compile(r'{}/{}\.(.*)'.format(datadir,
+                                                            self.name))
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
-                        pattern = os.path.join(datadir, 'log.%s' % ending)
+                        pattern = os.path.join(datadir,
+                                               'log.{}'.format(ending))
                         if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir,
                                                 quiet=True,
-                                                nml='log.%s' % ending)
+                                                nml='log.{}'.format(ending))
 
                 # Sum the files that correspond to the tag
-                mask = re.compile(r'%s\.(.*)' % self.name)
+                mask = re.compile(r'{}\.(.*)'.format(self.name))
                 for k, file in enumerate(files):
-                    print('reading %s' % file)
+                    print('reading {}'.format(file))
                     tag = mask.search(file).groups(0)[0]
-                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                    nml = PizzaSetup(nml='log.{}'.format(tag), datadir=datadir,
                                      quiet=True)
                     filename = file
                     if k == 0:
                         self.tstart = nml.start_time
                         self.tstop = nml.stop_time  # will be replaced later
-                        data = self.read(filename, endian)
+                        data = self._read(filename, endian)
                     else:
                         if os.path.exists(filename):
-                            tmp = self.read(filename, endian)
+                            tmp = self._read(filename, endian)
                             data = self.add(data, tmp, nml.stop_time,
                                             nml.start_time)
             else:
-                pattern = os.path.join(datadir, '%s*' % self.name)
+                pattern = os.path.join(datadir, '{}*'.format(self.name))
                 files = scanDir(pattern)
                 filename = files[-1]
-                print('reading %s' % filename)
+                print('reading {}'.format(filename))
                 # Determine the setup
-                mask = re.compile(r'%s\.(.*)' % self.name)
+                mask = re.compile(r'{}\.(.*)'.format(self.name))
                 ending = mask.search(files[-1]).groups(0)[0]
-                if os.path.exists('log.%s' % ending):
+                if os.path.exists('log.{}'.format(ending)):
                     try:
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.%s' % ending)
+                                            nml='log.{}'.format(ending))
                     except AttributeError:
                         pass
 
-                data = self.read(filename, endian)
+                data = self._read(filename, endian)
 
         else:  # if all is requested
-            pattern = os.path.join(datadir, '%s.*' % self.name)
+            pattern = os.path.join(datadir, '{}.*'.format(self.name))
             files = scanDir(pattern)
 
             # Determine the setup
-            mask = re.compile(r'%s\.(.*)' % self.name)
+            mask = re.compile(r'{}\.(.*)'.format(self.name))
             for k, file in enumerate(files):
-                print('reading %s' % file)
+                print('reading {}'.format(file))
                 tag = mask.search(file).groups(0)[0]
-                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                nml = PizzaSetup(nml='log.{}'.format(tag), datadir=datadir,
                                  quiet=True)
                 filename = file
                 if k == 0:
                     self.tstart = nml.start_time
                     self.tstop = nml.stop_time  # will be replaced afterwards
-                    data = self.read(filename, endian)
+                    data = self._read(filename, endian)
                 else:
                     if os.path.exists(filename):
-                        tmp = self.read(filename, endian)
+                        tmp = self._read(filename, endian)
                         data = self.add(data, tmp, nml.stop_time,
                                         nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                nml='log.%s' % tag)
+                                nml='log.{}'.format(tag))
 
             # Determine the setup
             mask = re.compile(r'.*\.(.*)')
             ending = mask.search(files[-1]).groups(0)[0]
-            if os.path.exists(os.path.join(datadir, 'log.%s' % ending)):
+            if os.path.exists(os.path.join(datadir, 'log.{}'.format(ending))):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % ending)
+                                    nml='log.{}'.format(ending))
 
         self.assemble(data)
 
@@ -493,34 +497,31 @@ class Pizza2DSpectrum(PizzaSetup):
 
         return out
 
-    def read(self, filename, endian='l'):
+    def _read(self, filename, endian='l'):
         """
         :param filename: name of the input file
         :type filename: str
         :param endian: endianness of the binary file
         :type endian: str
         """
-        file = open(filename, 'rb')
-        dt = np.dtype("i4, 6f8")
-        self.version, params = np.fromfile(file, dtype=dt, count=1)[0]
-        self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = params
-        dt = np.dtype("4i4")
-        self.n_r_max, self.n_m_max, self.m_max, self.minc = \
-            np.fromfile(file, dtype=dt, count=1)[0]
+        with open(filename, 'rb') as file:
+            self.version = np.fromfile(file, dtype=np.int32, count=1)[0]
+            self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = \
+                np.fromfile(file, dtype=np.float64, count=6)
+            self.n_r_max, self.n_m_max, self.m_max, self.minc = \
+                np.fromfile(file, dtype=np.int32, count=4)
 
-        dt = np.dtype("%if8" % self.n_r_max)
-        self.radius = np.fromfile(file, dtype=dt, count=1)[0]
-        self.idx2m = np.zeros(self.n_m_max)
-        for i in range(self.n_m_max):
-            self.idx2m[i] = i*self.minc
+            self.radius = np.fromfile(file, dtype=np.float64,
+                                      count=self.n_r_max)
+            self.idx2m = np.zeros(self.n_m_max)
+            for i in range(self.n_m_max):
+                self.idx2m[i] = i*self.minc
 
-        dt = np.dtype("(%i,%i)f8" % (self.n_r_max, self.n_m_max))
-        if self.version == 1:
-            data = np.fromfile(file, dtype=dt, count=3)
-        elif self.version == 2:
-            data = np.fromfile(file, dtype=dt, count=6)
-
-        file.close()
+            dt = np.dtype("(%i,%i)f8" % (self.n_r_max, self.n_m_max))
+            if self.version == 1:
+                data = np.fromfile(file, dtype=dt, count=3)
+            elif self.version == 2:
+                data = np.fromfile(file, dtype=dt, count=6)
 
         return data
 

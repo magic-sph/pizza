@@ -76,34 +76,34 @@ class PizzaBalance(PizzaSetup):
         logFiles = scanDir(pattern)
 
         if tag is not None:
-            pattern = os.path.join(datadir, 'vphi_bal.%s' % tag)
+            pattern = os.path.join(datadir, 'vphi_bal.{}'.format(tag))
             files = scanDir(pattern)
 
             #  Either the log.tag directly exists and the setup is easy
             #  to obtain
-            if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+            if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % tag)
+                                    nml='log.{}'.format(tag))
             #  Or the tag is a bit more complicated and we need to find
             #  the corresponding log file
             else:
-                mask = re.compile(r'%s/vphi_bal\.(.*)' % (datadir))
+                mask = re.compile(r'{}/vphi_bal\.(.*)'.format(datadir))
                 if mask.match(files[-1]):
                     ending = mask.search(files[-1]).groups(0)[0]
-                    pattern = os.path.join(datadir, 'log.%s' % ending)
+                    pattern = os.path.join(datadir, 'log.{}'.format(ending))
                     if os.path.exists(pattern):
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.%s' % ending)
+                                            nml='log.{}'.format(ending))
 
             for k, file in enumerate(files):
-                print('reading %s' % file)
+                print('reading {}'.format(file))
                 if k == 0:
                     self.radius, self.time, self.vp, self.dvpdt, \
                         self.rey_stress, self.ek_pump, self.visc = \
-                        self.read(file, endian)
+                        self._read(file, endian)
                 else:
                     radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
-                                              self.read(file, endian)
+                                              self._read(file, endian)
                     self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
                              visc)
 
@@ -111,17 +111,17 @@ class PizzaBalance(PizzaSetup):
         elif not all:
             if len(logFiles) != 0:
                 PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
-                name = 'vphi_bal.%s' % self.tag
+                name = 'vphi_bal.{}'.format(self.tag)
                 filename = os.path.join(datadir, name)
-                print('reading %s' % filename)
+                print('reading {}'.format(filename))
                 self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
-                    self.ek_pump, self.visc = self.read(filename, endian)
+                    self.ek_pump, self.visc = self._read(filename, endian)
             else:
                 dat = scanDir('vphi_bal.*')
                 filename = dat[-1][1]
-                print('reading %s' % filename)
+                print('reading {}'.format(filename))
                 self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
-                    self.ek_pump, self.visc = self.read(filename, endian)
+                    self.ek_pump, self.visc = self._read(filename, endian)
 
         # If no tag is specified but all=True, all the directory is plotted
         else:
@@ -130,14 +130,14 @@ class PizzaBalance(PizzaSetup):
             pattern = os.path.join(datadir, 'vphi_bal.*')
             files = scanDir(pattern)
             for k, file in enumerate(files):
-                print('reading %s' % file)
+                print('reading {}'.format(file))
                 if k == 0:
                     self.radius, self.time, self.vp, self.dvpdt, \
                         self.rey_stress, self.ek_pump, self.visc = \
-                        self.read(file, endian)
+                        self._read(file, endian)
                 else:
                     radius, time, vp, dvpdt, rey_stress, ek_pump, visc = \
-                        self.read(file, endian)
+                        self._read(file, endian)
                     self.add(time, radius, vp, dvpdt, rey_stress, ek_pump,
                              visc)
 
@@ -159,7 +159,7 @@ class PizzaBalance(PizzaSetup):
             self.visc = interp_dct(self.visc, nr_new)
 
             # We have a situation here:
-            self.radius = radius
+            self.radius = new.radius
 
         if new.time[0] == self.time[-1]:
             out.time = np.concatenate((self.time, new.time[1:]), axis=0)
@@ -211,7 +211,7 @@ class PizzaBalance(PizzaSetup):
             self.ek_pump = np.concatenate((self.ek_pump, ek_pump), axis=0)
             self.visc = np.concatenate((self.visc, visc), axis=0)
 
-    def read(self, filename, endian):
+    def _read(self, filename, endian):
         """
         Read one vphi_bal.TAG file
         """
@@ -220,8 +220,8 @@ class PizzaBalance(PizzaSetup):
         # This is right now the only way to properly stack vphi_bal files that
         # have different radial resolution
         tag = filename.split('vphi_bal.')[-1]
-        if os.path.exists('log.%s' % tag):
-            stp = PizzaSetup(nml='log.%s' % tag, quiet=True)
+        if os.path.exists('log.{}'.format(tag)):
+            stp = PizzaSetup(nml='log.{}'.format(tag), quiet=True)
             n_r_max = stp.n_r_max
         else:
             n_r_max = self.n_r_max
@@ -251,23 +251,21 @@ class PizzaBalance(PizzaSetup):
 
             file.close()
         except:  # New file format (without record marker)
-            file = open(filename, 'rb')
-            data = np.fromfile(file, dtype=np.float64)
-            self.ra, self.ek, self.pr, self.radratio, self.raxi, self.sc = \
-                data[0:6]
-            radius = data[6:7+n_r_max-1]
-            data = data[7+n_r_max-1:]
-            nsteps = len(data)//(5*n_r_max+1)
+            with open(filename, 'rb') as file:
+                data = np.fromfile(file, dtype=np.float64)
+                self.ra, self.ek, self.pr, self.radratio, self.raxi, \
+                    self.sc = data[0:6]
+                radius = data[6:7+n_r_max-1]
+                data = data[7+n_r_max-1:]
+                nsteps = len(data)//(5*n_r_max+1)
 
-            data = data.reshape((nsteps, 5*n_r_max+1))
-            time = data[:, 0]
-            vp = data[:, 1:n_r_max+1]
-            dvpdt = data[:, n_r_max+1:2*n_r_max+1]
-            rey_stress = data[:, 2*n_r_max+1:3*n_r_max+1]
-            ek_pump = data[:, 3*n_r_max+1:4*n_r_max+1]
-            visc = data[:, 4*n_r_max+1:5*n_r_max+1]
-
-            file.close()
+                data = data.reshape((nsteps, 5*n_r_max+1))
+                time = data[:, 0]
+                vp = data[:, 1:n_r_max+1]
+                dvpdt = data[:, n_r_max+1:2*n_r_max+1]
+                rey_stress = data[:, 2*n_r_max+1:3*n_r_max+1]
+                ek_pump = data[:, 3*n_r_max+1:4*n_r_max+1]
+                visc = data[:, 4*n_r_max+1:5*n_r_max+1]
 
         return radius, time, vp, dvpdt, rey_stress, ek_pump, visc
 
@@ -279,24 +277,22 @@ class PizzaBalance(PizzaSetup):
         :type filename: str
         """
 
-        out = open('%s' % filename, 'wb')
-        x = np.array([self.ra, self.ek, self.pr, self.radratio,
-                      self.raxi, self.sc], dtype=np.float64)
-        x.tofile(out)
-        self.radius.tofile(out)
-
-        nsteps = len(self.time)
-
-        for i in range(nsteps):
-            x = np.array([self.time[i]], dtype=np.float64)
+        with open(filename, 'wb') as out:
+            x = np.array([self.ra, self.ek, self.pr, self.radratio,
+                          self.raxi, self.sc], dtype=np.float64)
             x.tofile(out)
-            self.vp[i, :].tofile(out)
-            self.dvpdt[i, :].tofile(out)
-            self.rey_stress[i, :].tofile(out)
-            self.ek_pump[i, :].tofile(out)
-            self.visc[i, :].tofile(out)
+            self.radius.tofile(out)
 
-        out.close()
+            nsteps = len(self.time)
+
+            for i in range(nsteps):
+                x = np.array([self.time[i]], dtype=np.float64)
+                x.tofile(out)
+                self.vp[i, :].tofile(out)
+                self.dvpdt[i, :].tofile(out)
+                self.rey_stress[i, :].tofile(out)
+                self.ek_pump[i, :].tofile(out)
+                self.visc[i, :].tofile(out)
 
     def plot(self, nstep=1):
         """
@@ -400,97 +396,99 @@ class PizzaVortBalance(PizzaSetup):
 
         if not all:
             if tag is not None:
-                pattern = os.path.join(datadir, '%s.%s' % (self.name, tag))
+                pattern = os.path.join(datadir, '{}.{}'.format(self.name, tag))
                 files = scanDir(pattern)
                 # Either the log.tag directly exists and the setup is easy
                 # to obtain
-                if os.path.exists(os.path.join(datadir, 'log.%s' % tag)):
+                if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
                     PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                        nml='log.%s' % tag)
+                                        nml='log.{}'.format(tag))
                 # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'%s/%s\.(.*)' % (datadir, self.name))
+                    mask = re.compile(r'{}/{}\.(.*)'.format(datadir,
+                                                            self.name))
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
-                        pattern = os.path.join(datadir, 'log.%s' % ending)
+                        pattern = os.path.join(datadir,
+                                               'log.{}'.format(ending))
                         if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir,
                                                 quiet=True,
-                                                nml='log.%s' % ending)
+                                                nml='log.{}'.format(ending))
 
                 # Sum the files that correspond to the tag
-                mask = re.compile(r'%s\.(.*)' % self.name)
+                mask = re.compile(r'{}\.(.*)'.format(self.name))
                 for k, file in enumerate(files):
-                    print('reading %s' % file)
+                    print('reading {}'.format(file))
                     tag = mask.search(file).groups(0)[0]
-                    nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
-                                     quiet=True)
+                    nml = PizzaSetup(nml='log.{}'.format(tag),
+                                     datadir=datadir, quiet=True)
                     filename = file
                     if k == 0:
                         self.tstart = nml.start_time
                         self.tstop = nml.stop_time  # will be replaced later
-                        data = self.read(filename, endian)
+                        data = self._read(filename, endian)
                     else:
                         if os.path.exists(filename):
-                            tmp = self.read(filename, endian)
+                            tmp = self._read(filename, endian)
                             data = self.add(data, tmp, nml.stop_time,
                                             nml.start_time)
 
             else:
-                pattern = os.path.join(datadir, '%s*' % self.name)
+                pattern = os.path.join(datadir, '{}*'.format(self.name))
                 files = scanDir(pattern)
                 filename = files[-1]
-                print('reading %s' % filename)
+                print('reading {}'.format(filename))
                 # Determine the setup
-                mask = re.compile(r'%s\.(.*)' % self.name)
+                mask = re.compile(r'{}\.(.*)'.format(self.name))
                 ending = mask.search(files[-1]).groups(0)[0]
-                if os.path.exists('log.%s' % ending):
+                if os.path.exists('log.{}'.format(ending)):
                     try:
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.%s' % ending)
+                                            nml='log.{}'.foramt(ending))
                     except AttributeError:
                         pass
 
-                data = self.read(filename, endian)
+                data = self._read(filename, endian)
 
         else:  # if all is requested
-            pattern = os.path.join(datadir, '%s.*' % self.name)
+            pattern = os.path.join(datadir, '{}.*'.format(self.name))
             files = scanDir(pattern)
 
             # Determine the setup
-            mask = re.compile(r'%s\.(.*)' % self.name)
+            mask = re.compile(r'{}\.(.*)'.format(self.name))
             for k, file in enumerate(files):
-                print('reading %s' % file)
+                print('reading {}'.format(file))
                 tag = mask.search(file).groups(0)[0]
-                nml = PizzaSetup(nml='log.%s' % tag, datadir=datadir,
+                nml = PizzaSetup(nml='log.{}'.format(tag), datadir=datadir,
                                  quiet=True)
                 filename = file
                 if k == 0:
                     self.tstart = nml.start_time
                     self.tstop = nml.stop_time  # will be overwritten later
-                    data = self.read(filename, endian)
+                    data = self._read(filename, endian)
                 else:
                     if os.path.exists(filename):
-                        tmp = self.read(filename, endian)
+                        tmp = self._read(filename, endian)
                         data = self.add(data, tmp, nml.stop_time,
                                         nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                nml='log.%s' % tag)
+                                nml='log.{}'.format(tag))
 
             # Determine the setup
             mask = re.compile(r'.*\.(.*)')
             ending = mask.search(files[-1]).groups(0)[0]
-            if os.path.exists(os.path.join(datadir, 'log.%s' % ending)):
+            if os.path.exists(os.path.join(datadir, 'log.{}'.format(ending))):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.%s' % ending)
+                                    nml='log.{}'.format(ending))
 
         self.assemble(data)
 
         if iplot:
             self.plot()
 
-    def read(self, filename, endian='l'):
+    def _read(self, filename, endian='l'):
         """
         :param filename: name of the input file
         :type filename: str
@@ -499,27 +497,24 @@ class PizzaVortBalance(PizzaSetup):
         :returns data: a numpy array that contains all the time-averaged fields
         :type data: numpy.ndarray
         """
-        file = open(filename, 'rb')
-        dt = np.dtype("i4, 6f8")
-        self.version, params = np.fromfile(file, dtype=dt, count=1)[0]
-        self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = params
-        dt = np.dtype("4i4")
-        self.n_r_max, self.n_m_max, self.m_max, self.minc = \
-            np.fromfile(file, dtype=dt, count=1)[0]
+        with open(filename, 'rb') as file:
+            self.version = np.fromfile(file, dtype=np.int32, count=1)[0]
+            self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = \
+                np.fromfile(file, dtype=np.float4, count=6)
+            self.n_r_max, self.n_m_max, self.m_max, self.minc = \
+                np.fromfile(file, dtype=np.int32, count=4)
 
-        dt = np.dtype("%if8" % self.n_r_max)
-        self.radius = np.fromfile(file, dtype=dt, count=1)[0]
-        self.idx2m = np.zeros(self.n_m_max)
-        for i in range(self.n_m_max):
-            self.idx2m[i] = i*self.minc
+            self.radius = np.fromfile(file, dtype=np.float64,
+                                      count=self.n_r_max)
+            self.idx2m = np.zeros(self.n_m_max)
+            for i in range(self.n_m_max):
+                self.idx2m[i] = i*self.minc
 
-        dt = np.dtype("(%i,%i)f8" % (self.n_r_max, self.n_m_max))
-        if self.version == 1:
-            data = np.fromfile(file,  dtype=dt, count=9)
-        elif self.version == 2:
-            data = np.fromfile(file,  dtype=dt, count=18)
-
-        file.close()
+            dt = np.dtype("(%i,%i)f8" % (self.n_r_max, self.n_m_max))
+            if self.version == 1:
+                data = np.fromfile(file,  dtype=dt, count=9)
+            elif self.version == 2:
+                data = np.fromfile(file,  dtype=dt, count=18)
 
         return data
 
