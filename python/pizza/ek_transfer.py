@@ -96,7 +96,8 @@ class PizzaTransfer(PizzaSetup):
         fig, ax = plt.subplots()
         vmax = abs(self.trans[1:,1:]).max()
         vmin = -vmax
-        im = ax.pcolormesh(self.idx2m+1, self.idx2m+1, self.trans,
+        im = ax.pcolormesh(self.idx2m[:self.n_m_transfer]+1,
+                           self.idx2m[:self.n_m_transfer]+1, self.trans,
                            cmap=plt.get_cmap(cm),
                            vmax=vmax, vmin=vmin)
         ax.set_xlabel("m+1")
