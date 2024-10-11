@@ -10,3 +10,4 @@ from .spectrum import *
 from .averages import *
 from .hankel import *
 from .ek_transfer import *
+from .libmelt import *
