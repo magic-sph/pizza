@@ -123,9 +123,9 @@ contains
 
       !-- Get the radial derivatives
       call get_dr(us_Mloc,dus_Mloc,nMstart,nMstop,n_r_max,rscheme,nocopy=.false.,&
-           &      l_dct_in=.true.,l_dct_out=.true.)
+           &      l_dct_in=.true.)
       call get_dr(up_Mloc,dup_Mloc,nMstart,nMstop,n_r_max,rscheme,nocopy=.false.,&
-           &      l_dct_in=.true.,l_dct_out=.true.)
+           &      l_dct_in=.true.)
 
       !-- Transpose them in the r-distributed configuration
       call m2r_single%transp_m2r(dus_Mloc,dus_Rloc)
