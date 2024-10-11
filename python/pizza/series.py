@@ -171,6 +171,17 @@ class PizzaTs(PizzaSetup):
             else:
                 self.chemPower = np.zeros_like(self.buoPower)
                 self.viscDiss = data[:, 2]
+        elif self.field == 'phase':
+            self.time = data[:, 0]
+            self.rmelt_mean = data[:, 1]
+            self.tmelt_mean = data[:, 2]
+            self.rmelt_min = data[:, 3]
+            self.rmelt_max = data[:, 4]
+            self.volS = data[:, 5]
+            self.ekinS = data[:, 6]
+            self.ekinL = data[:, 7]
+            self.phase_min = data[:, 8]
+            self.phase_max = data[:, 9]
         elif self.field == 'power_3D':
             self.time = data[:, 0]
             self.buoPower = data[:, 1]
@@ -204,9 +215,9 @@ class PizzaTs(PizzaSetup):
         if self.field == 'e_kin':
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.plot(self.time, self.us2, ls='-', label='us**2', c='#1f77b4')
-            ax.plot(self.time, self.up2, ls='-', label='up**2', c='#d62728')
-            ax.plot(self.time, self.up2_axi, ls='--', c='#d62728',
+            ax.plot(self.time, self.us2, ls='-', label='us**2')
+            ax.plot(self.time, self.up2, ls='-', label='up**2')
+            ax.plot(self.time, self.up2_axi, ls='--', c='C1',
                     label='up_axi**2')
             ax.plot(self.time, self.ekin, ls='-', c='k')
             ax.legend(loc='best', frameon=False)
@@ -216,10 +227,10 @@ class PizzaTs(PizzaSetup):
         elif self.field == 'e_kin_3D':
             fig = plt.figure()
             ax = fig.add_subplot(111)
-            ax.plot(self.time, self.us2, ls='-', c='#1f77b4', label='us**2')
-            ax.plot(self.time, self.up2, ls='-', c='#d62728', label='up**2')
-            ax.plot(self.time, self.uz2, ls='-', c='#aec7e8', label='uz**2')
-            ax.plot(self.time, self.up2_axi, ls='--', c='#d62728',
+            ax.plot(self.time, self.us2, ls='-', label='us**2')
+            ax.plot(self.time, self.up2, ls='-', label='up**2')
+            #ax.plot(self.time, self.uz2, ls='-', c='#aec7e8', label='uz**2')
+            ax.plot(self.time, self.up2_axi, ls='--', c='C1',
                     label='up_axi**2')
             ax.plot(self.time, self.ekin, ls='-', c='k')
             ax.legend(loc='best', frameon=False)
@@ -296,6 +307,25 @@ class PizzaTs(PizzaSetup):
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Power (3D)')
+            fig.tight_layout()
+        elif self.field == 'phase':
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax1 = ax.twinx()
+            ax.plot(self.time, self.rmelt_mean, label='r melt')
+            ax1.plot(self.time, self.tmelt_mean, label='T melt', color='C1')
+            ax.set_xlim(self.time[0], self.time[-1])
+            ax.set_xlabel('Time')
+            ax.set_ylabel('r melt')
+            ax1.set_ylabel('T(r melt)')
+            fig.tight_layout()
+
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.semilogy(self.time, self.ekinS/self.ekinL)
+            ax.set_xlim(self.time[0], self.time[-1])
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Relative energy fraction in solidus')
             fig.tight_layout()
         elif self.field == 'length_scales':
             fig = plt.figure()

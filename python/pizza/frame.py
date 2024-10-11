@@ -174,6 +174,12 @@ class PizzaFields(PizzaSetup):
             self.xi_m[0, :] += self.xicond
             self.xi = spec_spat(self.xi_m, self.n_phi_max)
 
+        filename = self.get_filename('frame_phase', ivar, datadir, tag, verbose)
+        if filename is not None:
+            f = Frame(filename, endian=endian)
+            self.phase_m = f.field_m
+            self.phase = spec_spat(self.phase_m, self.n_phi_max)
+
     def get_filename(self, prefix, ivar, datadir, tag, verbose):
         """
         This routine determines the filename based on what is available
@@ -295,6 +301,15 @@ class PizzaFields(PizzaSetup):
                     cm = cmo.thermal
                 except ModuleNotFoundError:
                     cm = 'magma'
+            normed = False
+        elif field in ('phase', 'Phase', 'phi', 'Phi'):
+            if cm is None:
+                try:
+                    import cmocean.cm as cmo
+                    cm = cmo.tempo
+                except ModuleNotFoundError:
+                    cm = 'binary'
+            data = self.phase
             normed = False
         elif field in ('composition', 'Composition', 'xi', 'Xi', 'chem',
                        'Chem', 'comp', 'Comp'):
