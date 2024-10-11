@@ -335,6 +335,11 @@ class PizzaFields(PizzaSetup):
             data = self.uphi
             if cm is None:
                 cm = 'seismic'
+        elif field in ('Ek', 'ek', 'u2', 'U2', 'v2', 'V2', 'ekin', 'Ekin'):
+            data = 0.5*(self.us**2+self.uphi**2)
+            normed = False
+            if cm is None:
+                cm = 'Blues'
 
         if deminc:
             data = symmetrize(data, ms=self.minc)
