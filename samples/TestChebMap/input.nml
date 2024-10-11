@@ -1,15 +1,17 @@
 &grid
-   n_r_max    =64,
-   n_cheb_max =64,
+   n_r_max    =65,
+   n_cheb_max =65,
    m_max      =32,
    minc       =1,
 /
 &control
    tag        ="test",
    l_newmap   =.true.,
+  map_function='KTL',
    alph1      =0.8d0,
- n_time_steps =1000,
-   dtMax      =1d-4,
+ n_time_steps =300,
+   dtMax      =3d-4,
+   time_scheme='BPR353',
 /
  &phys_param
   ra          =5.0E+04,

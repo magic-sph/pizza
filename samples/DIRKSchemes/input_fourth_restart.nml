@@ -1,6 +1,6 @@
 &grid
-   n_r_max    =32,
-   n_cheb_max =32,
+   n_r_max    =33,
+   n_cheb_max =33,
    m_max      =32,
    minc       =1,
 /
@@ -11,7 +11,6 @@
    courfac    =1.0d0,
  n_time_steps =100,
    dtMax      =1d-5,
-  l_rerror_fix=.true.,
 /
  &phys_param
   ra          =6.0E+04,
