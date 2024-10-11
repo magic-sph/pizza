@@ -1,11 +1,9 @@
 #!/usr/bin/env python
-from __future__ import print_function
 import argparse
 import os
 import shutil
 import sys
 import subprocess as sp
-import numpy as np
 import unittest
 import NonRotRa2e3.unitTest
 import RotE1e3EkPump.unitTest
@@ -28,18 +26,18 @@ def getParser():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--version', action='version',
-                        version='%(prog)s '+__version__, 
+                        version='%(prog)s '+__version__,
                         help="Show program's version number and exit.")
     parser.add_argument('--level', action='store', dest='test_level', type=int,
                         default=-1, help='Test level')
-    parser.add_argument('--use-debug-flags', action='store_true', 
-                        dest='use_debug_flags', 
+    parser.add_argument('--use-debug-flags', action='store_true',
+                        dest='use_debug_flags',
                         default=False, help='Use compilation debug flags')
-    parser.add_argument('--use-mkl', action='store_true', dest='use_mkl', 
-                        default=False, 
+    parser.add_argument('--use-mkl', action='store_true', dest='use_mkl',
+                        default=False,
                         help='Use the MKL for FFTs and Lapack calls')
-    parser.add_argument('--use-precond', action='store', dest='use_precond', 
-                        type=bool, default=True, 
+    parser.add_argument('--use-precond', action='store', dest='use_precond',
+                        type=bool, default=True,
                         help='Use matrix preconditioning')
     parser.add_argument('--nranks', action='store', dest='nranks', type=int,
                         default=4, help='Specify the number of MPI ranks')
@@ -54,25 +52,25 @@ def wizard():
     print("pizza's auto-tests suite")
     print('\n')
 
-    print("                         ___              ")  
-    print("                      |  ~~--.            ")
-    print("                      |%=@%%/             ")
-    print("                      |o%%%/              ")
-    print("                   __ |%%o/               ")
-    print("             _,--~~ | |(_/ ._             ")
-    print("          ,/'  m%%%%| |o/ /  `\.          ")
-    print("         /' m%%o(_)%| |/ /o%%m `\         ")
-    print("       /' %%@=%o%%%o|   /(_)o%%% `\       ")
-    print("      /  %o%%%%%=@%%|  /%%o%%@=%%  \      ")
-    print("     |  (_)%(_)%%o%%| /%%%=@(_)%%%  |     ")
-    print("     | %%o%%%%o%%%(_|/%o%%o%%%%o%%% |     ")
-    print("     | %%o%(_)%%%%%o%(_)%%%o%%o%o%% |     ")
-    print("     |  (_)%%=@%(_)%o%o%%(_)%o(_)%  |     ")
-    print("      \ ~%%o%%%%%o%o%=@%%o%%@%%o%~ /      ")
-    print("       \. ~o%%(_)%%%o%(_)%%(_)o~ ,/       ")
-    print("         \_ ~o%=@%(_)%o%%(_)%~ _/         ")
-    print("           `\_~~o%%%o%%%%%~~_/'           ")
-    print("              `--..____,,--'              ")  
+    print(r"                         ___              ")
+    print(r"                      |  ~~--.            ")
+    print(r"                      |%=@%%/             ")
+    print(r"                      |o%%%/              ")
+    print(r"                   __ |%%o/               ")
+    print(r"             _,--~~ | |(_/ ._             ")
+    print(r"          ,/'  m%%%%| |o/ /  `\.          ")
+    print(r"         /' m%%o(_)%| |/ /o%%m `\         ")
+    print(r"       /' %%@=%o%%%o|   /(_)o%%% `\       ")
+    print(r"      /  %o%%%%%=@%%|  /%%o%%@=%%  \      ")
+    print(r"     |  (_)%(_)%%o%%| /%%%=@(_)%%%  |     ")
+    print(r"     | %%o%%%%o%%%(_|/%o%%o%%%%o%%% |     ")
+    print(r"     | %%o%(_)%%%%%o%(_)%%%o%%o%o%% |     ")
+    print(r"     |  (_)%%=@%(_)%o%o%%(_)%o(_)%  |     ")
+    print(r"      \ ~%%o%%%%%o%o%=@%%o%%@%%o%~ /      ")
+    print(r"       \. ~o%%(_)%%%o%(_)%%(_)o~ ,/       ")
+    print(r"         \_ ~o%=@%(_)%o%%(_)%~ _/         ")
+    print(r"           `\_~~o%%%o%%%%%~~_/'           ")
+    print(r"              `--..____,,--'              ")
     print('\n')
 
 
@@ -88,9 +86,9 @@ def cmake(args, startdir, execDir):
     os.chdir(execDir)
 
     if args.use_debug_flags:
-         build_type='-DCMAKE_BUILD_TYPE=Debug'
+        build_type = '-DCMAKE_BUILD_TYPE=Debug'
     else:
-         build_type='-DCMAKE_BUILD_TYPE=Release'
+        build_type = '-DCMAKE_BUILD_TYPE=Release'
 
     if args.use_precond:
         precond_opt = '-DUSE_PRECOND=yes'
@@ -103,8 +101,8 @@ def cmake(args, startdir, execDir):
         mkl_opt = '-DUSE_LAPACKLIB=LAPACK'
 
     # Compilation
-    cmd = 'cmake %s/.. %s %s %s' % (startdir, build_type,
-                                    precond_opt, mkl_opt)
+    cmd = 'cmake {}/.. {} {} {}'.format(startdir, build_type,
+                                        precond_opt, mkl_opt)
     print('  '+cmd)
     print('\n')
     sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'))
@@ -133,12 +131,12 @@ def get_env(args):
         c_comp = os.environ['CC']
     else:
         c_comp = 'CC is not defined. Default C compiler will be used!'
-        
-    print('  FC        : %s' % fortran_comp)
-    print('  CC        : %s' % c_comp)
-    print('  nranks    : %i' % args.nranks)
-    print('  mpi exec  : %s' % args.mpicmd)
-    print('  MKL       : %r' % args.use_mkl)
+
+    print('  FC        : {}'.format(fortran_comp))
+    print('  CC        : {}'.format(c_comp))
+    print('  nranks    : {:d}'.format(args.nranks))
+    print('  mpi exec  : {}'.format(args.mpicmd))
+    print('  MKL       : {}'.format(args.use_mkl))
     print('\n')
 
 
@@ -146,11 +144,11 @@ def get_exec_cmd(args, execDir):
     """
     Determine execution command
     """
-    pizzaExec = '%s/pizza.exe' % execDir
+    pizzaExec = '{}/pizza.exe'.format(execDir)
 
     os.environ['I_MPI_PIN_PROCESSOR_LIST'] = 'allcores'
 
-    execCmd = '%s -n %i %s' % (args.mpicmd, args.nranks, pizzaExec)
+    execCmd = '{} -n {} {}'.format(args.mpicmd, args.nranks, pizzaExec)
 
     return execCmd
 
@@ -170,70 +168,68 @@ def getSuite(startdir, cmd, precision, args):
 
     if args.test_level in [-1, 0]:
         # Non-rotating annulus convection
-        suite.addTest(NonRotRa2e3.unitTest.NonRotRa2e3('outputFileDiff',
-                                                  '%s/NonRotRa2e3' \
-                                                  % startdir, 
-                                                  execCmd=cmd,
-                                                  precision=precision))
+        suite.addTest(NonRotRa2e3.unitTest.NonRotRa2e3(
+                      'outputFileDiff',
+                      '{}/NonRotRa2e3'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # QG case with Ekman pumping
-        suite.addTest(RotE1e3EkPump.unitTest.RotE1e3EkPump('outputFileDiff',
-                                                  '%s/RotE1e3EkPump' % startdir, 
-                                                  execCmd=cmd,
-                                                  precision=precision))
+        suite.addTest(RotE1e3EkPump.unitTest.RotE1e3EkPump(
+                      'outputFileDiff',
+                      '{}/RotE1e3EkPump'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # Fingering convection
-        suite.addTest(FingConv.unitTest.FingConv('outputFileDiff',
-                                                 '%s/FingConv' % startdir, 
-                                                 execCmd=cmd,
-                                                 precision=precision))
+        suite.addTest(FingConv.unitTest.FingConv(
+                      'outputFileDiff',
+                      '{}/FingConv'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # QG case with Cheb integration method
-        suite.addTest(RotInteg.unitTest.RotInteg('outputFileDiff',
-                                                 '%s/RotInteg' % startdir, 
-                                                 execCmd=cmd,
-                                                 precision=precision))
+        suite.addTest(RotInteg.unitTest.RotInteg(
+                      'outputFileDiff',
+                      '{}/RotInteg'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # Inhomogeneous heat flux at the outer Boundary
-        suite.addTest(InhomogeneousHeatFlux.unitTest.InhomogeneousHeatFlux( \
-                                              'outputFileDiff',
-                                              '%s/InhomogeneousHeatFlux' % startdir,
-                                              execCmd=cmd,
-                                              precision=precision))
+        suite.addTest(InhomogeneousHeatFlux.unitTest.InhomogeneousHeatFlux(
+                      'outputFileDiff',
+                      '{}/InhomogeneousHeatFlux'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # Test restart from a checkpoint
-        suite.addTest(TestRestart.unitTest.TestRestart('outputFileDiff',
-                                                  '%s/TestRestart' % startdir, 
-                                                  execCmd=cmd,
-                                                  precision=precision))
+        suite.addTest(TestRestart.unitTest.TestRestart(
+                      'outputFileDiff',
+                      '{}/TestRestart'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # Test restart from a checkpoint and remap to a cheb grid
-        suite.addTest(TestChebMap.unitTest.TestChebMap('outputFileDiff',
-                                                  '%s/TestChebMap' % startdir, 
-                                                  execCmd=cmd,
-                                                  precision=precision))
+        suite.addTest(TestChebMap.unitTest.TestChebMap(
+                      'outputFileDiff',
+                      '{}/TestChebMap'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # Test several multistep schemes
-        suite.addTest(MultistepSchemes.unitTest.TestMultistepSchemes('outputFileDiff',
-                                                  '%s/MultistepSchemes' % startdir, 
-                                                  execCmd=cmd,
-                                                  precision=precision))
+        suite.addTest(MultistepSchemes.unitTest.TestMultistepSchemes(
+                      'outputFileDiff',
+                      '{}/MultistepSchemes'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # Test several DIRK schemes
-        suite.addTest(DIRKSchemes.unitTest.TestDIRKSchemes('outputFileDiff',
-                                                  '%s/DIRKSchemes' % startdir, 
-                                                  execCmd=cmd,
-                                                  precision=precision))
+        suite.addTest(DIRKSchemes.unitTest.TestDIRKSchemes(
+                      'outputFileDiff',
+                      '{}/DIRKSchemes'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # Test a timestep change
-        suite.addTest(TimeStepChange.unitTest.TimeStepChange('outputFileDiff',
-                                                  '%s/TimeStepChange' % startdir, 
-                                                  execCmd=cmd,
-                                                  precision=precision))
+        suite.addTest(TimeStepChange.unitTest.TimeStepChange(
+                      'outputFileDiff',
+                      '{}/TimeStepChange'.format(startdir),
+                      execCmd=cmd, precision=precision))
         # Test several Galerkin Bases
-        suite.addTest(GalerkinBases.unitTest.TestGalerkinBases('outputFileDiff',
-                                                  '%s/GalerkinBases' % startdir, 
-                                                  execCmd=cmd,
-                                                  precision=precision))
+        suite.addTest(GalerkinBases.unitTest.TestGalerkinBases(
+                      'outputFileDiff',
+                      '{}/GalerkinBases'.format(startdir),
+                      execCmd=cmd, precision=precision))
 
     return suite
 
 
 if __name__ == '__main__':
-    precision = 1e-8 # relative tolerance between expected and actual result
+    precision = 1e-8  # relative tolerance between expected and actual result
     startdir = os.getcwd()
-    execDir = '%s/tmp' % startdir # where pizza will be built
+    execDir = '{}/tmp'.format(startdir)  # where pizza will be built
 
     parser = getParser()
     args = parser.parse_args()
