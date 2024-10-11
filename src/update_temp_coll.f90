@@ -3,7 +3,8 @@ module update_temp_coll
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: one, zero
-   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, l_full_disk
+   use namelists, only: kbott, ktopt, tadvz_fac, TdiffFac, l_full_disk, &
+       &                l_phase_field, stef
    use radial_functions, only: rscheme, or1, or2, dtcond, tcond, beta
    use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
    use blocking, only: nMstart, nMstop
@@ -62,12 +63,14 @@ contains
 
    end subroutine finalize_temp_coll
 !------------------------------------------------------------------------------
-   subroutine update_temp_co(temp_Mloc, dtemp_Mloc, dTdt, tscheme, lMat, l_log_next)
+   subroutine update_temp_co(temp_Mloc, dtemp_Mloc, dTdt, phi_Mloc, tscheme, &
+              &              lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       logical,             intent(in) :: l_log_next
+      complex(cp),         intent(in) :: phi_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),       intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
@@ -81,6 +84,12 @@ contains
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt)
+
+      if ( l_phase_field ) then
+         do n_r=1,n_r_max
+            work_Mloc(:,n_r)=work_Mloc(:,n_r)+stef*phi_Mloc(:,n_r)
+         end do
+      end if
 
       do n_m=nMstart, nMstop
 
@@ -99,14 +108,10 @@ contains
          !-- Inhomogeneous B.Cs (if not zero)
          rhs(1)      =topt_Mloc(n_m)
          rhs(n_r_max)=bott_Mloc(n_m)
-         do n_r=2,n_r_max-1
-            rhs(n_r)=work_Mloc(n_m,n_r)
-         end do
+         rhs(2:n_r_max-1)=work_Mloc(n_m,2:n_r_max-1)
 
 #ifdef WITH_PRECOND_S
-         do n_r=1,n_r_max
-            rhs(n_r) = tMat_fac(n_r,n_m)*rhs(n_r)
-         end do
+         rhs(:) = tMat_fac(:,n_m)*rhs(:)
 #endif
 
          call solve_full_mat(tMat(:,:,n_m), n_r_max, n_r_max, tPivot(:, n_m), &
@@ -120,9 +125,7 @@ contains
 
       !-- set cheb modes > rscheme%n_max to zero (dealiazing)
       do n_r_out=rscheme%n_max+1,n_r_max
-         do n_m=nMstart,nMstop
-            temp_Mloc(n_m,n_r_out)=zero
-         end do
+         temp_Mloc(:,n_r_out)=zero
       end do
 
       !-- Roll the arrays before filling again the first block
@@ -130,15 +133,14 @@ contains
 
       !-- Calculation of the implicit part
       if ( tscheme%istage == tscheme%nstages ) then
-         call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, 1,   &
-              &                     tscheme%l_imp_calc_rhs(1),        &
-              &                     l_in_cheb_space=.true.)
+         call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, phi_Mloc, 1,   &
+              &                     tscheme%l_imp_calc_rhs(1), l_in_cheb_space=.true.)
       else
-         call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, tscheme%istage+1, &
-              &                     tscheme%l_imp_calc_rhs(tscheme%istage+1),      &
+         call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, phi_Mloc,    &
+              &                     tscheme%istage+1,                         &
+              &                     tscheme%l_imp_calc_rhs(tscheme%istage+1), &
               &                     l_in_cheb_space=.true.)
       end if
-
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       if ( l_log_next ) then
@@ -157,7 +159,7 @@ contains
       complex(cp), intent(inout) :: dtemp_exp_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m
+      integer :: n_r
 
       !-- Finish calculation of advection
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
@@ -165,20 +167,19 @@ contains
 
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
-         do n_m=nMstart, nMstop
-            dtemp_exp_last(n_m,n_r)=dtemp_exp_last(n_m,n_r)         &
-            &                       -or1(n_r)*work_Mloc(n_m,n_r)    &
-            &                       -us_Mloc(n_m,n_r)*(dtcond(n_r)- &
-            &                       tadvz_fac*beta(n_r)*tcond(n_r))
-         end do
+         dtemp_exp_last(:,n_r)=dtemp_exp_last(:,n_r)           &
+         &                       -or1(n_r)*work_Mloc(:,n_r)    &
+         &                       -us_Mloc(:,n_r)*(dtcond(n_r)- &
+         &                       tadvz_fac*beta(n_r)*tcond(n_r))
       end do
 
    end subroutine finish_exp_temp_coll
 !------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, istage, &
-              &                     l_calc_lin, l_in_cheb_space)
+   subroutine get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, phi_Mloc, &
+              &                     istage, l_calc_lin, l_in_cheb_space)
 
       !-- Input variables
+      complex(cp),       intent(in) :: phi_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),       intent(inout) :: temp_Mloc(nMstart:nMstop,n_r_max)
       integer,           intent(in) :: istage
       logical,           intent(in) :: l_calc_lin
@@ -209,10 +210,14 @@ contains
 
       if ( istage == 1 ) then
          do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               dTdt%old(n_m,n_r,istage)=temp_Mloc(n_m,n_r)
-            end do
+            dTdt%old(:,n_r,istage)=temp_Mloc(:,n_r)
          end do
+         if ( l_phase_field ) then
+            do n_r=1,n_r_max
+               dTdt%old(:,n_r,istage)=dTdt%old(:,n_r,istage) - &
+               &                        stef*phi_Mloc(:,n_r)
+            end do
+         end if
       end if
 
       if ( l_calc_lin ) then
@@ -230,12 +235,14 @@ contains
 
    end subroutine get_temp_rhs_imp_coll
 !------------------------------------------------------------------------------
-   subroutine assemble_temp_coll(temp_Mloc, dtemp_Mloc, dTdt, tscheme, l_log_next)
+   subroutine assemble_temp_coll(temp_Mloc, dtemp_Mloc, dTdt, phi_Mloc, &
+              &                  tscheme, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: l_log_next
       type(type_tarray),   intent(inout) :: dTdt
+      complex(cp),         intent(in) :: phi_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variable
       complex(cp), intent(inout) :: temp_Mloc(nMstart:nMstop,n_r_max)
@@ -245,6 +252,14 @@ contains
       integer :: n_r, n_m, m
 
       call tscheme%assemble_imex(work_Mloc, dTdt)
+
+      !-- In case phase field is used it needs to be substracted from work_Mloc
+      !-- since time advance handles \partial/\partial t (T-St*Phi)
+      if ( l_phase_field ) then
+         do n_r=1,n_r_max
+            work_Mloc(:,n_r)=work_Mloc(:,n_r)+stef*phi_Mloc(:,n_r)
+         end do
+      end if
 
       do n_r=2,n_r_max-1
          do n_m=nMstart,nMstop
@@ -281,9 +296,8 @@ contains
 
       !-- Finally call the construction of the implicit terms for the first stage
       !-- of next iteration
-      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, 1,   &
-           &                     tscheme%l_imp_calc_rhs(1),        &
-           &                     l_in_cheb_space=.false.)
+      call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, phi_Mloc, 1,   &
+           &                     tscheme%l_imp_calc_rhs(1), l_in_cheb_space=.false.)
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       if ( l_log_next ) then
@@ -358,10 +372,8 @@ contains
       end do
 
       !----- Factor for highest and lowest cheb:
-      do nR=1,n_r_max
-         tMat(nR,1)      =rscheme%boundary_fac*tMat(nR,1)
-         tMat(nR,n_r_max)=rscheme%boundary_fac*tMat(nR,n_r_max)
-      end do
+      tMat(:,1)      =rscheme%boundary_fac*tMat(:,1)
+      tMat(:,n_r_max)=rscheme%boundary_fac*tMat(:,n_r_max)
 
 #ifdef WITH_PRECOND_S
       ! compute the linesum of each line
@@ -376,9 +388,7 @@ contains
 
       !----- LU decomposition:
       call prepare_full_mat(tMat,n_r_max,n_r_max,tPivot,info)
-      if ( info /= 0 ) then
-         call abortRun('Singular matrix tMat!')
-      end if
+      if ( info /= 0 ) call abortRun('Singular matrix tMat!')
 
    end subroutine get_tempMat
 !------------------------------------------------------------------------------

@@ -29,6 +29,11 @@ module namelists
    real(cp), public :: radratio      ! Radius ratio
    real(cp), public :: raxi          ! Compisitional Rayleigh number
    real(cp), public :: sc            ! Schmidt number
+   real(cp), public :: stef          ! Stefan number
+   real(cp), public :: tmelt         ! Melting temperature
+   real(cp), public :: epsPhase      ! Cahn number
+   real(cp), public :: penaltyFac    ! penalty factor
+   real(cp), public :: phaseDiffFac  ! Diffusion coefficient in phase field equation
    real(cp), public :: tcond_fac     ! Rescaling of the conducting temperature
    real(cp), public :: xicond_fac    ! Rescaling of the conducting composition
    real(cp), public :: beta_shift    ! Shift the upper bound of \beta
@@ -42,6 +47,7 @@ module namelists
    integer,  public :: ktopt, kbott  ! Temperature boundary condition
    integer,  public :: ktopxi, kbotxi! Boundary conditions for chemical composition
    integer,  public :: ktopv, kbotv  ! Velocity boundary condition
+   integer,  public :: ktopphi, kbotphi  ! Boundary conditions for phase field
    integer,  public :: n_rings       ! Number of rings when turbulence is forced
    real(cp), public :: amp_forcing   ! Amplitude of forcing (in case turbulence is forced)
    real(cp), public :: dx_forcing    ! Grid spacing between two adjacent vortices in case of Cartesian forcing
@@ -86,6 +92,7 @@ module namelists
 
    real(cp), public :: amp_t
    integer,  public :: init_t
+   integer,  public :: init_phi
    real(cp), public :: amp_xi
    integer,  public :: init_xi
    real(cp), public :: scale_t
@@ -116,6 +123,7 @@ module namelists
    logical,  public :: l_energy_trans    ! Calculate the energy transfer between scales
    real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
    logical,  public :: l_heat
+   logical,  public :: l_phase_field
    logical,  public :: l_chem
    logical,  public :: l_AB1
    logical,  public :: l_bridge_step
@@ -133,6 +141,8 @@ module namelists
    integer,  public :: hdif_exp        ! Exponent of the hyperdiffusion profile
    integer,  public :: hdif_m          ! Azimuthal wavenumber for hdif
    integer,  public :: m_max_transfer  ! Azimuthal truncation when transfer of energy is computed
+   real(cp), public :: phi_top         ! Phase field value at the top
+   real(cp), public :: phi_bot         ! Phase field value at the top
 
    public :: read_namelists, write_namelists
 
@@ -157,17 +167,18 @@ contains
       &                matrix_solve,corio_term,buo_term,bc_method,  &
       &                mpi_transp,l_packed_transp,radial_scheme
       namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
-      namelist/phys_param/ra,ek,pr,raxi,sc,radratio,g0,g1,g2,       &
+      namelist/phys_param/ra,ek,pr,raxi,sc,stef,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,        &
       &                   l_temp_3D,tcond_fac,l_temp_advz,n_rings,  &
       &                   beta_shift,ktopxi,kbotxi,t_bot,t_top,     &
       &                   xi_bot,xi_top, l_xi_3D, xicond_fac,       &
       &                   h_temp, h_xi, container, beta_fac,        &
       &                   amp_forcing, radius_forcing, forcing_type,&
-      &                   dx_forcing
+      &                   dx_forcing, ktopphi, kbotphi, epsPhase,   &
+      &                   phaseDiffFac, penaltyFac, tmelt
       namelist/start_field/l_start_file,start_file,scale_t,init_t,amp_t, &
       &                    scale_u,init_u,amp_u,l_reset_t,amp_xi,init_xi,&
-      &                    scale_xi
+      &                    scale_xi, init_phi
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
       &                       l_vphi_balance, l_vort_balance, bl_cut,      &
@@ -297,6 +308,21 @@ contains
          l_chem=.false.
       else
          l_chem=.true.
+      end if
+
+      if ( stef == 0.0_cp ) then
+         l_phase_field=.false.
+      else
+         l_phase_field=.true.
+      end if
+
+      if ( l_phase_field ) then
+         if ( ktopphi /= 1 ) then
+            phi_top=0.0_cp ! Neumann
+         else
+            phi_top=one ! Dirichlet
+         end if
+         phi_bot=0.0_cp
       end if
 
       !-- Determine whether we also consider vertical advection of temperature
@@ -546,6 +572,11 @@ contains
       ek               =1.0e-3_cp
       raxi             =0.0e5_cp
       sc               =0.0_cp
+      stef             =0.0_cp
+      tmelt            =0.5_cp
+      phaseDiffFac     =one       ! Diffusion coefficient in phase field equation
+      epsPhase         =1.0e-2_cp ! Thickness of the transition
+      penaltyFac       =one       ! Penalty factor for velocity
       radratio         =0.35_cp
       tcond_fac        =one
       xicond_fac       =one
@@ -565,6 +596,8 @@ contains
       kbotxi           =1
       ktopv            =2
       kbotv            =2
+      ktopphi          =1
+      kbotphi          =1
       !----- Parameters for temp. BCs
       do n=1,3*n_t_bounds
          t_bot(n) =0.0_cp
@@ -592,6 +625,7 @@ contains
       init_u           =0
       scale_u          =1.0_cp
       amp_u            =0.0_cp
+      init_phi         =0
 
       !----- Output namelist
       n_log_step       =50
@@ -688,6 +722,8 @@ contains
       write(n_out,'(''  ek              ='',ES14.6,'','')') ek
       write(n_out,'(''  raxi            ='',ES14.6,'','')') raxi
       write(n_out,'(''  sc              ='',ES14.6,'','')') sc
+      write(n_out,'(''  stef            ='',ES14.6,'','')') stef
+      write(n_out,'(''  tmelt           ='',ES14.6,'','')') tmelt
       write(n_out,'(''  radratio        ='',ES14.6,'','')') radratio
       write(n_out,'(''  tcond_fac       ='',ES14.6,'','')') tcond_fac
       write(n_out,'(''  xicond_fac      ='',ES14.6,'','')') xicond_fac
@@ -699,6 +735,9 @@ contains
       write(n_out,'(''  amp_forcing     ='',ES14.6,'','')') amp_forcing
       write(n_out,'(''  dx_forcing      ='',ES14.6,'','')') dx_forcing
       write(n_out,'(''  radius_forcing  ='',ES14.6,'','')') radius_forcing
+      write(n_out,'(''  epsPhase        ='',ES14.6,'','')') epsPhase
+      write(n_out,'(''  penaltyFac      ='',ES14.6,'','')') penaltyFac
+      write(n_out,'(''  phaseDiffFac    ='',ES14.6,'','')') phaseDiffFac
       length=length_to_blank(forcing_type)
       write(n_out,*) " forcing_type    = """,forcing_type(1:length),""","
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
@@ -717,6 +756,9 @@ contains
       write(n_out,'(''  kbotxi          ='',i3,'','')') kbotxi
       write(n_out,'(''  ktopv           ='',i3,'','')') ktopv
       write(n_out,'(''  kbotv           ='',i3,'','')') kbotv
+      !-- B.C. for phase field
+      write(n_out,'(''  ktopphi         ='',i3,'','')') ktopphi
+      write(n_out,'(''  kbotphi         ='',i3,'','')') kbotphi
       write(n_out,*) "/"
 
       write(n_out,*) "&start_field"
@@ -733,6 +775,7 @@ contains
       write(n_out,'(''  scale_u         ='',ES14.6,'','')') scale_u
       write(n_out,'(''  init_u          ='',i7,'','')') init_u
       write(n_out,'(''  amp_u           ='',ES14.6,'','')') amp_u
+      write(n_out,'(''  init_phi        ='',i7,'','')') init_phi
       write(n_out,*) "/"
 
       write(n_out,*) "&output_control"

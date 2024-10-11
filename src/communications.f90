@@ -6,7 +6,8 @@ module communications
    use blocking
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, n_m_max
-   use namelists, only: mpi_transp, l_packed_transp, l_heat, l_chem
+   use namelists, only: mpi_transp, l_packed_transp, l_heat, l_chem, &
+       &                l_phase_field
    use parallel_mod, only: n_procs, rank, ierr
    use mpi_alltoall_mod, only: type_mpiatoav, type_mpiatoaw
    use mpi_transp_mod, only: type_mpitransp
@@ -93,19 +94,39 @@ contains
          call r2m_single%create_comm(1)
          if ( l_heat ) then
             if ( l_chem ) then ! Heat and composition
-               call m2r_fields%create_comm(5)
-               call r2m_fields%create_comm(6)
+               if ( l_phase_field ) then
+                  call m2r_fields%create_comm(6)
+                  call r2m_fields%create_comm(7)
+               else
+                  call m2r_fields%create_comm(5)
+                  call r2m_fields%create_comm(6)
+               end if
             else ! Heat and no composition
-               call m2r_fields%create_comm(4)
-               call r2m_fields%create_comm(4)
+               if ( l_phase_field ) then
+                  call m2r_fields%create_comm(5)
+                  call r2m_fields%create_comm(5)
+               else
+                  call m2r_fields%create_comm(4)
+                  call r2m_fields%create_comm(4)
+               end if
             end if
          else
             if ( l_chem ) then ! No heat and composition
-               call m2r_fields%create_comm(4)
-               call r2m_fields%create_comm(4)
+               if ( l_phase_field ) then
+                  call m2r_fields%create_comm(5)
+                  call r2m_fields%create_comm(5)
+               else
+                  call m2r_fields%create_comm(4)
+                  call r2m_fields%create_comm(4)
+               end if
             else ! No heat, no composition
-               call m2r_fields%create_comm(3)
-               call r2m_fields%create_comm(2)
+               if ( l_phase_field ) then
+                  call m2r_fields%create_comm(4)
+                  call r2m_fields%create_comm(3)
+               else
+                  call m2r_fields%create_comm(3)
+                  call r2m_fields%create_comm(2)
+               end if
             end if
          end if
       else

@@ -6,7 +6,7 @@ module mloop_fd_mod
    use constants, only: one
    use useful, only: abortRun, logWrite
    use outputs, only: n_log_file
-   use namelists, only: l_heat, l_chem
+   use namelists, only: l_heat, l_chem, l_phase_field
    use truncation, only: n_m_max
    use blocking, only: nRstart, nRstop
    use time_array, only: type_tarray
@@ -16,6 +16,7 @@ module mloop_fd_mod
    use timers_mod, only: timers_type, timer_type
    use update_temp_fd_mod
    use update_xi_fd_mod
+   use update_phi_fd_mod
    use update_psi_fd_mod
 
    implicit none
@@ -47,6 +48,11 @@ contains
          lXimat_FD(:)=.false.
          n_tri = n_tri+1
       end if
+      if ( l_phase_field ) then
+         call initialize_phi_fd()
+         lPhimat_FD(:)=.false.
+         n_tri = n_tri+1
+      end if
       call initialize_psi_fd(tscheme)
       lPsimat_FD(:)=.false.
 
@@ -65,6 +71,7 @@ contains
       deallocate( array_of_requests )
       if ( l_heat ) call finalize_temp_fd()
       if ( l_chem ) call finalize_xi_fd()
+      if ( l_phase_field ) call finalize_phi_fd()
       call finalize_psi_fd(tscheme)
 
    end subroutine finalize_mloop_fd
@@ -120,6 +127,7 @@ contains
       lPsimat_FD(:)=.false.
       if ( l_heat ) lTmat_FD(:) =.false.
       if ( l_chem ) lXimat_FD(:) =.false.
+      if ( l_phase_field ) lPhimat_FD(:) =.false.
 
       call MPI_Barrier(MPI_COMM_WORLD,ierr)
       call dummy%initialize(1, n_m_max, nRstart, nRstop, tscheme%nold, tscheme%nexp,&
@@ -127,6 +135,7 @@ contains
 
       if ( l_heat ) call prepare_temp_FD(tscheme, dummy)
       if ( l_chem ) call prepare_xi_FD(tscheme, dummy)
+      if ( l_phase_field ) call prepare_phi_FD(tscheme, dummy)
       call prepare_psi_fd(tscheme, dummy, dummy_time, dummy_counter)
 
       call find_faster_block() ! Find the fastest blocking
@@ -137,9 +146,9 @@ contains
 
    end subroutine test_mloop
 !------------------------------------------------------------------------------------
-   subroutine mloop_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, om_Rloc, &
-              &           us_Rloc, up_Rloc, dTdt, dxidt, dpsidt, vp_bal,     &
-              &           vort_bal, tscheme, lMat, timers)
+   subroutine mloop_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, phi_Rloc,    &
+              &           om_Rloc, us_Rloc, up_Rloc, dTdt, dxidt, dphidt, dpsidt,&
+              &           vp_bal, vort_bal, tscheme, lMat, timers)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -150,6 +159,7 @@ contains
       complex(cp),         intent(out) :: dtemp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(out) :: xi_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(out) :: dxi_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(out) :: phi_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(out) :: om_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(inout) :: us_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(inout) :: up_Rloc(n_m_max,nRstart:nRstop)
@@ -158,6 +168,7 @@ contains
       type(type_tarray),   intent(inout) :: dpsidt
       type(type_tarray),   intent(inout) :: dTdt
       type(type_tarray),   intent(inout) :: dxidt
+      type(type_tarray),   intent(inout) :: dphidt
       type(timers_type),   intent(inout) :: timers
 
       !-- Local variables
@@ -175,11 +186,13 @@ contains
          lPsimat_FD(:)=.false.
          if ( l_heat ) lTmat_FD(:)=.false.
          if ( l_chem ) lXimat_FD(:)=.false.
+         if ( l_phase_field ) lPhimat_FD(:)=.false.
       end if
 
       !-- Mainly assemble the r.h.s. and rebuild the matrices if required
       if ( l_heat ) call prepare_temp_FD(tscheme, dTdt)
       if ( l_chem ) call prepare_xi_FD(tscheme, dxidt)
+      if ( l_phase_field ) call prepare_phi_FD(tscheme, dphidt)
       call prepare_psi_FD(tscheme, dpsidt, timers%lu, timers%n_lu_calls)
 
       !-- solve the uphi0 equation on its own (one single m is involved)
@@ -200,11 +213,13 @@ contains
       !-- Now simply fill the ghost zones to ensure the boundary conditions
       if ( l_heat ) call fill_ghosts_temp(temp_ghost)
       if ( l_chem ) call fill_ghosts_xi(xi_ghost)
+      if ( l_phase_field ) call fill_ghosts_phi(phi_ghost)
       call fill_ghosts_psi(psi_ghost, up0_ghost)
 
       !-- Finally build the radial derivatives and the arrays for next iteration
       if ( l_heat ) call update_temp_FD(temp_Rloc, dtemp_Rloc, dTdt, tscheme)
       if ( l_chem ) call update_xi_FD(xi_Rloc, dxi_Rloc, dxidt, tscheme)
+      if ( l_phase_field ) call update_phi_FD(phi_Rloc, dphidt, tscheme)
       call update_psi_FD(us_Rloc, up_Rloc, om_Rloc, dpsidt, tscheme, vp_bal, &
            &             vort_bal)
 
@@ -218,9 +233,9 @@ contains
 
    end subroutine mloop_Rdist
 !------------------------------------------------------------------------------------
-   subroutine assemble_stage_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, us_Rloc,&
-              &                    up_Rloc, om_Rloc, dTdt, dxidt, dpsidt, tscheme,   &
-              &                    vp_bal, vort_bal)
+   subroutine assemble_stage_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc,    &
+              &                    phi_Rloc, us_Rloc, up_Rloc, om_Rloc, dTdt,   &
+              &                    dxidt, dphidt, dpsidt, tscheme, vp_bal, vort_bal)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -230,6 +245,7 @@ contains
       complex(cp),         intent(out) :: dtemp_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(out) :: xi_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(out) :: dxi_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(out) :: phi_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(out) :: om_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(inout) :: us_Rloc(n_m_max,nRstart:nRstop)
       complex(cp),         intent(inout) :: up_Rloc(n_m_max,nRstart:nRstop)
@@ -238,9 +254,11 @@ contains
       type(type_tarray),   intent(inout) :: dpsidt
       type(type_tarray),   intent(inout) :: dTdt
       type(type_tarray),   intent(inout) :: dxidt
+      type(type_tarray),   intent(inout) :: dphidt
 
       if ( l_heat ) call assemble_temp_Rdist(temp_Rloc, dtemp_Rloc, dTdt, tscheme)
       if ( l_chem ) call assemble_xi_Rdist(xi_Rloc, dxi_Rloc, dxidt, tscheme)
+      if ( l_phase_field ) call assemble_phi_Rdist(phi_Rloc, dphidt, tscheme)
       call assemble_psi_Rloc(block_sze, nblocks, us_Rloc, up_Rloc, om_Rloc, dpsidt, &
            &                 tscheme, vp_bal, vort_bal)
 
@@ -282,6 +300,13 @@ contains
             tag = tag+1
          end if
 
+         if ( l_phase_field ) then
+            call phiMat_FD%solver_up(phi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
+                 &                   array_of_requests, req, n_ms_block, n_m_block)
+            tag = tag+1
+         end if
+
+
          call psiMat_FD%solver_up(psi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
               &                   array_of_requests, req, n_ms_block, n_m_block)
          tag = tag+2
@@ -306,6 +331,12 @@ contains
             tag = tag+1
          end if
 
+         if ( l_phase_field ) then
+            call phiMat_FD%solver_dn(phi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
+                 &                   array_of_requests, req, n_ms_block, n_m_block)
+            tag = tag+1
+         end if
+
          call psiMat_FD%solver_dn(psi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
               &                   array_of_requests, req, n_ms_block, n_m_block)
          tag = tag+2
@@ -324,6 +355,12 @@ contains
 
          if ( l_chem ) then
             call xiMat_FD%solver_finish(xi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
+                 &                      tag, array_of_requests, req)
+            tag = tag+1
+         end if
+
+         if ( l_phase_field ) then
+            call phiMat_FD%solver_finish(phi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
                  &                      tag, array_of_requests, req)
             tag = tag+1
          end if

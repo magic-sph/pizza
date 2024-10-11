@@ -8,11 +8,13 @@ module init_fields
    use constants, only: zero, one, two, three, ci, pi, half
    use blocking, only: nRstart, nRstop
    use communications, only: r2m_fields, r2m_single, m2r_single
-   use radial_functions, only: r, rscheme, or1, or2, beta, dbeta, m_R
+   use parallel_mod
+   use radial_functions, only: r, rscheme, or1, or2, beta, dbeta, m_R, tcond
    use namelists, only: l_start_file, dtMax, init_t, amp_t, init_u, amp_u, &
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
        &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
-       &                l_direct_solve, l_finite_diff
+       &                l_direct_solve, l_finite_diff, tmelt, init_phi,    &
+       &                l_phase_field, epsPhase
    use outputs, only: n_log_file, vp_bal, vort_bal
    use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank
@@ -27,8 +29,11 @@ module init_fields
    use update_temp_integ, only: get_temp_rhs_imp_int
    use update_temp_fd_mod, only: get_temp_rhs_imp_ghost, temp_ghost, fill_ghosts_temp
    use update_xi_coll, only: get_xi_rhs_imp_coll
+   use update_phi_coll, only: get_phi_rhs_imp_coll
    use update_xi_integ, only: get_xi_rhs_imp_int
+   use update_phi_integ, only: get_phi_rhs_imp_int
    use update_xi_fd_mod, only: get_xi_rhs_imp_ghost, xi_ghost, fill_ghosts_xi
+   use update_phi_fd_mod, only: get_phi_rhs_imp_ghost, phi_ghost, fill_ghosts_phi
    use update_psi_coll_smat, only: get_psi_rhs_imp_coll_smat
    use update_psi_coll_dmat, only: get_psi_rhs_imp_coll_dmat
    use update_psi_integ_smat, only: get_psi_rhs_imp_int_smat
@@ -61,8 +66,8 @@ contains
       character(len=76) :: message
 
       if ( l_start_file ) then
-         call read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, dpsidt, &
-              &               dTdt, dxidt, time, tscheme)
+         call read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, phi_Mloc, &
+              &               dpsidt, dTdt, dxidt, dphidt, time, tscheme)
 
          if ( l_reset_t ) time = 0.0_cp
 
@@ -94,12 +99,14 @@ contains
 
          if ( l_heat ) temp_Mloc(:,:)=zero
          if ( l_chem ) xi_Mloc(:,:)  =zero
+         if ( l_phase_field ) phi_Mloc(:,:)  =zero
          us_Mloc(:,:)  =zero
          up_Mloc(:,:)  =zero
          psi_Mloc(:,:) =zero
          call dpsidt%set_initial_values()
          if ( l_heat ) call dTdt%set_initial_values()
          if ( l_chem ) call dxidt%set_initial_values()
+         if ( l_phase_field ) call dphidt%set_initial_values()
 
          time=0.0_cp
          tscheme%dt(:)=dtMax
@@ -116,12 +123,15 @@ contains
 
       if ( init_xi /= 0 .and. l_chem ) call initProp(xi_Mloc, init_xi, amp_xi)
 
+      if ( init_phi /= 0 .and. l_phase_field ) call initPhi(temp_Mloc, phi_Mloc)
+
       if ( init_u /= 0 ) call initU(us_Mloc, up_Mloc)
 
       if ( l_finite_diff ) then ! Finite diff. are used in radius
 
          if ( l_heat ) call m2r_single%transp_m2r(temp_Mloc, temp_Rloc)
          if ( l_chem ) call m2r_single%transp_m2r(xi_Mloc, xi_Rloc)
+         if ( l_phase_field ) call m2r_single%transp_m2r(phi_Mloc, phi_Rloc)
          call m2r_single%transp_m2r(us_Mloc, us_Rloc)
          call m2r_single%transp_m2r(up_Mloc, up_Rloc)
 
@@ -139,6 +149,14 @@ contains
             call exch_ghosts(xi_ghost, n_m_max, nRstart, nRstop, 1)
             call fill_ghosts_xi(xi_ghost)
             call get_xi_rhs_imp_ghost(xi_ghost, dxi_Rloc, dxidt, 1, .true.)
+         end if
+
+         if ( l_phase_field ) then
+            call bulk_to_ghost(phi_RLoc, phi_ghost, 1, nRstart, nRstop, n_m_max, &
+                 &             1, n_m_max)
+            call exch_ghosts(phi_ghost, n_m_max, nRstart, nRstop, 1)
+            call fill_ghosts_phi(phi_ghost)
+            call get_phi_rhs_imp_ghost(phi_ghost, dphidt, 1, .true.)
          end if
 
          !-- psi is unknown: rebuild it from us
@@ -190,6 +208,7 @@ contains
                do n_m=nMstart,nMstop
                   if ( l_heat ) temp_hat_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)
                   if ( l_chem ) xi_hat_Mloc(n_m,n_r)=xi_Mloc(n_m,n_r)
+                  if ( l_phase_field ) phi_hat_Mloc(n_m,n_r)=phi_Mloc(n_m,n_r)
                   psi_hat_Mloc(n_m,n_r) =psi_Mloc(n_m,n_r)
                end do
             end do
@@ -197,13 +216,18 @@ contains
                                &              n_r_max)
             if ( l_chem ) call rscheme%costf1(xi_hat_Mloc, nMstart, nMstop, &
                                &              n_r_max)
+            if ( l_phase_field ) call rscheme%costf1(phi_hat_Mloc, nMstart, nMstop, &
+                                      &              n_r_max)
             call rscheme%costf1(psi_hat_Mloc, nMstart, nMstop, n_r_max)
          end if
 
          !-- Compute the first implicit state
          if ( l_cheb_coll ) then
-            if ( l_heat ) call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, 1, .true.)
+            if ( l_heat ) call get_temp_rhs_imp_coll(temp_Mloc, dtemp_Mloc, dTdt, &
+                               &                     phi_Mloc, 1, .true.)
             if ( l_chem ) call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, 1, .true.)
+
+            if ( l_phase_field ) call get_phi_rhs_imp_coll(phi_Mloc, dphidt, 1, .true.)
 
             if ( l_direct_solve ) then
                call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc, dom_Mloc,   &
@@ -216,6 +240,7 @@ contains
          else
             if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, .true.)
             if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, .true.)
+            if ( l_phase_field ) call get_xi_rhs_imp_int(phi_hat_Mloc, dphidt, 1, .true.)
             if ( l_direct_solve ) then
                call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,temp_Mloc,psi_Mloc, &
                     &                        dpsidt, 1, vp_bal, .true.)
@@ -345,6 +370,53 @@ contains
       end if
 
    end subroutine initProp
+!----------------------------------------------------------------------------------
+   subroutine initPhi(temp_Mloc, phi_Mloc)
+      !
+      ! This subroutine initializes the phase field
+      !
+
+      !-- In/Out variables
+      complex(cp), intent(inout) :: temp_Mloc(nMstart:nMstop,n_r_max) ! Temperature
+      complex(cp), intent(inout) :: phi_Mloc(nMstart:nMstop,n_r_max) ! Phase field
+
+      !-- Local variables
+      integer :: n_r, n_r_melt, m, n_m
+      real(cp) :: temp0(n_r_max),phi0(n_r_max)
+      real(cp) :: rmelt
+
+      if ( init_phi /= 0 ) then
+         !-- The initial phase field is set as a tanh function of width epsPhase
+         !-- centered at the melting temperature
+
+         if ( nMstart == 1 ) then
+            temp0(:)=real(temp_Mloc(1,:))+tcond(:)
+            n_r_melt=1
+            do n_r=2,n_r_max
+               if ( temp0(n_r-1) < tmelt .and. temp0(n_r) >= tmelt ) then
+                  n_r_melt=n_r
+               end if
+            end do
+            rmelt=r(n_r_melt)
+            phi0(:)=half*(one+tanh((r(:)-rmelt)/two/sqrt(two)/epsPhase))
+            phi_Mloc(1,:)=cmplx(phi0,0.0_cp,cp)
+         end if
+      end if
+
+      call MPI_Bcast(phi0,n_r_max,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
+
+      !-- Make sure there is no temperature perturbation in the solid phase
+      if ( init_t /= 0 ) then
+         do n_r=1,n_r_max
+            do n_m=nMstart,nMstop
+               m = idx2m(n_m)
+               if ( m == 0 ) cycle
+               temp_Mloc(n_m,n_r)=temp_Mloc(n_m,n_r)*(one-phi0(n_r))
+            end do
+         end do
+      end if
+
+   end subroutine initPhi
 !----------------------------------------------------------------------------------
    subroutine initU(us_Mloc, up_Mloc)
 

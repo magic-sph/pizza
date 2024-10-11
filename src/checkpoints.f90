@@ -2,7 +2,7 @@ module checkpoints
 
    use parallel_mod
    use precision_mod
-   use constants, only: zero, two
+   use constants, only: zero, two, one
    use char_manip, only: dble2str
    use blocking, only: nMstart,nMstop,nm_per_rank
    use communications, only: scatter_from_rank0_to_mloc, r2m_single, &
@@ -10,7 +10,8 @@ module checkpoints
    use truncation, only: n_r_max, m_max, minc, n_m_max, idx2m
    use namelists, only: ra,raxi,pr,sc,ek,radratio,alph1,alph2,tag, l_AB1, &
        &                start_file, scale_u, scale_t, l_heat, l_chem,     &
-       &                l_bridge_step, l_cheb_coll, scale_xi, l_finite_diff
+       &                l_bridge_step, l_cheb_coll, scale_xi, stef,       &
+       &                l_finite_diff, l_phase_field
    use radial_scheme, only: type_rscheme
    use radial_functions, only: rscheme, r
    use chebyshev, only: type_cheb
@@ -30,8 +31,8 @@ module checkpoints
 contains
 
    subroutine write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
-              &                     l_stop_time, t_Mloc, xi_Mloc, us_Mloc,    &
-              &                     up_Mloc, dTdt, dxidt, dpsidt)
+              &                     l_stop_time, t_Mloc, xi_Mloc, phi_Mloc,   &
+              &                     us_Mloc, up_Mloc, dTdt, dxidt, dphidt, dpsidt)
       !
       ! This subroutine writes the checkpoint files using MPI-IO. For the sake
       ! of simplicity we do not include the record marker. Classical Fortran can
@@ -45,13 +46,15 @@ contains
       integer,             intent(in) :: n_time_step
       integer,             intent(in) :: n_log_file
       logical,             intent(in) :: l_stop_time
-      complex(cp),        intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
-      complex(cp),        intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      type(type_tarray),  intent(in) :: dTdt
-      type(type_tarray),  intent(in) :: dxidt
-      type(type_tarray),  intent(in) :: dpsidt
+      complex(cp),         intent(in) :: t_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: phi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+      type(type_tarray),   intent(in) :: dTdt
+      type(type_tarray),   intent(in) :: dxidt
+      type(type_tarray),   intent(in) :: dpsidt
+      type(type_tarray),   intent(in) :: dphidt
 
       !-- Local variables
       logical :: l_transp
@@ -71,15 +74,15 @@ contains
 
       l_transp = l_finite_diff
 
-      version = 6
+      version = 7
 
       header_size = SIZEOF_INTEGER+SIZEOF_DEF_REAL+SIZEOF_LOGICAL+       &
       &             len(tscheme%family)+                                 &
       &             3*SIZEOF_INTEGER+SIZEOF_DEF_REAL+size(tscheme%dt)*   &
-      &             SIZEOF_DEF_REAL+6*SIZEOF_DEF_REAL+3*SIZEOF_INTEGER   &
+      &             SIZEOF_DEF_REAL+7*SIZEOF_DEF_REAL+3*SIZEOF_INTEGER   &
       &             +2*SIZEOF_INTEGER+2*SIZEOF_DEF_REAL+                 &
       &             len(rscheme%version)+n_r_max*SIZEOF_DEF_REAL+        &
-      &             2*SIZEOF_LOGICAL
+      &             3*SIZEOF_LOGICAL
 
       !-- MPI-IO setup
       call mpiio_setup(info)
@@ -105,6 +108,7 @@ contains
          call MPI_File_Write(fh, raxi, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, sc, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, ek, 1, MPI_DEF_REAL, istat, ierr)
+         call MPI_File_Write(fh, stef, 1, MPI_DEF_REAL, istat, ierr)
          call MPI_File_Write(fh, radratio, 1, MPI_DEF_REAL, istat, ierr)
 
          call MPI_File_Write(fh, n_r_max, 1, MPI_INTEGER, istat, ierr)
@@ -123,6 +127,7 @@ contains
 
          call MPI_File_Write(fh, l_heat, 1, MPI_LOGICAL, istat, ierr)
          call MPI_File_Write(fh, l_chem, 1, MPI_LOGICAL, istat, ierr)
+         call MPI_File_Write(fh, l_phase_field, 1, MPI_LOGICAL, istat, ierr)
       end if
 
       arr_size(1) = n_m_max
@@ -152,6 +157,9 @@ contains
       !-- Chemical composition
       if ( l_chem ) call write_one_field_mpi(fh, tscheme, xi_Mloc, dxidt, l_transp)
 
+      !-- Phase field
+      if ( l_phase_field ) call write_one_field_mpi(fh, tscheme, phi_Mloc, dphidt, l_transp)
+
       call MPI_Info_free(info, ierr)
       call MPI_File_close(fh, ierr)
 
@@ -174,8 +182,8 @@ contains
 
    end subroutine write_checkpoint_mloc
 !------------------------------------------------------------------------------
-   subroutine read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, dpsidt, &
-              &               dTdt, dxidt, time, tscheme)
+   subroutine read_checkpoint(us_Mloc, up_Mloc, temp_Mloc, xi_Mloc, phi_Mloc, &
+              &               dpsidt, dTdt, dxidt, dphidt, time, tscheme)
 
       !-- Output variables
       class(type_tscheme), intent(inout) :: tscheme
@@ -183,18 +191,20 @@ contains
       complex(cp),         intent(out) :: up_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),         intent(out) :: temp_Mloc(nMstart:nMstop, n_r_max)
       complex(cp),         intent(out) :: xi_Mloc(nMstart:nMstop, n_r_max)
+      complex(cp),         intent(out) :: phi_Mloc(nMstart:nMstop, n_r_max)
       type(type_tarray),   intent(inout) :: dpsidt
       type(type_tarray),   intent(inout) :: dTdt
       type(type_tarray),   intent(inout) :: dxidt
+      type(type_tarray),   intent(inout) :: dphidt
       real(cp),            intent(out) :: time
 
       !-- Local variables
-      logical :: startfile_does_exist, l_heat_old, l_chem_old
+      logical :: startfile_does_exist, l_heat_old, l_chem_old, l_phase_old
       integer :: n_start_file, version
       integer,     allocatable :: m2idx_old(:)
       real(cp),    allocatable :: r_old(:)
       complex(cp), allocatable :: work(:,:), work_old(:,:)
-      real(cp) :: ra_old, raxi_old, sc_old, pr_old, radratio_old, ek_old
+      real(cp) :: ra_old, raxi_old, sc_old, pr_old, radratio_old, ek_old, stef_old
       integer :: n_r_max_old, m_max_old, minc_old, n_m_max_old
       character(len=72) :: rscheme_version_old
       character(len=10) :: tscheme_family_old
@@ -270,7 +280,12 @@ contains
          else if ( tscheme_family_old == 'DIRK' ) then
             dt_array_old(1:size(tscheme%dt))=dt_array_old(1)
          end if
-         read(n_start_file) ra_old,pr_old,raxi_old,sc_old,ek_old,radratio_old
+         if ( version >= 7 ) then
+            read(n_start_file) ra_old,pr_old,raxi_old,sc_old,ek_old,stef_old,radratio_old
+         else
+            read(n_start_file) ra_old,pr_old,raxi_old,sc_old,ek_old,radratio_old
+            stef_old=0.0_cp
+         end if
          read(n_start_file) n_r_max_old,m_max_old,minc_old
 
          n_r_max_max = max(n_r_max,n_r_max_old)
@@ -287,6 +302,8 @@ contains
             write(*,'(/,'' ! New composition-based Rayleigh number (old/new):'',2ES16.6)') raxi_old,raxi
          if ( sc /= sc_old ) &
             write(*,'(/,'' ! New Schmidt number (old/new):'',2ES16.6)') sc_old,sc
+         if ( stef /= stef_old ) &
+            write(*,'(/,'' ! New Stefan number (old/new):'',2ES16.6)') stef_old,stef
          if ( radratio /= radratio_old )                                    &
             write(*,'(/,'' ! New mag aspect ratio (old/new):'',2ES16.6)') &
             radratio_old,radratio
@@ -317,7 +334,12 @@ contains
 
          allocate( r_old(n_r_max_old) )
          read(n_start_file) r_old
-         read(n_start_file) l_heat_old, l_chem_old
+         if (version >= 7 ) then
+            read(n_start_file) l_heat_old, l_chem_old, l_phase_old
+         else
+            read(n_start_file) l_heat_old, l_chem_old
+            l_phase_old=.false.
+         end if
 
          n_m_max_old=m_max_old/minc_old+1
          allocate( m2idx_old(0:m_max_max) )
@@ -360,6 +382,7 @@ contains
       call MPI_Bcast(ek_old,1,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_heat_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_chem_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
+      call MPI_Bcast(l_phase_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
       call MPI_Bcast(l_coll_old,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ierr)
 
       !-- Fill the time step array
@@ -609,6 +632,69 @@ contains
                   end if
                end do
             end if
+         end if
+
+      end if
+
+      if ( l_phase_old ) then
+         !-- phase_field
+         if ( rank == 0 ) then
+            read( n_start_file ) work_old
+            call map_field(work_old, work, r_old, m2idx_old, one, &
+                 &         n_m_max_old, n_r_max_old, n_r_max_max, &
+                 &         lBc=.false.,l_phys_space=.true.)
+         end if
+         call scatter_from_rank0_to_mloc(work, phi_Mloc)
+
+         if ( tscheme_family_old == 'MULTISTEP' ) then
+            !-- Explicit time step
+            do n_o=2,nexp_old
+               if ( rank == 0 ) then
+                  read( n_start_file ) work_old
+                  call map_field(work_old, work, r_old, m2idx_old, one, &
+                       &         n_m_max_old, n_r_max_old, n_r_max_max, &
+                       &         lBc=.true.,l_phys_space=l_coll_old)
+               end if
+               if ( n_o <= tscheme%nexp ) then
+                  if ( l_finite_diff ) then
+                     call scatter_from_rank0_to_Rloc(work, dphidt%expl(:,:,n_o))
+                  else
+                     call scatter_from_rank0_to_mloc(work, dphidt%expl(:,:,n_o))
+                  end if
+               end if
+            end do
+
+            !-- Implicit time step
+            do n_o=2,nimp_old
+               if ( rank == 0 ) then
+                  read( n_start_file ) work_old
+                  call map_field(work_old, work, r_old, m2idx_old, one, &
+                       &         n_m_max_old, n_r_max_old, n_r_max_max, &
+                       &         lBc=.true.,l_phys_space=l_coll_old)
+               end if
+               if ( n_o <= tscheme%nimp ) then
+                  if ( l_finite_diff ) then
+                     call scatter_from_rank0_to_Rloc(work, dphidt%impl(:,:,n_o))
+                  else
+                     call scatter_from_rank0_to_mloc(work, dphidt%impl(:,:,n_o))
+                  end if
+               end if
+            end do
+            do n_o=2,nold_old
+               if ( rank == 0 ) then
+                  read( n_start_file ) work_old
+                  call map_field(work_old, work, r_old, m2idx_old, one, &
+                       &         n_m_max_old, n_r_max_old, n_r_max_max, &
+                       &         lBc=.false.,l_phys_space=l_coll_old)
+               end if
+               if ( n_o <= tscheme%nold ) then
+                  if ( l_finite_diff ) then
+                     call scatter_from_rank0_to_Rloc(work, dphidt%old(:,:,n_o))
+                  else
+                     call scatter_from_rank0_to_mloc(work, dphidt%old(:,:,n_o))
+                  end if
+               end if
+            end do
          end if
 
       end if

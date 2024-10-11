@@ -13,7 +13,7 @@ module outputs
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
        &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac,&
        &                l_vort_balance, l_corr, l_heat, l_chem, ChemFac,    &
-       &                l_energy_trans, m_max_transfer
+       &                l_energy_trans, m_max_transfer, l_phase_field
    use communications, only: reduce_radial_on_rank
    use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
@@ -23,6 +23,8 @@ module outputs
        &               nm_per_rank, m_balance
    use energy_transfer, only: calc_energy_transfer, initialize_transfer, &
        &                      finalize_transfer
+   use outputs_phase, only: initialize_out_phase, finalize_out_phase, &
+       &                    write_out_phase
    use integration, only: rInt_R, simps
    use useful, only: round_off, cc2real, cc22real, getMSD2, abortRun
    use constants, only: pi, two, four, surf, vol_otc, one, tiny_number
@@ -141,6 +143,7 @@ contains
       if ( l_vphi_balance ) call vp_bal%initialize()
       if ( l_vort_balance ) call vort_bal%initialize()
       if ( l_energy_trans ) call initialize_transfer(m_max_transfer)
+      if ( l_phase_field ) call initialize_out_phase()
 
    end subroutine initialize_outputs
 !------------------------------------------------------------------------------
@@ -158,6 +161,7 @@ contains
 
       call spec%finalize()
 
+      if ( l_phase_field ) call finalize_out_phase()
       if ( l_energy_trans ) call finalize_transfer()
       if ( l_vort_balance ) call vort_bal%finalize()
       if ( l_vphi_balance ) call vp_bal%finalize()
@@ -230,7 +234,7 @@ contains
    subroutine write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame, &
               &             l_vphi_bal_write, l_stop_time,  us_Mloc, up_Mloc,  &
               &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
-              &             dpsidt, dTdt, dxidt)
+              &             phi_Mloc, dpsidt, dTdt, dxidt, dphidt)
 
       !-- Input variables
       real(cp),            intent(in) :: time
@@ -248,9 +252,11 @@ contains
       complex(cp),         intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
       complex(cp),         intent(in) :: dxi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp),         intent(in) :: phi_Mloc(nMstart:nMstop,n_r_max)
       type(type_tarray),   intent(in) :: dpsidt
       type(type_tarray),   intent(in) :: dTdt
       type(type_tarray),   intent(in) :: dxidt
+      type(type_tarray),   intent(in) :: dphidt
 
       !-- Local variable
       character(len=144) :: frame_name
@@ -264,9 +270,9 @@ contains
 
       !-- Write checkpoints
       if ( l_rst ) then
-         call write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,   &
-              &                     l_stop_time, temp_Mloc, xi_Mloc, us_Mloc, &
-              &                     up_Mloc, dTdt, dxidt, dpsidt)
+         call write_checkpoint_mloc(time, tscheme, n_time_step, n_log_file,    &
+              &                     l_stop_time, temp_Mloc, xi_Mloc, phi_Mloc, &
+              &                     us_Mloc, up_Mloc, dTdt, dxidt, dphidt, dpsidt)
       end if
 
       !-- Calculate spectra
@@ -289,6 +295,10 @@ contains
          if ( l_chem ) then
             write(frame_name, '(A,I0,A,A)') 'frame_xi_',frame_counter,'.',tag
             call write_snapshot_mloc(frame_name, time, xi_Mloc)
+         end if
+         if ( l_phase_field ) then
+            write(frame_name, '(A,I0,A,A)') 'frame_phase_',frame_counter,'.',tag
+            call write_snapshot_mloc(frame_name, time, phi_Mloc)
          end if
          write(frame_name, '(A,I0,A,A)') 'frame_us_',frame_counter,'.',tag
          call write_snapshot_mloc(frame_name, time, us_Mloc)
@@ -316,6 +326,8 @@ contains
       if ( l_log .and. l_energy_trans ) then
          call calc_energy_transfer(us_Mloc, up_Mloc, l_stop_time)
       end if
+
+      if ( l_log .and. l_phase_field ) call write_out_phase(time)
 
       if ( vort_bal%l_calc .or. (l_stop_time .and. l_vort_balance) ) then
          timeAvg_vortbal = timeAvg_vortbal + tscheme%dt(1)

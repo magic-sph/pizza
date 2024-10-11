@@ -75,7 +75,7 @@ contains
       type(type_tarray), intent(inout) :: dxidt
 
       !-- Local variables
-      integer :: n_r, n_m, n_r_out, m
+      integer :: n_m, n_r_out, m
 
       if ( lMat ) lXiMat(:)=.false.
 
@@ -99,14 +99,10 @@ contains
          !-- Inhomogeneous B.Cs (if not zero)
          rhs(1)      =topxi_Mloc(n_m)
          rhs(n_r_max)=botxi_Mloc(n_m)
-         do n_r=2,n_r_max-1
-            rhs(n_r)=work_Mloc(n_m,n_r)
-         end do
+         rhs(2:n_r_max-1)=work_Mloc(n_m,2:n_r_max-1)
 
 #ifdef WITH_PRECOND_S
-         do n_r=1,n_r_max
-            rhs(n_r) = xiMat_fac(n_r,n_m)*rhs(n_r)
-         end do
+         rhs(:) = xiMat_fac(:,n_m)*rhs(:)
 #endif
 
          call solve_full_mat(xiMat(:,:,n_m), n_r_max, n_r_max, xiPivot(:, n_m), &
@@ -120,9 +116,7 @@ contains
 
       !-- set cheb modes > rscheme%n_max to zero (dealiazing)
       do n_r_out=rscheme%n_max+1,n_r_max
-         do n_m=nMstart,nMstop
-            xi_Mloc(n_m,n_r_out)=zero
-         end do
+         xi_Mloc(:,n_r_out)=zero
       end do
 
       !-- Roll the arrays before filling again the first block
@@ -155,7 +149,7 @@ contains
       complex(cp), intent(inout) :: dxi_exp_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m
+      integer :: n_r
 
       !-- Finish calculation of advection
       call get_dr( dVsXi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
@@ -163,11 +157,9 @@ contains
 
       !-- Finish calculation of the explicit part for current time step
       do n_r=1,n_r_max
-         do n_m=nMstart, nMstop
-            dxi_exp_last(n_m,n_r)=dxi_exp_last(n_m,n_r)         &
-            &                     -or1(n_r)*work_Mloc(n_m,n_r)  &
-            &                     -us_Mloc(n_m,n_r)*dxicond(n_r)
-         end do
+         dxi_exp_last(:,n_r)=dxi_exp_last(:,n_r)         &
+         &                   -or1(n_r)*work_Mloc(:,n_r)  &
+         &                   -us_Mloc(:,n_r)*dxicond(n_r)
       end do
 
    end subroutine finish_exp_xi_coll
@@ -206,9 +198,7 @@ contains
 
       if ( istage == 1 ) then
          do n_r=1,n_r_max
-            do n_m=nMstart,nMstop
-               dxidt%old(n_m,n_r,istage)=xi_Mloc(n_m,n_r)
-            end do
+            dxidt%old(:,n_r,istage)=xi_Mloc(:,n_r)
          end do
       end if
 
@@ -227,11 +217,10 @@ contains
 
    end subroutine get_xi_rhs_imp_coll
 !------------------------------------------------------------------------------
-   subroutine assemble_xi_coll(xi_Mloc, dxi_Mloc, dxidt, tscheme, l_log_next)
+   subroutine assemble_xi_coll(xi_Mloc, dxi_Mloc, dxidt, tscheme)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
-      logical,             intent(in) :: l_log_next
       type(type_tarray),   intent(inout) :: dxidt
 
       !-- Output variable
@@ -348,10 +337,8 @@ contains
       end do
 
       !----- Factor for highest and lowest cheb:
-      do nR=1,n_r_max
-         tMat(nR,1)      =rscheme%boundary_fac*tMat(nR,1)
-         tMat(nR,n_r_max)=rscheme%boundary_fac*tMat(nR,n_r_max)
-      end do
+      tMat(:,1)      =rscheme%boundary_fac*tMat(:,1)
+      tMat(:,n_r_max)=rscheme%boundary_fac*tMat(:,n_r_max)
 
 #ifdef WITH_PRECOND_S
       ! compute the linesum of each line
@@ -366,9 +353,7 @@ contains
 
       !----- LU decomposition:
       call prepare_full_mat(tMat,n_r_max,n_r_max,tPivot,info)
-      if ( info /= 0 ) then
-         call abortRun('Singular matrix tMat!')
-      end if
+      if ( info /= 0 ) call abortRun('Singular matrix xiMat!')
 
    end subroutine get_xiMat
 !------------------------------------------------------------------------------

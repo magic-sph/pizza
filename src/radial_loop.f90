@@ -6,8 +6,10 @@ module rloop
    use mem_alloc, only: bytes_allocated
    use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem, n_rings,    &
        &                radratio, amp_forcing, radius_forcing, dx_forcing, &
-       &                forcing_type, tag, l_full_disk
-   use radial_functions, only: or1, r, beta, dtcond, ekpump, m_R
+       &                forcing_type, tag, l_full_disk, l_phase_field,     &
+       &                epsPhase, penaltyFac, phaseDiffFac, tmelt
+   use radial_functions, only: or1, r, beta, dtcond, ekpump, m_R, tcond
+   use outputs_phase, only: calc_out_phase
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx, n_r_max
    use courant_mod, only: courant
@@ -23,6 +25,7 @@ module rloop
 
    real(cp), allocatable :: us_grid(:), up_grid(:)
    real(cp), allocatable :: om_grid(:), temp_grid(:), xi_grid(:)
+   real(cp), allocatable :: phi_grid(:), phiTerms(:)
    real(cp), allocatable :: usT_grid(:), upT_grid(:)
    real(cp), allocatable :: usXi_grid(:), upXi_grid(:)
    real(cp), allocatable :: usOm_grid(:), upOm_grid(:)
@@ -57,6 +60,10 @@ contains
          allocate( xi_grid(n_phi_max) )
          n_nphi_arrays = n_nphi_arrays+3
       end if
+      if ( l_phase_field ) then
+         allocate( phi_grid(n_phi_max), phiTerms(n_phi_max) )
+         n_nphi_arrays = n_nphi_arrays+2
+      end if
       bytes_allocated = bytes_allocated+n_nphi_arrays*n_phi_max*SIZEOF_DEF_REAL
 
       us_grid(:)  =0.0_cp
@@ -73,6 +80,10 @@ contains
          xi_grid(:)  =0.0_cp
          usXi_grid(:)=0.0_cp
          upXi_grid(:)=0.0_cp
+      end if
+      if ( l_phase_field ) then
+         phi_grid(:)=0.0_cp
+         phiTerms(:)=0.0_cp
       end if
 
       if ( n_rings > 0 .or. dx_forcing > 0.0_cp ) then
@@ -197,28 +208,32 @@ contains
       if ( n_rings > 0 ) deallocate( forcing_Rloc )
       if ( l_heat ) deallocate (usT_grid, upT_grid,  temp_grid )
       if ( l_chem ) deallocate (usXi_grid, upXi_grid,  xi_grid )
+      if ( l_phase_field ) deallocate( phi_grid, phiTerms )
       deallocate( usOm_grid, upOm_grid, us_grid, up_grid, om_grid )
 
    end subroutine finalize_radial_loop
 !------------------------------------------------------------------------------
    subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc,   &
-              &           dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc, dVsXi_Rloc, &
-              &           dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc, dth_Rloc,     &
-              &           timers, tscheme)
+              &           phi_Rloc, dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc,   &
+              &           dVsXi_Rloc, dphidt_Rloc, dpsidt_Rloc, dVsOm_Rloc,&
+              &           dtr_Rloc, dth_Rloc, timers, tscheme, l_log)
 
       !-- Input variables
       complex(cp),         intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),         intent(in) :: up_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),         intent(in) :: om_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),         intent(in) :: temp_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: phi_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),         intent(in) :: xi_Rloc(n_m_max, nRstart:nRstop)
       class(type_tscheme), intent(in) :: tscheme
+      logical,             intent(in) :: l_log
 
       !-- Output variables
       complex(cp),       intent(out) :: dpsidt_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(out) :: dtempdt_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(out) :: dVsT_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(out) :: dxidt_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),       intent(out) :: dphidt_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(out) :: dVsXi_Rloc(n_m_max, nRstart:nRstop)
       complex(cp),       intent(out) :: dVsOm_Rloc(n_m_max, nRstart:nRstop)
       real(cp),          intent(out) :: dtr_Rloc(nRstart:nRstop)
@@ -228,7 +243,7 @@ contains
       !-- Local variables
       real(cp) :: usom, runStart, runStop
       complex(cp) :: us_fluct
-      integer :: n_r, n_phi, n_m, m, idx_m0
+      integer :: n_r, n_m, m, idx_m0
 
       idx_m0 = m2idx(0)
 
@@ -258,9 +273,15 @@ contains
          runStop = MPI_Wtime()
          if ( l_heat ) call ifft(temp_Rloc(:,n_r), temp_grid, m_R(n_r))
          if ( l_chem ) call ifft(xi_Rloc(:,n_r), xi_grid, m_R(n_r))
+         if ( l_phase_field ) call ifft(phi_Rloc(:,n_r), phi_grid, m_R(n_r))
          if ( runStop > runStart ) then
             timers%fft = timers%fft + (runStop-runStart)
             timers%n_fft_calls = timers%n_fft_calls + 3
+         end if
+
+         !-- Compute diagnostics related to phase field
+         if ( l_phase_field .and. l_log ) then
+            call calc_out_phase(us_grid, up_grid, phi_grid, temp_grid, n_r)
          end if
 
          !-- Courant condition
@@ -271,21 +292,29 @@ contains
 
          !-- Get nonlinear products
          if ( l_heat ) then
-            do n_phi=1,n_phi_max
-               usT_grid(n_phi) =r(n_r)*us_grid(n_phi)*temp_grid(n_phi)
-               upT_grid(n_phi) =       up_grid(n_phi)*temp_grid(n_phi)
-            end do
+            usT_grid(:) =r(n_r)*us_grid(:)*temp_grid(:)
+            upT_grid(:) =       up_grid(:)*temp_grid(:)
          end if
          if ( l_chem ) then
-            do n_phi=1,n_phi_max
-               usXi_grid(n_phi) =r(n_r)*us_grid(n_phi)*xi_grid(n_phi)
-               upXi_grid(n_phi) =       up_grid(n_phi)*xi_grid(n_phi)
-            end do
+            usXi_grid(:) =r(n_r)*us_grid(:)*xi_grid(:)
+            upXi_grid(:) =       up_grid(:)*xi_grid(:)
          end if
-         do n_phi=1,n_phi_max
-            usOm_grid(n_phi)=r(n_r)*us_grid(n_phi)*  om_grid(n_phi)
-            upOm_grid(n_phi)=       up_grid(n_phi)*  om_grid(n_phi)
-         end do
+         usOm_grid(:)=r(n_r)*us_grid(:)*om_grid(:)
+         upOm_grid(:)=       up_grid(:)*om_grid(:)
+
+         if ( l_phase_field ) then
+            phiTerms(:)=-one/epsPhase**2* phi_grid(:)*(one-phi_grid(:))*( &
+            &           phaseDiffFac*(one-two*phi_grid(:))+temp_grid(:)+  &
+            &           tcond(n_r)-tmelt)
+            !usOm_grid(:)=usOm_grid(:)+r(n_r)*us_grid(:)*phi_grid(:)/ &
+            !&            epsPhase**2/penaltyFac**2
+            !upOm_grid(:)=upOm_grid(:)+up_grid(:)*phi_grid(:)/ &
+            !&            epsPhase**2/penaltyFac**2
+            usOm_grid(:)=usOm_grid(:)+r(n_r)*up_grid(:)*phi_grid(:)/ &
+            &            epsPhase**2/penaltyFac**2
+            upOm_grid(:)=upOm_grid(:)-us_grid(:)*phi_grid(:)/ &
+            &            epsPhase**2/penaltyFac**2
+         end if
 
          !-- Bring data back on the spectral domain
          runStart = MPI_Wtime()
@@ -300,6 +329,7 @@ contains
             call fft(upXi_grid, dxidt_Rloc(:,n_r), m_R(n_r))
             call fft(usXi_grid, dVsXi_Rloc(:,n_r), m_R(n_r))
          end if
+         if ( l_phase_field ) call fft(phiTerms, dphidt_Rloc(:,n_r), m_R(n_r))
          if ( runStop > runStart ) then
             timers%fft = timers%fft + (runStop-runStart)
             timers%n_fft_calls = timers%n_fft_calls + 2

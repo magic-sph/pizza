@@ -9,11 +9,13 @@ module step_time
        &             temp_Rloc, om_Rloc, om_Mloc, psi_Mloc, dtemp_Mloc,     &
        &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,        &
        &             xi_Rloc, dxi_Mloc, xi_hat_Mloc, fields_Mloc_container, &
-       &             fields_Rloc_container, dtemp_Rloc, dxi_Rloc
-   use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc, &
-       &                 dVsOm_Rloc, dVsOm_Mloc, dpsidt, dTdt, dxidt,     &
-       &                 dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc,              &
-       &                 dt_fields_Rloc_container, dt_fields_Mloc_container
+       &             fields_Rloc_container, dtemp_Rloc, dxi_Rloc, phi_Rloc, &
+       &             phi_Mloc, phi_hat_Mloc
+   use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc,    &
+       &                 dVsOm_Rloc, dVsOm_Mloc, dpsidt, dTdt, dxidt,        &
+       &                 dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc, dphidt,         &
+       &                 dt_fields_Rloc_container, dt_fields_Mloc_container, &
+       &                 dphidt_Rloc
    use truncation, only: n_m_max, idx2m
    use courant_mod, only: dt_courant
    use radial_der, only: exch_ghosts, bulk_to_ghost
@@ -22,10 +24,13 @@ module step_time
    use radial_functions, only: r
    use update_temp_coll, only: get_temp_rhs_imp_coll
    use update_xi_coll, only: get_xi_rhs_imp_coll
+   use update_phi_coll, only: get_phi_rhs_imp_coll
    use update_temp_fd_mod, only: get_temp_rhs_imp_ghost, temp_ghost, fill_ghosts_temp
    use update_temp_integ, only: get_temp_rhs_imp_int
    use update_xi_integ, only: get_xi_rhs_imp_int
+   use update_phi_integ, only: get_phi_rhs_imp_int
    use update_xi_fd_mod, only: get_xi_rhs_imp_ghost, xi_ghost, fill_ghosts_xi
+   use update_phi_fd_mod, only: get_phi_rhs_imp_ghost, phi_ghost, fill_ghosts_phi
    use update_psi_fd_mod, only: get_psi_rhs_imp_ghost, psi_ghost, up0_ghost, &
        &                        fill_ghosts_psi
    use update_psi_integ_smat, only: get_psi_rhs_imp_int_smat
@@ -41,7 +46,8 @@ module step_time
        &                n_frame_step, n_checkpoints, n_checkpoint_step,   &
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance,      &
-       &                l_heat, l_chem, l_packed_transp, l_finite_diff
+       &                l_heat, l_chem, l_packed_transp, l_finite_diff,   &
+       &                l_phase_field
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
@@ -193,7 +199,7 @@ contains
          call write_outputs(time, tscheme, n_time_step, l_log, l_rst, l_frame, &
               &             l_vphi_bal_write, l_stop_time, us_Mloc,  up_Mloc,  &
               &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
-              &             dpsidt, dTdt, dxidt)
+              &             phi_Mloc, dpsidt, dTdt, dxidt, dphidt)
          runStop = MPI_Wtime()
          if (runStop>runStart) then
             timers%n_io_calls=timers%n_io_calls+1
@@ -219,15 +225,17 @@ contains
                runStart = MPI_Wtime()
                if ( l_finite_diff ) then
                   call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc, &
-                       &            dTdt%expl(:,:,tscheme%istage), dVsT_Rloc,      &
-                       &            dxidt%expl(:,:,tscheme%istage), dVsXi_Rloc,    &
+                       &            phi_Rloc, dTdt%expl(:,:,tscheme%istage),       &
+                       &            dVsT_Rloc, dxidt%expl(:,:,tscheme%istage),     &
+                       &            dVsXi_Rloc, dphidt%expl(:,:,tscheme%istage),   &
                        &            dpsidt%expl(:,:,tscheme%istage), dVsOm_Rloc,   &
-                       &            dtr_Rloc, dth_Rloc, timers, tscheme )
+                       &            dtr_Rloc, dth_Rloc, timers, tscheme, l_log )
                else
                   call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc, &
-                       &            dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc,           &
-                       &            dVsXi_Rloc, dpsidt_Rloc, dVsOm_Rloc, dtr_Rloc, &
-                       &            dth_Rloc, timers, tscheme )
+                       &            phi_Rloc, dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc, &
+                       &            dVsXi_Rloc, dphidt_Rloc, dpsidt_Rloc,          &
+                       &            dVsOm_Rloc, dtr_Rloc, dth_Rloc, timers,        &
+                       &            tscheme, l_log )
                end if
                runStop = MPI_Wtime()
                if (runStop>runStart) then
@@ -303,15 +311,16 @@ contains
             if ( (.not. tscheme%l_assembly) .or. (tscheme%istage/=tscheme%nstages) ) then
                runStart = MPI_Wtime()
                if ( l_finite_diff ) then
-                  call mloop_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, &
-                       &           om_Rloc, us_Rloc, up_Rloc, dTdt, dxidt,   &
-                       &           dpsidt, vp_bal, vort_bal, tscheme, lMat,  &
-                       &           timers)
+                  call mloop_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc,  &
+                       &           phi_Rloc, om_Rloc, us_Rloc, up_Rloc, dTdt, &
+                       &           dxidt, dphidt, dpsidt, vp_bal, vort_bal,   &
+                       &           tscheme, lMat, timers)
                else
-                  call mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc,       &
-                       &     xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,      &
-                       &     dom_Mloc, us_Mloc, up_Mloc, dTdt, dxidt, dpsidt, vp_bal, &
-                       &     vort_bal, tscheme, lMat, l_log_next, timers)
+                  call mloop(temp_hat_Mloc, xi_hat_Mloc, phi_hat_Mloc, temp_Mloc,   &
+                       &     dtemp_Mloc, xi_Mloc, dxi_Mloc, phi_Mloc, psi_hat_Mloc, &
+                       &     psi_Mloc, om_Mloc, dom_Mloc, us_Mloc, up_Mloc, dTdt,   &
+                       &     dxidt, dphidt, dpsidt, vp_bal, vort_bal, tscheme, lMat,&
+                       &     l_log_next, timers)
                end if
                runStop = MPI_Wtime()
                if ( .not. lMat ) then
@@ -338,12 +347,14 @@ contains
          if ( tscheme%l_assembly ) then
             if ( l_finite_diff ) then
                call assemble_stage_Rdist(temp_Rloc, dtemp_Rloc, xi_Rloc, dxi_Rloc, &
-                    &              us_Rloc, up_Rloc, om_Rloc, dTdt, dxidt, dpsidt, &
-                    &              tscheme, vp_bal, vort_bal)
+                    &                    phi_Rloc, us_Rloc, up_Rloc, om_Rloc, dTdt,&
+                    &                    dxidt, dphidt, dpsidt, tscheme, vp_bal,   &
+                    &                    vort_bal)
             else
-               call assemble_stage(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc, &
-                    &              xi_Mloc, dxi_Mloc, psi_hat_Mloc, psi_Mloc,         &
-                    &              us_Mloc, up_Mloc, om_Mloc, dTdt, dxidt, dpsidt,    &
+               call assemble_stage(temp_hat_Mloc, xi_hat_Mloc, phi_hat_Mloc,     &
+                    &              temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc,     &
+                    &              phi_Mloc, psi_hat_Mloc, psi_Mloc, us_Mloc,    &
+                    &              up_Mloc, om_Mloc, dTdt, dxidt, dphidt, dpsidt,&
                     &              tscheme, vp_bal, vort_bal, l_log_next, timers)
             end if
          end if
@@ -426,6 +437,14 @@ contains
                call get_xi_rhs_imp_ghost(xi_ghost, dxi_Rloc, dxidt, 1, .true.)
             end if
 
+            if ( l_phase_field ) then
+               call bulk_to_ghost(phi_Rloc, phi_ghost, 1, nRstart, nRstop, n_m_max,&
+                    &             1, n_m_max)
+               call exch_ghosts(phi_ghost, n_m_max, nRstart, nRstop, 1)
+               call fill_ghosts_phi(phi_ghost)
+               call get_phi_rhs_imp_ghost(phi_ghost, dphidt, 1, .true.)
+            end if
+
             call bulk_to_ghost(up_Rloc(1,:), up0_ghost, 1, nRstart, nRstop, 1, 1, 1)
             call exch_ghosts(up0_ghost, 1, nRstart, nRstop, 1)
             !-- psi is unknown: rebuild it from us
@@ -446,8 +465,9 @@ contains
             if ( l_cheb_coll ) then
 
                if ( l_heat ) call get_temp_rhs_imp_coll(temp_Mloc,dtemp_Mloc, &
-                                  &                     dTdt, 1, .true.)
+                                  &                     dTdt, phi_Mloc, 1, .true.)
                if ( l_chem ) call get_xi_rhs_imp_coll(xi_Mloc, dxi_Mloc, dxidt, 1, .true.)
+               if ( l_phase_field ) call get_phi_rhs_imp_coll(phi_Mloc, dphidt, 1, .true.)
                if ( l_direct_solve ) then
                   call get_psi_rhs_imp_coll_smat(us_Mloc, up_Mloc, om_Mloc,    &
                        &                         dom_Mloc, temp_Mloc, xi_Mloc, &
@@ -461,6 +481,7 @@ contains
             else
                if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, .true.)
                if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, .true.)
+               if ( l_phase_field ) call get_phi_rhs_imp_int(phi_hat_Mloc, dxidt, 1, .true.)
                if ( l_direct_solve ) then
                   call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,temp_Mloc,psi_Mloc, &
                        &                        dpsidt, 1, vp_bal, .true.)
@@ -536,6 +557,7 @@ contains
             call m2r_single%transp_m2r(om_Mloc, om_Rloc)
             if ( l_heat ) call m2r_single%transp_m2r(temp_Mloc, temp_Rloc)
             if ( l_chem ) call m2r_single%transp_m2r(xi_Mloc, xi_Rloc)
+            if ( l_phase_field ) call m2r_single%transp_m2r(phi_Mloc, phi_Rloc)
          end if
       end if
       runStop = MPI_Wtime()
@@ -572,6 +594,9 @@ contains
                call r2m_single%transp_r2m(dxidt_Rloc,dxidt%expl(:,:,istage))
                call r2m_single%transp_r2m(dVsXi_Rloc, dVsXi_Mloc(:,:,istage))
             end if
+            if ( l_phase_field ) then
+               call r2m_single%transp_r2m(dphidt_Rloc,dphidt%expl(:,:,istage))
+            end if
             call r2m_single%transp_r2m(dpsidt_Rloc,dpsidt%expl(:,:,istage))
             call r2m_single%transp_r2m(dVsOm_Rloc, dVsOm_Mloc(:,:,istage))
          end if
@@ -597,6 +622,8 @@ contains
          call r2m_single%transp_r2m(xi_Rloc, xi_Mloc)
          call r2m_single%transp_r2m(dxi_Rloc, dxi_Mloc)
       end if
+
+      if ( l_phase_field ) call r2m_single%transp_r2m(phi_Rloc, phi_Mloc)
 
    end subroutine transp_Rloc_to_Mloc_IO
 !--------------------------------------------------------------------------------

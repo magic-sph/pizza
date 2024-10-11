@@ -5,7 +5,7 @@ module fields
    !
    use precision_mod
    use constants, only: zero
-   use namelists, only: l_cheb_coll, l_heat, l_chem,  l_finite_diff
+   use namelists, only: l_cheb_coll, l_heat, l_chem, l_finite_diff, l_phase_field
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
    use blocking, only: nMstart, nMstop, nRstart, nRstop
@@ -20,10 +20,10 @@ module fields
    complex(cp), allocatable, public :: work_Mloc(:,:)
    complex(cp), allocatable, public :: dtemp_Rloc(:,:), dxi_Rloc(:,:)
    complex(cp), pointer, public :: temp_Mloc(:,:), om_Mloc(:,:), xi_Mloc(:,:)
-   complex(cp), pointer, public :: us_Mloc(:,:), up_Mloc(:,:)
+   complex(cp), pointer, public :: us_Mloc(:,:), up_Mloc(:,:), phi_Mloc(:,:)
    complex(cp), allocatable, target, public :: fields_Mloc_container(:,:,:)
 
-   complex(cp), pointer, public :: us_Rloc(:,:), up_Rloc(:,:)
+   complex(cp), pointer, public :: us_Rloc(:,:), up_Rloc(:,:), phi_Rloc(:,:)
    complex(cp), pointer, public :: om_Rloc(:,:), temp_Rloc(:,:), xi_Rloc(:,:)
    complex(cp), allocatable, target, public :: fields_Rloc_container(:,:,:)
 
@@ -31,6 +31,8 @@ module fields
    complex(cp), allocatable, public :: temp_hat_Mloc(:,:)
    complex(cp), allocatable, public :: xi_hat_Mloc(:,:)
 
+   complex(cp), allocatable, public :: phi_hat_Mloc(:,:)
+ 
    public :: initialize_fields, finalize_fields
 
 contains
@@ -52,6 +54,11 @@ contains
       else
          allocate( xi_Mloc(0,0), dxi_Mloc(0,0) )
       end if
+      if ( l_phase_field ) then
+         n_mloc_fields = n_mloc_fields + 1
+      else
+         allocate( phi_Mloc(0,0) )
+      end if
 
       allocate( fields_Mloc_container(nMstart:nMstop, n_r_max, 3+n_mloc_fields) )
       us_Mloc(nMstart:,1:) => fields_Mloc_container(nMstart:nMstop,1:n_r_max,1)
@@ -62,10 +69,24 @@ contains
          temp_Mloc(nMstart:,1:) => fields_Mloc_container(nMstart:nMstop,1:n_r_max,4)
          if ( l_chem ) then ! Heat and Chem
             xi_Mloc(nMstart:,1:) => fields_Mloc_container(nMstart:nMstop,1:n_r_max,5)
+            if ( l_phase_field ) then ! Heat, Chem and phase
+               phi_Mloc(nMstart:,1:) => fields_Mloc_container(nMstart:nMstop,1:n_r_max,6)
+            end if
+         else
+            if ( l_phase_field ) then ! Heat and phase
+               phi_Mloc(nMstart:,1:) => fields_Mloc_container(nMstart:nMstop,1:n_r_max,5)
+            end if
          end if
       else
          if ( l_chem ) then
             xi_Mloc(nMstart:,1:) => fields_Mloc_container(nMstart:nMstop,1:n_r_max,4)
+            if ( l_phase_field ) then ! Chem and phase
+               phi_Mloc(nMstart:,1:) => fields_Mloc_container(nMstart:nMstop,1:n_r_max,5)
+            end if
+         else
+            if ( l_phase_field ) then
+               phi_Mloc(nMstart:,1:) => fields_Mloc_container(nMstart:nMstop,1:n_r_max,4)
+            end if
          end if
       end if
       allocate( psi_Mloc(nMStart:nMstop,n_r_max) )
@@ -82,6 +103,9 @@ contains
       if ( l_chem ) then
          xi_Mloc(:,:) =zero
          dxi_Mloc(:,:)=zero
+      end if
+      if ( l_phase_field ) then
+         phi_Mloc(:,:)=zero
       end if
       psi_Mloc(:,:) =zero
       om_Mloc(:,:)  =zero
@@ -105,15 +129,23 @@ contains
          else
             allocate( xi_hat_Mloc(0,0) )
          end if
+         if ( l_phase_field ) then
+            allocate( phi_hat_Mloc(nMstart:nMstop,n_r_max) )
+            n_mloc_fields = n_mloc_fields + 1
+         else
+            allocate( phi_hat_Mloc(0,0) )
+         end if
          bytes_allocated = bytes_allocated+n_mloc_fields* &
          &                 (nMstop-nMstart+1)*n_r_max*SIZEOF_DEF_COMPLEX
          psi_hat_Mloc(:,:)=zero
          if ( l_heat ) temp_hat_Mloc(:,:)=zero
          if ( l_chem ) xi_hat_Mloc(:,:)=zero
+         if ( l_phase_field ) phi_hat_Mloc(:,:)=zero
       else
          ! We have to allocate the arrays to make the code runs when
          ! debug flags are turned on
-         allocate (psi_hat_Mloc(0,0), temp_hat_Mloc(0,0), xi_hat_Mloc(0,0) )
+         allocate( psi_hat_Mloc(0,0), temp_hat_Mloc(0,0), xi_hat_Mloc(0,0) )
+         allocate( phi_hat_Mloc(0,0) ) 
       end if
 
       n_rloc_fields = 0
@@ -127,6 +159,11 @@ contains
       else
          allocate( xi_Rloc(0,0) )
       end if
+      if ( l_phase_field ) then
+         n_rloc_fields = n_rloc_fields+1
+      else
+         allocate( phi_Rloc(0,0) )
+      end if
       allocate( fields_Rloc_container(n_m_max, nRstart:nRstop, 3+n_rloc_fields) )
       us_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,1)
       up_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,2)
@@ -135,10 +172,22 @@ contains
          temp_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,4)
          if ( l_chem ) then
             xi_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,5)
+            if ( l_phase_field ) then ! heat, chem and phase
+               phi_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,6)
+            end if
+         else ! Heat and phase
+            phi_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,5)
          end if
       else
          if ( l_chem ) then
             xi_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,4)
+            if ( l_phase_field ) then ! Chem and phase
+               phi_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,5)
+            end if
+         else
+            if ( l_phase_field ) then
+               phi_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,4)
+            end if
          end if
       end if
 
@@ -183,6 +232,7 @@ contains
          deallocate( dtemp_Mloc )
          if ( .not. l_cheb_coll ) deallocate( temp_hat_Mloc )
       end if
+      if ( l_phase_field ) deallocate(phi_hat_Mloc)
 
       deallocate(fields_Rloc_container, fields_Mloc_container)
       deallocate( dtemp_Rloc, dxi_Rloc )
