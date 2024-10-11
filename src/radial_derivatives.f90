@@ -1,3 +1,4 @@
+#define USE_DCT_FFT
 module radial_der
    !
    ! Radial derivatives functions
@@ -310,7 +311,7 @@ contains
    end subroutine get_ddcheb_real_1d
 !------------------------------------------------------------------------------
    subroutine get_dr_complex_2d(f,df,nMstart,nMstop,n_r_max,r_scheme,nocopy,  &
-              &                 l_dct_in,l_dct_out)
+              &                 l_dct_in)
       !
       !  Returns first radial derivative df of the input function f.
       !  Array f(nMstart:nMstop,*) may contain several functions numbered by
@@ -327,14 +328,13 @@ contains
       class(type_rscheme), intent(in) :: r_scheme
       logical, optional,   intent(in) :: nocopy
       logical, optional,   intent(in) :: l_dct_in
-      logical, optional,   intent(in) :: l_dct_out
 
       !-- Output variables:
       complex(cp), intent(out) :: df(nMstart:nMstop,n_r_max) ! first derivative of f
 
       !-- Local:
       integer :: n_r,od
-      logical :: copy_array, l_dct_in_loc, l_dct_out_loc
+      logical :: copy_array, l_dct_in_loc
 
       select type ( r_scheme)
 
@@ -346,18 +346,16 @@ contains
             l_dct_in_loc=.true.
          end if
 
-         if ( present(l_dct_out) ) then
-            l_dct_out_loc=l_dct_out
-         else
-            l_dct_out_loc=.true.
-         end if
-
          if ( present(nocopy) ) then
             copy_array=.false.
          else
             copy_array=.true.
          end if
 
+#ifdef USE_DCT_FFT
+          call r_scheme%chebt%get_dr_fft(f,df,r_scheme%x_cheb,nMstart,nMstop,n_r_max, &
+               &                         n_r_max,l_dct_in_loc)
+#else
          if ( copy_array )  then
             do n_r=1,n_r_max
                work(:,n_r)=f(:,n_r)
@@ -369,9 +367,7 @@ contains
             !-- Get derivatives:
             !call get_dcheb(work,df,nMstart,nMstop,n_r_max,r_scheme%n_max)
             call get_dcheb(work,df,nMstart,nMstop,n_r_max,n_r_max)
-
-            !-- Transform back:
-            if ( l_dct_out_loc ) call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
+            call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
 
          else
 
@@ -384,9 +380,10 @@ contains
 
             !-- Transform back:
             if ( l_dct_in_loc ) call r_scheme%costf1(f,nMstart,nMstop,n_r_max)
-            if ( l_dct_out_loc ) call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
+            call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
 
          end if
+#endif
 
          !-- New map:
          do n_r=1,n_r_max
@@ -523,6 +520,10 @@ contains
             l_dct_loc=.true.
          end if
 
+#ifdef USE_DCT_FFT
+         call r_scheme%chebt%get_ddr_fft(f,df,ddf,r_scheme%x_cheb,nMstart,nMstop, &
+              &                          n_r_max,n_r_max,l_dct_loc)
+#else
          !-- Copy input functions:
          do n_r=1,n_r_max
             work(:,n_r)=f(:,n_r)
@@ -538,10 +539,11 @@ contains
          !-- Transform back:
          call r_scheme%costf1(df,nMstart,nMstop,n_r_max)
          call r_scheme%costf1(ddf,nMstart,nMstop,n_r_max)
+#endif
 
          !-- New map:
          do n_r=1,n_r_max
-            ddf(:,n_r)=r_scheme%ddrx(n_r)*df(:,n_r)+&
+            ddf(:,n_r)=r_scheme%ddrx(n_r)*df(:,n_r) + &
             &          r_scheme%drx(n_r)*r_scheme%drx(n_r)*ddf(:,n_r)
             df(:,n_r) =r_scheme%drx(n_r)*df(:,n_r)
          end do
