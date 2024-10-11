@@ -817,8 +817,7 @@ contains
       end do
       !-- Finish calculation of advection
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct_in=.false.,        &
-           &       l_dct_out=.false.)
+           &       rscheme, nocopy=.true., l_dct_in=.false. )
 
       !-- If the force balance is requested
       if ( vort_bal%l_calc ) then
@@ -910,19 +909,18 @@ contains
          end do
       end if
 
-      !-- Transform the explicit part to Chebyshev space
-      call rscheme%costf1(dpsi_exp_last, nMstart, nMstop, n_r_max)
-
       !-- Add the advection term that is already in Chebyshev space
-      do n_cheb=1,n_cheb_max
+      do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_last(n_m,n_cheb)=dpsi_exp_last(n_m,n_cheb)-&
-               &                             work_Mloc(n_m,n_cheb)
+               dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-work_Mloc(n_m,n_r)
             end if
          end do
       end do
+
+      !-- Transform the explicit part to Chebyshev space
+      call rscheme%costf1(dpsi_exp_last, nMstart, nMstop, n_r_max)
 
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop

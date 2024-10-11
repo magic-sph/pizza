@@ -300,8 +300,7 @@ contains
       end do
 
       call get_dr( dVsXi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct_in=.false.,        &
-           &       l_dct_out=.false. )
+           &       rscheme, nocopy=.true., l_dct_in=.false. )
 
       !-- Finish calculation of the explicit part for current time step
       if ( l_non_rot ) then
@@ -323,16 +322,13 @@ contains
          end do
       end if
 
+      !-- Add the advection term
+      do n_r=1,n_r_max
+         dxi_exp_last(:,n_r)=dxi_exp_last(:,n_r)-work_Mloc(:,n_r)
+      end do
+
       !-- Transform the explicit part to Chebyshev space
       call rscheme%costf1(dxi_exp_last, nMstart, nMstop, n_r_max)
-
-      !-- Add the advection term that is already in Chebyshev space
-      do n_cheb=1,n_cheb_max
-         do n_m=nMstart,nMstop
-            dxi_exp_last(n_m,n_cheb)=dxi_exp_last(n_m,n_cheb)- &
-            &                               work_Mloc(n_m,n_cheb)
-         end do
-      end do
 
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
