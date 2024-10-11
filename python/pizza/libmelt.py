@@ -1,32 +1,13 @@
 # -*- coding: utf-8 -*-
-from .npfile import npfile
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
 from .log import PizzaSetup
-from .libpizza import scanDir, costf
-from scipy.integrate import simps
+from .libpizza import scanDir
+from .balance import avg_std
+from scipy.interpolate import interp1d
 import os
 import re
-
-
-def avg_std(time, y):
-    """
-    This routine computes the time-average and the standard deviation of
-    an input array
-
-    :param time: the time vector
-    :type time: numpy.ndarray
-    :param y: the quantity one wants to time average
-    :type y: numpy.ndarray
-    """
-
-    tfac = 1./(time[-1]-time[0])
-    ymean = tfac*simps(y, time, axis=0)
-    ystd = np.sqrt(tfac*simps((y-ymean)**2, time, axis=0))
-
-    return ymean, ystd
-
 
 
 class PizzaMelt(PizzaSetup):
@@ -83,7 +64,7 @@ class PizzaMelt(PizzaSetup):
                     self.phi, self.time, self.rmelt, self.dt_rmelt = \
                         self._read(file, endian)
                 else:
-                    time, phi, rmelt, dt_rmelt = self._read(file, endian)
+                    phi, time, rmelt, dt_rmelt = self._read(file, endian)
                     self.add(phi, time, rmelt, dt_rmelt)
 
         # If no tag is specified, the most recent is plotted
@@ -144,12 +125,12 @@ class PizzaMelt(PizzaSetup):
 
         return out
 
-    def add(self, phi, time, rmelt, dtmelt):
+    def add(self, phi, time, rmelt, dt_rmelt):
         if self.n_phi_max != len(phi):
             ip = interp1d(self.phi, self.rmelt, axis=1, fill_value='extrapolate')
-            self.rmelt(ip, phi)
+            self.rmelt = ip(self.rmelt, phi)
             ip = interp1d(self.phi, self.dt_rmelt, axis=1, fill_value='extrapolate')
-            self.dt_rmelt(ip, phi)
+            self.dt_rmelt = ip(self.dt_rmelt, phi)
             self.phi = phi
 
         if time[0] == self.time[-1]:
@@ -173,9 +154,8 @@ class PizzaMelt(PizzaSetup):
             data = np.fromfile(file, dtype=np.float64, count=8)
             self.ra, self.ek, self.pr, self.radratio, self.raxi, \
                 self.sc, self.stef, self.tmelt = data
-            print(self.stef, self.tmelt)
             data = np.fromfile(file, dtype=np.float64)
-            nsteps = len(data)//(2*self.n_phi_max+1) # Modify if two fields
+            nsteps = len(data)//(2*self.n_phi_max+1)  # Modify if two fields
 
             data = data.reshape((nsteps, 2*self.n_phi_max+1))
             time = data[:, 0]
