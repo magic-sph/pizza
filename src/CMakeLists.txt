@@ -19,10 +19,8 @@ if(USE_LAPACKLIB MATCHES MKL)
    target_link_libraries(lapack95 ${MKLCORE} ${MKLLAPACK} ${MKLSEQ} ${MKL64})
    target_link_libraries(blas95 ${MKLCORE} ${MKLBLAS} ${MKLSEQ} ${MKL64})
    target_link_libraries(${EXEC} lapack95 blas95)
-endif()
-
+elseif(USE_LAPACKLIB MATCHES LAPACK)
 # Link LAPACK
-if(USE_LAPACKLIB MATCHES LAPACK)
    target_link_libraries(${EXEC} ${LAPACK_LIBRARIES})
 elseif(USE_LAPACKLIB MATCHES LIBSCI)
    target_link_libraries (${EXEC} ${SCI})
