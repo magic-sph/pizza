@@ -217,7 +217,7 @@ contains
                !-------------------
                !-- MPI transpositions from m-distributed to r-distributed
                !-------------------
-               call transp_Mloc_to_Rloc(timers%n_mpi_comms, timers%mpi_comms)
+               call transp_Mloc_to_Rloc(timers%n_mpi_comms, timers%mpi_comms, l_log)
 
                !-------------------
                !-- Radial loop
@@ -535,7 +535,7 @@ contains
 
    end subroutine check_signals
 !--------------------------------------------------------------------------------
-   subroutine transp_Mloc_to_Rloc(n_mpi_comms, mpi_comms)
+   subroutine transp_Mloc_to_Rloc(n_mpi_comms, mpi_comms, l_log)
       !
       !- MPI transposition from M-distributed to r-distributed
       !
@@ -543,6 +543,7 @@ contains
       !-- Output variables
       integer,  intent(inout) :: n_mpi_comms
       real(cp), intent(inout) :: mpi_comms
+      logical,  intent(in) :: l_log
 
       !-- Local variables
       real(cp) :: runStart, runStop
@@ -559,6 +560,8 @@ contains
             if ( l_chem ) call m2r_single%transp_m2r(xi_Mloc, xi_Rloc)
             if ( l_phase_field ) call m2r_single%transp_m2r(phi_Mloc, phi_Rloc)
          end if
+
+         if ( l_phase_field .and. l_log ) call m2r_single%transp_m2r(dtemp_Mloc, dtemp_Rloc)
       end if
       runStop = MPI_Wtime()
       if (runStop>runStart) then

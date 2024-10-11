@@ -33,7 +33,7 @@ contains
       allocate( phi_ghost(n_m_max,nRstart-1:nRstop+1) )
       bytes_allocated=bytes_allocated + n_m_max*(nRstop-nRstart+3)*SIZEOF_DEF_COMPLEX
       phi_ghost(:,:)=zero
-      allocate( lPhimat_FD(1:n_m_max) ) 
+      allocate( lPhimat_FD(1:n_m_max) )
 
    end subroutine initialize_phi_fd
 !---------------------------------------------------------------------------------

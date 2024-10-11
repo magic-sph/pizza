@@ -327,7 +327,7 @@ contains
          call calc_energy_transfer(us_Mloc, up_Mloc, l_stop_time)
       end if
 
-      if ( l_log .and. l_phase_field ) call write_out_phase(time)
+      if ( l_log .and. l_phase_field .and. n_time_step > 1 ) call write_out_phase(time)
 
       if ( vort_bal%l_calc .or. (l_stop_time .and. l_vort_balance) ) then
          timeAvg_vortbal = timeAvg_vortbal + tscheme%dt(1)

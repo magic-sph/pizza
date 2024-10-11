@@ -32,7 +32,7 @@ module fields
    complex(cp), allocatable, public :: xi_hat_Mloc(:,:)
 
    complex(cp), allocatable, public :: phi_hat_Mloc(:,:)
- 
+
    public :: initialize_fields, finalize_fields
 
 contains
@@ -145,7 +145,7 @@ contains
          ! We have to allocate the arrays to make the code runs when
          ! debug flags are turned on
          allocate( psi_hat_Mloc(0,0), temp_hat_Mloc(0,0), xi_hat_Mloc(0,0) )
-         allocate( phi_hat_Mloc(0,0) ) 
+         allocate( phi_hat_Mloc(0,0) )
       end if
 
       n_rloc_fields = 0
@@ -214,7 +214,11 @@ contains
          bytes_allocated = bytes_allocated + n_rloc_fields* &
          &                 n_m_max*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
       else
-         allocate( dtemp_Rloc(1,1) )
+         if ( l_phase_field ) then
+            allocate( dtemp_Rloc(n_m_max,nRstart:nRstop) )
+         else
+            allocate( dtemp_Rloc(1,1) )
+         end if
          allocate( dxi_Rloc(1,1) )
       end if
 

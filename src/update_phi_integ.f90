@@ -18,7 +18,7 @@ module update_phi_integ
    use chebsparselib, only: intcheb2rmult2lapl, intcheb2rmult2
 
    implicit none
-   
+
    private
 
    integer, parameter :: n_boundaries=2 ! Number of BCs for this equation
@@ -181,7 +181,7 @@ contains
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
-         
+
          if ( .not. lPhimat(n_m) ) then
             if ( l_galerkin ) then
                call get_lhs_mat_gal( tscheme%wimp_lin(1), LHS_mat_gal(n_m), &
@@ -251,7 +251,7 @@ contains
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dphidt)
 
-      !-- Compute implicit stage 
+      !-- Compute implicit stage
       if ( tscheme%istage == tscheme%nstages ) then
          call get_phi_rhs_imp_int(phi_hat_Mloc, dphidt, 1, tscheme%l_imp_calc_rhs(1))
       else
@@ -280,7 +280,7 @@ contains
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
-         
+
          if ( .not. lAssmat(n_m) ) then
             if ( l_galerkin ) then
                call get_lhs_mat_gal( 0.0_cp, Ass_mat_gal(n_m), assfac(:,n_m), m )
@@ -345,7 +345,7 @@ contains
       !-- Bring phase field back to physical space
       call rscheme%costf1(phi_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Compute implicit stage 
+      !-- Compute implicit stage
       call get_phi_rhs_imp_int(phi_hat_Mloc, dphidt, 1, tscheme%l_imp_calc_rhs(1))
 
    end subroutine assemble_phi_int
@@ -401,7 +401,7 @@ contains
          !-- Finally assemble the right hand side
          do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
-               dphidt%impl(n_m,n_cheb,istage)=phaseDiffFac*work_Mloc(n_m,n_cheb) 
+               dphidt%impl(n_m,n_cheb,istage)=phaseDiffFac*work_Mloc(n_m,n_cheb)
             end do
          end do
 
@@ -438,7 +438,7 @@ contains
 
          !-- Define the equations
          stencilA = 5.0_cp*6.0_cp*stef*pr*intcheb2rmult2(a,b,i_r-1,Amat%nbands)-&
-         &          wimp*phaseDiffFac*intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)  
+         &          wimp*phaseDiffFac*intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)
 
          !-- Roll the array for band storage
          do n_band=1,Amat%nbands
@@ -535,7 +535,7 @@ contains
 
          !-- Define the equations
          stencilA4 = 5.0_cp/6.0_cp*stef*pr*intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-&
-         &           wimp*phaseDiffFac*intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         &           wimp*phaseDiffFac*intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
 
          !-- Roll the array for band storage
          do n_band=1,A_mat%nbands
@@ -551,7 +551,7 @@ contains
       do n_r=1,A_mat%nlines_band
          i_r = n_r+A_mat%ntau
          stencilA4 = 5.0_cp/6.0_cp*pr*stef*intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-&
-         &           wimp*phaseDiffFac*intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         &           wimp*phaseDiffFac*intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,A_mat%kl

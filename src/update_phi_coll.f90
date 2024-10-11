@@ -16,7 +16,7 @@ module update_phi_coll
    use time_array, only: type_tarray
 
    implicit none
-   
+
    private
 
    logical,  allocatable :: lPhimat(:)
@@ -83,7 +83,7 @@ contains
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
-         
+
          if ( .not. lPhimat(n_m) ) then
 #ifdef WITH_PRECOND_S
             call get_phiMat(tscheme, m, phiMat(:,:,n_m), phiPivot(:,n_m), &
