@@ -520,7 +520,7 @@ contains
       cheb_method      ='colloc'
       bc_method        ='tau-lanczos'
       matrix_solve     ='DIRECT'
-      l_rerror_fix     =.true.
+      l_rerror_fix     =.false.
       rerror_fac       =500.0_cp
       corio_term       ='IMPLICIT' ! Implicit treatment of Coriolis term
       buo_term         ='IMPLICIT' ! Implicit treatment of Buoyancy
