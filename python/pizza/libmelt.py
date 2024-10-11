@@ -106,11 +106,11 @@ class PizzaMelt(PizzaSetup):
         Built-in functions to sum two vphi force balances
         """
         out = copy.deepcopy(new)
-        if self.n_phi_max != new.n_phi_max:
+        if len(self.phi) != new.n_phi_max:
             ip = interp1d(self.phi, self.rmelt, axis=1, fill_value='extrapolate')
-            self.rmelt = ip(self.rmelt, new.phi)
+            self.rmelt = ip(new.phi)
             ip = interp1d(self.phi, self.dt_rmelt, axis=1, fill_value='extrapolate')
-            self.dt_rmelt = ip(self.dt_rmelt, new.phi)
+            self.dt_rmelt = ip(new.phi)
             self.phi = new.phi
 
         if new.time[0] == self.time[-1]:
@@ -126,11 +126,11 @@ class PizzaMelt(PizzaSetup):
         return out
 
     def add(self, phi, time, rmelt, dt_rmelt):
-        if self.n_phi_max != len(phi):
+        if len(self.phi) != len(phi):
             ip = interp1d(self.phi, self.rmelt, axis=1, fill_value='extrapolate')
-            self.rmelt = ip(self.rmelt, phi)
+            self.rmelt = ip(phi)
             ip = interp1d(self.phi, self.dt_rmelt, axis=1, fill_value='extrapolate')
-            self.dt_rmelt = ip(self.dt_rmelt, phi)
+            self.dt_rmelt = ip(phi)
             self.phi = phi
 
         if time[0] == self.time[-1]:
