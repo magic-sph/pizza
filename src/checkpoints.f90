@@ -374,7 +374,7 @@ contains
       end do
 
       !-- If new Ekman and old Ekman differ, we use AB1 for the first time step.
-      if ( ek_old /= ek ) then 
+      if ( ek_old /= ek ) then
          l_AB1 = .true.
       end if
 
@@ -741,7 +741,7 @@ contains
             &                               radial_data_imag(n_r),cp)
          end do
 
-      !-- If either the old grid or the new grid is FD, we use a 
+      !-- If either the old grid or the new grid is FD, we use a
       !-- polynomial interpolation
       else
 

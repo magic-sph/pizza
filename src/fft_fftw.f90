@@ -1,5 +1,5 @@
 module fourier
-   
+
    use iso_c_binding
    use namelists, only: fftw_plan_flag
    use constants, only: zero, half, two
@@ -49,7 +49,7 @@ contains
 
       complex(cp) :: tmp(n_phi_max/2+1)
       integer :: n_m,m
-      
+
       call fftw_execute_dft_r2c(plan_forward, array_in, tmp)
 
       do n_m=1,n_m_max

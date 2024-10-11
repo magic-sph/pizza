@@ -1,5 +1,5 @@
 module courant_mod
- 
+
    use parallel_mod
    use precision_mod
    use outputs, only: n_log_file
@@ -41,48 +41,48 @@ contains
 !------------------------------------------------------------------------------
    subroutine courant(n_r,dtrkc,dthkc,ur,up,courfac)
       !
-      !  courant condition check: calculates Courant                      
-      !  advection lengths in radial direction dtrkc                      
-      !  and in horizontal direction dthkc                                
-      !  on the local radial level n_r                                   
+      !  courant condition check: calculates Courant
+      !  advection lengths in radial direction dtrkc
+      !  and in horizontal direction dthkc
+      !  on the local radial level n_r
       !
-    
+
       !-- Input variable:
       integer,  intent(in) :: n_r             ! radial level
       real(cp), intent(in) :: ur(n_phi_max)   ! radial velocity
       real(cp), intent(in) :: up(n_phi_max)   ! azimuthal velocity
       real(cp), intent(in) :: courfac         ! Courant factor
 
-    
+
       !-- Output:
       real(cp), intent(out) :: dtrkc    ! Courant step (based on radial advection)
                                         ! for the range of points covered
       real(cp), intent(out) :: dthkc    ! Courant step based on horizontal advection
-    
+
       integer :: n_phi
       real(cp) :: vr2max,vh2max
       real(cp) :: vflr2,vflh2
       real(cp) :: cf2
-    
+
       vr2max=0.0_cp
       vh2max=0.0_cp
       dtrkc =1.0e10_cp
       dthkc =1.0e10_cp
       cf2=courfac*courfac
-    
+
       do n_phi=1,n_phi_max
-    
+
          vflr2 =ur(n_phi)*ur(n_phi)
          vr2max=max(vr2max,cf2*vflr2)
-    
-         vflh2 =up(n_phi)*up(n_phi) 
+
+         vflh2 =up(n_phi)*up(n_phi)
          vh2max=max(vh2max,cf2*vflh2)
-    
+
       end do
-    
+
       if ( vr2max /= 0.0_cp ) dtrkc=min(dtrkc,sqrt(delxr2(n_r)/vr2max))
       if ( vh2max /= 0.0_cp ) dthkc=min(dthkc,sqrt(delxh2(n_r)/vh2max))
-    
+
    end subroutine courant
 !------------------------------------------------------------------------------
    subroutine dt_courant(dt_r,dt_h,l_new_dt,dt,dt_new,dtMax,dtrkc,dthkc,time)
@@ -108,18 +108,18 @@ contains
       real(cp), intent(in) :: dtrkc(nRstart:nRstop)
       real(cp), intent(in) :: dthkc(nRstart:nRstop)
       real(cp), intent(in) :: time
-    
+
       !-- Output variables:
       logical,  intent(out) :: l_new_dt
       real(cp), intent(out) :: dt_new
       real(cp), intent(out) :: dt_r,dt_h
-    
+
       !-- Local:
       integer :: n_r
       real(cp) :: dt_rh,dt_2
-    
+
       character(len=200) :: message
-    
+
       dt_r  =1000.0_cp*dtMax
       dt_h  =dt_r
       do n_r=nRstart,nRstop
@@ -136,15 +136,15 @@ contains
       dt_2 =min(half*(one/dt_fac+one)*dt_rh,dtMax)
 
       if ( dt > dtMax ) then ! Timestep larger than dtMax from Namelist
-    
+
          l_new_dt=.true.
          dt_new=dtMax
          write(message,'(1P," ! COURANT: dt=dtMax =",ES12.4,A)') dtMax,&
               &" ! Think about changing dtMax !"
          call logWrite(message,n_log_file)
-    
+
       else if ( dt > dt_rh ) then ! Timestep decrease
-    
+
          l_new_dt=.true.
          dt_new  =dt_2
          write(message,'(1P," ! COURANT: dt=",ES11.4," > dt_r=",ES12.4, &
@@ -153,9 +153,9 @@ contains
          if ( rank == 0 ) then
             write(file_handle, '(1p, es20.12, es16.8)')  time, dt_new
          end if
-    
+
       else if ( dt_fac*dt < dt_rh .and. dt < dtMax ) then ! Timestep increase
-    
+
          l_new_dt=.true.
          dt_new=dt_2
          write(message,'(" ! COURANT: ",F4.1,1P,"*dt=",ES11.4, &
@@ -166,11 +166,11 @@ contains
             write(file_handle, '(1p, es20.12, es16.8)')  time, dt_new
          end if
 
-      else 
+      else
 
          l_new_dt=.false.
          dt_new=dt
-    
+
       end if
 
    end subroutine dt_courant

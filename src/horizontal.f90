@@ -7,9 +7,9 @@ module horizontal
    use precision_mod
    use parallel_mod
    use mem_alloc
-   use constants, only: zero, one
+   use constants, only: zero, one, two, pi
    use blocking, only: nMstart, nMstop, m_balance, nm_per_rank
-   use truncation, only: idx2m, n_m_max
+   use truncation, only: idx2m, n_m_max, minc, n_phi_max
    use namelists, only: hdif_m, hdif_exp, hdif_vel, hdif_temp, tag,   &
        &                t_bot, t_top, xi_bot, xi_top, hdif_comp,      &
        &                l_heat, l_chem
@@ -28,11 +28,16 @@ module horizontal
    real(cp), public, allocatable :: hdif_T(:)
    real(cp), public, allocatable :: hdif_Xi(:)
 
+   real(cp), public, allocatable :: phi(:) ! Longitude
+
    public :: initialize_mfunctions, finalize_mfunctions, mfunctions
 
 contains
 
    subroutine initialize_mfunctions
+
+      allocate( phi(n_phi_max) )
+      bytes_allocated = bytes_allocated+n_m_max*SIZEOF_DEF_REAL
 
       allocate( hdif_V(nMstart:nMstop) )
       bytes_allocated = bytes_allocated+(nMstop-nMstart+1)*SIZEOF_DEF_REAL
@@ -57,7 +62,7 @@ contains
 
       if ( l_heat ) deallocate( bott_Mloc, topt_Mloc, hdif_T )
       if ( l_chem ) deallocate( botxi_Mloc, topxi_Mloc, hdif_Xi )
-      deallocate( hdif_V )
+      deallocate( hdif_V, phi )
 
    end subroutine finalize_mfunctions
 !--------------------------------------------------------------------------------
@@ -65,11 +70,15 @@ contains
 
       !-- Local variables
       integer :: n, m_bot, m_top
-      integer :: n_m, m, n_p, file_handle
+      integer :: n_m, m, n_p, file_handle, n_phi
       integer :: displs(0:n_procs-1), recvcounts(0:n_procs-1)
-      real(cp) :: eps, tr_bot, ti_bot, tr_top, ti_top
+      real(cp) :: eps, tr_bot, ti_bot, tr_top, ti_top, fac
       real(cp) :: hdif_T_global(n_m_max), hdif_V_global(n_m_max)
       real(cp) :: hdif_Xi_global(n_m_max)
+
+      !----- Same for longitude output grid:
+      fac=two*pi/real(n_phi_max*minc,cp)
+      phi(:)=[((n_phi-1)*fac, n_phi=1,n_phi_max)]
 
       eps = 10.0_cp*epsilon(one)
       if ( abs(hdif_temp) > eps .or. abs(hdif_vel) > eps .or. &

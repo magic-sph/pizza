@@ -90,7 +90,7 @@ contains
       else if ( index(time_scheme, 'TVB33') /= 0 ) then
          this%time_scheme = 'TVB33'
          this%nold = 3
-         this%nimp = 3 
+         this%nimp = 3
          this%nexp = 3
          courfac_loc = 4.0_cp
       else if ( index(time_scheme, 'BDF4AB4') /= 0 .or. index(time_scheme, 'SBDF4') /= 0 ) then
@@ -142,13 +142,13 @@ contains
       !-- Local variables
       real(cp) :: delta, delta_n, delta_n_1, delta_n_2
       real(cp) :: a0, a1, a2, a3, a4, b0, b1, b2, b3, c0, c1, c2, c3
-      real(cp) :: gam, theta, c 
+      real(cp) :: gam, theta, c
       real(cp) :: wimp_old
 
       wimp_old = this%wimp_lin(1)
 
       select case ( this%time_scheme )
-         case ('CNAB2') 
+         case ('CNAB2')
             this%wimp(1)    =one
             this%wimp_lin(1)=alpha*this%dt(1)
             this%wimp_lin(2)=(1-alpha)*this%dt(1)
@@ -165,7 +165,7 @@ contains
 
             this%wexp(1)=(one+delta)*this%dt(1)
             this%wexp(2)=0.0_cp
-         case ('MODCNAB') 
+         case ('MODCNAB')
             delta = this%dt(1)/this%dt(2)
             this%wimp(1)    =one
             this%wimp(2)    =0.0_cp

@@ -20,7 +20,7 @@ module update_temp_integ
    use chebsparselib, only: intcheb2rmult1, intcheb2rmult2lapl, intcheb2rmult2
 
    implicit none
-   
+
    private
 
    integer, parameter :: n_boundaries=2 ! Number of BCs for this equation
@@ -200,7 +200,7 @@ contains
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
-         
+
          if ( .not. lTmat(n_m) ) then
             if ( l_galerkin ) then
                call get_lhs_mat_gal(tscheme%wimp_lin(1), LHS_mat_gal(n_m), &
@@ -310,7 +310,7 @@ contains
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
-         
+
          if ( .not. lAssmat(n_m) ) then
             if ( l_galerkin ) then
                call get_lhs_mat_gal(0.0_cp, Ass_mat_gal(n_m), assfac(:,n_m), m)
@@ -402,8 +402,7 @@ contains
          end do
       end do
       call get_dr( dVsT_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct_in=.false.,       &
-           &       l_dct_out=.false. )
+           &       rscheme, nocopy=.true., l_dct_in=.false. )
 
       !-- Finish calculation of the explicit part for current time step
       if ( l_non_rot ) then
@@ -426,16 +425,13 @@ contains
          end do
       end if
 
+      !-- Add the advection term
+      do n_r=1,n_r_max
+         dtemp_exp_last(:,n_r)=dtemp_exp_last(:,n_r)-work_Mloc(:,n_r)
+      end do
+
       !-- Transform the explicit part to Chebyshev space
       call rscheme%costf1(dtemp_exp_last, nMstart, nMstop, n_r_max)
-
-      !-- Add the advection term that is already in Chebyshev space
-      do n_cheb=1,n_cheb_max
-         do n_m=nMstart,nMstop
-            dtemp_exp_last(n_m,n_cheb)=dtemp_exp_last(n_m,n_cheb)- &
-            &                               work_Mloc(n_m,n_cheb)
-         end do
-      end do
 
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
@@ -512,7 +508,7 @@ contains
          do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
                dTdt%impl(n_m,n_cheb,istage)=TdiffFac*hdif_T(n_m)*&
-               &                            work_Mloc(n_m,n_cheb) 
+               &                            work_Mloc(n_m,n_cheb)
             end do
          end do
 
@@ -550,7 +546,7 @@ contains
          !-- Define the equations
          stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-      &
          &          wimp*TdiffFac*hdif_T(n_m)*                  &
-         &          intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)  
+         &          intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)
 
          !-- Roll the array for band storage
          do n_band=1,Amat%nbands
@@ -648,7 +644,7 @@ contains
          !-- Define the equations
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-     &
          &           wimp*TdiffFac*hdif_T(n_m)*                  &
-         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
 
          !-- Roll the array for band storage
          do n_band=1,A_mat%nbands
@@ -665,7 +661,7 @@ contains
          i_r = n_r+A_mat%ntau
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-    &
          &           wimp*TdiffFac*hdif_T(n_m)*                 &
-         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,A_mat%kl

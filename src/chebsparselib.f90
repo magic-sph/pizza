@@ -344,11 +344,11 @@ contains
       !-- Input variables
       real(cp), intent(in) :: a
       real(cp), intent(in) :: b
-      integer,  intent(in) :: m 
+      integer,  intent(in) :: m
       integer,  intent(in) :: n
       integer,  intent(in) :: len_stencil
 
-      !-- Output variable 
+      !-- Output variable
       real(cp) :: stencil(len_stencil)
 
       !-- Local variables
@@ -403,7 +403,7 @@ contains
       integer,  intent(in) :: n
       integer,  intent(in) :: len_stencil
 
-      !-- Output variable 
+      !-- Output variable
       real(cp) :: stencil(len_stencil)
 
       !-- Local variables
@@ -678,11 +678,11 @@ contains
       !-- Input variables
       real(cp), intent(in) :: a
       real(cp), intent(in) :: b
-      integer,  intent(in) :: m 
+      integer,  intent(in) :: m
       integer,  intent(in) :: n
       integer,  intent(in) :: len_stencil
 
-      !-- Output variable 
+      !-- Output variable
       real(cp) :: stencil(len_stencil)
 
       !-- Local variables
@@ -844,11 +844,11 @@ contains
       !-- Input variables
       real(cp), intent(in) :: a
       real(cp), intent(in) :: b
-      integer,  intent(in) :: m 
+      integer,  intent(in) :: m
       integer,  intent(in) :: n
       integer,  intent(in) :: len_stencil
 
-      !-- Output variable 
+      !-- Output variable
       real(cp) :: stencil(len_stencil)
 
       !-- Local variables

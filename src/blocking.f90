@@ -23,7 +23,7 @@ module blocking
    integer, public :: nMstart, nMstop, nm_per_rank
    logical, public :: l_rank_has_m0
 
-   public :: set_mpi_domains, destroy_mpi_domains
+   public :: set_mpi_domains, destroy_mpi_domains, getBlocks, load
 
 contains
 
@@ -68,7 +68,7 @@ contains
       integer, intent(in) :: n_points
 
       integer :: n_points_loc, check, p
-      
+
       n_points_loc = n_points/n_procs
 
       check = mod(n_points,n_procs)-1

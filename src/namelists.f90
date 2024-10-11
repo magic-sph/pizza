@@ -96,7 +96,7 @@ module namelists
    logical,  public :: l_start_file     ! taking fields from startfile ?
    logical,  public :: l_reset_t ! Should we reset the time stored in the startfile?
    logical,  public :: l_packed_transp
-   character(len=72), public :: start_file  ! name of start_file           
+   character(len=72), public :: start_file  ! name of start_file
 
    integer,  public :: n_log_step
    integer,  public :: n_frames
@@ -112,7 +112,8 @@ module namelists
    logical,  public :: l_vort_balance    ! Calculate the vorticiy balance
    logical,  public :: l_2D_spectra      ! Calculate 2D spectra
    logical,  public :: l_2D_SD           ! Also store the standard deviation
-   logical,  public :: l_corr            ! Calculte the correlation
+   logical,  public :: l_corr            ! Calculate the correlation
+   logical,  public :: l_energy_trans    ! Calculate the energy transfer between scales
    real(cp), public :: bl_cut            ! Cut-off boundary layers in the force balance
    logical,  public :: l_heat
    logical,  public :: l_chem
@@ -131,6 +132,7 @@ module namelists
    real(cp), public :: hdif_vel        ! Hyperdiffusion amplitude on velocity
    integer,  public :: hdif_exp        ! Exponent of the hyperdiffusion profile
    integer,  public :: hdif_m          ! Azimuthal wavenumber for hdif
+   integer,  public :: m_max_transfer  ! Azimuthal truncation when transfer of energy is computed
 
    public :: read_namelists, write_namelists
 
@@ -168,8 +170,9 @@ contains
       &                    scale_xi
       namelist/output_control/n_log_step,n_checkpoints, n_checkpoint_step, &
       &                       n_frames, n_frame_step, n_specs, n_spec_step,&
-      &                       l_vphi_balance,l_vort_balance,bl_cut,        &
-      &                       l_2D_spectra, l_2D_SD, l_corr
+      &                       l_vphi_balance, l_vort_balance, bl_cut,      &
+      &                       l_2D_spectra, l_2D_SD, l_corr,               &
+      &                       l_energy_trans, m_max_transfer
 
    !namelist/control/tag,n_times
 
@@ -402,7 +405,7 @@ contains
             &    '(" ! Coriolis term will be treated explicitly")')
          end if
       end if
-      
+
       if ( l_finite_diff ) then
          l_buo_imp = .false.
          if ( rank == 0 ) then
@@ -413,8 +416,10 @@ contains
          end if
       end if
 
+      if ( l_energy_trans .and. m_max_transfer < 0 ) m_max_transfer=m_max
+
       !-- Time unit
-      call capitalize(time_scale) 
+      call capitalize(time_scale)
       if ( l_non_rot ) then
          CorFac = 0.0_cp
          if ( l_heat ) then
@@ -474,8 +479,8 @@ contains
 !--------------------------------------------------------------------------------
    subroutine default_namelists
       !
-      !  Purpose of this subroutine is to set default parameters          
-      !  for the namelists.                                               
+      !  Purpose of this subroutine is to set default parameters
+      !  for the namelists.
       !
 
       !-- Local variable:
@@ -515,7 +520,7 @@ contains
       cheb_method      ='colloc'
       bc_method        ='tau-lanczos'
       matrix_solve     ='DIRECT'
-      l_rerror_fix     =.true.
+      l_rerror_fix     =.false.
       rerror_fac       =500.0_cp
       corio_term       ='IMPLICIT' ! Implicit treatment of Coriolis term
       buo_term         ='IMPLICIT' ! Implicit treatment of Buoyancy
@@ -553,7 +558,7 @@ contains
       !----- Volumetric sources
       h_temp           =0.0_cp
       h_xi             =0.0_cp
-      !----- Boundary conditions        
+      !----- Boundary conditions
       ktopt            =1
       kbott            =1
       ktopxi           =1
@@ -602,6 +607,8 @@ contains
       l_2D_SD          =.false.
       l_corr           =.false.
       bl_cut           =1.0e-3_cp
+      l_energy_trans   =.false.
+      m_max_transfer   =-1
 
    end subroutine default_namelists
 !--------------------------------------------------------------------------------
@@ -742,6 +749,8 @@ contains
       write(n_out,'(''  l_2D_spectra    ='',l3,'','')') l_2D_spectra
       write(n_out,'(''  l_2D_SD         ='',l3,'','')') l_2D_SD
       write(n_out,'(''  l_corr          ='',l3,'','')') l_corr
+      write(n_out,'(''  l_energy_trans  ='',l3,'','')') l_energy_trans
+      write(n_out,'(''  m_max_transfer  ='',i5,'','')') m_max_transfer
       write(n_out,*) "/"
 
    end subroutine write_namelists

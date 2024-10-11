@@ -31,7 +31,7 @@ module update_psi_integ_smat
 
 
    implicit none
-   
+
    private
 
    logical,  allocatable :: lPsimat(:) ! Do we need to rebuild the matrices?
@@ -205,7 +205,7 @@ contains
    subroutine finalize_psi_integ_smat(tscheme)
       !
       ! Memory deallocation
-      ! 
+      !
 
       !-- Input variable
       class(type_tscheme), intent(in) :: tscheme
@@ -817,8 +817,7 @@ contains
       end do
       !-- Finish calculation of advection
       call get_dr( dVsOm_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct_in=.false.,        &
-           &       l_dct_out=.false.)
+           &       rscheme, nocopy=.true., l_dct_in=.false. )
 
       !-- If the force balance is requested
       if ( vort_bal%l_calc ) then
@@ -853,7 +852,7 @@ contains
                end if
 
                !-- If Buoyancy is treated explicitly
-               if ( .not. l_buo_imp ) then 
+               if ( .not. l_buo_imp ) then
                   !-- Store buoyancy for the force balance
                   if ( vort_bal%l_calc ) then
                      if ( l_heat ) then
@@ -899,7 +898,7 @@ contains
                if ( m == 0 ) then
                   dpsi_exp_last(n_m,n_r)=  dpsi_exp_last(n_m,n_r)- &
                   &                      ekp_fac*up_Mloc(n_m,n_r)
-               else 
+               else
                   dpsi_exp_last(n_m,n_r)=     dpsi_exp_last(n_m,n_r) -       &
                   &               ekp_fac*r(n_r)*(  om_Mloc(n_m,n_r) +       &
                   &                  ekp_up(n_r)*   up_Mloc(n_m,n_r) +       &
@@ -910,19 +909,18 @@ contains
          end do
       end if
 
-      !-- Transform the explicit part to Chebyshev space
-      call rscheme%costf1(dpsi_exp_last, nMstart, nMstop, n_r_max)
-
       !-- Add the advection term that is already in Chebyshev space
-      do n_cheb=1,n_cheb_max
+      do n_r=1,n_r_max
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
             if ( m /= 0 ) then
-               dpsi_exp_last(n_m,n_cheb)=dpsi_exp_last(n_m,n_cheb)-&
-               &                             work_Mloc(n_m,n_cheb)
+               dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-work_Mloc(n_m,n_r)
             end if
          end do
       end do
+
+      !-- Transform the explicit part to Chebyshev space
+      call rscheme%costf1(dpsi_exp_last, nMstart, nMstop, n_r_max)
 
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
@@ -1180,7 +1178,7 @@ contains
             else
                stencilA = -intcheb4rmult4lapl(a,b,m,i_r-1,Amat%nbands)+  &
                &                         wimp*ViscFac*hdif_V(n_m)*       &
-               &          intcheb4rmult4lapl2(a,b,m,i_r-1,Amat%nbands)  
+               &          intcheb4rmult4lapl2(a,b,m,i_r-1,Amat%nbands)
                CorSten   = 0.0_cp
             end if
 
@@ -1195,7 +1193,7 @@ contains
             else
                stencilA = intcheb4rmult4laplrot(a,b,m,i_r-1,Amat%nbands)   &
                &                         -wimp*ViscFac*hdif_V(n_m)*        &
-               &          intcheb4rmult4laplrot2(a,b,m,i_r-1,Amat%nbands)  
+               &          intcheb4rmult4laplrot2(a,b,m,i_r-1,Amat%nbands)
                if ( l_coriolis_imp ) then
                   CorSten=wimp*CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,Amat%nbands)
                else
@@ -1336,7 +1334,7 @@ contains
             else
                stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
                &                          wimp*ViscFac*hdif_V(n_m)*        &
-               &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+               &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)
                CorSten   = 0.0_cp
             end if
 
@@ -1351,7 +1349,7 @@ contains
             else
                stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)   &
                &                          -wimp*ViscFac*hdif_V(n_m)*         &
-               &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+               &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)
                if ( l_coriolis_imp ) then
                   CorSten=wimp*CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
                else
@@ -1388,7 +1386,7 @@ contains
             else
                stencilA4 = -intcheb4rmult4lapl(a,b,m,i_r-1,A_mat%nbands)+  &
                &                          wimp*ViscFac*hdif_V(n_m)*        &
-               &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)  
+               &           intcheb4rmult4lapl2(a,b,m,i_r-1,A_mat%nbands)
                CorSten   = 0.0_cp
             end if
 
@@ -1403,7 +1401,7 @@ contains
             else
                stencilA4 = intcheb4rmult4laplrot(a,b,m,i_r-1,A_mat%nbands)   &
                &                          -wimp*ViscFac*hdif_V(n_m)*         &
-               &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)  
+               &           intcheb4rmult4laplrot2(a,b,m,i_r-1,A_mat%nbands)
                if ( l_coriolis_imp ) then
                   CorSten=wimp*CorFac*real(m,cp)*intcheb4rmult4(a,b,i_r-1,A_mat%nbands)
                else
@@ -1475,7 +1473,7 @@ contains
                A_mat%A1(2,n_r)=rscheme%rnorm*rscheme%rMat(2,n_r)
                if ( ktopv == 1 ) then !-- Stress-free
                   A_mat%A1(3,n_r)=rscheme%rnorm*(rscheme%d2rMat(1,n_r)-&
-                  &                        or1(1)*rscheme%drMat(1,n_r) ) 
+                  &                        or1(1)*rscheme%drMat(1,n_r) )
                else
                   if ( l_non_rot ) then
                      A_mat%A1(3,n_r)=rscheme%rnorm*rscheme%drMat(1,n_r)

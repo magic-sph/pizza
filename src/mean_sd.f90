@@ -75,7 +75,7 @@ contains
       allocate( this%mean(n_start:n_stop,n_in) )
       bytes_allocated=bytes_allocated+(n_stop-n_start+1)*n_in*SIZEOF_DEF_REAL
       this%mean(:,:)=0.0_cp
-      
+
       if ( l_SD ) then
          allocate( this%SD(n_start:n_stop,n_in) )
          bytes_allocated=bytes_allocated+(n_stop-n_start+1)*n_in*SIZEOF_DEF_REAL

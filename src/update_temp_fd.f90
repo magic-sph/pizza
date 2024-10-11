@@ -33,7 +33,7 @@ contains
       allocate( temp_ghost(n_m_max,nRstart-1:nRstop+1) )
       bytes_allocated=bytes_allocated + n_m_max*(nRstop-nRstart+3)*SIZEOF_DEF_COMPLEX
       temp_ghost(:,:)=zero
-      allocate( lTmat_FD(1:n_m_max) ) 
+      allocate( lTmat_FD(1:n_m_max) )
 
    end subroutine initialize_temp_fd
 !---------------------------------------------------------------------------------

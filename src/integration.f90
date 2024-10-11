@@ -25,12 +25,12 @@ contains
       real(cp),            intent(in) :: f(:)    ! Input function
       real(cp),            intent(in) :: r(:)    ! Radius
       class(type_rscheme), intent(in) :: r_scheme! Radial scheme (FD or Cheb)
-              
+
       !-- Local variables
       real(cp), allocatable :: f2(:)
       real(cp) :: h1, h2
       integer :: n_r, nCheb, n_r_max
-                 
+
       n_r_max=size(f)
 
       !--- Integrals:
@@ -107,11 +107,11 @@ contains
       !-- Input variables:
       real(cp), intent(in) :: f(:)    ! Input function
       real(cp), intent(in) :: r(:)    ! Radius
-              
+
       !-- Local variables
       real(cp) :: h1, h2
       integer :: n_r, n_r_max
-                 
+
       n_r_max=size(f)
 
       if ( mod(n_r_max,2)==1 ) then ! Odd number (Simpson ok)

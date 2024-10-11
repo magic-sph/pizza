@@ -29,7 +29,7 @@ module mloop_mod
 
    public :: mloop, finish_explicit_assembly, assemble_stage
 
-contains 
+contains
 
    subroutine mloop(temp_hat_Mloc, xi_hat_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc,&
               &     dxi_Mloc, psi_hat_Mloc, psi_Mloc, om_Mloc,  dom_Mloc,      &

@@ -17,7 +17,7 @@ module bordered_matrix
       integer :: ku ! Number of upper diagonals
       integer :: nbands ! Number of bands
       integer :: nlines_band ! Number of lines of the banded block
-      integer :: nlines      ! Number of lines 
+      integer :: nlines      ! Number of lines
       integer :: ntau        ! Number of tau lines
       real(cp), allocatable :: A1(:,:) ! Upper left block
       real(cp), allocatable :: A2(:,:) ! Upper right block
@@ -39,7 +39,7 @@ module bordered_matrix
       integer :: ku ! Number of upper diagonals
       integer :: nbands ! Number of bands
       integer :: nlines_band ! Number of lines of the banded block
-      integer :: nlines      ! Number of lines 
+      integer :: nlines      ! Number of lines
       integer :: ntau        ! Number of tau lines
       complex(cp), allocatable :: A1(:,:) ! Upper left block
       complex(cp), allocatable :: A2(:,:) ! Upper right block
@@ -318,7 +318,7 @@ contains
       do n_r=1,this%ntau
          vec(n_r)=tmp1(n_r)
       end do
-! 
+!
       do n_r=1,this%nlines_band
          vec(n_r+this%ntau)=tmp2(n_r)
       end do

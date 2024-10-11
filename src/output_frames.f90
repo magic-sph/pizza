@@ -157,7 +157,7 @@ contains
       disp = header_size
       call MPI_File_Set_View(fh, disp, MPI_DEF_COMPLEX, filetype, "native", &
            &                 info, ierr)
-  
+
       call MPI_File_Write_all(fh, arr_Mloc, nm_per_rank*n_r_max, &
            &                  MPI_DEF_COMPLEX, istat, ierr)
 

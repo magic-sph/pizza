@@ -16,7 +16,7 @@ module pre_calculations
    implicit none
 
    private
-   
+
    public :: preCalc
 
 contains

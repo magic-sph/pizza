@@ -20,7 +20,7 @@ module update_xi_integ
    use chebsparselib, only: intcheb2rmult1, intcheb2rmult2lapl, intcheb2rmult2
 
    implicit none
-   
+
    private
 
    integer, parameter :: n_boundaries=2 ! Number of BCs for this equation
@@ -189,7 +189,7 @@ contains
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
-         
+
          if ( .not. lXimat(n_m) ) then
             if ( l_galerkin ) then
                call get_lhs_mat_gal( tscheme%wimp_lin(1), LHS_mat_gal(n_m), &
@@ -261,7 +261,7 @@ contains
       !-- Roll the arrays before filling again the first block
       call tscheme%rotate_imex(dxidt)
 
-      !-- Compute implicit stage 
+      !-- Compute implicit stage
       if ( tscheme%istage == tscheme%nstages ) then
          call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, tscheme%l_imp_calc_rhs(1))
       else
@@ -300,8 +300,7 @@ contains
       end do
 
       call get_dr( dVsXi_Mloc, work_Mloc, nMstart, nMstop, n_r_max, &
-           &       rscheme, nocopy=.true., l_dct_in=.false.,        &
-           &       l_dct_out=.false. )
+           &       rscheme, nocopy=.true., l_dct_in=.false. )
 
       !-- Finish calculation of the explicit part for current time step
       if ( l_non_rot ) then
@@ -323,16 +322,13 @@ contains
          end do
       end if
 
+      !-- Add the advection term
+      do n_r=1,n_r_max
+         dxi_exp_last(:,n_r)=dxi_exp_last(:,n_r)-work_Mloc(:,n_r)
+      end do
+
       !-- Transform the explicit part to Chebyshev space
       call rscheme%costf1(dxi_exp_last, nMstart, nMstop, n_r_max)
-
-      !-- Add the advection term that is already in Chebyshev space
-      do n_cheb=1,n_cheb_max
-         do n_m=nMstart,nMstop
-            dxi_exp_last(n_m,n_cheb)=dxi_exp_last(n_m,n_cheb)- &
-            &                               work_Mloc(n_m,n_cheb)
-         end do
-      end do
 
       do n_cheb=n_cheb_max+1,n_r_max
          do n_m=nMstart,nMstop
@@ -379,7 +375,7 @@ contains
       do n_m=nMstart, nMstop
 
          m = idx2m(n_m)
-         
+
          if ( .not. lAssmat(n_m) ) then
             if ( l_galerkin ) then
                call get_lhs_mat_gal( 0.0_cp, Ass_mat_gal(n_m), assfac(:,n_m), m )
@@ -439,7 +435,7 @@ contains
       !-- Bring composition back to physical space
       call rscheme%costf1(xi_Mloc, nMstart, nMstop, n_r_max)
 
-      !-- Compute implicit stage 
+      !-- Compute implicit stage
       call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, tscheme%l_imp_calc_rhs(1))
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
@@ -502,7 +498,7 @@ contains
          do n_cheb=1,n_r_max
             do n_m=nMstart,nMstop
                dxidt%impl(n_m,n_cheb,istage)=XidiffFac*hdif_Xi(n_m)*&
-               &                             work_Mloc(n_m,n_cheb) 
+               &                             work_Mloc(n_m,n_cheb)
             end do
          end do
 
@@ -539,7 +535,7 @@ contains
 
          !-- Define the equations
          stencilA = intcheb2rmult2(a,b,i_r-1,Amat%nbands)-wimp*XidiffFac* &
-         &          hdif_Xi(n_m)*intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)  
+         &          hdif_Xi(n_m)*intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)
 
          !-- Roll the array for band storage
          do n_band=1,Amat%nbands
@@ -637,7 +633,7 @@ contains
          !-- Define the equations
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-     &
          &           wimp*XidiffFac*hdif_Xi(n_m)*                &
-         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
 
          !-- Roll the array for band storage
          do n_band=1,A_mat%nbands
@@ -654,7 +650,7 @@ contains
          i_r = n_r+A_mat%ntau
          stencilA4 = intcheb2rmult2(a,b,i_r-1,A_mat%nbands)-      &
          &           wimp*XidiffFac*hdif_Xi(n_m)*                 &
-         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)  
+         &           intcheb2rmult2lapl(a,b,m,i_r-1,A_mat%nbands)
 
          !-- Only the lower bands can contribute to the matrix A3
          do n_band=1,A_mat%kl

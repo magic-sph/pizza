@@ -237,19 +237,16 @@ contains
 
       !-- Local variables
       integer :: m_pertu, n_r, idx, n_phi, n_m, ir
-      real(cp) :: x, c_r, rdm, c1, c2, rc, L, sigma_r
+      real(cp) :: c_r, rdm, c1, c2, rc, L, sigma_r
       real(cp) :: t1(n_r_max), gasp(n_r_max)
       real(cp) :: phi, phi0
       real(cp) :: phi_func(n_phi_max)
 
       !-- Radial dependence of perturbation in t1:
-      do n_r=1,n_r_max
-         x=two*r(n_r)-r_cmb-r_icb
-         t1(n_r)=sin(pi*(r(n_r)-r_icb))
-      end do
+      t1(:)=sin(pi*(r(:)-r_icb))
 
       if ( init_prop > 0 ) then ! Initialize a peculiar m mode
-         
+
          m_pertu = init_prop
 
          if ( mod(m_pertu,minc) /= 0 ) then
@@ -336,10 +333,6 @@ contains
       else ! random noise
 
          do n_r=1,n_r_max
-            t1(n_r)=sin(pi*(r(n_r)-r_icb))
-         end do
-
-         do n_r=1,n_r_max
             do n_m=nMstart, nMstop
                m_pertu = idx2m(n_m)
                if ( m_pertu > 0 ) then
@@ -366,12 +359,10 @@ contains
 
 
       !-- Radial dependence of perturbation in t1:
-      do n_r=1,n_r_max
-         u1(n_r)=sin(pi*(r(n_r)-r_icb))
-      end do
+      u1(:)=sin(pi*(r(:)-r_icb))
 
       if ( init_u > 0 ) then
-         
+
          m_pertu = init_u
 
          if ( mod(m_pertu,minc) /= 0 ) then

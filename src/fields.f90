@@ -9,11 +9,11 @@ module fields
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
    use blocking, only: nMstart, nMstop, nRstart, nRstop
- 
+
    implicit none
 
    private
- 
+
    !-- Velocity potentials:
    complex(cp), allocatable, public :: psi_Mloc(:,:), dtemp_Mloc(:,:)
    complex(cp), allocatable, public :: dxi_Mloc(:,:), dom_Mloc(:,:)
@@ -30,7 +30,7 @@ module fields
    complex(cp), allocatable, public :: psi_hat_Mloc(:,:)
    complex(cp), allocatable, public :: temp_hat_Mloc(:,:)
    complex(cp), allocatable, public :: xi_hat_Mloc(:,:)
- 
+
    public :: initialize_fields, finalize_fields
 
 contains

@@ -18,7 +18,7 @@ module chebyshev
       real(cp) :: alpha2 !Input parameter for non-linear map to define central point of different spacing (-1.0:1.0)
       logical :: l_map
       type(costf_t) :: chebt
-      real(cp), allocatable :: r_cheb(:)
+      real(cp), allocatable :: x_cheb(:)
 
    contains
 
@@ -37,14 +37,14 @@ contains
    subroutine initialize(this, n_r_max, order, order_boundary, l_cheb_coll, &
               &          no_work_array)
       !
-      !  Purpose of this subroutine is to calculate and store several     
-      !  values that will be needed for a fast cosine transform of the    
-      !  first kind. The actual transform is performed by the             
-      !  subroutine costf1.                                               
+      !  Purpose of this subroutine is to calculate and store several
+      !  values that will be needed for a fast cosine transform of the
+      !  first kind. The actual transform is performed by the
+      !  subroutine costf1.
       !
 
       class(type_cheb) :: this
-      
+
       !-- Input variables
       integer, intent(in) :: n_r_max
       integer, intent(in) :: order ! This is going to be n_cheb_max
@@ -54,7 +54,7 @@ contains
 
       !-- Local variable
       logical :: l_work_array
-            
+
       this%rnorm = sqrt(two/real(n_r_max-1,kind=cp))
       this%n_max = order  ! n_cheb_max
       this%boundary_fac = half
@@ -92,9 +92,9 @@ contains
          l_work_array=.false.
       end if
 
-      call this%chebt%initialize(nMstart, nMstop, n_r_max, l_work_array)
+      call this%chebt%initialize(nMstart, nMstop, n_r_max, n_r_max, l_work_array)
 
-      allocate( this%r_cheb(n_r_max), this%drx(n_r_max), this%ddrx(n_r_max) )
+      allocate( this%x_cheb(n_r_max), this%drx(n_r_max), this%ddrx(n_r_max) )
       bytes_allocated=bytes_allocated+3*n_r_max*SIZEOF_DEF_REAL
 
    end subroutine initialize
@@ -114,7 +114,6 @@ contains
       real(cp), intent(out) :: r(n_r_max)
 
       !-- Local variables:
-      integer :: n_r
       real(cp) :: lambd,paraK,paraX0 !parameters of the nonlinear mapping
 
       !--
@@ -133,7 +132,7 @@ contains
          this%alpha2=0.0_cp
       end if
 
-      call cheb_grid(ricb,rcmb,n_r_max-1,r,this%r_cheb,this%alpha1,this%alpha2, &
+      call cheb_grid(ricb,rcmb,n_r_max-1,r,this%x_cheb,this%alpha1,this%alpha2, &
            &         paraX0,lambd,this%l_map)
 
       if ( this%l_map ) then
@@ -141,34 +140,26 @@ contains
          !-- Tangent mapping (see Bayliss et al. 1992)
          if ( index(map_function, 'TAN') /= 0 .or.      &
          &    index(map_function, 'BAY') /= 0 ) then
-
-            do n_r=1,n_r_max
-               this%drx(n_r)  =                         (two*this%alpha1) /        &
-               &    ((one+this%alpha1**2*(two*r(n_r)-ricb-rcmb-this%alpha2)**2)*   &
-               &    lambd)
-               this%ddrx(n_r) =-(8.0_cp*this%alpha1**3*(two*r(n_r)-ricb-rcmb-      &
-               &               this%alpha2)) / ((one+this%alpha1**2*(-two*r(n_r)+  &
-               &               ricb+rcmb+this%alpha2)**2)**2*lambd)
-            end do
-
+            this%drx(:)  =two*this%alpha1*(rcmb - ricb)/(lambd*(this%alpha1**2* &
+            &             (this%alpha2*(rcmb-ricb)-two*r(:)+rcmb+ricb)**2+      &
+            &             (rcmb-ricb)**2))
+            this%ddrx(:) =8.0_cp*this%alpha1**3*(rcmb-ricb)*(this%alpha2*       &
+            &             (rcmb-ricb)-two*r(:)+rcmb+ricb)/(lambd*(              &
+            &             this%alpha1**2*(this%alpha2*(rcmb-ricb)-two*r(:)      &
+            &             +rcmb+ricb)**2+(rcmb-ricb)**2)**2)
          !-- Arcsin mapping (see Kosloff and Tal-Ezer, 1993)
          else if ( index(map_function, 'ARCSIN') /= 0 .or. &
          &         index(map_function, 'KTL') /= 0 ) then
-
-            do n_r=1,n_r_max
-               this%drx(n_r)  =two*asin(this%alpha1)/this%alpha1*sqrt(one-     &
-               &               this%alpha1**2*this%r_cheb(n_r)**2)
-               this%ddrx(n_r) =-four*asin(this%alpha1)**2*this%r_cheb(n_r)
-            end do
-
+            this%drx(:)  =two*asin(this%alpha1)/this%alpha1*sqrt(one-     &
+            &             this%alpha1**2*this%x_cheb(:)**2)/(rcmb-ricb)
+            this%ddrx(:) =-four*asin(this%alpha1)**2*this%x_cheb(:)/      &
+            &              (rcmb-ricb)**2
          end if
 
       else !-- No mapping is used: this is the regular Gauss-Lobatto grid
 
-         do n_r=1,n_r_max
-            this%drx(n_r)  =two/(rcmb-ricb)
-            this%ddrx(n_r) =0.0_cp
-         end do
+         this%drx(:)  =two/(rcmb-ricb)
+         this%ddrx(:) =0.0_cp
 
       end if
 
@@ -186,7 +177,7 @@ contains
 
       deallocate( this%rMat, this%drMat, this%d2rMat )
       deallocate( this%dr_top, this%dr_bot )
-      deallocate( this%r_cheb, this%drx, this%ddrx)
+      deallocate( this%x_cheb, this%drx, this%ddrx)
 
       if ( present(no_work_array) ) then
          l_work_array=no_work_array
@@ -211,7 +202,7 @@ contains
       !   .. note:: x(i) and y(i) are stored in the reversed order:
       !             x(1)=b, x(n+1)=a, y(1)=1, y(n+1)=-1
       !
-       
+
       !-- Input variables
       real(cp), intent(in) :: a,b   ! interval boundaries
       integer,  intent(in) :: n ! degree of Cheb polynomial to be represented by the grid points
@@ -221,11 +212,11 @@ contains
       !-- Output variables
       real(cp), intent(out) :: x(*) ! grid points in interval [a,b]
       real(cp), intent(out) :: y(*) ! grid points in interval [-1,1]
-       
+
       !-- Local variables:
       real(cp) :: bpa,bma
       integer :: k
-       
+
       bma=half*(b-a)
       bpa=half*(a+b)
 
@@ -243,7 +234,7 @@ contains
             x(k)=bma * y(k) + bpa
          end if
       end do
-        
+
    end subroutine cheb_grid
 !------------------------------------------------------------------------------
    subroutine get_der_mat(this, n_r_max, l_cheb_coll)
@@ -273,7 +264,7 @@ contains
 
             !----- set first two chebs:
             this%rMat(1,k)  =one
-            this%rMat(2,k)  =this%r_cheb(k)
+            this%rMat(2,k)  =this%x_cheb(k)
             this%drMat(1,k) =0.0_cp
             this%drMat(2,k) =this%drx(k)
             this%d2rMat(1,k)=0.0_cp
@@ -282,14 +273,14 @@ contains
             !----- now construct the rest with a recursion:
             do n=3,n_r_max ! do loop over the (n-1) order of the chebs
 
-               this%rMat(n,k)  =    two*this%r_cheb(k)*this%rMat(n-1,k) - &
+               this%rMat(n,k)  =    two*this%x_cheb(k)*this%rMat(n-1,k) - &
                &                                       this%rMat(n-2,k)
                this%drMat(n,k) =       two*this%drx(k)*this%rMat(n-1,k) + &
-               &                   two*this%r_cheb(k)*this%drMat(n-1,k) - &
+               &                   two*this%x_cheb(k)*this%drMat(n-1,k) - &
                &                                      this%drMat(n-2,k)
                this%d2rMat(n,k)=      two*this%ddrx(k)*this%rMat(n-1,k) + &
                &                     four*this%drx(k)*this%drMat(n-1,k) + &
-               &                  two*this%r_cheb(k)*this%d2rMat(n-1,k) - &
+               &                  two*this%x_cheb(k)*this%d2rMat(n-1,k) - &
                &                                     this%d2rMat(n-2,k)
             end do
 
@@ -418,14 +409,14 @@ contains
 
       !-- Input variables:
       integer,  intent(in) :: nMstart
-      integer,  intent(in) :: nMstop 
+      integer,  intent(in) :: nMstop
       integer,  intent(in) :: n_r_max            ! number of columns in f,f2
-    
+
       !-- Output variables:
       complex(cp), intent(inout) :: f(nMstart:nMstop,n_r_max) ! data/coeff input
-    
+
       call this%chebt%costf(f,nMstart,nMstop,n_r_max)
-    
+
    end subroutine costf1_complex_2d
 !------------------------------------------------------------------------------
    subroutine costf1_real_1d(this,f,n_r_max)

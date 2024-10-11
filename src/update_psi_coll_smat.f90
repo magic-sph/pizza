@@ -23,7 +23,7 @@ module update_psi_coll_smat
    use timers_mod, only: timers_type
 
    implicit none
-   
+
    private
 
    logical,  allocatable :: lPsimat(:), lAssmat(:)
@@ -156,7 +156,7 @@ contains
             end do
 
          else ! Non-axisymmetric components
-         
+
             if ( .not. lPsimat(n_m) ) then
                call get_psiMat(tscheme, m, psiMat(:,:,n_m), psiPivot(:,n_m), &
                     &          psiMat_fac(:,:,n_m), timers%lu, timers%n_lu_calls)
@@ -543,7 +543,7 @@ contains
       type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
 
-      !-- Local variables 
+      !-- Local variables
       complex(cp) :: rhs1(n_r_max)
       real(cp) :: uphi0(n_r_max), om0(n_r_max)
       real(cp) :: fac_bot, fac_top, dm2

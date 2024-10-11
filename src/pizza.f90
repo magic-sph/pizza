@@ -13,7 +13,7 @@ program pizza
    use communications, only: initialize_communications, finalize_communications
    use blocking, only: set_mpi_domains, nMstart, nMstop, destroy_mpi_domains, &
        &               nRstart, nRstop
-   use namelists, only: read_namelists, write_namelists, tag, time_scheme,    &  
+   use namelists, only: read_namelists, write_namelists, tag, time_scheme,    &
        &                l_cheb_coll, l_rerror_fix, rerror_fac, l_direct_solve,&
        &                courfac, l_heat, l_chem, l_finite_diff
    use mloop_fd_mod, only: initialize_mloop_fd, finalize_mloop_fd, test_mloop
@@ -22,7 +22,7 @@ program pizza
    use horizontal, only: initialize_mfunctions, finalize_mfunctions
    use radial_functions, only: initialize_radial_functions, &
        &                       finalize_radial_functions
-   use truncation, only: initialize_truncation, n_r_max, n_phi_max, & 
+   use truncation, only: initialize_truncation, n_r_max, n_phi_max, &
        &                 finalize_truncation, n_m_max
    use fourier, only: initialize_fourier, finalize_fourier
    use rloop, only: initialize_radial_loop, finalize_radial_loop

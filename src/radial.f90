@@ -25,7 +25,7 @@ module radial_functions
    implicit none
 
    private
- 
+
    !-- arrays depending on r:
    integer,  public, allocatable :: m_R(:)       ! m(r)
    real(cp), public, allocatable :: r(:)         ! radii
@@ -54,13 +54,13 @@ module radial_functions
 
    real(cp), public :: alpha1   ! Input parameter for non-linear map to define degree of spacing (0.0:2.0)
    real(cp), public :: alpha2   ! Input parameter for non-linear map to define central point of different spacing (-1.0:1.0)
- 
+
    !-- arrays for buoyancy, depend on Ra and Pr:
    real(cp), public, allocatable :: rgrav(:)     ! Buoyancy term `dtemp0/Di`
 
    !-- Radial scheme
    class(type_rscheme), public, pointer :: rscheme
- 
+
    public :: initialize_radial_functions, radial, finalize_radial_functions
 
 contains
@@ -364,7 +364,7 @@ contains
                tcond(n_r) = f_top*r_cmb - f_top*r_cmb**2*(asinh(h(n_r)/r(n_r))/h(n_r)) &
                &          - (epsc0/two)*(r(n_r)**2 + third*h(n_r)**2 +                 &
                &             two*r_cmb**3*(asinh(h(n_r)/r(n_r))/h(n_r)))
-            enddo 
+            enddo
          endif
          call get_dr(tcond, dtcond, n_r_max, rscheme)
       else

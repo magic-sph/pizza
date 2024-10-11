@@ -316,7 +316,7 @@ contains
          if ( l_chem ) then
             do n_m=1,n_m_max
                m = idx2m(n_m)
-               dxidt_Rloc(n_m,n_r)=-or1(n_r)*ci*m*dxidt_Rloc(n_m,n_r) 
+               dxidt_Rloc(n_m,n_r)=-or1(n_r)*ci*m*dxidt_Rloc(n_m,n_r)
             end do
          end if
          do n_m=1,n_m_max

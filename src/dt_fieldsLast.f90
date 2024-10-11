@@ -3,7 +3,7 @@ module fieldsLast
    ! This module contains time-derivatives array of the previous time-step
    ! They are needed in the time-stepping scheme.
    !
- 
+
    use precision_mod
    use constants, only: zero
    use mem_alloc, only: bytes_allocated

@@ -222,7 +222,7 @@ contains
             end if
          end do
          val_m = simps(dat,r)
-         !val_m = sqrt(val_m) ! I rather save the squared forces for a coherent 
+         !val_m = sqrt(val_m) ! I rather save the squared forces for a coherent
          ! definition of forces: intcheb(mean_2D) = mean_1D; intcheb(SD_2D= SD_1D
          call getMSD2(outM%mean(n_m), outM%SD(n_m), val_m, this%n_calls,&
               &       this%dt, time)
