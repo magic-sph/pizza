@@ -107,9 +107,11 @@ class PizzaMelt(PizzaSetup):
         """
         out = copy.deepcopy(new)
         if len(self.phi) != new.n_phi_max:
-            ip = interp1d(self.phi, self.rmelt, axis=1, fill_value='extrapolate')
+            ip = interp1d(self.phi, self.rmelt, axis=1,
+                          fill_value='extrapolate')
             self.rmelt = ip(new.phi)
-            ip = interp1d(self.phi, self.dt_rmelt, axis=1, fill_value='extrapolate')
+            ip = interp1d(self.phi, self.dt_rmelt, axis=1,
+                          fill_value='extrapolate')
             self.dt_rmelt = ip(new.phi)
             self.phi = new.phi
 
@@ -121,22 +123,26 @@ class PizzaMelt(PizzaSetup):
         else:
             out.time = np.concatenate((self.time, new.time), axis=0)
             out.rmelt = np.concatenate((self.rmelt, new.rmelt), axis=0)
-            out.dt_rmelt = np.concatenate((self.dt_rmelt, new.dt_rmelt), axis=0)
+            out.dt_rmelt = np.concatenate((self.dt_rmelt, new.dt_rmelt),
+                                          axis=0)
 
         return out
 
     def add(self, phi, time, rmelt, dt_rmelt):
         if len(self.phi) != len(phi):
-            ip = interp1d(self.phi, self.rmelt, axis=1, fill_value='extrapolate')
+            ip = interp1d(self.phi, self.rmelt, axis=1,
+                          fill_value='extrapolate')
             self.rmelt = ip(phi)
-            ip = interp1d(self.phi, self.dt_rmelt, axis=1, fill_value='extrapolate')
+            ip = interp1d(self.phi, self.dt_rmelt, axis=1,
+                          fill_value='extrapolate')
             self.dt_rmelt = ip(phi)
             self.phi = phi
 
         if time[0] == self.time[-1]:
             self.time = np.concatenate((self.time, time[1:]), axis=0)
             self.rmelt = np.concatenate((self.rmelt, rmelt[1:, :]), axis=0)
-            self.dt_rmelt = np.concatenate((self.dt_rmelt, dt_rmelt[1:, :]), axis=0)
+            self.dt_rmelt = np.concatenate((self.dt_rmelt, dt_rmelt[1:, :]),
+                                           axis=0)
         else:
             self.time = np.concatenate((self.time, time), axis=0)
             self.rmelt = np.concatenate((self.rmelt, rmelt), axis=0)
@@ -180,8 +186,8 @@ class PizzaMelt(PizzaSetup):
         ax.plot(self.phi, rmelt_m)
         dt_rmelt_m, dt_rmelt_std = avg_std(self.time[::nstep],
                                            self.dt_rmelt[::nstep])
-        ax1.fill_between(self.phi, dt_rmelt_m-dt_rmelt_std, dt_rmelt_m+dt_rmelt_std,
-                         alpha=0.1, color='C1')
+        ax1.fill_between(self.phi, dt_rmelt_m-dt_rmelt_std,
+                         dt_rmelt_m+dt_rmelt_std, alpha=0.1, color='C1')
         ax1.plot(self.phi, dt_rmelt_m, color='C1')
         ax.set_xlabel('Longitude')
         ax.set_ylabel('r melt')
@@ -199,12 +205,10 @@ class PizzaMelt(PizzaSetup):
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        ax.contourf(self.time[::nstep], self.phi, self.dt_rmelt[::nstep, :].T, 65,
-                    cmap=plt.get_cmap('plasma'))
+        ax.contourf(self.time[::nstep], self.phi, self.dt_rmelt[::nstep, :].T,
+                    65, cmap=plt.get_cmap('plasma'))
 
         ax.set_xlabel('Time')
         ax.set_ylabel('Longitude')
 
         fig.tight_layout()
-
-
