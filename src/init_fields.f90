@@ -16,7 +16,6 @@ module init_fields
        &                l_direct_solve, l_finite_diff, tmelt, init_phi,    &
        &                l_phase_field, epsPhase
    use outputs, only: n_log_file, vp_bal, vort_bal
-   use parallel_mod, only: rank
    use blocking, only: nMstart, nMstop, nM_per_rank
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max, n_m_max
    use useful, only: logWrite, abortRun, gausslike_compact_center, &
