@@ -114,12 +114,7 @@ contains
       real(cp), intent(out) :: r(n_r_max)
 
       !-- Local variables:
-      real(cp) :: lambd,paraK,paraX0 !parameters of the nonlinear mapping
-
-      !--
-      !-- There's possibly an issue when the Chebyshev mapping was used in
-      !-- the old grid and a different mapping is used on the new one
-      !--
+      real(cp) :: lambd,paraK,paraX0,A,B !parameters of the nonlinear mapping
 
       if ( this%l_map ) then
          this%alpha1=ratio1
@@ -154,6 +149,25 @@ contains
             &             this%alpha1**2*this%x_cheb(:)**2)/(rcmb-ricb)
             this%ddrx(:) =-four*asin(this%alpha1)**2*this%x_cheb(:)/      &
             &              (rcmb-ricb)**2
+         !-- sinh mapping from Tee & Trefethen, 2006
+         else if ( index(map_function, 'TT') /= 0 .or.  &
+         &         index(map_function, 'TEE') /= 0 ) then
+            this%drx(:)  =two*this%alpha1/(A*(rcmb-ricb)*cosh( &
+            &             A*(this%x_cheb(:)-one)+B))
+            this%ddrx(:) =-four*this%alpha1**2*sinh(A*this%x_cheb(:)-A+B) / &
+            &              (A*(ricb-rcmb)**2*cosh(A*this%x_cheb(:)-A+B)**3)
+         !-- Jafari-Varzaneh and Hosseini, 2014
+         else if ( index(map_function, 'JAFARI') /= 0 ) then
+            this%drx(:)  =two*this%alpha1*paraX0/(A*(rcmb-ricb)*(        &
+            &             tan(this%x_cheb(:)*atan(paraX0))**2+one)*      &
+            &             cosh(A*(-one+tan(this%x_cheb(:)*atan(paraX0))/ &
+            &             paraX0)+B)*atan(paraX0))
+            this%ddrx(:) =-two*this%alpha1**2*paraX0*(two*A*tanh(-A+A*tan(          &
+            &             this%x_cheb(:)*atan(paraX0))/paraX0+B)+four*paraX0*sin(   &
+            &             this%x_cheb(:)*atan(paraX0))*cos(this%x_cheb(:)*          &
+            &             atan(paraX0)))*cos(this%x_cheb(:)*atan(paraX0))**2/(A**2* &
+            &             (ricb-rcmb)**2*cosh(-A+A*tan(this%x_cheb(:)*atan(paraX0)) &
+            &             /paraX0+B)**2*atan(paraX0))
          end if
 
       else !-- No mapping is used: this is the regular Gauss-Lobatto grid
@@ -214,11 +228,17 @@ contains
       real(cp), intent(out) :: y(*) ! grid points in interval [-1,1]
 
       !-- Local variables:
-      real(cp) :: bpa,bma
+      real(cp) :: bpa,bma,AJ,BJ
       integer :: k
 
       bma=half*(b-a)
       bpa=half*(a+b)
+      if ( index(map_function, 'JAFARI') /= 0 .or. index(map_function, 'TT') /= 0 &
+      &    .or. index(map_function, 'TEE') /= 0 ) then
+         AJ=half*(asinh((one-a2)*a1)+asinh((one+a2)*a1))
+         BJ=asinh((one-a2)*a1)
+      end if
+
 
       do k=1,n+1
          y(k)=cos( pi*real(k-1,cp)/real(n,cp) )
@@ -229,6 +249,11 @@ contains
             else if ( index(map_function, 'ARCSIN') /= 0 .or. &
             &         index(map_function, 'KTL') /= 0 ) then
                x(k)=half*asin(a1*y(k))/asin(a1)+bpa
+            elseif ( index(map_function, 'TT') /= 0 .or.    &
+            &        index(map_function, 'TEE') /= 0 ) then
+               x(k)=bma*(a2+sinh(AJ*(y(k)-one)+BJ)/a1)+bpa
+            else if ( index(map_function, 'JAFARI') /= 0 ) then
+               x(k)=bma*(a2+sinh(AJ*(tan(y(k)*atan(x0))/x0-one)+BJ)/a1)+bpa
             end if
          else
             x(k)=bma * y(k) + bpa
