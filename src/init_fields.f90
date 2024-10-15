@@ -382,9 +382,9 @@ contains
       !-- Local variables
       integer :: n_r, n_r_melt, m, n_m
       real(cp) :: temp0(n_r_max),phi0(n_r_max)
-      real(cp) :: rmelt
+      real(cp) :: rmelt, r_ice_init
 
-      if ( init_phi /= 0 ) then
+      if ( init_phi == 1 ) then
          !-- The initial phase field is set as a tanh function of width epsPhase
          !-- centered at the melting temperature
 
@@ -400,6 +400,33 @@ contains
             phi0(:)=half*(one+tanh((r(:)-rmelt)/two/sqrt(two)/epsPhase))
             phi_Mloc(1,:)=cmplx(phi0,0.0_cp,cp)
          end if
+      else if ( init_phi == 2 ) then
+         !-- Out-of-equilibrium init: the initial phase field is set as a
+         !-- tanh function centered at r_icb+0.05
+
+         if ( nMstart == 1 ) then
+            n_r_melt=1
+            r_ice_init=r_icb+0.05_cp
+            do n_r=2,n_r_max
+               if ( r(n_r-1) > r_ice_init .and. r(n_r) <= r_ice_init ) then
+                  n_r_melt=n_r
+               end if
+            end do
+            rmelt=r(n_r_melt)
+            phi0(:)=half*(one+tanh((r(:)-rmelt)/two/sqrt(two)/epsPhase))
+            phi_Mloc(1,:) =cmplx(phi0,0.0_cp,cp)
+
+            !-- Now modify the axsymmetric temperature
+            do n_r=1,n_r_max
+               if ( n_r <= n_r_melt ) then
+                  temp0(n_r)=0.0_cp
+               else
+                  temp0(n_r)=(r_ice_init-r(n_r))/(r_ice_init-r_icb) ! Planar approximation
+               end if
+            end do
+            temp_Mloc(1,:)=cmplx(temp0-tcond,0.0_cp,cp)
+         end if
+
       end if
 
       call MPI_Bcast(phi0,n_r_max,MPI_DEF_REAL,0,MPI_COMM_WORLD,ierr)
