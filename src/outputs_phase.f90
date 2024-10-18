@@ -260,7 +260,7 @@ contains
       !-- Determine the radial level where \phi=0.5
       n_r_phase=1
       do n_r=2,n_r_max
-         if ( phase(n_r) < half .and. phase(n_r-1) > half ) then
+         if ( phase(n_r) < half .and. phase(n_r-1) >= half ) then
             n_r_phase=n_r
          end if
       end do
