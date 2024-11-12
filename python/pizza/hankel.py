@@ -456,7 +456,7 @@ class HankelAnnulus:
         f = np.zeros_like(fhat)
         norm = abs(hankel1(self.m, self.roots*self.rin))
         for k, rk in enumerate(self.grid):
-            kernel = jv(self.m, self.roots*rk)*yn(self.m, self.roots*self.rin) -
+            kernel = jv(self.m, self.roots*rk)*yn(self.m, self.roots*self.rin) -\
                      jv(self.m, self.roots*self.rin)*yn(self.m, self.roots*rk)
             kernel /= norm
             f[k] = simps(kernel * fhat * self.roots, self.roots)
