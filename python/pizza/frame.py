@@ -307,10 +307,10 @@ class PizzaFields(PizzaSetup):
             data = self.xi
             normed = False
         elif field in ('tfluct', 'tempfluct'):
-            data = self.temp-self.temp_m[0, :]
+            data = self.temp-self.temp_m[0, :].real
             cm = 'PuOr'
         elif field in ('xifluct', 'chemfluct', 'compfluct'):
-            data = self.xi-self.xi_m[0, :]
+            data = self.xi-self.xi_m[0, :].real
             cm = 'PiYG'
         elif field in ('us', 'Us', 'ur', 'Ur', 'vs', 'Vs', 'Vr', 'vr'):
             data = self.us
