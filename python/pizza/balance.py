@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import copy
 from .log import PizzaSetup
 from .libpizza import scanDir, costf
-from scipy.integrate import simps
+try:
+    from scipy.integrate import simps
+except:
+    from scipy.integrate import simpson as simps
 import os
 import re
 
@@ -22,8 +25,8 @@ def avg_std(time, y):
     """
 
     tfac = 1./(time[-1]-time[0])
-    ymean = tfac*simps(y, time, axis=0)
-    ystd = np.sqrt(tfac*simps((y-ymean)**2, time, axis=0))
+    ymean = tfac*simps(y, x=time, axis=0)
+    ystd = np.sqrt(tfac*simps((y-ymean)**2, x=time, axis=0))
 
     return ymean, ystd
 
