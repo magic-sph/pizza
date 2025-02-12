@@ -245,6 +245,9 @@ contains
                &                                       work_Rloc(n_m,n_r)  &
                &                           +or1(n_r)*        dxi(n_m,n_r)  &
                &                     -dm2*or2(n_r)*          xig(n_m,n_r) )
+               if ( m == 0 .and. l_full_disk .and. n_r==n_r_max ) then
+                  dxidt%impl(n_m,n_r,istage)=XiDiffFac*two*work_Rloc(n_m,n_r)
+               end if
             end do
          end do
       end if
@@ -382,6 +385,14 @@ contains
             xiMat%up(n_m,nR)=   -tscheme%wimp_lin(1)*XiDiffFac*    &
             &                (               rscheme%ddr(nR,2) +   &
             &                         or1(nR)*rscheme%dr(nR,2) )
+            if ( m == 0 .and. l_full_disk .and. nR==n_r_max ) then
+               xiMat%diag(n_m,nR)=one - tscheme%wimp_lin(1)*XiDiffFac*&
+               &                        two*      rscheme%ddr(nR,1)
+               xiMat%low(n_m,nR)=   -tscheme%wimp_lin(1)*XiDiffFac*   &
+               &                        two*      rscheme%ddr(nR,0)
+               xiMat%up(n_m,nR)=   -tscheme%wimp_lin(1)*XiDiffFac*    &
+               &                        two*      rscheme%ddr(nR,2)
+            end if
          end do
       end do
       !$omp end do

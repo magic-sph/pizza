@@ -56,7 +56,38 @@ def chebgrid(nr, a, b):
     """
     rst = (a+b)/(b-a)
     rr = 0.5*(rst+np.cos(np.pi*(1.-np.arange(nr+1.)/nr)))*(b-a)
+
     return rr
+
+def ktl(nr, ri, ro, alph1=0):
+    """
+    This function defines a Gauss-Lobatto grid strectched by the arcin
+    mapping defined by Kosloff and Tal-Ezer (JCP, 1993). It also returns
+    the derivative of the mapping with respect to the Gauss-Lobatto grid.
+
+    :param nr: number of radial grid points
+    :type nr: int
+    :param ri: lower limit of the grid
+    :type ri: float
+    :param ro: upper limit of the grid
+    :type ro: float
+    :param alph1: the stretching coefficient (must be lower than 1)
+    :type alph1: float
+    :returns: the Gauss-Lobatto grid remapped using the arcsin mapping and
+              the derivative of the mapping with respect to the GL grid
+    :rtype: list
+    """
+    bma = 0.5*(ri-ro)
+    bpa = 0.5*(ri+ro)
+
+    if alph1 == 0:
+        alph1 = 1./np.cosh(np.log(2**-53)/nr)
+
+    y = np.cos(np.pi * np.arange(nr+1.)/nr)
+    x = bma * np.arcsin(alph1*y)/np.arcsin(alph1)+bpa
+    drx = np.arcsin(alph1)/alph1*np.sqrt(1.-alph1**2*y**2)/(ro-ri)
+
+    return x, drx
 
 
 def avgField(time, field, tstart=None, tstop=None, std=False):
@@ -198,13 +229,13 @@ def get_dddr(f):
 
 
 def fourier_cheb_spectra(f, r, weight, n_cheb_max):
-    """
+    r"""
     This routine computes spectra in the Fourier/Chebyshev domain. This makes use
     of the Parseval relation:
 
     \int |f(r,\phi)|^2 r w(r) dr dphi = \sum_m\sum_n \pi f_{mn}^2/(N_r-1)
 
-    (+ some factor 2 or 1/2 corrections for m=0 and n=0 modes
+    (+ some factor 2 or 1/2 corrections for m=0 and n=0 modes)
 
     :param f: a complex input array (first dimension is m)
     :type f: numpy.ndarray
