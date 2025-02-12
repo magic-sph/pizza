@@ -5,7 +5,10 @@ import numpy as np
 import time
 import os
 import pickle
-from scipy.integrate import simps
+try:
+    from scipy.integrate import simps
+except:
+    from scipy.integrate import simpson as simps
 import matplotlib.pyplot as plt
 
 
@@ -419,10 +422,10 @@ class HankelAnnulus:
         if self.grid_type == 'GL':
             for k in range(self.nroots):
                 fhat[k] = intcheb(self.kernels[k, :] * f * self.grid)
-                # fhat[k] = simps(self.kernels[k, :] * f * self.grid, self.grid)
+                # fhat[k] = simps(self.kernels[k, :] * f * self.grid, x=self.grid)
         else:
             for k in range(self.nroots):
-                fhat[k] = simps(self.kernels[k, :] * f * self.grid, self.grid)
+                fhat[k] = simps(self.kernels[k, :] * f * self.grid, x=self.grid)
 
         return fhat
 
@@ -459,7 +462,7 @@ class HankelAnnulus:
             kernel = jv(self.m, self.roots*rk)*yn(self.m, self.roots*self.rin) -\
                      jv(self.m, self.roots*self.rin)*yn(self.m, self.roots*rk)
             kernel /= norm
-            f[k] = simps(kernel * fhat * self.roots, self.roots)
+            f[k] = simps(kernel * fhat * self.roots, x=self.roots)
 
         return f
 
