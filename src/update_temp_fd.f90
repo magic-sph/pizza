@@ -246,6 +246,9 @@ contains
                &                                       work_Rloc(n_m,n_r)  &
                &                         +or1(n_r)*        dtemp(n_m,n_r)  &
                &                     -dm2*or2(n_r)*           tg(n_m,n_r) )
+               if ( m==0 .and. l_full_disk .and. n_r==n_r_max ) then
+                  dTdt%impl(n_m,n_r,istage)=TdiffFac*two*work_Rloc(n_m,n_r)
+               end if
             end do
          end do
       end if
@@ -387,6 +390,15 @@ contains
             sMat%up(n_m,nR)=   -tscheme%wimp_lin(1)*TdiffFac*    &
             &                (               rscheme%ddr(nR,2) + &
             &                         or1(nR)*rscheme%dr(nR,2) )
+
+            if ( m==0 .and. l_full_disk .and. nR==n_r_max ) then
+               sMat%diag(n_m,nR)=one - tscheme%wimp_lin(1)*TdiffFac*&
+               &                          two*  rscheme%ddr(nR,1)
+               sMat%low(n_m,nR)=   -tscheme%wimp_lin(1)*TdiffFac*   &
+               &                          two*  rscheme%ddr(nR,0)
+               sMat%up(n_m,nR)=   -tscheme%wimp_lin(1)*TdiffFac*    &
+               &                          two*  rscheme%ddr(nR,2)
+            end if
          end do
       end do
       !$omp end do
