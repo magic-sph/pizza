@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 class PizzaMovie:
 
     def __init__(self, field='up', nvar='all', datadir='.', tag=None, step=1,
-                 endian='l', levels=64, cmap='seismic', deminc=True, png=False,
-                 cut=1., bgcolor=None, dpi=100, normed=False,
-                 rm_hor_avg=False):
+                 endian='l', levels=64, cm=None, deminc=True, png=False,
+                 cut=1., bgcolor=None, dpi=100, normed=True,
+                 rm_hor_avg=False, pcolor=False):
 
         if png:
             plt.ioff()
@@ -23,14 +23,38 @@ class PizzaMovie:
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
             st = 'om'
+            if cm is None:
+                try:
+                    import cmocean.cm as cmo
+                    cm = cmo.curl
+                except ModuleNotFoundError:
+                    cm = 'Spectral_r'
         elif field in ('temperature', 'Temperature', 'temp', 'Temp', 't', 'T'):
             st = 'temp'
+            if cm is None:
+                try:
+                    import cmocean.cm as cmo
+                    cm = cmo.thermal
+                except ModuleNotFoundError:
+                    cm = 'magma'
+            normed = False
         elif field in ('comp', 'Comp', 'composition', 'xi', 'Xi'):
             st = 'xi'
+            if cm is None:
+                try:
+                    import cmocean.cm as cmo
+                    cm = cmo.haline
+                except ModuleNotFoundError:
+                    cm = 'viridis'
+            normed = False
         elif field in ('us', 'Us', 'ur', 'Ur', 'vs', 'Vs', 'Vr', 'vr'):
             st = 'us'
+            if cm is None:
+                cm = 'seismic'
         elif field in ('up', 'Up', 'uphi', 'Uphi', 'vp', 'Vp', 'Vphi', 'vphi'):
             st = 'up'
+            if cm is None:
+                cm = 'seismic'
 
         # Determine the file name pattern
         if tag is not None:
@@ -56,6 +80,10 @@ class PizzaMovie:
                 if os.path.exists(filename) and k != 0:
                     continue
             f = Frame(file, endian=endian)
+            if st == 'temp':
+                f.field_m[0, :] += f.tcond
+            elif st == 'xi':
+                f.field_m[0, :] += f.xicond
             dat = spec_spat(f.field_m, f.n_phi_max)
             if deminc:
                 dat = symmetrize(dat, ms=f.minc)
@@ -84,17 +112,21 @@ class PizzaMovie:
                 else:
                     phi = np.linspace(0., 2.*np.pi/self.minc, dat.shape[0])
 
-                vmin = -max(abs(dat.max()), abs(dat.min()))
-                vmin = cut * vmin
-                vmax = -vmin
-                # vmin = dat.min()
-                # vmax = dat.max()
+                if normed:
+                    vmin = -max(abs(dat.max()), abs(dat.min()))
+                    vmin = cut * vmin
+                    vmax = -vmin
+                else:
+                    vmin = dat.min()
+                    vmax = dat.max()
+
+                print(vmin, vmax)
                 cs = np.linspace(vmin, vmax, levels)
 
                 fig, xx, yy = equatContour(dat, self.radius, minc=self.minc,
-                                           levels=levels, cm=cmap, vmin=vmin,
+                                           levels=levels, cm=cm, vmin=vmin,
                                            vmax=vmax, deminc=deminc,
-                                           cbar=False)
+                                           cbar=False, pcolor=pcolor)
 
                 man = plt.get_current_fig_manager()
                 man.canvas.draw()
@@ -110,8 +142,13 @@ class PizzaMovie:
                     cs = np.linspace(vmin, vmax, levels)
 
                 ax = fig.axes[0]
-                ax.contourf(xx, yy, dat, cs, cmap=plt.get_cmap(cmap),
-                            extend='both')
+                if pcolor:
+                    ax.pcolormesh(xx, yy, dat, cmap=plt.get_cmap(cm),
+                                  vmin=vmin, vmax=vmax, shading='gouraud',
+                                  antialiased=True, rasterized=True)
+                else:
+                    ax.contourf(xx, yy, dat, cs, cmap=plt.get_cmap(cm),
+                                extend='both')
 
                 ax.plot(self.radius[0]*np.cos(phi), self.radius[0]*np.sin(phi),
                         'k-')
