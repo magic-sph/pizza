@@ -269,7 +269,7 @@ contains
                !------ Checking Courant criteria, l_new_dt and dt_new are output
                !-------------------
                call dt_courant(dtr,dth,l_new_dt,tscheme%dt(1),dt_new,dtMax, &
-                    &          dtr_Rloc,dth_Rloc,time)
+                    &          dtr_Rloc,dth_Rloc,time,n_log_file)
 
                call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step,&
                     &                    l_new_dt)

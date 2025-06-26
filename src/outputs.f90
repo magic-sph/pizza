@@ -13,19 +13,22 @@ module outputs
        &                radratio, raxi, sc, tadvz_fac, kbotv, ktopv,        &
        &                ViscFac, CorFac, time_scale, r_cmb, r_icb, TdiffFac,&
        &                l_vort_balance, l_corr, l_heat, l_chem, ChemFac,    &
-       &                l_energy_trans, m_max_transfer
-   use communications, only: reduce_radial_on_rank
-   use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc
+       &                l_energy_trans, m_max_transfer, radius_forcing,     &
+       &                amp_forcing
+   use communications, only: reduce_radial_on_rank,m2r_single
+   use fourier, only: ifft
+   use truncation, only: n_r_max, m2idx, n_m_max, idx2m, minc, n_phi_max
    use radial_functions, only: r, rscheme, rgrav, dtcond, height, tcond, &
        &                       beta, ekpump, or1, oheight, or2, xicond,  &
-       &                       dxicond
+       &                       dxicond, m_R
    use blocking, only: nMstart, nMstop, nRstart, nRstop, l_rank_has_m0, &
        &               nm_per_rank, m_balance
    use energy_transfer, only: calc_energy_transfer, initialize_transfer, &
        &                      finalize_transfer
    use integration, only: rInt_R, simps
    use useful, only: round_off, cc2real, cc22real, getMSD2, abortRun
-   use constants, only: pi, two, four, surf, vol_otc, one, tiny_number
+   use constants, only: pi, two, four, surf, vol_otc, one, tiny_number, half
+   use rloop, only: x_pump, y_pump, amp_pump
    use checkpoints, only: write_checkpoint_mloc
    use output_frames, only: write_snapshot_mloc
    use time_schemes, only: type_tscheme
@@ -425,7 +428,7 @@ contains
 
       !-- Local variables
       integer :: n_r, n_m, m, n_m0
-      real(cp) :: dlus_peak, dlekin_peak, dlvort_peak
+      real(cp) :: dlus_peak, dlekin_peak, dlvort_peak, mech_power_2D, mech_power_3D
       real(cp) :: dl_diss, dlekin_int, pow_3D
       real(cp) :: tTop, tBot, visc_2D, pow_2D, pum, visc_3D
       real(cp) :: us2_2D, up2_2D, up2_axi_2D, us2_3D, up2_3D, up2_axi_3D, uz2_3D
@@ -503,6 +506,12 @@ contains
       if ( l_chem ) then
          call reduce_radial_on_rank(sh_vol_r, 0)
          call reduce_radial_on_rank(chem_power, 0)
+      end if
+
+      !-- In case mechanical forcing is used
+      if ( amp_forcing /= 0.0_cp ) then
+         call compute_power_mech_forcing(us_Mloc, up_Mloc, mech_power_2D, &
+              &                          mech_power_3D)
       end if
 
       !-------
@@ -586,6 +595,8 @@ contains
             pow_2D=0.0_cp
          end if
 
+         if ( amp_forcing /= 0.0_cp ) pow_2D=pow_2D+mech_power_2D
+
          if ( l_chem ) then
             tmp(:)=ChemFac*chem_power(:)*rgrav(:)*r(:)
             chem_2D=rInt_R(tmp, r, rscheme)
@@ -613,6 +624,8 @@ contains
             else
                pow_3D=0.0_cp
             end if
+
+            if ( amp_forcing /= 0.0_cp ) pow_3D=pow_3D+mech_power_2D
 
             if ( l_chem ) then
                tmp(:)=ChemFac*chem_power(:)*rgrav(:)*r(:)*height(:)
@@ -917,5 +930,75 @@ contains
       end if
 
    end subroutine get_lengthscales
+!------------------------------------------------------------------------------
+   subroutine compute_power_mech_forcing(us_Mloc, up_Mloc, mech_power_2D, mech_power_3D)
+      !
+      ! This subroutine handles the computation of the power when mechanical
+      ! forcing is used
+      !
+
+      !-- Input arrays
+      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Output quantity
+      real(cp), intent(out) :: mech_power_2D
+      real(cp), intent(out) :: mech_power_3D
+
+      !-- Local arrays
+      integer :: n_r, n_pumps, n_p, i
+      real(cp) :: phi, si, x, y, func, ux, uy, dphi
+      real(cp) :: us_grid(n_phi_max),up_grid(n_phi_max)
+      real(cp) :: mech_powerR(n_r_max)
+      complex(cp) :: us_R(n_m_max,nRstart:nRstop), up_R(n_m_max,nRstart:nRstop)
+
+      n_pumps = size(x_pump)
+
+      !-- Transpose arrays
+      call m2r_single%transp_m2r(us_Mloc,us_R)
+      call m2r_single%transp_m2r(up_Mloc,up_R)
+
+      !-- Get the power in physical space
+      mech_powerR(:)=0.0_cp
+      dphi=two*pi/n_phi_max
+      do n_r=nRstart,nRstop
+         call ifft(us_R(:,n_r), us_grid, m_R(n_r))
+         call ifft(up_R(:,n_r), up_grid, m_R(n_r))
+         do n_p=1,n_phi_max
+            phi=(n_p-1)*two*pi/n_phi_max
+            x=r(n_r)*cos(phi)
+            y=r(n_r)*sin(phi)
+            ux=us_grid(n_p)*cos(phi)-up_grid(n_p)*sin(phi)
+            uy=us_grid(n_p)*sin(phi)+up_grid(n_p)*cos(phi)
+
+            func=0.0_cp
+            do i=1,n_pumps
+               si=sqrt((x-x_pump(i))**2+(y-y_pump(i))**2)
+               func=func+amp_pump(i)*(one-exp(-si**2/radius_forcing**2))* &
+               &    (-(y-y_pump(i))*ux+(x-x_pump(i))*uy)/si**2
+            end do
+            !func=half*amp_forcing*radius_forcing**2*func
+            mech_powerR(n_r)=mech_powerR(n_r)+func*dphi
+         end do 
+      end do
+
+      !-- Get all radial levels on rank 0
+      call reduce_radial_on_rank(mech_powerR, 0)
+
+      !-- Compute the integration over radius
+      if ( rank==0 ) then
+         mech_powerR(:)=mech_powerR(:)*r(:)
+         mech_power_2D=rInt_R(mech_powerR, r, rscheme)
+         mech_power_2D=half*amp_forcing*radius_forcing**2*mech_power_2D
+         if ( .not. l_non_rot ) then
+            mech_powerR(:)=mech_powerR(:)*height(:)
+            mech_power_3D=rInt_R(mech_powerR, r, rscheme)
+            mech_power_3D=half*amp_forcing*radius_forcing**2*mech_power_3D
+         else
+            mech_power_3D=0.0_cp
+         end if
+      end if
+
+   end subroutine compute_power_mech_forcing
 !------------------------------------------------------------------------------
 end module outputs
