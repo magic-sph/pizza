@@ -429,12 +429,12 @@ contains
       !-- Local variables
       integer :: n_r, n_m, m, n_m0
       real(cp) :: dlus_peak, dlekin_peak, dlvort_peak, mech_power_2D, mech_power_3D
-      real(cp) :: dl_diss, dlekin_int, pow_3D
-      real(cp) :: tTop, tBot, visc_2D, pow_2D, pum, visc_3D
+      real(cp) :: dl_diss, dlekin_int, pow_3D, pump_zon_3D, pump_tot_3D
+      real(cp) :: tTop, tBot, visc_2D, pow_2D, visc_3D, pump_zon_2D, pump_tot_2D
       real(cp) :: us2_2D, up2_2D, up2_axi_2D, us2_3D, up2_3D, up2_axi_3D, uz2_3D
       real(cp) :: chem_2D, chem_3D, ShTop, ShBot, beta_xi, Sh_vol, xiTop, xiBot
       real(cp) :: up2_axi_r(n_r_max), nu_vol_r(n_r_max), nu_cond_r(n_r_max)
-      real(cp) :: buo_power(n_r_max), pump(n_r_max), tmp(n_r_max)
+      real(cp) :: buo_power(n_r_max), tmp(n_r_max)
       real(cp) :: chem_power(n_r_max), sh_vol_r(n_r_max)
       real(cp) :: theta(n_r_max), sh_cond_r(n_r_max)
       real(cp) :: NuTop, NuBot, beta_t, Nu_vol, Nu_int, fac
@@ -448,7 +448,6 @@ contains
          enstrophy(n_r) =0.0_cp
          buo_power(n_r) =0.0_cp
          chem_power(n_r)=0.0_cp
-         pump(n_r)      =0.0_cp
          nu_vol_r(n_r)  =0.0_cp
          sh_vol_r(n_r)  =0.0_cp
          flux_r(n_r)    =0.0_cp
@@ -481,7 +480,6 @@ contains
 
             if ( m == 0 ) then
                up2_axi_r(n_r)=up2_axi_r(n_r)+cc2real(up_Mloc(n_m,n_r),m)
-               pump(n_r)     =pump(n_r)+cc2real(up_Mloc(n_m,n_r),m)
                if ( l_heat ) then
                   flux_r(n_r)   =flux_r(n_r)-TdiffFac*real(dtemp_Mloc(n_m,n_r))-&
                   &              TdiffFac*dtcond(n_r)
@@ -497,7 +495,6 @@ contains
       call reduce_radial_on_rank(up2_r, 0)
       call reduce_radial_on_rank(up2_axi_r, 0)
       call reduce_radial_on_rank(enstrophy, 0)
-      call reduce_radial_on_rank(pump, 0)
       if ( l_heat ) then
          call reduce_radial_on_rank(buo_power, 0)
          call reduce_radial_on_rank(flux_r, 0)
@@ -644,28 +641,39 @@ contains
             ! &      0.5_cp*height(:)*r_cmb )
             ! pow_3D_b = rInt_R(tmp, r, rscheme)
             ! pow_3D_b = round_off(two*pi*pow_3D_b)
+            tmp(:)=CorFac*(us2_r(:)+up2_r(:))*ekpump(:)*r(:)
+            pump_tot_2D=rInt_R(tmp, r, rscheme)
+            pump_tot_2D=round_off(two*pi*pump_tot_2D)
 
-            tmp(:)=CorFac*pump(:)*ekpump(:)*height(:)*r(:)
-            pum=rInt_R(tmp, r, rscheme)
-            pum=round_off(two*pi*pum)
+            tmp(:)=CorFac*up2_axi_r(:)*ekpump(:)*r(:)
+            pump_zon_2D=rInt_R(tmp, r, rscheme)
+            pump_zon_2D=round_off(two*pi*pump_zon_2D)
+
+            tmp(:)=CorFac*(us2_r(:)+up2_r(:))*ekpump(:)*height(:)*r(:)
+            pump_tot_3D=rInt_R(tmp, r, rscheme)
+            pump_tot_3D=round_off(two*pi*pump_tot_3D)
+
+            tmp(:)=CorFac*up2_axi_r(:)*ekpump(:)*height(:)*r(:)
+            pump_zon_3D=rInt_R(tmp, r, rscheme)
+            pump_zon_3D=round_off(two*pi*pump_zon_3D)
          end if
 
 
          write(n_kin_file_2D, '(1P, es20.12, 3es16.8)') time, us2_2D, up2_2D, &
          &                                              up2_axi_2D
-         write(n_power_file_2D, '(1P, es20.12, 3es16.8)') time, pow_2D, chem_2D, &
-         &                                                visc_2D
-
+         write(n_power_file_2D, '(1P, es20.12, 5es16.8)') time, pow_2D, chem_2D, &
+         &                                                visc_2D, pump_zon_2D,  &
+         &                                                pump_tot_2D
          write(n_rey_file_2D, '(1P, es20.12, 3es16.8)') time, rey_2D, rey_zon_2D,&
          &                                              rey_fluct_2D
 
          if ( .not. l_non_rot ) then
             write(n_kin_file_3D, '(1P, es20.12, 4es16.8)') time, us2_3D, up2_3D, &
             &                                              uz2_3D, up2_axi_3D
-            write(n_power_file_3D, '(1P, es20.12, 4es16.8)') time, pow_3D, &
-            &                                                chem_3D,      &
-            &                                                visc_3D, pum
-
+            write(n_power_file_3D, '(1P, es20.12, 5es16.8)') time, pow_3D,     &
+            &                                                chem_3D, visc_3D, &
+            &                                                pump_zon_3D,      &
+            &                                                pump_tot_3D
             write(n_rey_file_3D, '(1P, es20.12, 3es16.8)') time, rey_3D, &
             &                                              rey_zon_3D,   &
             &                                              rey_fluct_3D
