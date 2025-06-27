@@ -165,23 +165,39 @@ class PizzaTs(PizzaSetup):
         elif self.field == 'power':
             self.time = data[:, 0]
             self.buoPower = data[:, 1]
-            if data.shape[-1] == 4:
+            if data.shape[-1] == 6:
                 self.chemPower = data[:, 2]
                 self.viscDiss = data[:, 3]
+                self.ekpump_zon = data[:, 4]
+                self.ekpump_tot = data[:, 5]
+            elif data.shape[-1] == 4:
+                self.chemPower = data[:, 2]
+                self.viscDiss = data[:, 3]
+                self.ekpump_zon = np.zeros_like(self.time)
+                self.ekpump_tot = np.zeros_like(self.time)
             else:
-                self.chemPower = np.zeros_like(self.buoPower)
+                self.chemPower = np.zeros_like(self.time)
                 self.viscDiss = data[:, 2]
+                self.ekpump_zon = np.zeros_like(self.time)
+                self.ekpump_tot = np.zeros_like(self.time)
         elif self.field == 'power_3D':
             self.time = data[:, 0]
             self.buoPower = data[:, 1]
+            if data.shape[-1] == 6:
+                self.chemPower = data[:, 2]
+                self.viscDiss = data[:, 3]
+                self.ekpump_zon = data[:, 4]
+                self.ekpump_tot = data[:, 5]
             if data.shape[-1] == 5:
                 self.chemPower = data[:, 2]
                 self.viscDiss = data[:, 3]
-                self.pump = data[:, 4]
+                self.ekpump_zon = data[:, 4]
+                self.ekpump_tot = np.zeros_like(self.time)
             else:
-                self.chemPower = np.zeros_like(self.buoPower)
+                self.chemPower = np.zeros_like(self.time)
                 self.viscDiss = data[:, 2]
-                self.pump = data[:, 3]
+                self.ekpump_zon = data[:, 3]
+                self.ekpump_tot = np.zeros_like(self.time)
         elif self.field == 'length_scales':
             self.time = data[:, 0]
             self.lus_peak = data[:, 1]
@@ -278,6 +294,11 @@ class PizzaTs(PizzaSetup):
                 ax.semilogy(self.time, self.chemPower,
                             label='Chemical buoyancy')
             ax.semilogy(self.time, self.viscDiss, label='Viscous diss.')
+            if abs(self.ekpump_zon).max() > 0.:
+                ax.semilogy(self.time, self.ekpump_zon,
+                           label='Ekman friction of zonal flow')
+            if abs(self.ekpump_tot).max() > 0.:
+                ax.semilogy(self.time, self.ekpump_tot, label='Total Ekman friction')
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Power (2D)')
@@ -291,8 +312,11 @@ class PizzaTs(PizzaSetup):
                 ax.semilogy(self.time, self.chemPower,
                             label='Chemical buoyancy')
             ax.semilogy(self.time, self.viscDiss, label='Viscous diss.')
-            ax.semilogy(self.time, self.pump,
-                        label='Ekman friction of zonal flow')
+            if abs(self.ekpump_zon).max() > 0.:
+                ax.semilogy(self.time, self.ekpump_zon,
+                            label='Ekman friction of zonal flow')
+            if abs(self.ekpump_tot).max() > 0.:
+                ax.semilogy(self.time, self.ekpump_tot, label='Total Ekman friction')
             ax.legend(loc='best', frameon=False)
             ax.set_xlabel('Time')
             ax.set_ylabel('Power (3D)')
