@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import re
+import copy
 import matplotlib.pyplot as plt
 import numpy as np
 from .log import PizzaSetup
@@ -79,16 +80,11 @@ class PizzaTs(PizzaSetup):
             # Concatenate the files that correspond to the tag
             for k, file in enumerate(files):
                 filename = file
-                datanew = fast_read(filename)
+                data = fast_read(filename)
                 if k == 0:
-                    data = datanew.copy()
-                    ncolRef = data.shape[1]
+                    tslut = TsLookUpTable(data, self.field)
                 else:
-                    ncol = datanew.shape[1]
-                    if ncol == ncolRef:
-                        data = np.vstack((data, datanew[1:, :]))
-                    else:  # If the number of columns has changed
-                        data = np.vstack((data, datanew[1:, 0:ncolRef]))
+                    tslut += TsLookUpTable(data, self.field)
 
         # If no tag is specified, the most recent is plotted
         elif not all:
@@ -103,6 +99,7 @@ class PizzaTs(PizzaSetup):
                 dat.sort()
                 filename = dat[-1][1]
                 data = fast_read(filename)
+            tslut = TsLookUpTable(data, self.field)
 
         # If no tag is specified but all=True, all the directory is plotted
         else:
@@ -112,103 +109,16 @@ class PizzaTs(PizzaSetup):
             files = scanDir(pattern)
             for k, file in enumerate(files):
                 filename = file
-                datanew = fast_read(filename)
-                if k == 0:
-                    data = datanew.copy()
-                    ncolRef = data.shape[1]
-                else:
-                    if datanew.shape[0] != 0:  # In case the file is empty
-                        ncol = datanew.shape[1]
-                        if ncol == ncolRef:
-                            data = np.vstack((data, datanew[1:, :]))
-                        else:  # If the number of columns has changed
-                            data = np.vstack((data, datanew[1:, 0:ncolRef]))
+                data = fast_read(filename)
+                if len(data) > 0: # File is not empty
+                    if k == 0:
+                        tslut = TsLookUpTable(data, self.field)
+                    else:
+                        tslut += TsLookUpTable(data, self.field)
 
-        if self.field == 'e_kin':
-            self.time = data[:, 0]
-            self.us2 = data[:, 1]
-            self.up2 = data[:, 2]
-            self.up2_axi = data[:, 3]
-            self.ekin = self.us2+self.up2
-        elif self.field == 'e_kin_3D':
-            self.time = data[:, 0]
-            self.us2 = data[:, 1]
-            self.up2 = data[:, 2]
-            self.uz2 = data[:, 3]
-            self.up2_axi = data[:, 4]
-            self.ekin = self.us2+self.up2+self.uz2
-        elif self.field == 'timestep':
-            self.time = data[:, 0]
-            self.dt = data[:, 1]
-        elif self.field == 'heat':
-            self.time = data[:, 0]
-            self.topnuss = data[:, 1]
-            self.botnuss = data[:, 2]
-            self.volnuss = data[:, 3]
-            self.shellnuss = data[:, 4]
-            self.toptemp = data[:, 5]
-            self.bottemp = data[:, 6]
-            self.beta_t = data[:, 7]
-        elif self.field == 'comp' or self.field == 'composition':
-            self.time = data[:, 0]
-            self.topsh = data[:, 1]
-            self.botsh = data[:, 2]
-            self.volsh = data[:, 3]
-            self.topxi = data[:, 4]
-            self.botxi = data[:, 5]
-            self.beta_xi = data[:, 6]
-        elif self.field == 'reynolds' or self.field == 'reynolds_3D':
-            self.time = data[:, 0]
-            self.rey = data[:, 1]
-            self.rey_zon = data[:, 2]
-            self.rey_fluct = data[:, 3]
-        elif self.field == 'power':
-            self.time = data[:, 0]
-            self.buoPower = data[:, 1]
-            if data.shape[-1] == 6:
-                self.chemPower = data[:, 2]
-                self.viscDiss = data[:, 3]
-                self.ekpump_zon = data[:, 4]
-                self.ekpump_tot = data[:, 5]
-            elif data.shape[-1] == 4:
-                self.chemPower = data[:, 2]
-                self.viscDiss = data[:, 3]
-                self.ekpump_zon = np.zeros_like(self.time)
-                self.ekpump_tot = np.zeros_like(self.time)
-            else:
-                self.chemPower = np.zeros_like(self.time)
-                self.viscDiss = data[:, 2]
-                self.ekpump_zon = np.zeros_like(self.time)
-                self.ekpump_tot = np.zeros_like(self.time)
-        elif self.field == 'power_3D':
-            self.time = data[:, 0]
-            self.buoPower = data[:, 1]
-            if data.shape[-1] == 6:
-                self.chemPower = data[:, 2]
-                self.viscDiss = data[:, 3]
-                self.ekpump_zon = data[:, 4]
-                self.ekpump_tot = data[:, 5]
-            if data.shape[-1] == 5:
-                self.chemPower = data[:, 2]
-                self.viscDiss = data[:, 3]
-                self.ekpump_zon = data[:, 4]
-                self.ekpump_tot = np.zeros_like(self.time)
-            else:
-                self.chemPower = np.zeros_like(self.time)
-                self.viscDiss = data[:, 2]
-                self.ekpump_zon = data[:, 3]
-                self.ekpump_tot = np.zeros_like(self.time)
-        elif self.field == 'length_scales':
-            self.time = data[:, 0]
-            self.lus_peak = data[:, 1]
-            self.lekin_peak = data[:, 2]
-            self.lvort_peak = data[:, 3]
-            self.lint = data[:, 4]
-            self.ldiss = data[:, 5]
-        elif self.field == 'corr':
-            self.time = data[:, 0]
-            self.stress = data[:, 1]
-            self.corr = data[:, 2]
+        # Copy look-up table arguments into MagicTs object
+        for attr in tslut.__dict__:
+            setattr(self, attr, tslut.__dict__[attr])
 
         if iplot:
             self.plot()
@@ -347,3 +257,132 @@ class PizzaTs(PizzaSetup):
             ax.set_xlabel('Time')
             ax.set_ylabel('Time step size')
             fig.tight_layout()
+
+
+class TsLookUpTable:
+    """
+    The purpose of this class is to create a lookup table between the numpy
+    array that comes from the reading of the time series and the corresponding
+    column.
+    """
+
+    def __init__(self, data, field):
+        """
+        :param data: numpy array that contains the data
+        :type data: numpy.ndarray
+        :param field: name of the field (i.e. 'eKinR', 'eMagR', 'powerR', ...)
+        :type field: str
+        """
+
+        self.field = field
+
+        if self.field == 'e_kin':
+            self.time = data[:, 0]
+            self.us2 = data[:, 1]
+            self.up2 = data[:, 2]
+            self.up2_axi = data[:, 3]
+            self.ekin = self.us2+self.up2
+        elif self.field == 'e_kin_3D':
+            self.time = data[:, 0]
+            self.us2 = data[:, 1]
+            self.up2 = data[:, 2]
+            self.uz2 = data[:, 3]
+            self.up2_axi = data[:, 4]
+            self.ekin = self.us2+self.up2+self.uz2
+        elif self.field == 'timestep':
+            self.time = data[:, 0]
+            self.dt = data[:, 1]
+        elif self.field == 'heat':
+            self.time = data[:, 0]
+            self.topnuss = data[:, 1]
+            self.botnuss = data[:, 2]
+            self.volnuss = data[:, 3]
+            self.shellnuss = data[:, 4]
+            self.toptemp = data[:, 5]
+            self.bottemp = data[:, 6]
+            self.beta_t = data[:, 7]
+        elif self.field == 'comp' or self.field == 'composition':
+            self.time = data[:, 0]
+            self.topsh = data[:, 1]
+            self.botsh = data[:, 2]
+            self.volsh = data[:, 3]
+            self.topxi = data[:, 4]
+            self.botxi = data[:, 5]
+            self.beta_xi = data[:, 6]
+        elif self.field == 'reynolds' or self.field == 'reynolds_3D':
+            self.time = data[:, 0]
+            self.rey = data[:, 1]
+            self.rey_zon = data[:, 2]
+            self.rey_fluct = data[:, 3]
+        elif self.field == 'power':
+            self.time = data[:, 0]
+            self.buoPower = data[:, 1]
+            if data.shape[-1] == 6:
+                self.chemPower = data[:, 2]
+                self.viscDiss = data[:, 3]
+                self.ekpump_zon = data[:, 4]
+                self.ekpump_tot = data[:, 5]
+            elif data.shape[-1] == 4:
+                self.chemPower = data[:, 2]
+                self.viscDiss = data[:, 3]
+                self.ekpump_zon = np.zeros_like(self.time)
+                self.ekpump_tot = np.zeros_like(self.time)
+            else:
+                self.chemPower = np.zeros_like(self.time)
+                self.viscDiss = data[:, 2]
+                self.ekpump_zon = np.zeros_like(self.time)
+                self.ekpump_tot = np.zeros_like(self.time)
+        elif self.field == 'power_3D':
+            self.time = data[:, 0]
+            self.buoPower = data[:, 1]
+            if data.shape[-1] == 6:
+                self.chemPower = data[:, 2]
+                self.viscDiss = data[:, 3]
+                self.ekpump_zon = data[:, 4]
+                self.ekpump_tot = data[:, 5]
+            if data.shape[-1] == 5:
+                self.chemPower = data[:, 2]
+                self.viscDiss = data[:, 3]
+                self.ekpump_zon = data[:, 4]
+                self.ekpump_tot = np.zeros_like(self.time)
+            else:
+                self.chemPower = np.zeros_like(self.time)
+                self.viscDiss = data[:, 2]
+                self.ekpump_zon = data[:, 3]
+                self.ekpump_tot = np.zeros_like(self.time)
+        elif self.field == 'length_scales':
+            self.time = data[:, 0]
+            self.lus_peak = data[:, 1]
+            self.lekin_peak = data[:, 2]
+            self.lvort_peak = data[:, 3]
+            self.lint = data[:, 4]
+            self.ldiss = data[:, 5]
+        elif self.field == 'corr':
+            self.time = data[:, 0]
+            self.stress = data[:, 1]
+            self.corr = data[:, 2]
+
+    def __add__(self, new):
+        """
+        This method allows to sum two look up tables together. This is python
+        built-in method.
+        """
+
+        out = copy.deepcopy(new)
+        timeOld = self.time[-1]
+        timeNew = new.time[0]
+
+        for attr in new.__dict__.keys():
+            if attr == 'coeffs':
+                out.__dict__[attr] = np.vstack((self.__dict__[attr],
+                                                out.__dict__[attr][1:, :]))
+            elif attr != 'field':
+                if attr in self.__dict__.keys():  # If the argument already existed
+                    if timeOld != timeNew:
+                            out.__dict__[attr] = np.hstack((self.__dict__[attr],
+                                                            out.__dict__[attr]))
+                    else: # Same time
+                        out.__dict__[attr] = np.hstack((self.__dict__[attr],
+                                                        out.__dict__[attr][1:]))
+
+        return out
