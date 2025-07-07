@@ -509,6 +509,9 @@ contains
       if ( amp_forcing /= 0.0_cp ) then
          call compute_power_mech_forcing(us_Mloc, up_Mloc, mech_power_2D, &
               &                          mech_power_3D)
+      else
+         mech_power_2D=0.0_cp
+         mech_power_3D=0.0_cp
       end if
 
       !-------
