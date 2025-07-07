@@ -2,7 +2,6 @@ module courant_mod
 
    use parallel_mod
    use precision_mod
-   use outputs, only: n_log_file
    use namelists, only:  dt_fac, tag
    use truncation, only: n_phi_max, n_r_max
    use blocking, only: nRstart, nRstop
@@ -85,7 +84,7 @@ contains
 
    end subroutine courant
 !------------------------------------------------------------------------------
-   subroutine dt_courant(dt_r,dt_h,l_new_dt,dt,dt_new,dtMax,dtrkc,dthkc,time)
+   subroutine dt_courant(dt_r,dt_h,l_new_dt,dt,dt_new,dtMax,dtrkc,dthkc,time,n_log_file)
       !
       ! Check if Courant criterion based on combined
       ! fluid velocity is satisfied
@@ -108,6 +107,7 @@ contains
       real(cp), intent(in) :: dtrkc(nRstart:nRstop)
       real(cp), intent(in) :: dthkc(nRstart:nRstop)
       real(cp), intent(in) :: time
+      integer,  intent(in) :: n_log_file
 
       !-- Output variables:
       logical,  intent(out) :: l_new_dt

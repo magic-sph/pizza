@@ -30,6 +30,7 @@ module rloop
    real(cp), allocatable :: usXi_grid(:), upXi_grid(:)
    real(cp), allocatable :: usOm_grid(:), upOm_grid(:)
    complex(cp), allocatable :: forcing_Rloc(:,:)
+   real(cp), public, allocatable :: amp_pump(:), x_pump(:), y_pump(:)
 
    public :: radial_loop, initialize_radial_loop, finalize_radial_loop
 
@@ -41,7 +42,7 @@ contains
       integer,  intent(in) :: n_phi_max
 
       !-- Local variable:
-      real(cp), allocatable :: r_rings(:), x(:), y(:), phi_ring(:), amp(:)
+      real(cp), allocatable :: r_rings(:), phi_ring(:)
       real(cp) :: force(n_phi_max)
       real(cp) :: ricb, rcmb, dr, dphi, xgrid, ygrid, phi, dy_forcing, rad
       integer, allocatable :: n_phi_ring(:)
@@ -112,7 +113,7 @@ contains
             end do
 
             !-- Get the coordinates
-            allocate(x(Ntot), y(Ntot), amp(Ntot))
+            allocate(x_pump(Ntot), y_pump(Ntot), amp_pump(Ntot))
             Npumps=0
             do nr=1,n_rings
                allocate(phi_ring(n_phi_ring(nr)))
@@ -120,15 +121,15 @@ contains
                do np=1,n_phi_ring(nr)
                   phi_ring(np)=(np-1)*dphi
                end do
-               x(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*cos(phi_ring(:))
-               y(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*sin(phi_ring(:))
+               x_pump(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*cos(phi_ring(:))
+               y_pump(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*sin(phi_ring(:))
                deallocate(phi_ring)
                Npumps=Npumps+n_phi_ring(nr)
             end do
 
             !-- Set amplitude array
             do npump=1,Ntot
-               amp(npump)=(-1)**npump
+               amp_pump(npump)=(-1)**npump
             end do
 
             deallocate(r_rings, n_phi_ring)
@@ -138,7 +139,7 @@ contains
             Nx=int(two*rcmb/dx_forcing+1)
             Ny=Nx
             !-- Redefine dx (because of integer)
-            dx_forcing = two*rcmb/(Nx-1)
+            dx_forcing=two*rcmb/(Nx-1)
             dy_forcing=dx_forcing
 
             !-- Determine the number of vortices
@@ -155,7 +156,7 @@ contains
             end do
 
             !-- Get the coordinates
-            allocate(x(Ntot), y(Ntot), amp(Ntot))
+            allocate(x_pump(Ntot), y_pump(Ntot), amp_pump(Ntot))
             npump=1
             do i=1,Nx
                xgrid=-rcmb+(i-1)*dx_forcing
@@ -163,9 +164,9 @@ contains
                   ygrid=-rcmb+(j-1)*dy_forcing
                   rad = sqrt(xgrid*xgrid+ygrid*ygrid)
                   if ( rad >= ricb+half*dx_forcing .and. rad <= rcmb-half*dx_forcing) then
-                     x(npump)=xgrid
-                     y(npump)=ygrid
-                     amp(npump)=(-1)**i*(-1)**j
+                     x_pump(npump)  =xgrid
+                     y_pump(npump)  =ygrid
+                     amp_pump(npump)=(-1)**i*(-1)**j
                      npump=npump+1
                   end if
                end do
@@ -185,9 +186,9 @@ contains
                ygrid=r(nr)*sin(phi)
 
                do npump=1,Ntot
-                  force(np)=force(np)+amp_forcing*amp(npump)            * &
-                  &         exp(-(x(npump)-xgrid)**2/radius_forcing**2) * &
-                  &         exp(-(y(npump)-ygrid)**2/radius_forcing**2)
+                  force(np)=force(np)+amp_forcing*amp_pump(npump)            * &
+                  &         exp(-(x_pump(npump)-xgrid)**2/radius_forcing**2) * &
+                  &         exp(-(y_pump(npump)-ygrid)**2/radius_forcing**2)
                end do
                !if ( np == 1) print*, nr, force(np)
             end do
@@ -198,14 +199,13 @@ contains
          !-- Write a snapshot which contain the layout of the forcing
          call write_snapshot_rloc('forcing.'//tag, 0.0_cp, forcing_Rloc)
 
-         deallocate(x, y, amp)
       end if
 
    end subroutine initialize_radial_loop
 !------------------------------------------------------------------------------
    subroutine finalize_radial_loop
 
-      if ( n_rings > 0 ) deallocate( forcing_Rloc )
+      if ( n_rings > 0 ) deallocate( forcing_Rloc, x_pump, y_pump, amp_pump )
       if ( l_heat ) deallocate (usT_grid, upT_grid,  temp_grid )
       if ( l_chem ) deallocate (usXi_grid, upXi_grid,  xi_grid )
       if ( l_phase_field ) deallocate( phi_grid, phiTerms )

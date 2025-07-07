@@ -192,7 +192,7 @@ contains
          !-- Outputs
          !-------------------
          !-- Get time series
-         runStart = MPI_Wtime()
+         if ( l_log .or. l_rst .or. l_frame ) runStart = MPI_Wtime()
          if ( l_finite_diff .and. ( l_log .or. l_rst .or. l_frame ) ) then
             call transp_Rloc_to_Mloc_IO()
          end if
@@ -200,10 +200,12 @@ contains
               &             l_vphi_bal_write, l_stop_time, us_Mloc,  up_Mloc,  &
               &             om_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc, &
               &             phi_Mloc, dpsidt, dTdt, dxidt, dphidt)
-         runStop = MPI_Wtime()
-         if (runStop>runStart) then
-            timers%n_io_calls=timers%n_io_calls+1
-            timers%io        =timers%io+(runStop-runStart)
+         if ( l_log .or. l_rst .or. l_frame ) then
+            runStop = MPI_Wtime()
+            if (runStop>runStart) then
+               timers%n_io_calls=timers%n_io_calls+1
+               timers%io        =timers%io+(runStop-runStart)
+            end if
          end if
 
          !-- If this is running out of time, exit the loop and terminate the calculations
@@ -277,7 +279,7 @@ contains
                !------ Checking Courant criteria, l_new_dt and dt_new are output
                !-------------------
                call dt_courant(dtr,dth,l_new_dt,tscheme%dt(1),dt_new,dtMax, &
-                    &          dtr_Rloc,dth_Rloc,time)
+                    &          dtr_Rloc,dth_Rloc,time,n_log_file)
 
                call tscheme%set_dt_array(dt_new,dtMin,time,n_log_file,n_time_step,&
                     &                    l_new_dt)

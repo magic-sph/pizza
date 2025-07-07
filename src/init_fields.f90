@@ -455,8 +455,7 @@ contains
       real(cp) :: c_r
       real(cp) :: u1(n_r_max)
 
-
-      !-- Radial dependence of perturbation in t1:
+      !-- Radial dependence of perturbation in u1:
       u1(:)=sin(pi*(r(:)-r_icb))
 
       if ( init_u > 0 ) then

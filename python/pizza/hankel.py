@@ -1,5 +1,6 @@
 from scipy import optimize
 from scipy.special import jv, yn, hankel1
+from scipy.interpolate import interp1d
 from .libpizza import chebgrid, intcheb, progressbar
 import numpy as np
 import time
@@ -10,6 +11,23 @@ try:
 except:
     from scipy.integrate import simpson as simps
 import matplotlib.pyplot as plt
+
+
+def remap(fold, rold, rnew):
+    """
+    This function remaps onto a new grid using splines
+    """
+    ro = rold[0]
+    ri = rold[-1]
+
+    if ro > ri:
+        ir = interp1d(rold[::-1], fold[..., ::-1], axis=-1)
+    else:
+        ir = interp1d(rold, fold, axis=-1)
+    fnew = ir(rnew)
+
+    return fnew
+
 
 
 def jnyn_zeros_guess(rin, rout, m, zeros_m_minus_one, nroots):
@@ -33,18 +51,26 @@ def jnyn_zeros_guess(rin, rout, m, zeros_m_minus_one, nroots):
     :rtype: numpy.ndarray
     """
 
-    def f(x):
-        return (jv(m, x*rout)*yn(m, x*rin)-jv(m, x*rin)*yn(m, x*rout)) / \
-                abs(hankel1(m, x*rin))
+    if rin == 0.: # Full disk configuration
+        def f(x):
+            return jv(m, x)
+    else:
+        def f(x):
+            return (jv(m, x*rout)*yn(m, x*rin)-jv(m, x*rin)*yn(m, x*rout)) / \
+                    abs(hankel1(m, x*rin))
 
     len0 = len(zeros_m_minus_one)
 
     import mpmath as mp
 
-    def fmpmath(x):
-        return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) -
-                mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
-                abs(mp.hankel1(m, x*rin))
+    if rin == 0.:
+        def fmpmath(x):
+            return mp.besselj(m, x)
+    else:
+        def fmpmath(x):
+            return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) -
+                    mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
+                    abs(mp.hankel1(m, x*rin))
 
     roots = np.zeros(nroots, np.float64)
     nroot = 0
@@ -204,6 +230,205 @@ def jnyn_zeros(rin, rout, m, nroots):
     """
 
     return roots
+
+
+def jn_zeros(m, nroots):
+    """
+    This subroutine determines the roots of the transcendental equation
+    when Dirichlet boundary conditions are considered in the full disk.
+
+    :param m: azimuthal wavenumber
+    :type m: integer
+    :param nroots: nroots
+    :type nroots: number of roots to be computed
+    :returns: a numpy array which contains the roots
+    :rtype: numpy.ndarray
+    """
+    def f(x):
+        return jv(m, x)
+
+    if m < 10:
+        npoints = 1024
+        x = np.linspace(m, 100, npoints)
+    else:
+        npoints = 10*m
+        x = np.linspace(m, 2*m, npoints)
+    signs = np.sign(f(x))
+    nroot = 0
+    roots = np.zeros((nroots), np.float64)
+    for i in range(npoints-1):
+        if signs[i] + signs[i+1] == 0:
+            sol = optimize.root_scalar(f, bracket=[x[i], x[i+1]], method='brentq')
+            if nroot < nroots:
+                roots[nroot] = sol.root
+            nroot += 1
+
+    # Only works if previous spacing between 2 roots is not far from next
+    while nroot < nroots:
+        spacing = roots[nroot-1] - roots[nroot-2]
+        start = roots[nroot-1] + 0.5*spacing
+        stop = roots[nroot-1] + 1.5*spacing
+        sol = optimize.root_scalar(f, bracket=[start, stop], method='brentq')
+        roots[nroot] = sol.root
+
+        nroot += 1
+
+    return roots
+
+
+
+class HankelDisk:
+    """
+    This is an implementation of the discrete Hankel transform for a disk.
+    This is based on ``The Discrete Hankel Transform'' by Natalie Baddour.
+    """
+
+    def __init__(self, rout, m, nroots, storage_dir=None, verbose=False):
+        """
+        :param rout: outer radius
+        :type rout: float
+        :param m: azimuthal wavenumber
+        :type m: integer
+        :param nroots: nroots
+        :type nroots: number of roots to be computed
+        :param storage_dir: a directory when one case store the Hankel
+                            transforms
+        :type storage_dir: char
+        :param verbose: a boolean to trigger some printouts of infos
+        :type verbose: bool
+        """
+        compute = True
+        store = False
+        if storage_dir is not None:
+            filename = f'Hankel_{rout:.2f}_{nroots:04d}_{m:04d}.pickle'
+            file = os.path.join(storage_dir, filename)
+            if os.path.exists(file):
+                self._read(file, verbose)
+                compute = False
+            else:
+                store = True
+
+        if compute:
+            self.rout = rout
+            self.m = m
+            self.nroots = nroots
+
+            # Get the roots
+            if storage_dir is not None:
+                filename = \
+                     f'Hankel_{rout:.2f}_{nroots:04d}_{m-1:04d}.pickle'
+                file = os.path.join(storage_dir, filename)
+                if os.path.exists(file):
+                    with open(file, 'rb') as fi:
+                        tmp = pickle.load(fi)
+                        roots_m_minus_1, grid_m_minus_1, k_m_minus_1 = \
+                            pickle.load(fi)
+                    self.roots = jnyn_zeros_guess(0., self.rout, self.m,
+                                                  roots_m_minus_1,
+                                                  nroots+1)
+                else:
+                    self.roots = jn_zeros(self.m, nroots+1)
+            else:
+                self.roots = jn_zeros(self.m, nroots+1)
+
+            self.roots_last = self.roots[-1]
+            self.roots = self.roots[:-1]
+
+            self.grid = self.roots * self.rout / self.roots_last
+
+            self.kr = self.roots / self.rout
+
+            self.compute_kernels()
+
+            if store:
+                self._store(storage_dir)
+
+    def compute_kernels(self):
+        """
+        This routine is used to store the kernels employed in the Hankel
+        transforms on the disk
+        """
+
+        self.jp1 = abs(jv(self.m+1, self.roots))
+        jp = jv(self.m, self.roots[:, np.newaxis]@self.roots[np.newaxis, :] /
+                self.roots_last)
+        self.kernels = 2.*jp/(self.jp1[:, np.newaxis]@self.jp1[np.newaxis, :] *
+                              self.roots_last)
+
+    def _read(self, file, verbose):
+        """
+        This routine is used to read the inverse matrix and the roots
+
+        :param file: the pickle file which contains the structure
+        :type file: char
+        :param verbose: a boolean to trigger some printouts of infos
+        :type verbose: bool
+        """
+        with open(file, 'rb') as f:
+            if verbose:
+                print(f'Reading {file}')
+            self.rout, self.m, self.nroots, self.roots_last = pickle.load(f)
+            self.roots, self.grid, self.kr = pickle.load(f)
+            self.jp1, self.kernels = pickle.load(f)
+
+    def _store(self, dir):
+        """
+        This routine is used to store the inverse matrix and the roots
+
+        :param dir: a directory when one case store the Hankel transforms
+        :type dir: char
+        """
+
+        filename = f'Hankel_{self.rout:.2f}_{self.nroots:04d}_{self.m:04d}.pickle'
+        file = os.path.join(dir, filename)
+
+        with open(file, 'wb') as f:
+            pickle.dump([self.rout, self.m, self.nroots, self.roots_last], f)
+            pickle.dump([self.roots, self.grid, self.kr], f)
+            pickle.dump([self.jp1, self.kernels], f)
+
+    def HT(self, f):
+        """
+        This is the actual discrete Hankel transform from physical
+        to spectral space.
+
+        :param f: the function defined in physical space
+        :type f: numpy.ndarray
+        :returns: the function in spectral space
+        :rtype: numpy.ndarray
+        """
+        fac = self.rout**2/self.roots_last
+        fhat = self.jp1 * fac * np.matmul(self.kernels, f/self.jp1)
+
+        return fhat
+
+    def iHT(self, fhat):
+        """
+        This is the inverse discrete Hankel transform on the disk.
+
+        :param f: the function defined in spectral space
+        :type f: numpy.ndarray
+        :returns: the function in physical space
+        :rtype: numpy.ndarray
+        """
+
+        fac = self.roots_last/self.rout**2
+        f = self.jp1 * fac * np.matmul(self.kernels, fhat/self.jp1)
+
+        return f
+
+    def spectra(self, fhat):
+        """
+        This function handles the computation of the spectra
+        :param fhat: the function defined in spectral space
+        :type fhat: numpy.ndarray
+        :returns: the energy content as a function of the order
+        :rtype: numpy.ndarray
+        """
+        jp1 = jv(self.m+1, self.roots)
+        En = 2. / self.rout**2 * abs(fhat)**2 / jp1**2
+
+        return En
 
 
 class HankelAnnulus:
@@ -485,6 +710,58 @@ class HankelAnnulus:
             f[k] = np.sum(fac*fhat*kernel) * np.pi**2/2.
 
         return f
+
+def hankel_spectra(f, r, weight, idx2m, nroots, storage_dir=None, file_save=None):
+    """
+    This routine computes the Hankel spectra on the full disk. 
+    It takes a complex array of dimension (n_m_max, n_r) as an input.
+    
+
+    :param f: a a complex input array (first dimension is m
+    :type f: numpy.ndarray
+    :param r: the radius
+    :type f: numpy.ndarray
+    :param weight: a weighting function (typically the height of the container)
+    :type weight: numpy.ndarray
+    :param idx2m: an array which convert the index to ms
+    :type idx2m: numpy.ndarray
+    :param nroots: the number of roots
+    :type nroots: integer
+    :param storage_dir: the directory where the Hankel transform are stored
+    :type storage_dir: char
+    :param file_save: filename to save the computation once done
+    :type file_save: char
+    """
+    rout = r.max()
+    nms = f.shape[0]
+    Ek = np.zeros((nms, nroots), np.float64)
+    K = np.zeros_like(Ek)
+
+    if file_save is not None and os.path.exists(file_save):
+        with open(file_save, 'rb') as fi:
+            K, Ek = pickle.load(fi)
+    else:
+        for idx in progressbar(range(nms)):
+            m = idx2m[idx]
+            if storage_dir is not None:
+                h = HankelDisk(rout, m, nroots, storage_dir=storage_dir)
+            else:
+                h = HankelDisk(rout, m, nroots)
+
+            fnew = remap(f[idx, :], r, h.grid)
+            weight_new = remap(weight, r, h.grid)
+            fhat = h.HT(fnew*np.sqrt(weight_new))
+            if m == 0:
+                Ek[idx, :] = np.pi * h.spectra(fhat)
+            else:
+                Ek[idx, :] = 2.*np.pi * h.spectra(fhat)
+            K[idx, :] = h.kr
+
+    if file_save is not None:
+        with open(file_save, 'wb') as fi:
+            pickle.dump([K, Ek], fi)
+
+    return K, Ek
 
 
 def weber_orr_spectra(f, r, weight, idx2m, storage_dir=None, file_save=None):
