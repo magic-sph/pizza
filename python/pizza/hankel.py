@@ -51,18 +51,26 @@ def jnyn_zeros_guess(rin, rout, m, zeros_m_minus_one, nroots):
     :rtype: numpy.ndarray
     """
 
-    def f(x):
-        return (jv(m, x*rout)*yn(m, x*rin)-jv(m, x*rin)*yn(m, x*rout)) / \
-                abs(hankel1(m, x*rin))
+    if rin == 0.: # Full disk configuration
+        def f(x):
+            return jv(m, x)
+    else:
+        def f(x):
+            return (jv(m, x*rout)*yn(m, x*rin)-jv(m, x*rin)*yn(m, x*rout)) / \
+                    abs(hankel1(m, x*rin))
 
     len0 = len(zeros_m_minus_one)
 
     import mpmath as mp
 
-    def fmpmath(x):
-        return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) -
-                mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
-                abs(mp.hankel1(m, x*rin))
+    if rin == 0.:
+        def fmpmath(x):
+            return mp.besselj(m, x)
+    else:
+        def fmpmath(x):
+            return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) -
+                    mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
+                    abs(mp.hankel1(m, x*rin))
 
     roots = np.zeros(nroots, np.float64)
     nroot = 0
@@ -306,7 +314,22 @@ class HankelDisk:
             self.nroots = nroots
 
             # Get the roots
-            self.roots = jn_zeros(m, nroots+1)
+            if storage_dir is not None:
+                filename = \
+                     f'Hankel_{rout:.2f}_{nroots:04d}_{m-1:04d}.pickle'
+                file = os.path.join(storage_dir, filename)
+                if os.path.exists(file):
+                    with open(file, 'rb') as fi:
+                        tmp = pickle.load(fi)
+                        roots_m_minus_1, grid_m_minus_1, k_m_minus_1 = \
+                            pickle.load(fi)
+                    self.roots = jnyn_zeros_guess(0., self.rout, self.m,
+                                                  roots_m_minus_1,
+                                                  nroots+1)
+                else:
+                    self.roots = jn_zeros(self.m, nroots+1)
+            else:
+                self.roots = jn_zeros(self.m, nroots+1)
 
             self.roots_last = self.roots[-1]
             self.roots = self.roots[:-1]
