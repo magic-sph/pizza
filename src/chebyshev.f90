@@ -2,7 +2,7 @@ module chebyshev
 
    use precision_mod
    use mem_alloc, only: bytes_allocated
-   use constants, only: half, one, two, three, four, pi, third
+   use constants, only: half, one, two, three, four, pi, third, ci
    use blocking, only: nMstart,nMstop
    use radial_scheme, only: type_rscheme
    use dct_fftw, only: costf_t
@@ -114,21 +114,37 @@ contains
       real(cp), intent(out) :: r(n_r_max)
 
       !-- Local variables:
-      real(cp) :: lambd,paraK,paraX0,A,B !parameters of the nonlinear mapping
+      real(cp) :: lambd,tmp,x0,A,B !parameters of the nonlinear mapping
 
       if ( this%l_map ) then
          this%alpha1=ratio1
          this%alpha2=ratio2
-         paraK=atan(this%alpha1*(one+this%alpha2))/atan(this%alpha1*(one-this%alpha2))
-         paraX0=(paraK-one)/(paraK+one)
-         lambd=atan(this%alpha1*(one-this%alpha2))/(one-paraX0)
       else
          this%alpha1=0.0_cp
          this%alpha2=0.0_cp
       end if
 
+      if ( index(map_function, 'JAFARI') /= 0 .or. index(map_function, 'TT') /= 0 &
+      &    .or. index(map_function, 'TEE') /= 0 ) then
+         A=half*(asinh((one-this%alpha2)*this%alpha1) + &
+         &       asinh((one+this%alpha2)*this%alpha1))
+         B=asinh((one-this%alpha2)*this%alpha1)
+      else
+         A=0.0_cp
+         B=0.0_cp
+      end if
+
+      if ( index(map_function, 'TAN') /= 0 .or. index(map_function, 'BAY') /= 0 ) then
+         tmp=atan(this%alpha1*(one+this%alpha2))/atan(this%alpha1*(one-this%alpha2))
+         x0 =(tmp-one)/(tmp+one)
+         lambd=atan(this%alpha1*(one-this%alpha2))/(one-x0)
+      else if (index(map_function, 'JAFARI') /= 0 ) then
+         tmp=abs(aimag((half*ci*pi-B)/A+one))
+         x0=one/(tmp+0.4_cp)
+      end if
+
       call cheb_grid(ricb,rcmb,n_r_max-1,r,this%x_cheb,this%alpha1,this%alpha2, &
-           &         paraX0,lambd,this%l_map)
+           &         x0,lambd,this%l_map)
 
       if ( this%l_map ) then
 
@@ -158,16 +174,16 @@ contains
             &              (A*(ricb-rcmb)**2*cosh(A*this%x_cheb(:)-A+B)**3)
          !-- Jafari-Varzaneh and Hosseini, 2014
          else if ( index(map_function, 'JAFARI') /= 0 ) then
-            this%drx(:)  =two*this%alpha1*paraX0/(A*(rcmb-ricb)*(        &
-            &             tan(this%x_cheb(:)*atan(paraX0))**2+one)*      &
-            &             cosh(A*(-one+tan(this%x_cheb(:)*atan(paraX0))/ &
-            &             paraX0)+B)*atan(paraX0))
-            this%ddrx(:) =-two*this%alpha1**2*paraX0*(two*A*tanh(-A+A*tan(          &
-            &             this%x_cheb(:)*atan(paraX0))/paraX0+B)+four*paraX0*sin(   &
-            &             this%x_cheb(:)*atan(paraX0))*cos(this%x_cheb(:)*          &
-            &             atan(paraX0)))*cos(this%x_cheb(:)*atan(paraX0))**2/(A**2* &
-            &             (ricb-rcmb)**2*cosh(-A+A*tan(this%x_cheb(:)*atan(paraX0)) &
-            &             /paraX0+B)**2*atan(paraX0))
+            this%drx(:)  =two*this%alpha1*x0/(A*(rcmb-ricb)*(        &
+            &             tan(this%x_cheb(:)*atan(x0))**2+one)*      &
+            &             cosh(A*(-one+tan(this%x_cheb(:)*atan(x0))/ &
+            &             x0)+B)*atan(x0))
+            this%ddrx(:) =-two*this%alpha1**2*x0*(two*A*tanh(-A+A*tan(          &
+            &             this%x_cheb(:)*atan(x0))/x0+B)+four*x0*sin(           &
+            &             this%x_cheb(:)*atan(x0))*cos(this%x_cheb(:)*          &
+            &             atan(x0)))*cos(this%x_cheb(:)*atan(x0))**2/(A**2*     &
+            &             (ricb-rcmb)**2*cosh(-A+A*tan(this%x_cheb(:)*atan(x0)) &
+            &             /x0+B)**2*atan(x0))
          end if
 
       else !-- No mapping is used: this is the regular Gauss-Lobatto grid
@@ -233,12 +249,12 @@ contains
 
       bma=half*(b-a)
       bpa=half*(a+b)
+
       if ( index(map_function, 'JAFARI') /= 0 .or. index(map_function, 'TT') /= 0 &
       &    .or. index(map_function, 'TEE') /= 0 ) then
-         AJ=half*(asinh((one-a2)*a1)+asinh((one+a2)*a1))
+         AJ=half*(asinh((one-a2)*a1) + asinh((one+a2)*a1))
          BJ=asinh((one-a2)*a1)
       end if
-
 
       do k=1,n+1
          y(k)=cos( pi*real(k-1,cp)/real(n,cp) )
