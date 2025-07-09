@@ -3,8 +3,9 @@ module update_temp_integ
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, one, ci, half
-   use namelists, only: kbott, ktopt, tadvz_fac, r_cmb, r_icb, &
-       &                TdiffFac, l_non_rot, l_galerkin, l_full_disk
+   use namelists, only: kbott, ktopt, tadvz_fac, r_cmb, r_icb, stef, &
+       &                TdiffFac, l_non_rot, l_galerkin, l_full_disk,&
+       &                l_phase_field
    use horizontal, only: hdif_T, bott_Mloc, topt_Mloc
    use radial_functions, only: rscheme, or2, dtcond, tcond, r
    use blocking, only: nMstart, nMstop
@@ -176,12 +177,13 @@ contains
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
    subroutine update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt,  &
-              &               tscheme, lMat, l_log_next)
+              &               phi, tscheme, lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       logical,             intent(in) :: l_log_next
+      complex(cp),         intent(in) :: phi(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),       intent(out) :: temp_hat_Mloc(nMstart:nMstop, n_r_max)
@@ -196,6 +198,12 @@ contains
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%set_imex_rhs(work_Mloc, dTdt)
+
+      if ( l_phase_field ) then
+         do n_cheb=1,n_r_max
+            work_Mloc(:,n_cheb)=work_Mloc(:,n_cheb)+stef*phi(:,n_cheb)
+         end do
+      end if
 
       do n_m=nMstart, nMstop
 
@@ -274,9 +282,9 @@ contains
 
       !-- Compute implicit state
       if ( tscheme%istage == tscheme%nstages ) then
-         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, tscheme%l_imp_calc_rhs(1))
+         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, phi, 1, tscheme%l_imp_calc_rhs(1))
       else
-         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, tscheme%istage+1,    &
+         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, phi, tscheme%istage+1,    &
               &                    tscheme%l_imp_calc_rhs(tscheme%istage+1))
       end if
 
@@ -288,12 +296,13 @@ contains
 
    end subroutine update_temp_int
 !------------------------------------------------------------------------------
-   subroutine assemble_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt,  &
+   subroutine assemble_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt, phi,  &
               &                 tscheme, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: l_log_next
+      complex(cp),         intent(in) :: phi(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       complex(cp),       intent(out) :: temp_hat_Mloc(nMstart:nMstop, n_r_max)
@@ -303,6 +312,8 @@ contains
 
       !-- Local variables
       integer :: n_m, m, n_cheb
+
+      if ( l_phase_field ) call abortRun('! Phase field + sparse Cheb + assembly stage is not in place!')
 
       !-- Now assemble the right hand side and store it in work_Mloc
       call tscheme%assemble_imex(work_Mloc, dTdt)
@@ -371,7 +382,7 @@ contains
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Compute implicit stage for first state of next iteration if required
-      call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, tscheme%l_imp_calc_rhs(1))
+      call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, phi, 1, tscheme%l_imp_calc_rhs(1))
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       !-- This is needed to estimate the heat fluxes
@@ -456,12 +467,13 @@ contains
 
    end subroutine finish_exp_temp_int
 !------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, istage, l_calc_lin)
+   subroutine get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, phi, istage, l_calc_lin)
 
       !-- Input variables
       complex(cp),       intent(in) :: temp_hat_Mloc(nMstart:nMstop,n_r_max)
       logical,           intent(in) :: l_calc_lin
       integer,           intent(in) :: istage
+      complex(cp),       intent(in) :: phi(nMstart:nMstop,n_r_max)
 
       !-- Output variable
       type(type_tarray), intent(inout) :: dTdt
@@ -485,8 +497,13 @@ contains
             do n_cheb=1,n_r_max
                dTdt%old(n_m,n_cheb,istage)=rhs(n_cheb)
             end do
-
          end do
+
+         if ( l_phase_field ) then
+            do n_cheb=1,n_r_max
+               dTdt%old(:,n_cheb,istage)=dTdt%old(:,n_cheb,istage)-stef*phi(:,n_cheb)
+            end do
+         end if
       end if
 
       if ( l_calc_lin ) then

@@ -14,7 +14,7 @@ module mloop_mod
    use update_temp_integ, only: update_temp_int, finish_exp_temp_int, &
        &                        assemble_temp_int
    use update_xi_integ, only: update_xi_int, finish_exp_xi_int, assemble_xi_int
-   use update_phi_integ, only: update_phi_int, assemble_phi_int
+   use update_phi_integ, only: update_phi_int, assemble_phi_int, finish_exp_phi_int
    use update_psi_integ_smat, only: update_psi_int_smat, finish_exp_psi_int_smat, &
        &                            assemble_psi_int_smat
    use update_psi_integ_dmat, only: update_psi_int_dmat, finish_exp_psi_int_dmat
@@ -86,7 +86,7 @@ contains
          if ( l_phase_field ) call update_phi_int(phi_hat_Mloc, phi_Mloc, dphidt,   &
                                    &              tscheme, lMat)
          if ( l_heat ) call update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt, &
-                            &               tscheme, lMat, l_log_next)
+                            &               dphidt%old(:,:,1), tscheme, lMat, l_log_next)
          if ( l_chem ) call update_xi_int(xi_hat_Mloc, xi_Mloc, dxi_Mloc, dxidt,   &
                             &             tscheme, lMat, l_log_next)
          if ( l_direct_solve ) then
@@ -151,7 +151,8 @@ contains
          if ( l_phase_field ) call assemble_phi_int(phi_hat_Mloc, phi_Mloc, dphidt, &
                                    &                tscheme)
          if ( l_heat ) call assemble_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, &
-                            &                 dTdt, tscheme, l_log_next)
+                            &                 dTdt, dphidt%old(:,:,1), tscheme,     &
+                            &                 l_log_next)
          if ( l_chem ) call assemble_xi_int(xi_hat_Mloc, xi_Mloc, dxi_Mloc, dxidt, &
                             &               tscheme, l_log_next)
 
@@ -168,8 +169,8 @@ contains
 !------------------------------------------------------------------------------
    subroutine finish_explicit_assembly(temp_Mloc, xi_Mloc, psi_Mloc, us_Mloc,    &
               &                        up_Mloc, om_Mloc, dVsT_Mloc, dVsXi_Mloc,  &
-              &                        dVsOm_Mloc, dTdt, dxidt, dpsidt, tscheme, &
-              &                        vp_bal, vort_bal)
+              &                        dVsOm_Mloc, dTdt, dxidt, dpsidt, dphidt,  &
+              &                        tscheme, vp_bal, vort_bal)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
@@ -187,6 +188,7 @@ contains
       type(type_tarray),   intent(inout) :: dTdt
       type(type_tarray),   intent(inout) :: dxidt
       type(type_tarray),   intent(inout) :: dpsidt
+      type(type_tarray),   intent(inout) :: dphidt
       type(vp_bal_type),   intent(inout) :: vp_bal
       type(vort_bal_type), intent(inout) :: vort_bal
 
@@ -211,6 +213,7 @@ contains
                             &                   dTdt%expl(:,:,tscheme%istage))
          if ( l_chem ) call finish_exp_xi_int(psi_Mloc, dVsXi_Mloc,  &
                             &                 dxidt%expl(:,:,tscheme%istage))
+         if ( l_phase_field ) call finish_exp_phi_int(dphidt%expl(:,:,tscheme%istage))
          if ( l_direct_solve ) then
             call finish_exp_psi_int_smat(psi_Mloc, us_Mloc, up_Mloc, om_Mloc, &
                  &                       dVsOm_Mloc, temp_Mloc, xi_Mloc,      &

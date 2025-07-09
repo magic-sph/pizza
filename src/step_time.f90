@@ -265,8 +265,8 @@ contains
                        &                        dVsT_Mloc(:,:,tscheme%istage),     &
                        &                        dVsXi_Mloc(:,:,tscheme%istage),    &
                        &                        dVsOm_Mloc(:,:,tscheme%istage),    &
-                       &                        dTdt, dxidt, dpsidt, tscheme,      &
-                       &                        vp_bal, vort_bal)
+                       &                        dTdt, dxidt, dpsidt, dphidt,       &
+                       &                        tscheme, vp_bal, vort_bal)
                end if
                runStop = MPI_Wtime()
                if (runStop>runStart) then
@@ -481,9 +481,10 @@ contains
                        &                         1, vp_bal, vort_bal, .true.)
                end if
             else
-               if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, 1, .true.)
+               if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, &
+                                  &                    dphidt%old(:,:,1), 1, .true.)
                if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, .true.)
-               if ( l_phase_field ) call get_phi_rhs_imp_int(phi_hat_Mloc, dxidt, 1, .true.)
+               if ( l_phase_field ) call get_phi_rhs_imp_int(phi_hat_Mloc, dphidt, 1, .true.)
                if ( l_direct_solve ) then
                   call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,temp_Mloc,psi_Mloc, &
                        &                        dpsidt, 1, vp_bal, .true.)

@@ -4,7 +4,7 @@ module update_phi_integ
    use mem_alloc, only: bytes_allocated
    use constants, only: zero, one, half
    use namelists, only: kbotphi, ktopphi, r_cmb, r_icb, l_full_disk, stef, pr, &
-       &                phaseDiffFac, l_galerkin, phi_top, phi_bot
+       &                phaseDiffFac, phi_top, phi_bot
    use radial_functions, only: rscheme
    use blocking, only: nMstart, nMstop
    use truncation, only: n_r_max, idx2m, n_cheb_max, m2idx
@@ -14,7 +14,6 @@ module update_phi_integ
    use time_array, only: type_tarray
    use band_matrix, only: type_bandmat_real, band_band_product
    use bordered_matrix, only: type_bordmat_real
-   use galerkin
    use chebsparselib, only: intcheb2rmult2lapl, intcheb2rmult2
 
    implicit none
@@ -29,14 +28,13 @@ module update_phi_integ
    complex(cp), allocatable :: rhs(:)
 
    type(type_bordmat_real), allocatable :: LHS_mat_tau(:), Ass_mat_tau(:)
-   type(type_bandmat_real), allocatable :: LHS_mat_gal(:), Ass_mat_gal(:)
-   type(type_bandmat_real) :: RHSE_mat, gal_sten, gal_sten_m0
+   type(type_bandmat_real) :: RHSE_mat
    type(type_bandmat_real), allocatable :: RHSI_mat(:)
    real(cp), allocatable :: phifac(:,:) ! Precondition matrix
    real(cp), allocatable :: assfac(:,:)
 
    public :: update_phi_int, initialize_phi_integ, finalize_phi_integ, &
-   &         get_phi_rhs_imp_int, assemble_phi_int
+   &         get_phi_rhs_imp_int, assemble_phi_int, finish_exp_phi_int
 
 contains
 
@@ -48,29 +46,6 @@ contains
       !-- Local variables
       integer :: n_m, m
 
-      if ( l_galerkin ) then
-         !-- Define Galerkin basis and stencils
-         if ( l_full_disk ) then
-            if ( ktopphi == 1 ) then
-               call get_galerkin_stencil(gal_sten, n_r_max, 1)
-               call get_galerkin_stencil(gal_sten_m0, n_r_max, 3)
-            else
-               call get_galerkin_stencil(gal_sten, n_r_max, 4)
-               call get_galerkin_stencil(gal_sten_m0, n_r_max, 2)
-            end if
-         else
-            if ( ktopphi == 1 .and. kbotphi == 1 ) then
-               call get_galerkin_stencil(gal_sten, n_r_max, 1)
-            else if ( ktopphi /= 1 .and. kbotphi /= 1 ) then
-               call get_galerkin_stencil(gal_sten, n_r_max, 2)
-            else if ( ktopphi == 1 .and. kbotphi /= 1 ) then
-               call get_galerkin_stencil(gal_sten, n_r_max, 3)
-            else if ( ktopphi /= 1 .and. kbotphi == 1 ) then
-               call get_galerkin_stencil(gal_sten, n_r_max, 4)
-            end if
-         end if
-      end if
-
       call RHSE_mat%initialize(4, 4, n_r_max)
 
       allocate( RHSI_mat(nMstart:nMstop) )
@@ -78,20 +53,15 @@ contains
          call RHSI_mat(n_m)%initialize(2, 2, n_r_max)
       end do
 
-      if ( l_galerkin ) then
-         allocate( LHS_mat_gal(nMstart:nMstop) )
-         if ( tscheme%l_assembly ) allocate( Ass_mat_gal(nMstart:nMstop) )
-      else
-         allocate( LHS_mat_tau(nMstart:nMstop) )
+      allocate( LHS_mat_tau(nMstart:nMstop) )
+      do n_m=nMstart,nMstop
+         call LHS_mat_tau(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
+      end do
+      if ( tscheme%l_assembly ) then
+         allocate( Ass_mat_tau(nMstart:nMstop) )
          do n_m=nMstart,nMstop
-            call LHS_mat_tau(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
+            call Ass_mat_tau(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
          end do
-         if ( tscheme%l_assembly ) then
-            allocate( Ass_mat_tau(nMstart:nMstop) )
-            do n_m=nMstart,nMstop
-               call Ass_mat_tau(n_m)%initialize(klA, kuA, n_boundaries, n_r_max)
-            end do
-         end if
       end if
 
       call get_rhs_exp_mat(RHSE_mat)
@@ -121,7 +91,6 @@ contains
       allocate( rhs(n_r_max) )
       bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_COMPLEX
 
-
    end subroutine initialize_phi_integ
 !------------------------------------------------------------------------------
    subroutine finalize_phi_integ(tscheme)
@@ -139,23 +108,12 @@ contains
       deallocate( phifac, RHSI_mat, rhs, lPhimat )
       if ( tscheme%l_assembly ) deallocate( assfac, lAssmat )
 
-      if ( l_galerkin ) then
-         do n_m=nMstart,nMstop
-            call LHS_mat_gal(n_m)%finalize()
-            if ( tscheme%l_assembly ) call Ass_mat_gal(n_m)%finalize()
-         end do
-         deallocate( LHS_mat_gal )
-         if ( tscheme%l_assembly ) deallocate( Ass_mat_gal )
-         call destroy_galerkin_stencil(gal_sten)
-         if ( l_full_disk ) call destroy_galerkin_stencil(gal_sten_m0)
-      else
-         do n_m=nMstart,nMstop
-            call LHS_mat_tau(n_m)%finalize()
-            if ( tscheme%l_assembly ) call Ass_mat_tau(n_m)%finalize()
-         end do
-         deallocate( LHS_mat_tau )
-         if ( tscheme%l_assembly ) deallocate( Ass_mat_tau )
-      end if
+      do n_m=nMstart,nMstop
+         call LHS_mat_tau(n_m)%finalize()
+         if ( tscheme%l_assembly ) call Ass_mat_tau(n_m)%finalize()
+      end do
+      deallocate( LHS_mat_tau )
+      if ( tscheme%l_assembly ) deallocate( Ass_mat_tau )
 
    end subroutine finalize_phi_integ
 !------------------------------------------------------------------------------
@@ -183,54 +141,30 @@ contains
          m = idx2m(n_m)
 
          if ( .not. lPhimat(n_m) ) then
-            if ( l_galerkin ) then
-               call get_lhs_mat_gal( tscheme%wimp_lin(1), LHS_mat_gal(n_m), &
-                    &                phifac(:,n_m), m )
-            else
-               call get_lhs_mat_tau( tscheme%wimp_lin(1), LHS_mat_tau(n_m), &
-                    &                phifac(:,n_m), m )
-            end if
+            call get_lhs_mat_tau( tscheme%wimp_lin(1), LHS_mat_tau(n_m), &
+                 &                phifac(:,n_m), m )
             lPhimat(n_m)=.true.
          end if
 
          do n_cheb=1,n_r_max
             rhs(n_cheb)=work_Mloc(n_m,n_cheb)
          end do
-         !-- Inhomogeneous heat B.Cs (if not zero or not galerkin)
-         if ( .not. l_galerkin ) then
-            if ( m == 0 ) then
-               rhs(1)=cmplx(phi_top,0.0_cp,cp)
-               rhs(2)=cmplx(phi_bot,0.0_cp,cp)
-            else
-               rhs(1)=zero
-               rhs(2)=zero
-            end if
-         endif
+
+         !-- Boundary values
+         if ( m == 0 ) then
+            rhs(1)=cmplx(phi_top,0.0_cp,cp)
+            rhs(2)=cmplx(phi_bot,0.0_cp,cp)
+         else
+            rhs(1)=zero
+            rhs(2)=zero
+         end if
 
          !-- Multiply rhs by precond matrix
          do n_cheb=1,n_r_max
             rhs(n_cheb)=rhs(n_cheb)*phifac(n_cheb,n_m)
          end do
 
-         if ( l_galerkin ) then
-            call LHS_mat_gal(n_m)%solve(rhs(1+n_boundaries:n_r_max), &
-                 &                      n_r_max-n_boundaries)
-            !-- Put the two first zero lines at the end
-            rhs = cshift(rhs, n_boundaries)
-
-            !-- Transform from Galerkin space to Chebyshev space
-            if ( l_full_disk ) then
-               if ( m == 0 ) then
-                  call galerkin2cheb(gal_sten_m0, rhs)
-               else
-                  call galerkin2cheb(gal_sten, rhs)
-               end if
-            else
-               call galerkin2cheb(gal_sten, rhs)
-            end if
-         else
-            call LHS_mat_tau(n_m)%solve(rhs, n_r_max)
-         end if
+         call LHS_mat_tau(n_m)%solve(rhs, n_r_max)
 
          do n_cheb=1,n_r_max
             phi_hat_Mloc(n_m, n_cheb)=rhs(n_cheb)
@@ -282,52 +216,29 @@ contains
          m = idx2m(n_m)
 
          if ( .not. lAssmat(n_m) ) then
-            if ( l_galerkin ) then
-               call get_lhs_mat_gal( 0.0_cp, Ass_mat_gal(n_m), assfac(:,n_m), m )
-            else
-               call get_lhs_mat_tau( 0.0_cp, Ass_mat_tau(n_m), assfac(:,n_m), m )
-            end if
+            call get_lhs_mat_tau( 0.0_cp, Ass_mat_tau(n_m), assfac(:,n_m), m )
             lAssmat(n_m)=.true.
          end if
 
          do n_cheb=1,n_r_max
             rhs(n_cheb)=work_Mloc(n_m,n_cheb)
          end do
-         !-- Inhomogeneous heat B.Cs (if not zero or not galerkin)
-         if ( .not. l_galerkin ) then
-            if ( m == 0 ) then
-               rhs(1)=cmplx(phi_top,0.0_cp,cp)
-               rhs(2)=cmplx(phi_bot,0.0_cp,cp)
-            else
-               rhs(1)=zero
-               rhs(2)=zero
-            end if
-         endif
+
+         !-- Boundary values
+         if ( m == 0 ) then
+            rhs(1)=cmplx(phi_top,0.0_cp,cp)
+            rhs(2)=cmplx(phi_bot,0.0_cp,cp)
+         else
+            rhs(1)=zero
+            rhs(2)=zero
+         end if
 
          !-- Multiply rhs by precond matrix
          do n_cheb=1,n_r_max
             rhs(n_cheb)=rhs(n_cheb)*assfac(n_cheb,n_m)
          end do
 
-         if ( l_galerkin ) then
-            call Ass_mat_gal(n_m)%solve(rhs(1+n_boundaries:n_r_max), &
-                 &                      n_r_max-n_boundaries)
-            !-- Put the two first zero lines at the end
-            rhs = cshift(rhs, n_boundaries)
-
-            !-- Transform from Galerkin space to Chebyshev space
-            if ( l_full_disk ) then
-               if ( m == 0 ) then
-                  call galerkin2cheb(gal_sten_m0, rhs)
-               else
-                  call galerkin2cheb(gal_sten, rhs)
-               end if
-            else
-               call galerkin2cheb(gal_sten, rhs)
-            end if
-         else
-            call Ass_mat_tau(n_m)%solve(rhs, n_r_max)
-         end if
+         call Ass_mat_tau(n_m)%solve(rhs, n_r_max)
 
          do n_cheb=1,n_r_max
             phi_hat_Mloc(n_m, n_cheb)=rhs(n_cheb)
@@ -349,6 +260,40 @@ contains
       call get_phi_rhs_imp_int(phi_hat_Mloc, dphidt, 1, tscheme%l_imp_calc_rhs(1))
 
    end subroutine assemble_phi_int
+!------------------------------------------------------------------------------
+   subroutine finish_exp_phi_int(dphi_exp_last)
+
+      !-- Input/Output variables
+      complex(cp), intent(inout) :: dphi_exp_last(nMstart:nMstop,n_r_max)
+
+      !-- Local variables
+      integer :: n_r, n_m, m, n_cheb
+
+      !-- Transform the explicit part to Chebyshev space
+      call rscheme%costf1(dphi_exp_last, nMstart, nMstop, n_r_max)
+
+      do n_cheb=n_cheb_max+1,n_r_max
+         do n_m=nMstart,nMstop
+            dphi_exp_last(n_m,n_cheb)=zero
+         end do
+      end do
+
+      !-- Matrix-vector multiplication by the operator \int\int r^2 .
+      do n_m=nMstart,nMstop
+         do n_cheb=1,n_r_max
+            rhs(n_cheb)=dphi_exp_last(n_m,n_cheb)
+         end do
+
+         call RHSE_mat%mat_vec_mul(rhs)
+
+         rhs(1)=zero
+         rhs(2)=zero
+         do n_cheb=1,n_r_max
+            dphi_exp_last(n_m,n_cheb)=rhs(n_cheb)
+         end do
+      end do
+
+   end subroutine finish_exp_phi_int
 !------------------------------------------------------------------------------
    subroutine get_phi_rhs_imp_int(phi_hat_Mloc, dphidt, istage, l_calc_lin)
 
@@ -408,98 +353,6 @@ contains
       end if
 
    end subroutine get_phi_rhs_imp_int
-!------------------------------------------------------------------------------
-   subroutine get_lhs_mat_gal(wimp, Cmat, phiMat_fac, m)
-
-      !-- Input variables
-      real(cp), intent(in) :: wimp ! Weight of the IMEX integrator
-      integer,  intent(in) :: m          ! Azimuthal wavenumber
-
-      !-- Output variables
-      type(type_bandmat_real), intent(out) :: Cmat
-      real(cp),                intent(inout) :: phiMat_fac(:)
-
-      !-- Local variables
-      type(type_bandmat_real) :: Amat
-      real(cp), allocatable :: stencilA(:)
-      integer :: n_r, i_r, n_band, n_m
-      real(cp) :: a, b
-
-      n_m = m2idx(m)
-      a = half*(r_cmb-r_icb)
-      b = half*(r_cmb+r_icb)
-
-      call Amat%initialize(klA, kuA, n_r_max)
-      allocate( stencilA(Amat%nbands) )
-
-      !-- Fill A matrix
-      do n_r=1,Amat%nlines
-         i_r = n_r+n_boundaries
-
-         !-- Define the equations
-         stencilA = 5.0_cp*6.0_cp*stef*pr*intcheb2rmult2(a,b,i_r-1,Amat%nbands)-&
-         &          wimp*phaseDiffFac*intcheb2rmult2lapl(a,b,m,i_r-1,Amat%nbands)
-
-         !-- Roll the array for band storage
-         do n_band=1,Amat%nbands
-            if ( i_r+Amat%ku+1-n_band <= Amat%nlines .and. i_r+Amat%ku+1-n_band >= 1 ) then
-               Amat%dat(n_band,i_r+Amat%ku+1-n_band) = rscheme%rnorm*stencilA(n_band)
-            end if
-         end do
-
-      end do
-
-      !-- Multiply by the Galerkin matrix and allocate Cmat
-      if ( l_full_disk ) then
-         if ( m == 0 ) then
-            call band_band_product(Amat, gal_sten_m0, Cmat, l_lhs=.true.)
-         else
-            call band_band_product(Amat, gal_sten, Cmat, l_lhs=.true.)
-         end if
-      else
-         call band_band_product(Amat, gal_sten, Cmat, l_lhs=.true.)
-      end if
-
-      !-- Remove first blank rows (careful remapping of kl, ku and room for LU factorisation)
-      call Cmat%remove_leading_blank_rows(n_boundaries)
-
-      !-- Truncate the last N lines
-      call Cmat%remove_last_rows(n_boundaries)
-
-      !-- Quick preconditionner
-      deallocate( stencilA )
-      allocate( stencilA(Cmat%nbands) )
-      stencilA(:)=0.0_cp
-      do n_r=1,Cmat%nlines
-        do n_band=1,Cmat%nbands
-           if ( n_r+Cmat%ku+1-n_band <= Cmat%nlines .and. &
-           &                         n_r+Cmat%ku+1-n_band >= 1 ) then
-
-               stencilA(n_band)=Cmat%dat(Cmat%kl+n_band,n_r+Cmat%ku+1-n_band)
-           end if
-         end do
-        phiMat_fac(n_r+n_boundaries)=one/maxval(abs(stencilA))
-      end do
-      do n_r=1,Cmat%nlines
-        do n_band=1,Cmat%nbands
-           if ( n_r+Cmat%ku+1-n_band <= Cmat%nlines .and. &
-           &                         n_r+Cmat%ku+1-n_band >= 1 ) then
-              Cmat%dat(Cmat%kl+n_band,n_r+Cmat%ku+1-n_band) =  &
-              & Cmat%dat(Cmat%kl+n_band,n_r+Cmat%ku+1-n_band)* &
-              &                      phiMat_fac(n_r+n_boundaries)
-          end if
-       end do
-      end do
-      phiMat_fac(1:n_boundaries)=one
-
-      !-- LU factorisation
-      call Cmat%prepare_LU()
-
-      !-- Remove temporary arrays
-      deallocate( stencilA )
-      call Amat%finalize()
-
-   end subroutine get_lhs_mat_gal
 !------------------------------------------------------------------------------
    subroutine get_lhs_mat_tau(wimp, A_mat, phiMat_fac, m)
 

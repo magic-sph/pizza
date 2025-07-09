@@ -404,11 +404,15 @@ contains
       if ( l_galerkin .and. index(cheb_method, 'COLL') == 0 .and. &
       &    ( maxval(abs(t_top(:))) > 0.0_cp .or.                  &
       &      maxval(abs(xi_top(:))) > 0.0_cp) ) then
-         call abortRun('! Inhomogeneous BCs not compatible with chosen chebyshev solver !')
+         call abortRun('! Inhomogeneous BCs not compatible with chosen Chebyshev solver !')
       else if ( l_galerkin .and. index(cheb_method, 'COLL') == 0 .and. &
       &         ( maxval(abs(t_bot(:))) > 0.0_cp .or.                  &
       &           maxval(abs(xi_bot(:))) > 0.0_cp) ) then
-         call abortRun('! Inhomogeneous BCs not compatible with chosen chebyshev solver !')
+         call abortRun('! Inhomogeneous BCs not compatible with chosen Chebyshev solver !')
+      end if
+
+      if ( l_galerkin .and. l_phase_field .and. index(cheb_method, 'COLL')==0 ) then
+         call abortRun('! Phase field incompatible with Galerkin basis: use tau instead !')
       end if
 
       !-- Implicit or Explicit treatment of Coriolis force
