@@ -263,6 +263,7 @@ contains
             usom = usom+cc22real(us_fluct,om_Rloc(n_m,n_r),m)
          end do
 
+         !-- Penalty term for the axisymmetric equation
          if ( l_phase_field ) then
             upPhi = 0.0_cp
             do n_m=1,n_m_max
@@ -360,7 +361,7 @@ contains
             m = idx2m(n_m)
             if ( m == 0 ) then
                dpsidt_Rloc(n_m,n_r)=-usom
-               if ( l_phase_field ) then
+               if ( l_phase_field ) then ! Penalty term for the <uphi> equation
                   dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)-upPhi / &
                   &                    epsPhase**2/penaltyFac**2
                end if
