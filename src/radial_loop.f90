@@ -241,7 +241,7 @@ contains
       type(timers_type), intent(inout) :: timers
 
       !-- Local variables
-      real(cp) :: usom, runStart, runStop
+      real(cp) :: usom, runStart, runStop, upPhi
       complex(cp) :: us_fluct
       integer :: n_r, n_m, m, idx_m0
 
@@ -262,6 +262,13 @@ contains
             end if
             usom = usom+cc22real(us_fluct,om_Rloc(n_m,n_r),m)
          end do
+
+         if ( l_phase_field ) then
+            upPhi = 0.0_cp
+            do n_m=1,n_m_max
+               upPhi = upPhi+cc22real(up_Rloc(n_m,n_r),phi_Rloc(n_m,n_r),m)
+            end do
+         end if
 
          !-----------------
          !-- Bring data on the grid
@@ -353,6 +360,10 @@ contains
             m = idx2m(n_m)
             if ( m == 0 ) then
                dpsidt_Rloc(n_m,n_r)=-usom
+               if ( l_phase_field ) then
+                  dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)-upPhi / &
+                  &                    epsPhase**2/penaltyFac**2
+               end if
             else
                dpsidt_Rloc(n_m,n_r)=-or1(n_r)*ci*m*dpsidt_Rloc(n_m,n_r)
             end if
