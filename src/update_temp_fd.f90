@@ -9,7 +9,8 @@ module update_temp_fd_mod
    use parallel_solvers, only: type_tri_par
    use time_schemes, only: type_tscheme
    use time_array, only: type_tarray
-   use namelists, only: TdiffFac, kbott, ktopt, tadvz_fac, l_full_disk
+   use namelists, only: TdiffFac, kbott, ktopt, tadvz_fac, l_full_disk, &
+       &                stef, l_phase_field
    use radial_functions, only: or1, or2, rscheme, r, beta, tcond, dtcond
    use radial_der, only: get_ddr_ghost, get_dr_Rloc, exch_ghosts, bulk_to_ghost
 
@@ -44,7 +45,7 @@ contains
 
    end subroutine finalize_temp_fd
 !---------------------------------------------------------------------------------
-   subroutine prepare_temp_fd(tscheme, dTdt)
+   subroutine prepare_temp_fd(tscheme, dTdt, phi)
       !
       ! This subroutine is used to assemble the r.h.s. of the temperature equation
       ! when parallel F.D solvers are used. Boundary values are set here.
@@ -52,6 +53,7 @@ contains
 
       !-- Input of variables:
       class(type_tscheme), intent(in) :: tscheme
+      complex(cp),         intent(in) :: phi(n_m_max,nRstart:nRstop)
 
       !-- Input/output of scalar fields:
       type(type_tarray), intent(inout) :: dTdt
@@ -71,6 +73,15 @@ contains
 
       !-- Now assemble the right hand side
       call tscheme%set_imex_rhs_ghost(temp_ghost, dTdt, n_m_start, n_m_stop, 1)
+
+      if ( l_phase_field ) then
+         !-- Add the last remaining term to assemble St*\partial \phi/\partial t
+         do nR=nRstart,nRstop
+            do n_m=n_m_start,n_m_stop
+               temp_ghost(n_m,nR)=temp_ghost(n_m,nR)+stef*phi(n_m,nR)
+            end do
+         end do
+      end if
 
       !-- Set boundary conditions
       if ( nRstart == 1 ) then
@@ -157,7 +168,7 @@ contains
 
    end subroutine fill_ghosts_temp
 !---------------------------------------------------------------------------------
-   subroutine update_temp_fd(temp, dtemp, dTdt, tscheme)
+   subroutine update_temp_fd(temp, dtemp, dTdt, phi, tscheme)
       !
       ! This subroutine is called after the linear solves have been completed.
       ! This is then assembling the linear terms that will be used in the r.h.s.
@@ -166,6 +177,7 @@ contains
 
       !-- Input of variables:
       class(type_tscheme), intent(in) :: tscheme
+      complex(cp),         intent(in) :: phi(n_m_max,nRstart:nRstop)
 
       !-- Input/output of scalar fields:
       type(type_tarray), intent(inout) :: dTdt
@@ -181,10 +193,10 @@ contains
 
       !-- Calculation of the implicit part
       if ( tscheme%istage == tscheme%nstages ) then
-         call get_temp_rhs_imp_ghost(temp_ghost, dtemp, dTdt, 1, &
+         call get_temp_rhs_imp_ghost(temp_ghost, dtemp, dTdt, phi, 1, &
               &                      tscheme%l_imp_calc_rhs(1))
       else
-         call get_temp_rhs_imp_ghost(temp_ghost, dtemp, dTdt, tscheme%istage+1, &
+         call get_temp_rhs_imp_ghost(temp_ghost, dtemp, dTdt, phi, tscheme%istage+1, &
               &                      tscheme%l_imp_calc_rhs(tscheme%istage+1))
       end if
 
@@ -202,7 +214,7 @@ contains
 
    end subroutine update_temp_fd
 !---------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp_ghost(tg, dtemp, dTdt, istage, l_calc_lin)
+   subroutine get_temp_rhs_imp_ghost(tg, dtemp, dTdt, phi, istage, l_calc_lin)
       !
       ! This subroutine computes the linear terms that enters the r.h.s.. This is
       ! used with R-distributed
@@ -212,6 +224,7 @@ contains
       integer,     intent(in) :: istage
       logical,     intent(in) :: l_calc_lin
       complex(cp), intent(in) :: tg(n_m_max,nRstart-1:nRstop+1)
+      complex(cp), intent(in) :: phi(n_m_max,nRstart:nRstop)
 
       !-- Output variables
       complex(cp),       intent(out) :: dtemp(n_m_max,nRstart:nRstop)
@@ -233,6 +246,12 @@ contains
             do n_m=start_m,stop_m
                dTdt%old(n_m,n_r,istage)=tg(n_m,n_r)
             end do
+            if ( l_phase_field ) then
+               do n_m=start_m,stop_m
+                  dTdt%old(n_m,n_r,istage)=dTdt%old(n_m,n_r,istage)-stef*phi(n_m,n_r)
+               end do
+            end if
+
          end do
       end if
 
@@ -295,7 +314,7 @@ contains
 
    end subroutine finish_exp_temp_Rdist
 !---------------------------------------------------------------------------------
-   subroutine assemble_temp_Rdist(temp, dtemp, dTdt, tscheme)
+   subroutine assemble_temp_Rdist(temp, dtemp, dTdt, phi, tscheme)
       !
       ! This subroutine is used when an IMEX Runge-Kutta time scheme with an assembly
       ! stage is used. This is used when R is distributed.
@@ -303,6 +322,7 @@ contains
 
       !-- Input variable
       class(type_tscheme), intent(in) :: tscheme
+      complex(cp),         intent(in) :: phi(n_m_max,nRstart:nRstop)
 
       !-- Output variables
       complex(cp),       intent(inout) :: temp(n_m_max,nRstart:nRstop)
@@ -319,6 +339,14 @@ contains
       start_m=1; stop_m=n_m_max
       call get_openmp_blocks(start_m,stop_m)
       !$omp barrier
+
+      if ( l_phase_field ) then
+         do n_r=nRstart,nRstop
+            do n_m=start_m,stop_m
+               work_Rloc(n_m,n_r)=work_Rloc(n_m,n_r)+stef*phi(n_m,n_r)
+            end do
+         end do
+      end if
 
       do n_r=nRstart,nRstop
          do n_m=start_m,stop_m
@@ -351,7 +379,7 @@ contains
 
       !-- Finally call the construction of the implicit terms for the first stage
       !-- of next iteration
-      call get_temp_rhs_imp_ghost(temp_ghost, dtemp, dTdt, 1, &
+      call get_temp_rhs_imp_ghost(temp_ghost, dtemp, dTdt, phi, 1, &
            &                      tscheme%l_imp_calc_rhs(1))
 
    end subroutine assemble_temp_Rdist

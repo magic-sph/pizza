@@ -51,7 +51,6 @@ contains
       if ( l_phase_field ) then
          call initialize_phi_fd()
          lPhimat_FD(:)=.false.
-         n_tri = n_tri+1
       end if
       call initialize_psi_fd(tscheme)
       lPsimat_FD(:)=.false.
@@ -119,7 +118,8 @@ contains
       !-- Input variables:
       class(type_tscheme), intent(in) :: tscheme ! time scheme
 
-      !-- Local variable
+      !-- Local variables
+      complex(cp) :: work_Rloc(n_m_max,nRstart:nRstop)
       type(type_tarray) :: dummy
       real(cp) :: dummy_time
       integer :: dummy_counter
@@ -127,15 +127,13 @@ contains
       lPsimat_FD(:)=.false.
       if ( l_heat ) lTmat_FD(:) =.false.
       if ( l_chem ) lXimat_FD(:) =.false.
-      if ( l_phase_field ) lPhimat_FD(:) =.false.
 
       call MPI_Barrier(MPI_COMM_WORLD,ierr)
       call dummy%initialize(1, n_m_max, nRstart, nRstop, tscheme%nold, tscheme%nexp,&
            &                tscheme%nimp, l_allocate_exp=.true.)
 
-      if ( l_heat ) call prepare_temp_FD(tscheme, dummy)
+      if ( l_heat ) call prepare_temp_FD(tscheme, dummy, work_Rloc)
       if ( l_chem ) call prepare_xi_FD(tscheme, dummy)
-      if ( l_phase_field ) call prepare_phi_FD(tscheme, dummy)
       call prepare_psi_fd(tscheme, dummy, dummy_time, dummy_counter)
 
       call find_faster_block() ! Find the fastest blocking
@@ -189,10 +187,18 @@ contains
          if ( l_phase_field ) lPhimat_FD(:)=.false.
       end if
 
+      !-- Phase field needs to be computed first on its own to allow a proper
+      !-- advance of temperature afterwards
+      if ( l_phase_field ) then
+         call prepare_phi_FD(tscheme, dphidt)
+         call parallel_solve_phase(block_sze)
+         call fill_ghosts_phi(phi_ghost)
+         call update_phi_FD(phi_Rloc, dphidt, tscheme)
+      end if
+
       !-- Mainly assemble the r.h.s. and rebuild the matrices if required
-      if ( l_heat ) call prepare_temp_FD(tscheme, dTdt)
+      if ( l_heat ) call prepare_temp_FD(tscheme, dTdt, phi_Rloc)
       if ( l_chem ) call prepare_xi_FD(tscheme, dxidt)
-      if ( l_phase_field ) call prepare_phi_FD(tscheme, dphidt)
       call prepare_psi_FD(tscheme, dpsidt, timers%lu, timers%n_lu_calls)
 
       !-- solve the uphi0 equation on its own (one single m is involved)
@@ -213,13 +219,11 @@ contains
       !-- Now simply fill the ghost zones to ensure the boundary conditions
       if ( l_heat ) call fill_ghosts_temp(temp_ghost)
       if ( l_chem ) call fill_ghosts_xi(xi_ghost)
-      if ( l_phase_field ) call fill_ghosts_phi(phi_ghost)
       call fill_ghosts_psi(psi_ghost, up0_ghost)
 
       !-- Finally build the radial derivatives and the arrays for next iteration
-      if ( l_heat ) call update_temp_FD(temp_Rloc, dtemp_Rloc, dTdt, tscheme)
+      if ( l_heat ) call update_temp_FD(temp_Rloc, dtemp_Rloc, dTdt, phi_Rloc, tscheme)
       if ( l_chem ) call update_xi_FD(xi_Rloc, dxi_Rloc, dxidt, tscheme)
-      if ( l_phase_field ) call update_phi_FD(phi_Rloc, dphidt, tscheme)
       call update_psi_FD(us_Rloc, up_Rloc, om_Rloc, dpsidt, tscheme, vp_bal, &
            &             vort_bal)
 
@@ -256,9 +260,10 @@ contains
       type(type_tarray),   intent(inout) :: dxidt
       type(type_tarray),   intent(inout) :: dphidt
 
-      if ( l_heat ) call assemble_temp_Rdist(temp_Rloc, dtemp_Rloc, dTdt, tscheme)
-      if ( l_chem ) call assemble_xi_Rdist(xi_Rloc, dxi_Rloc, dxidt, tscheme)
       if ( l_phase_field ) call assemble_phi_Rdist(phi_Rloc, dphidt, tscheme)
+      if ( l_heat ) call assemble_temp_Rdist(temp_Rloc, dtemp_Rloc, dTdt, phi_Rloc, &
+      &                                      tscheme)
+      if ( l_chem ) call assemble_xi_Rdist(xi_Rloc, dxi_Rloc, dxidt, tscheme)
       call assemble_psi_Rloc(block_sze, nblocks, us_Rloc, up_Rloc, om_Rloc, dpsidt, &
            &                 tscheme, vp_bal, vort_bal)
 
@@ -269,7 +274,7 @@ contains
       ! This subroutine handles the parallel solve of the time-advance matrices.
       ! This works with R-distributed arrays (finite differences).
       !
-      integer, intent(in) :: block_sze ! Size ot the LM blocks
+      integer, intent(in) :: block_sze ! Size ot the M blocks
 
       !-- Local variables
       integer :: req
@@ -300,13 +305,6 @@ contains
             tag = tag+1
          end if
 
-         if ( l_phase_field ) then
-            call phiMat_FD%solver_up(phi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
-                 &                   array_of_requests, req, n_ms_block, n_m_block)
-            tag = tag+1
-         end if
-
-
          call psiMat_FD%solver_up(psi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
               &                   array_of_requests, req, n_ms_block, n_m_block)
          tag = tag+2
@@ -328,12 +326,6 @@ contains
          if ( l_chem ) then
             call xiMat_FD%solver_dn(xi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
                  &                  array_of_requests, req, n_ms_block, n_m_block)
-            tag = tag+1
-         end if
-
-         if ( l_phase_field ) then
-            call phiMat_FD%solver_dn(phi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
-                 &                   array_of_requests, req, n_ms_block, n_m_block)
             tag = tag+1
          end if
 
@@ -359,19 +351,13 @@ contains
             tag = tag+1
          end if
 
-         if ( l_phase_field ) then
-            call phiMat_FD%solver_finish(phi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
-                 &                      tag, array_of_requests, req)
-            tag = tag+1
-         end if
-
          call psiMat_FD%solver_finish(psi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
               &                       tag, array_of_requests, req)
          tag = tag+2
       end do
 
       call MPI_Waitall(req-1, array_of_requests(1:req-1), MPI_STATUSES_IGNORE, ierr)
-      if ( ierr /= MPI_SUCCESS ) call abortRun('MPI_Waitall failed in LMLoop')
+      if ( ierr /= MPI_SUCCESS ) call abortRun('MPI_Waitall failed in MLoop')
       call MPI_Barrier(MPI_COMM_WORLD,ierr)
       !$omp end master
       !$omp barrier
@@ -380,9 +366,71 @@ contains
 
    end subroutine parallel_solve
 !------------------------------------------------------------------------------------
+   subroutine parallel_solve_phase(block_sze)
+      !
+      ! This subroutine handles the parallel solve of the time-advance matrices.
+      ! This works with R-distributed arrays (finite differences).
+      !
+      integer, intent(in) :: block_sze ! Size ot the M blocks
+
+      !-- Local variables
+      integer :: req
+      integer :: start_m, stop_m, tag, n_m_block, n_ms_block
+
+      array_of_requests(:)=MPI_REQUEST_NULL
+
+      !$omp parallel default(shared) private(tag, req, start_m, stop_m)
+      tag = 0
+      req=1
+
+      do n_ms_block=1,n_m_max,block_sze
+         n_m_block = n_m_max-n_ms_block+1
+         if ( n_m_block > block_sze ) n_m_block=block_sze
+         start_m=n_ms_block; stop_m=n_ms_block+n_m_block-1
+         call get_openmp_blocks(start_m,stop_m)
+         !$omp barrier
+
+         call phiMat_FD%solver_up(phi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
+              &                   array_of_requests, req, n_ms_block, n_m_block)
+         tag = tag+1
+      end do
+
+      do n_ms_block=1,n_m_max,block_sze
+         n_m_block = n_m_max-n_ms_block+1
+         if ( n_m_block > block_sze ) n_m_block=block_sze
+         start_m=n_ms_block; stop_m=n_ms_block+n_m_block-1
+         call get_openmp_blocks(start_m,stop_m)
+         !$omp barrier
+
+         call phiMat_FD%solver_dn(phi_ghost, start_m, stop_m, nRstart, nRstop, tag, &
+              &                   array_of_requests, req, n_ms_block, n_m_block)
+         tag = tag+1
+      end do
+
+      !$omp master
+      do n_ms_block=1,n_m_max,block_sze
+         n_m_block = n_m_max-n_ms_block+1
+         if ( n_m_block > block_sze ) n_m_block=block_sze
+
+         call phiMat_FD%solver_finish(phi_ghost, n_ms_block, n_m_block, nRstart, nRstop, &
+              &                       tag, array_of_requests, req)
+         tag = tag+1
+      end do
+
+      call MPI_Waitall(req-1, array_of_requests(1:req-1), MPI_STATUSES_IGNORE, ierr)
+      if ( ierr /= MPI_SUCCESS ) call abortRun('MPI_Waitall failed in MLoop')
+      call MPI_Barrier(MPI_COMM_WORLD,ierr)
+      !$omp end master
+      !$omp barrier
+
+      !$omp end parallel
+
+
+   end subroutine parallel_solve_phase
+!------------------------------------------------------------------------------------
    integer function set_block_number(nb) result(nbo)
       !
-      ! This routine returns the number of lm-blocks for solving the LM loop.
+      ! This routine returns the number of M-blocks for solving the M loop.
       ! This is adapted from xshells.
       !
       integer, intent(inout) :: nb ! Number of blocks
@@ -409,7 +457,7 @@ contains
 !------------------------------------------------------------------------------------
    subroutine find_faster_block
       !
-      ! This routine is used to find the best lm-block size for MPI communication.
+      ! This routine is used to find the best M-block size for MPI communication.
       ! This is adapted from xshells.
       !
       real(cp), parameter :: alpha=0.61803_cp
@@ -419,7 +467,7 @@ contains
       character(len=72) :: str
 
       call logWrite('', n_log_file)
-      call logWrite('! Time the LM Loop to get the optimal blocking:', n_log_file)
+      call logWrite('! Time the M Loop to get the optimal blocking:', n_log_file)
 
       t(:)=0.0_cp; b(:)=1
       nloops=1
@@ -554,7 +602,7 @@ contains
       ! when a a number of block nblk is used. This takes the average over nloop calls.
       !
 
-      integer, intent(inout) :: nblk ! Number of lm blocks
+      integer, intent(inout) :: nblk ! Number of M blocks
       integer, intent(in) :: nloops ! Number of calls
 
       !-- Local variables

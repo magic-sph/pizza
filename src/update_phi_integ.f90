@@ -267,7 +267,7 @@ contains
       complex(cp), intent(inout) :: dphi_exp_last(nMstart:nMstop,n_r_max)
 
       !-- Local variables
-      integer :: n_r, n_m, m, n_cheb
+      integer :: n_m, n_cheb
 
       !-- Transform the explicit part to Chebyshev space
       call rscheme%costf1(dphi_exp_last, nMstart, nMstop, n_r_max)

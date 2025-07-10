@@ -176,7 +176,9 @@ contains
                phi_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,6)
             end if
          else ! Heat and phase
-            phi_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,5)
+            if ( l_phase_field ) then
+               phi_Rloc(1:,nRstart:) => fields_Rloc_container(1:n_m_max,nRstart:nRstop,5)
+            end if
          end if
       else
          if ( l_chem ) then

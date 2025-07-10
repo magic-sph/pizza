@@ -139,7 +139,7 @@ contains
                  &             1, n_m_max)
             call exch_ghosts(temp_ghost, n_m_max, nRstart, nRstop, 1)
             call fill_ghosts_temp(temp_ghost)
-            call get_temp_rhs_imp_ghost(temp_ghost, dtemp_Rloc, dTdt, 1, .true.)
+            call get_temp_rhs_imp_ghost(temp_ghost, dtemp_Rloc, dTdt, phi_Rloc, 1, .true.)
          end if
 
          if ( l_chem ) then
