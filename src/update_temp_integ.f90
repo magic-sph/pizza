@@ -177,13 +177,13 @@ contains
    end subroutine finalize_temp_integ
 !------------------------------------------------------------------------------
    subroutine update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt,  &
-              &               phi, tscheme, lMat, l_log_next)
+              &               dphidt, tscheme, lMat, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: lMat
       logical,             intent(in) :: l_log_next
-      complex(cp),         intent(in) :: phi(nMstart:nMstop,n_r_max)
+      type(type_tarray),   intent(in) :: dphidt
 
       !-- Output variables
       complex(cp),       intent(out) :: temp_hat_Mloc(nMstart:nMstop, n_r_max)
@@ -201,7 +201,7 @@ contains
 
       if ( l_phase_field ) then
          do n_cheb=1,n_r_max
-            work_Mloc(:,n_cheb)=work_Mloc(:,n_cheb)+stef*phi(:,n_cheb)
+            work_Mloc(:,n_cheb)=work_Mloc(:,n_cheb)+stef*dphidt%old(:,n_cheb,1)
          end do
       end if
 
@@ -282,9 +282,10 @@ contains
 
       !-- Compute implicit state
       if ( tscheme%istage == tscheme%nstages ) then
-         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, phi, 1, tscheme%l_imp_calc_rhs(1))
+         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, dphidt, 1, &
+              &                    tscheme%l_imp_calc_rhs(1))
       else
-         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, phi, tscheme%istage+1,    &
+         call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, dphidt, tscheme%istage+1, &
               &                    tscheme%l_imp_calc_rhs(tscheme%istage+1))
       end if
 
@@ -296,13 +297,13 @@ contains
 
    end subroutine update_temp_int
 !------------------------------------------------------------------------------
-   subroutine assemble_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt, phi,  &
+   subroutine assemble_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt, dphidt,  &
               &                 tscheme, l_log_next)
 
       !-- Input variables
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: l_log_next
-      complex(cp),         intent(in) :: phi(nMstart:nMstop,n_r_max)
+      type(type_tarray),   intent(in) :: dphidt
 
       !-- Output variables
       complex(cp),       intent(out) :: temp_hat_Mloc(nMstart:nMstop, n_r_max)
@@ -382,7 +383,7 @@ contains
       call rscheme%costf1(temp_Mloc, nMstart, nMstop, n_r_max)
 
       !-- Compute implicit stage for first state of next iteration if required
-      call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, phi, 1, tscheme%l_imp_calc_rhs(1))
+      call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, dphidt, 1, tscheme%l_imp_calc_rhs(1))
 
       !-- In case log is needed on the next iteration, recalculate dT/dr
       !-- This is needed to estimate the heat fluxes
@@ -467,13 +468,13 @@ contains
 
    end subroutine finish_exp_temp_int
 !------------------------------------------------------------------------------
-   subroutine get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, phi, istage, l_calc_lin)
+   subroutine get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, dphidt, istage, l_calc_lin)
 
       !-- Input variables
       complex(cp),       intent(in) :: temp_hat_Mloc(nMstart:nMstop,n_r_max)
       logical,           intent(in) :: l_calc_lin
       integer,           intent(in) :: istage
-      complex(cp),       intent(in) :: phi(nMstart:nMstop,n_r_max)
+      type(type_tarray), intent(in) :: dphidt
 
       !-- Output variable
       type(type_tarray), intent(inout) :: dTdt
@@ -501,7 +502,8 @@ contains
 
          if ( l_phase_field ) then
             do n_cheb=1,n_r_max
-               dTdt%old(:,n_cheb,istage)=dTdt%old(:,n_cheb,istage)-stef*phi(:,n_cheb)
+               dTdt%old(:,n_cheb,istage)=       dTdt%old(:,n_cheb,istage) - &
+               &                         stef*dphidt%old(:,n_cheb,istage)
             end do
          end if
       end if

@@ -239,7 +239,7 @@ contains
          else
             if ( l_phase_field ) call get_phi_rhs_imp_int(phi_hat_Mloc, dphidt, 1, .true.)
             if ( l_heat ) call get_temp_rhs_imp_int(temp_hat_Mloc, dTdt, &
-                               &                    dphidt%old(:,:,1), 1, .true.)
+                               &                    dphidt, 1, .true.)
             if ( l_chem ) call get_xi_rhs_imp_int(xi_hat_Mloc, dxidt, 1, .true.)
             if ( l_direct_solve ) then
                call get_psi_rhs_imp_int_smat(psi_hat_Mloc,up_Mloc,temp_Mloc,psi_Mloc, &

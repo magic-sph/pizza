@@ -121,8 +121,8 @@ contains
       !-- Local variables
       complex(cp) :: work_Rloc(n_m_max,nRstart:nRstop)
       type(type_tarray) :: dummy
-      real(cp) :: dummy_time
-      integer :: dummy_counter
+      real(cp) :: dummy_time=0.0_cp
+      integer :: dummy_counter=0
 
       lPsimat_FD(:)=.false.
       if ( l_heat ) lTmat_FD(:) =.false.

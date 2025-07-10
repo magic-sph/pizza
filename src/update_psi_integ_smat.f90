@@ -300,6 +300,8 @@ contains
                         &                  xi_Mloc(n_m,n_r)
                      end if
                   end if
+               else
+                  buo_Mloc(n_m,n_r)=0.0_cp
                end if
             end do
          end do

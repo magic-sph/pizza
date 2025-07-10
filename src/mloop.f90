@@ -86,7 +86,7 @@ contains
          if ( l_phase_field ) call update_phi_int(phi_hat_Mloc, phi_Mloc, dphidt,   &
                                    &              tscheme, lMat)
          if ( l_heat ) call update_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, dTdt, &
-                            &               dphidt%old(:,:,1), tscheme, lMat, l_log_next)
+                            &               dphidt, tscheme, lMat, l_log_next)
          if ( l_chem ) call update_xi_int(xi_hat_Mloc, xi_Mloc, dxi_Mloc, dxidt,   &
                             &             tscheme, lMat, l_log_next)
          if ( l_direct_solve ) then
@@ -151,8 +151,7 @@ contains
          if ( l_phase_field ) call assemble_phi_int(phi_hat_Mloc, phi_Mloc, dphidt, &
                                    &                tscheme)
          if ( l_heat ) call assemble_temp_int(temp_hat_Mloc, temp_Mloc, dtemp_Mloc, &
-                            &                 dTdt, dphidt%old(:,:,1), tscheme,     &
-                            &                 l_log_next)
+                            &                 dTdt, dphidt, tscheme, l_log_next)
          if ( l_chem ) call assemble_xi_int(xi_hat_Mloc, xi_Mloc, dxi_Mloc, dxidt, &
                             &               tscheme, l_log_next)
 
