@@ -8,14 +8,14 @@ import shutil
 import subprocess as sp
 
 def cleanDir(dir):
-    for f in glob.glob('%s/*.test' % dir):
+    for f in glob.glob('{}/*.test'.format(dir)):
         os.remove(f)
-    if os.path.exists('%s/stdout.out' % dir):
-        os.remove('%s/stdout.out' % dir)
-    for f in glob.glob('%s/*.pyc' % dir):
+    if os.path.exists('{}/stdout.out'.format(dir)):
+        os.remove('{}/stdout.out'.format(dir))
+    for f in glob.glob('{}/*.pyc'.format(dir)):
         os.remove(f)
-    if os.path.exists('%s/__pycache__' % dir):
-        shutil.rmtree('%s/__pycache__' % dir)
+    if os.path.exists('{}/__pycache__'.format(dir)):
+        shutil.rmtree('{}/__pycache__'.format(dir))
 
 def readStack(file):
     f = open(file, 'r')
@@ -43,30 +43,30 @@ class TestGalerkinBases(unittest.TestCase):
 
     def setUp(self):
         # Cleaning when entering
-        print('\nDirectory   :           %s' % self.dir)
-        print('Description :           %s' % self.description)
+        print('\nDirectory   :           {}'.format(self.dir))
+        print('Description :           {}'.format(self.description))
         self.startTime = time.time()
         cleanDir(self.dir)
-        for f in glob.glob('%s/*.start' % self.dir):
+        for f in glob.glob('{}/*.start'.format(self.dir)):
             os.remove(f)
-        for f in glob.glob('%s/*.first_continue' % self.dir):
+        for f in glob.glob('{}/*.first_continue'.format(self.dir)):
             os.remove(f)
-        for f in glob.glob('%s/*.second_continue' % self.dir):
+        for f in glob.glob('{}/*.second_continue'.format(self.dir)):
             os.remove(f)
-        for f in glob.glob('%s/*.final' % self.dir):
+        for f in glob.glob('{}/*.final'.format(self.dir)):
             os.remove(f)
 
         os.chdir(self.dir)
-        cmd = '%s %s/input.nml' % (self.execCmd, self.dir)
+        cmd = '{} {}/input.nml'.format(self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = '%s %s/input_first_continue.nml' % (self.execCmd, self.dir)
+        cmd = '{} {}/input_first_continue.nml'.format(self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = '%s %s/input_second_continue.nml' % (self.execCmd, self.dir)
+        cmd = '{} {}/input_second_continue.nml'.format(self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = '%s %s/input_final.nml' % (self.execCmd, self.dir)
+        cmd = '{} {}/input_final.nml'.format(self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
         cmd = 'cat e_kin.start e_kin.first_continue e_kin.second_continue e_kin.final > e_kin.test'
@@ -76,18 +76,18 @@ class TestGalerkinBases(unittest.TestCase):
         # Cleaning when leaving
         os.chdir(self.startDir)
         cleanDir(self.dir)
-        for f in glob.glob('%s/*.start' % self.dir):
+        for f in glob.glob('{}/*.start'.format(self.dir)):
             os.remove(f)
-        for f in glob.glob('%s/*.first_continue' % self.dir):
+        for f in glob.glob('{}/*.first_continue'.format(self.dir)):
             os.remove(f)
-        for f in glob.glob('%s/*.second_continue' % self.dir):
+        for f in glob.glob('{}/*.second_continue'.format(self.dir)):
             os.remove(f)
-        for f in glob.glob('%s/*.final' % self.dir):
+        for f in glob.glob('{}/*.final'.format(self.dir)):
             os.remove(f)
 
         t = time.time()-self.startTime
         st = time.strftime("%M:%S", time.gmtime(t))
-        print('Time used   :                            %s' % st)
+        print('Time used   :                            {}'.format(st))
 
         if hasattr(self, '_outcome'): # python 3.4+
             if hasattr(self._outcome, 'errors'):  # python 3.4-3.10
@@ -116,7 +116,7 @@ class TestGalerkinBases(unittest.TestCase):
                 print(result.failures[-1][-1])
 
     def outputFileDiff(self):
-        datRef = readStack('%s/reference.out' % self.dir)
-        datTmp = readStack('%s/e_kin.test' % self.dir)
+        datRef = readStack('{}/reference.out'.format(self.dir))
+        datTmp = readStack('{}/e_kin.test'.format(self.dir))
         np.testing.assert_allclose(datRef, datTmp, rtol=self.precision,
                                    atol=1e-20)

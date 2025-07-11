@@ -8,20 +8,20 @@ import shutil
 import subprocess as sp
 
 def cleanDir(dir):
-    for f in glob.glob('%s/*.test' % dir):
+    for f in glob.glob('{}/*.test'.format(dir)):
         os.remove(f)
-    for f in glob.glob('%s/*.start' % dir):
+    for f in glob.glob('{}/*.start'.format(dir)):
         os.remove(f)
-    for f in glob.glob('%s/*.continue' % dir):
+    for f in glob.glob('{}/*.continue'.format(dir)):
         os.remove(f)
-    for f in glob.glob('%s/*.final' % dir):
+    for f in glob.glob('{}/*.final'.format(dir)):
         os.remove(f)
-    if os.path.exists('%s/stdout.out' % dir):
-        os.remove('%s/stdout.out' % dir)
-    for f in glob.glob('%s/*.pyc' % dir):
+    if os.path.exists('{}/stdout.out'.format(dir)):
+        os.remove('{}/stdout.out'.format(dir))
+    for f in glob.glob('{}/*.pyc'.format(dir)):
         os.remove(f)
-    if os.path.exists('%s/__pycache__' % dir):
-        shutil.rmtree('%s/__pycache__' % dir)
+    if os.path.exists('{}/__pycache__'.format(dir)):
+        shutil.rmtree('{}/__pycache__'.format(dir))
 
 
 def readData(file):
@@ -45,18 +45,18 @@ class RotInteg(unittest.TestCase):
 
     def setUp(self):
         # Cleaning when entering
-        print('\nDirectory   :           %s' % self.dir)
-        print('Description :           %s' % self.description)
+        print('\nDirectory   :           {}'.format(self.dir))
+        print('Description :           {}'.format(self.description))
         self.startTime = time.time()
         cleanDir(self.dir)
         os.chdir(self.dir)
-        cmd = '%s %s/input_start.nml' % (self.execCmd, self.dir)
+        cmd = '{} {}/input_start.nml'.format(self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = '%s %s/input_continue.nml' % (self.execCmd, self.dir)
+        cmd = '{} {}/input_continue.nml'.format(self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = '%s %s/input_final.nml' % (self.execCmd, self.dir)
+        cmd = '{} {}/input_final.nml'.format(self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
         cmd = 'cat e_kin_3D.start e_kin_3D.continue e_kin_3D.final > e_kin_3D.test'
@@ -70,7 +70,7 @@ class RotInteg(unittest.TestCase):
 
         t = time.time()-self.startTime
         st = time.strftime("%M:%S", time.gmtime(t))
-        print('Time used   :                            %s' % st)
+        print('Time used   :                            {}'.format(st))
 
         if hasattr(self, '_outcome'): # python 3.4+
             if hasattr(self._outcome, 'errors'):  # python 3.4-3.10
@@ -102,6 +102,6 @@ class RotInteg(unittest.TestCase):
 
     def outputFileDiff(self):
         # Kinetic energy
-        datRef = readData('%s/reference.out' % self.dir)
-        datTmp = readData('%s/e_kin_3D.test' % self.dir)
+        datRef = readData('{}/reference.out'.format(self.dir))
+        datTmp = readData('{}/e_kin_3D.test'.format(self.dir))
         np.testing.assert_allclose(datRef, datTmp, rtol=self.precision, atol=1e-20)

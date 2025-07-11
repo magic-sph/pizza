@@ -16,9 +16,9 @@ import DIRKSchemes.unitTest
 import GalerkinBases.unitTest
 import InhomogeneousHeatFlux.unitTest
 import FingConv.unitTest
+import PhaseField.unitTest
 
 __version__ = '1.0'
-
 
 def getParser():
     """
@@ -181,6 +181,11 @@ def getSuite(startdir, cmd, precision, args):
         suite.addTest(FingConv.unitTest.FingConv(
                       'outputFileDiff',
                       '{}/FingConv'.format(startdir),
+                      execCmd=cmd, precision=precision))
+        # Phase field
+        suite.addTest(PhaseField.unitTest.PhaseField(
+                      'outputFileDiff',
+                      '{}/PhaseField'.format(startdir),
                       execCmd=cmd, precision=precision))
         # QG case with Cheb integration method
         suite.addTest(RotInteg.unitTest.RotInteg(

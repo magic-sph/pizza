@@ -14,6 +14,8 @@ def cleanDir(dir):
         os.remove(f)
     for f in glob.glob('{}/*.continue'.format(dir)):
         os.remove(f)
+    for f in glob.glob('{}/*.final'.format(dir)):
+        os.remove(f)
     if os.path.exists('{}/stdout.out'.format(dir)):
         os.remove('{}/stdout.out'.format(dir))
     for f in glob.glob('{}/*.pyc'.format(dir)):
@@ -26,16 +28,16 @@ def readData(file):
     return np.loadtxt(file)
 
 
-class FingConv(unittest.TestCase):
+class PhaseField(unittest.TestCase):
 
     def __init__(self, testName, dir, execCmd='mpirun -n 8 ../tmp/pizza.exe', 
                  precision=1e-8):
-        super(FingConv, self).__init__(testName)
+        super(PhaseField, self).__init__(testName)
         self.dir = dir
         self.precision = precision
         self.execCmd = execCmd
         self.startDir = os.getcwd()
-        self.description = "Fingering convection"
+        self.description = "Phase field"
 
     def list2reason(self, exc_list):
         if exc_list and exc_list[-1][0] is self:
@@ -51,10 +53,13 @@ class FingConv(unittest.TestCase):
         cmd = '{} {}/input.nml'.format(self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = '{} {}/input_restart.nml'.format(self.execCmd, self.dir)
+        cmd = '{} {}/input_continue.nml'.format(self.execCmd, self.dir)
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
                 stderr=open(os.devnull, 'wb'))
-        cmd = 'cat e_kin.start e_kin.continue > e_kin.test'
+        cmd = '{} {}/input_final.nml'.format(self.execCmd, self.dir)
+        sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'),
+                stderr=open(os.devnull, 'wb'))
+        cmd = 'cat e_kin.start e_kin.continue e_kin.final > e_kin.test'
         sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'))
 
 

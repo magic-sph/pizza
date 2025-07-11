@@ -1,0 +1,49 @@
+&grid
+   n_r_max    =256,
+   m_max      =96,
+   minc       =1,
+/
+&control
+   tag        ="final",
+ n_time_steps =100,
+   dtMax      =4d-6,
+   l_non_rot  =.true.,
+n_fft_optim_lev=2,
+   courfac    =1.2d0,
+   time_scheme='BPR353',
+ radial_scheme='FD',
+   runHours   =00,
+   runMinutes =10,
+/
+ &phys_param
+  ra          =1.0E+06,
+  pr          =1.0E+00,
+  radratio    =3.5E-01,
+  stef        =1.0E+00,
+  tmelt       =0.65E+00,
+  epsPhase    =1.0E-02,
+  penaltyFac  =0.2E00,
+  g0          =1.0E+00,
+  g1          =0.0E+00,
+  g2          =0.0E+00,
+  ktopt       =1,
+  kbott       =1,
+  ktopv       =2,
+  kbotv       =2,
+  kbotphi     =2,
+  ktopphi     =2,
+ /
+ &start_field
+  l_start_file=.true.,
+  start_file  ="checkpoint_end.continue",
+  init_t      =0,
+  amp_t       =1.0e-3,
+  init_u      =0,
+  amp_u       =3.0e-4,
+  init_phi    =0,
+/
+&output_control
+  n_log_step  =10,
+  n_frames    =1,
+ n_checkpoints=1,
+/
