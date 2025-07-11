@@ -381,6 +381,10 @@ contains
          l_galerkin = .false.
       end if
 
+      if ( .not. l_finite_diff .and. .not. l_cheb_coll .and. l_newmap ) then
+         call abortRun('! Chebyshev mapping incompatible with sparse Cheb form')
+      end if
+
       !-- Shape of the container (for QG computations)
       call capitalize(container)
 
@@ -389,7 +393,7 @@ contains
 
       if ( index(container, 'SPHERE') == 0 .and. (.not. l_cheb_coll) .and. &
       &    (.not. l_finite_diff) ) then
-         call abortRun('! This container is not supported by the sparse cheb form')
+         call abortRun('! This container is not supported by the sparse Cheb form')
       end if
 
       !-- Determine solver method

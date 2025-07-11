@@ -124,6 +124,7 @@ contains
       real(cp) :: dummy_time=0.0_cp
       integer :: dummy_counter=0
 
+      work_Rloc(:,:)=0.0_cp
       lPsimat_FD(:)=.false.
       if ( l_heat ) lTmat_FD(:) =.false.
       if ( l_chem ) lXimat_FD(:) =.false.
