@@ -327,8 +327,13 @@ def spec_spat(arr_M, n_phi_max):
     :rtype: numpy.ndarray
     """
     n_m = arr_M.shape[0]
-    tmp = np.zeros((int(n_phi_max/2)+1, arr_M.shape[-1]), np.complex128)
-    tmp[:n_m, :] = arr_M
+    if len(arr_M.shape) == 1:
+        tmp = np.zeros((int(n_phi_max/2)+1), np.complex128)
+        tmp[:n_m] = arr_M
+    else:
+        tmp = np.zeros((int(n_phi_max/2)+1, arr_M.shape[-1]), np.complex128)
+        tmp[:n_m, :] = arr_M
+
     return np.fft.irfft(tmp, n=n_phi_max, axis=0)*n_phi_max
 
 
