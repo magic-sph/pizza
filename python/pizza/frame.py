@@ -101,6 +101,43 @@ class Frame:
             self.idx2m.tofile(out)
             self.field_m.T.tofile(out)
 
+    def frame2vtk(self, filename, name):
+        """
+        This routine converts the snapshot as a vtk file.
+
+        :parameter filename: name of the vts file (without the trailing vts)
+        :type filename: str
+        :parameter name: name of the field (to appear in paraview scalars)
+        :type filename: str
+        """
+        try:
+            from evtk.hl import structuredToVTK
+            gridToVTK = structuredToVTK
+        except:
+            import evtk
+            gridToVTK = evtk.hl.gridToVTK
+
+        field = spec_spat(self.field_m, self.n_phi_max)
+        field = symmetrize(field, self.minc)
+
+        phi = np.linspace(0., 2.*np.pi, field.shape[0])
+        X = np.zeros((1, field.shape[0], self.n_r_max), dtype=np.float32)
+        Y = np.zeros_like(X)
+        Z = np.zeros_like(X)
+        rr, pphi = np.meshgrid(self.radius, phi)
+        X[0, :, :] = rr*np.cos(pphi)
+        Y[0, :, :] = rr*np.sin(pphi)
+
+        dat = np.zeros_like(X)
+        dat[0, ...] = field
+
+        point_data = {}
+        point_data[name] = dat
+
+        gridToVTK(filename, X, Y, Z, pointData=point_data)
+        print('Store {}.vts'.format(filename))
+
+
 
 class PizzaFields(PizzaSetup):
     """
@@ -203,9 +240,10 @@ class PizzaFields(PizzaSetup):
                 file = '{}_{}.{}'.format(prefix, ivar, tag)
                 filename = os.path.join(datadir, file)
             else:
-                files = scanDir('{}_*{}'.format(prefix, tag))
-                if len(files) != 0:
-                    filename = os.path.join(datadir, files[-1])
+                files = scanDir(os.path.join(datadir,
+                                             '{}_*{}'.format(prefix, tag)))
+                if len(files) > 0:
+                    filename = files[-1]
                 else:
                     return
 
@@ -214,15 +252,17 @@ class PizzaFields(PizzaSetup):
                                     nml='log.{}'.format(tag))
         else:
             if ivar is not None:
-                files = scanDir('{}_{}.*'.format(prefix, ivar))
-                if len(files) != 0:
-                    filename = os.path.join(datadir, files[-1])
+                files = scanDir(os.path.join(datadir,
+                                             '{}_{}.*'.format(prefix, ivar)))
+                if len(files) > 0:
+                    filename = files[-1]
                 else:
                     return
             else:
-                files = scanDir('{}_*'.format(prefix))
-                if len(files) != 0:
-                    filename = os.path.join(datadir, files[-1])
+                files = scanDir(os.path.join(datadir,
+                                             '{}_*'.format(prefix)))
+                if len(files) > 0:
+                    filename = files[-1]
                 else:
                     return
             # Determine the setup
@@ -344,12 +384,12 @@ class PizzaFields(PizzaSetup):
         if deminc:
             data = symmetrize(data, ms=self.minc)
 
-        self.fig, xx, yy = equatContour(data, self.radius, minc=self.minc,
-                                        levels=levels, cm=cm, deminc=deminc,
-                                        normed=normed, vmax=vmax, vmin=vmin,
-                                        normRad=normRad, cbar=cbar,
-                                        label=label, pcolor=pcolor,
-                                        rasterized=rasterized)
+        self.fig, xx, yy, im  = equatContour(data, self.radius, minc=self.minc,
+                                             levels=levels, cm=cm, deminc=deminc,
+                                             normed=normed, vmax=vmax, vmin=vmin,
+                                             normRad=normRad, cbar=cbar,
+                                             label=label, pcolor=pcolor,
+                                             rasterized=rasterized)
 
         if stream:
             ax = self.fig.get_axes()[0]

@@ -123,10 +123,10 @@ class PizzaMovie:
                 print(vmin, vmax)
                 cs = np.linspace(vmin, vmax, levels)
 
-                fig, xx, yy = equatContour(dat, self.radius, minc=self.minc,
-                                           levels=levels, cm=cm, vmin=vmin,
-                                           vmax=vmax, deminc=deminc,
-                                           cbar=False, pcolor=pcolor)
+                fig, xx, yy, im = equatContour(dat, self.radius, minc=self.minc,
+                                               levels=levels, cm=cm, vmin=vmin,
+                                               vmax=vmax, deminc=deminc,
+                                               cbar=False, pcolor=pcolor)
 
                 man = plt.get_current_fig_manager()
                 man.canvas.draw()

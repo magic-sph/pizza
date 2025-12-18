@@ -207,12 +207,12 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
 
     #To avoid white lines on pdfs
     if not pcolor:
-        for c in im.collections:
+        for c in ax.collections:
             c.set_edgecolor('face')
             if rasterized:
                 c.set_rasterized(True)
 
-    return fig, xx, yy
+    return fig, xx, yy, im
 
 
 def spec2D(field_m, n_cheb_max=None):
