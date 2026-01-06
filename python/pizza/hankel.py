@@ -838,8 +838,7 @@ if __name__ == '__main__':
 
     x = np.linspace(0.66*m, 5.66*m, 10*m)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots()
     ax.plot(x, f(x))
     ax.plot(ht.roots, np.zeros_like(ht.roots), ls='None',
             marker='o', mfc='None')
