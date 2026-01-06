@@ -190,8 +190,7 @@ class PizzaRadial(PizzaSetup):
         Display the result when ``iplot=True``
         """
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
         ax.fill_between(self.radius, self.temp_mean-self.temp_std,
                         self.temp_mean+self.temp_std, alpha=0.1)
         ax.plot(self.radius, self.temp_mean)
@@ -202,8 +201,7 @@ class PizzaRadial(PizzaSetup):
         fig.tight_layout()
 
         if abs(self.uphi_mean).max() > 0.:
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.fill_between(self.radius, self.uphi_mean-self.uphi_std,
                             self.uphi_mean+self.uphi_std, alpha=0.1)
             ax.plot(self.radius, self.uphi_mean)
@@ -212,8 +210,7 @@ class PizzaRadial(PizzaSetup):
             ax.set_xlim(self.radius[-1], self.radius[0])
             fig.tight_layout()
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
         ax.fill_between(self.radius, self.us2_mean-self.us2_std,
                         self.us2_mean+self.us2_std, alpha=0.1)
         ax.plot(self.radius, self.us2_mean, label='us**2')
@@ -230,8 +227,7 @@ class PizzaRadial(PizzaSetup):
         fig.tight_layout()
 
         if self.l_non_rot == 'F' or not self.l_non_rot:
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.plot(self.radius, self.qpot)
             ax.plot(self.radius, self.qplan)
 
@@ -270,8 +266,7 @@ class PizzaRadial(PizzaSetup):
                     lamb_us[k-1] = 2.*np.pi*np.sqrt(vs_loc*self.ek/beta_loc)
                     coord[k-1] = self.radius[idx[k-1]:idx[k]].mean()
 
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.plot(coord, jet_widths, marker='o', label='Jet width')
             ax.plot(coord, lamb_uzon, marker='s', label='Rhines scale (Uzon)')
             ax.plot(coord, lamb_us, marker='s', label='Rhines scale (Us)')

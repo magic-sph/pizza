@@ -177,8 +177,7 @@ class PizzaMelt(PizzaSetup):
         :param nstep: time interval (by default 1)
         :type nstep: int
         """
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
         ax1 = ax.twinx()
         rmelt_m, rmelt_std = avg_std(self.time[::nstep], self.rmelt[::nstep])
         ax.fill_between(self.phi, rmelt_m-rmelt_std, rmelt_m+rmelt_std,
@@ -195,16 +194,14 @@ class PizzaMelt(PizzaSetup):
         ax.set_xlim(self.phi[0], self.phi[-1])
         fig.tight_layout()
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
         ax.contourf(self.time[::nstep], self.phi, self.rmelt[::nstep, :].T, 65,
                     cmap=plt.get_cmap('terrain'))
 
         ax.set_xlabel('Time')
         ax.set_ylabel('Longitude')
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
         ax.contourf(self.time[::nstep], self.phi, self.dt_rmelt[::nstep, :].T,
                     65, cmap=plt.get_cmap('plasma'))
 

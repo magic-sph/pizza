@@ -128,8 +128,7 @@ class PizzaTs(PizzaSetup):
         Plotting subroutines. Only called if 'iplot=True'
         """
         if self.field == 'e_kin':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.plot(self.time, self.us2, ls='-', label='us**2')
             ax.plot(self.time, self.up2, ls='-', label='up**2')
             ax.plot(self.time, self.up2_axi, ls='--', c='C1',
@@ -140,8 +139,7 @@ class PizzaTs(PizzaSetup):
             ax.set_ylabel('Ekin (2D)')
             fig.tight_layout()
         elif self.field == 'e_kin_3D':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.plot(self.time, self.us2, ls='-', label='us**2')
             ax.plot(self.time, self.up2, ls='-', label='up**2')
             #ax.plot(self.time, self.uz2, ls='-', c='#aec7e8', label='uz**2')
@@ -153,8 +151,7 @@ class PizzaTs(PizzaSetup):
             ax.set_ylabel('Ekin (3D)')
             fig.tight_layout()
         elif self.field == 'reynolds':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.plot(self.time, self.rey, label='Re')
             ax.plot(self.time, self.rey_fluct, label='Re fluct')
             ax.plot(self.time, self.rey_zon, label='Re zon')
@@ -163,8 +160,7 @@ class PizzaTs(PizzaSetup):
             ax.set_ylabel('Reynolds (2D)')
             fig.tight_layout()
         elif self.field == 'reynolds_3D':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.plot(self.time, self.rey, label='Re_3D')
             ax.plot(self.time, self.rey_fluct, label='Re_3D fluct')
             ax.plot(self.time, self.rey_zon, label='Re_3D zon')
@@ -173,8 +169,7 @@ class PizzaTs(PizzaSetup):
             ax.set_ylabel('Reynolds (3D)')
             fig.tight_layout()
         elif self.field == 'heat':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.plot(self.time, self.topnuss, label='Top Nusselt')
             ax.plot(self.time, self.botnuss, label='Bottom Nusselt')
             ax.plot(self.time, self.volnuss, label='Volume Nusselt')
@@ -185,8 +180,7 @@ class PizzaTs(PizzaSetup):
             ax.set_ylabel('Nusselt number')
             fig.tight_layout()
         elif self.field == 'comp' or self.field == 'composition':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.plot(self.time, self.topsh, label='Top Sherwood')
             ax.plot(self.time, self.botsh, label='Bottom Sherwood')
             ax.plot(self.time, self.volsh, label='Volume Sherwood')
@@ -195,8 +189,7 @@ class PizzaTs(PizzaSetup):
             ax.set_ylabel('Sherwood number')
             fig.tight_layout()
         elif self.field == 'power':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             if abs(self.buoPower).max() > 0.:
                 ax.semilogy(self.time, self.buoPower,
                             label='Thermal buoyancy')
@@ -214,8 +207,7 @@ class PizzaTs(PizzaSetup):
             ax.set_ylabel('Power (2D)')
             fig.tight_layout()
         elif self.field == 'power_3D':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             if abs(self.buoPower).max() > 0.:
                 ax.semilogy(self.time, self.buoPower, label='Thermal buoyancy')
             if abs(self.chemPower).max() > 0.:
@@ -232,8 +224,7 @@ class PizzaTs(PizzaSetup):
             ax.set_ylabel('Power (3D)')
             fig.tight_layout()
         elif self.field == 'phase':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax1 = ax.twinx()
             ax.plot(self.time, self.rmelt_mean, label='r melt')
             ax1.plot(self.time, self.tmelt_mean, label='T melt', color='C1')
@@ -242,15 +233,13 @@ class PizzaTs(PizzaSetup):
             ax1.set_ylabel('T(r melt)')
             fig.tight_layout()
 
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.semilogy(self.time, self.ekinS/self.ekinL)
             ax.set_xlabel('Time')
             ax.set_ylabel('Relative energy fraction in solidus')
             fig.tight_layout()
         elif self.field == 'length_scales':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.semilogy(self.time, self.lus_peak, label='Peak $u_s^2$')
             ax.semilogy(self.time, self.lint, label='Integral')
             ax.semilogy(self.time, self.ldiss, label='Dissipation')
@@ -260,15 +249,13 @@ class PizzaTs(PizzaSetup):
             ax.set_ylabel('Length scales')
             fig.tight_layout()
         elif self.field == 'corr':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.plot(self.time, self.corr)
             ax.set_xlabel('Time')
             ax.set_ylabel('Correlation')
             fig.tight_layout()
         elif self.field == 'timestep':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             ax.step(self.time, self.dt)
             ax.set_yscale('log')
             ax.set_xlabel('Time')
