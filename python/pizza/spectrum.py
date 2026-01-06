@@ -184,6 +184,12 @@ class PizzaSpectrum(PizzaSetup):
                 self.us2 = data[:, 1]
                 self.up2 = data[:, 2]
                 self.enst = data[:, 3]
+                if data.shape[1] > 4:
+                    self.temp2 = data[:, 4]
+                    self.xi2 = data[:, 5]
+                else:
+                    self.temp2 = np.zeros_like(self.us2)
+                    self.xi2 = np.zeros_like(self.us2)
             else:
                 self.us2_mean = data[:, 1]
                 self.us2_std = data[:, 2]
@@ -191,6 +197,16 @@ class PizzaSpectrum(PizzaSetup):
                 self.up2_std = data[:, 4]
                 self.enst_mean = data[:, 5]
                 self.enst_std = data[:, 6]
+                if data.shape[1] > 7:
+                    self.temp2_mean = data[:, 7]
+                    self.temp2_std = data[:, 8]
+                    self.xi2_mean = data[:, 9]
+                    self.xi2_std = data[:, 10]
+                else:
+                    self.temp2_mean = np.zeros_like(self.us2_mean)
+                    self.temp2_std = np.zeros_like(self.us2_mean)
+                    self.xi2_mean = np.zeros_like(self.us2_mean)
+                    self.xi2_std = np.zeros_like(self.us2_mean)
 
         if iplot:
             self.plot()
@@ -237,8 +253,7 @@ class PizzaSpectrum(PizzaSetup):
         Plotting function
         """
         if self.name == 'vort_terms_avg':
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
+            fig, ax = plt.subplots()
             sd = self.buo_std/np.sqrt(self.buo_mean)/2.
             ax.fill_between(self.index, np.sqrt(self.buo_mean)-sd,
                             np.sqrt(self.buo_mean)+sd, alpha=0.1)
@@ -274,8 +289,7 @@ class PizzaSpectrum(PizzaSetup):
 
         else:
             if not self.ave:
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
+                fig, ax = plt.subplots()
                 if abs(self.up2[0]) > 0.:
                     ax.loglog(self.index[1:]+1, self.us2[1:], label='us**2')
                     ax.loglog(self.index+1, self.up2, label='up**2')
@@ -289,9 +303,18 @@ class PizzaSpectrum(PizzaSetup):
                 ax.set_xlim(1, self.index[-1])
                 ax.legend(loc='best', frameon=False)
                 fig.tight_layout()
+                if abs(self.temp2).max() > 0 or abs(self.xi2).max() > 0:
+                    fig1, ax1 = plt.subplots()
+                    if abs(self.temp2).max() > 0:
+                        ax1.loglog(self.index[1:], self.temp2[1:], label='T**2')
+                    if abs(self.xi2).max() > 0:
+                        ax1.loglog(self.index[1:], self.xi2[1:], label='xi**2')
+                    ax1.set_xlabel('m')
+                    ax1.set_xlim(1, self.index[-1])
+                    ax1.legend(loc='best', frameon=False)
+                    fig1.tight_layout()
             else:
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
+                fig, ax = plt.subplots()
 
                 if abs(self.up2_mean[0]) > 0.:
                     ax.fill_between(self.index[1:]+1,
@@ -333,6 +356,28 @@ class PizzaSpectrum(PizzaSetup):
                 ax.set_xlim(1, self.index[-1])
                 ax.legend(loc='best', frameon=False)
                 fig.tight_layout()
+
+                if abs(self.temp2_mean).max() > 0 or abs(self.xi2_mean).max() > 0:
+                    fig1, ax1 = plt.subplots()
+                    if abs(self.temp2_mean).max() > 0:
+                        ax1.fill_between(self.index[1:],
+                                         self.temp2_mean[1:]-self.temp2_std[1:],
+                                         self.temp2_mean[1:]+self.temp2_std[1:],
+                                         alpha=0.1)
+                        ax1.plot(self.index[1:], self.temp2_mean[1:], label='temp**2')
+                    if abs(self.xi2_mean).max() > 0:
+                        ax1.fill_between(self.index[1:],
+                                        self.xi2_mean[1:]-self.xi2_std[1:],
+                                        self.xi2_mean[1:]+self.xi2_std[1:],
+                                        alpha=0.1)
+                        ax1.plot(self.index[1:], self.xi2_mean[1:], label='xi**2')
+
+                    ax1.set_yscale('log')
+                    ax1.set_xscale('log')
+                    ax1.set_xlabel('m')
+                    ax1.set_xlim(1, self.index[-1])
+                    ax1.legend(loc='best', frameon=False)
+                    fig1.tight_layout()
 
 
 class Pizza2DSpectrum(PizzaSetup):
@@ -562,9 +607,7 @@ class Pizza2DSpectrum(PizzaSetup):
         idx = np.where(abs(self.radius-r) == abs(self.radius-r).min(), 1, 0)
         idx = np.nonzero(idx)[0][0]
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-
+        fig, ax = plt.subplots()
         # if hasattr(self, 'us2_std'):
         #     sd = self.us2_std[1:,idx]
         #     ax.fill_between(self.idx2m[1:]+1, self.us2_mean[1:,idx]-sd, \
@@ -613,8 +656,7 @@ class Pizza2DSpectrum(PizzaSetup):
         vmin = cut*np.log10(self.us2_mean[self.us2_mean > 1e-15]).min()
         levs = np.linspace(vmin, vmax, levels)
 
-        fig = plt.figure()
-        ax1 = fig.add_subplot(111)
+        fig, ax1 = plt.subplots()
         im = ax1.contourf(self.radius[1:-1], self.idx2m[1:],
                           np.log10(self.us2_mean[1:, 1:-1]+1e-20),
                           levs, extend='both', cmap=plt.get_cmap(cm))
