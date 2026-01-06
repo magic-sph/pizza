@@ -280,9 +280,9 @@ contains
 
       !-- Calculate spectra
       if ( l_log .or. spec%l_calc ) then
-         call spec%calculate_spectra(timeAvg_spec, l_stop_time, us_Mloc, &
-              &                      up_Mloc, om_Mloc, us2_m_Mloc,       &
-              &                      up2_m_Mloc, enst_m_Mloc)
+         call spec%calculate_spectra(timeAvg_spec, l_stop_time, us_Mloc,   &
+              &                      up_Mloc, om_Mloc, temp_Mloc, xi_Mloc, &
+              &                      us2_m_Mloc, up2_m_Mloc, enst_m_Mloc)
       end if
 
       !-- Write spectra

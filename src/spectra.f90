@@ -12,7 +12,7 @@ module spectra
    use truncation, only: n_r_max, idx2m, n_m_max, minc, m_max
    use blocking, only: nMstart, nMstop, nm_per_rank, m_balance
    use namelists, only: tag, ra, ek, pr, ek, raxi, sc, radratio, l_2D_spectra, &
-       &                l_2D_SD
+       &                l_2D_SD, l_heat, l_chem
    use useful, only: cc2real, getMSD2, round_off
    use radial_functions, only: r, rscheme, height
    use integration, only: rInt_R
@@ -29,6 +29,8 @@ module spectra
       type(mean_sd_type) :: us2M
       type(mean_sd_type) :: up2M
       type(mean_sd_type) :: enstM
+      type(mean_sd_type) :: temp2M
+      type(mean_sd_type) :: xi2M
       integer :: n_calls
       integer :: ispec_counter
       real(cp) :: dt
@@ -42,6 +44,9 @@ module spectra
       procedure :: write_spectra_avg
       procedure :: calculate_spectra
    end type spectra_type
+
+   real(cp), allocatable :: temp2_m(:)
+   real(cp), allocatable :: xi2_m(:)
 
 contains
 
@@ -60,6 +65,12 @@ contains
       call this%us2M%initialize(nMstart,nMstop)
       call this%up2M%initialize(nMstart,nMstop)
       call this%enstM%initialize(nMstart,nMstop)
+      call this%temp2M%initialize(nMstart,nMstop)
+      call this%xi2M%initialize(nMstart,nMstop)
+
+      allocate(temp2_m(nMstart:nMstop), xi2_m(nMstart:nMstop))
+      temp2_m(:)=0.0_cp
+      xi2_m(:)=0.0_cp
 
       this%ispec_counter = 1
       this%n_calls = 0
@@ -75,6 +86,10 @@ contains
       !
       class(spectra_type) :: this
 
+      deallocate(temp2_m, xi2_m)
+
+      call this%xi2M%finalize()
+      call this%temp2M%finalize()
       call this%enstM%finalize()
       call this%up2M%finalize()
       call this%us2M%finalize()
@@ -87,7 +102,7 @@ contains
    end subroutine finalize
 !------------------------------------------------------------------------------
    subroutine calculate_spectra(this, time, l_stop_time, us_Mloc, up_Mloc, &
-              &                 om_Mloc, us2_m, up2_m, enst_m)
+              &                 om_Mloc, temp_Mloc, xi_Mloc, us2_m, up2_m, enst_m)
 
       class(spectra_type) :: this
 
@@ -97,6 +112,8 @@ contains
       complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: om_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
 
       !-- Output variables
       real(cp), intent(out) :: us2_m(nMstart:nMstop)
@@ -105,6 +122,7 @@ contains
 
       !-- Local variables:
       real(cp) :: us2R(n_r_max), up2R(n_r_max), enstR(n_r_max)
+      real(cp) :: temp2R(n_r_max), xi2R(n_r_max)
       real(cp) :: sd
       integer :: n_r, n_m, m
 
@@ -122,6 +140,14 @@ contains
             us2R(n_r) =pi*us2R(n_r)*r(n_r)*height(n_r)
             up2R(n_r) =pi*up2R(n_r)*r(n_r)*height(n_r)
             enstR(n_r)=pi*enstR(n_r)*r(n_r)*height(n_r)
+            if ( l_heat ) then
+               temp2R(n_r)=cc2real(temp_Mloc(n_m,n_r),m)
+               temp2R(n_r)=pi*temp2R(n_r)*r(n_r)*height(n_r)
+            end if
+            if ( l_chem ) then
+               xi2R(n_r)=cc2real(xi_Mloc(n_m,n_r),m)
+               xi2R(n_r)=pi*xi2R(n_r)*r(n_r)*height(n_r)
+            end if
             if ( l_2D_spectra ) then
                if ( this%us2%l_SD ) then
                   call getMSD2(this%us2%mean(n_m,n_r), this%us2%SD(n_m,n_r), &
@@ -152,6 +178,16 @@ contains
               &       this%n_calls, this%dt, time)
          call getMSD2(this%enstM%mean(n_m), this%enstM%SD(n_m), enst_m(n_m), &
               &       this%n_calls, this%dt, time)
+         if ( l_heat ) then
+            temp2_m(n_m) = rInt_R(temp2R, r, rscheme)
+            call getMSD2(this%temp2M%mean(n_m), this%temp2M%SD(n_m), temp2_m(n_m), &
+                 &       this%n_calls, this%dt, time)
+         end if
+         if ( l_chem ) then
+            xi2_m(n_m) = rInt_R(temp2R, r, rscheme)
+            call getMSD2(this%xi2M%mean(n_m), this%xi2M%SD(n_m), xi2_m(n_m), &
+                 &       this%n_calls, this%dt, time)
+         end if
       end do
       this%timeLast = time
 
@@ -170,6 +206,8 @@ contains
       real(cp) :: us2_mean_global(n_m_max), us2_SD_global(n_m_max)
       real(cp) :: up2_mean_global(n_m_max), up2_SD_global(n_m_max)
       real(cp) :: enst_mean_global(n_m_max), enst_SD_global(n_m_max)
+      real(cp) :: temp2_mean_global(n_m_max), temp2_SD_global(n_m_max)
+      real(cp) :: xi2_mean_global(n_m_max), xi2_SD_global(n_m_max)
       integer :: file_handle, n_m, m, n_p, n_r
       integer :: displs(0:n_procs-1), recvcounts(0:n_procs-1)
 
@@ -203,19 +241,45 @@ contains
       call MPI_GatherV(this%enstM%SD, nm_per_rank, MPI_DEF_REAL,   &
            &           enst_SD_global, recvcounts, displs,         &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+      if ( l_heat ) then
+         call MPI_GatherV(this%temp2M%mean, nm_per_rank, MPI_DEF_REAL, &
+              &           temp2_mean_global, recvcounts, displs,       &
+              &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+         call MPI_GatherV(this%temp2M%SD, nm_per_rank, MPI_DEF_REAL,   &
+              &           temp2_SD_global, recvcounts, displs,         &
+              &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+      else
+         temp2_mean_global(:)=0.0_cp
+         temp2_SD_global(:)  =0.0_cp
+      end if
+      if ( l_chem ) then
+         call MPI_GatherV(this%xi2M%mean, nm_per_rank, MPI_DEF_REAL, &
+              &           xi2_mean_global, recvcounts, displs,       &
+              &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+         call MPI_GatherV(this%xi2M%SD, nm_per_rank, MPI_DEF_REAL,   &
+              &           xi2_SD_global, recvcounts, displs,         &
+              &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+      else
+         xi2_mean_global(:)=0.0_cp
+         xi2_SD_global(:)  =0.0_cp
+      end if
 
       !-- Only rank==0 writes the spec_avg.TAG file
       if ( rank == 0 ) then
          open(newunit=file_handle, file='spec_avg.'//tag)
          do n_m=1,n_m_max
             m = idx2m(n_m)
-            us2_SD_global(n_m) =sqrt(us2_SD_global(n_m)/this%timeLast)
-            up2_SD_global(n_m) =sqrt(up2_SD_global(n_m)/this%timeLast)
-            enst_SD_global(n_m)=sqrt(enst_SD_global(n_m)/this%timeLast)
-            write(file_handle, '(I5, 6es16.8)') m,                                &
-            &     round_off(us2_mean_global(n_m)), round_off(us2_SD_global(n_m)), &
-            &     round_off(up2_mean_global(n_m)), round_off(up2_SD_global(n_m)), &
-            &     round_off(enst_mean_global(n_m)), round_off(enst_SD_global(n_m))
+            us2_SD_global(n_m)  =sqrt(us2_SD_global(n_m)/this%timeLast)
+            up2_SD_global(n_m)  =sqrt(up2_SD_global(n_m)/this%timeLast)
+            enst_SD_global(n_m) =sqrt(enst_SD_global(n_m)/this%timeLast)
+            temp2_SD_global(n_m)=sqrt(temp2_SD_global(n_m)/this%timeLast)
+            xi2_SD_global(n_m)  =sqrt(xi2_SD_global(n_m)/this%timeLast)
+            write(file_handle, '(I5, 10es16.8)') m,                                  &
+            &     round_off(us2_mean_global(n_m)), round_off(us2_SD_global(n_m)),    &
+            &     round_off(up2_mean_global(n_m)), round_off(up2_SD_global(n_m)),    &
+            &     round_off(enst_mean_global(n_m)), round_off(enst_SD_global(n_m)),  &
+            &     round_off(temp2_mean_global(n_m)), round_off(temp2_SD_global(n_m)),&
+            &     round_off(xi2_mean_global(n_m)), round_off(xi2_SD_global(n_m))
          end do
          close(file_handle)
       end if
@@ -253,7 +317,8 @@ contains
 
       !-- Local variables
       real(cp) :: us2_m_global(n_m_max), up2_m_global(n_m_max)
-      real(cp) :: enst_m_global(n_m_max)
+      real(cp) :: enst_m_global(n_m_max), temp2_m_global(n_m_max)
+      real(cp) :: xi2_m_global(n_m_max)
       integer :: n_p, m, n_m
       integer :: displs(0:n_procs-1), recvcounts(0:n_procs-1)
       character(len=144) :: spec_name
@@ -275,6 +340,12 @@ contains
       call MPI_GatherV(enst_m, nm_per_rank, MPI_DEF_REAL,       &
            &           enst_m_global, recvcounts, displs,       &
            &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+      call MPI_GatherV(temp2_m, nm_per_rank, MPI_DEF_REAL,       &
+           &           temp2_m_global, recvcounts, displs,       &
+           &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
+      call MPI_GatherV(xi2_m, nm_per_rank, MPI_DEF_REAL,       &
+           &           xi2_m_global, recvcounts, displs,       &
+           &           MPI_DEF_REAL, 0, MPI_COMM_WORLD, ierr)
 
       if ( rank == 0 ) then
          write(spec_name, '(A,I0,A,A)') 'spec_',this%ispec_counter,'.',tag
@@ -282,10 +353,12 @@ contains
          open(newunit=file_handle, file=spec_name, position='append')
          do n_m=1,n_m_max
             m = idx2m(n_m)
-            write(file_handle, '(I5, 3es16.8)') m,       &
-            &              round_off(us2_m_global(n_m)), &
-            &              round_off(up2_m_global(n_m)), &
-            &              round_off(enst_m_global(n_m))
+            write(file_handle, '(I5, 5es16.8)') m,         &
+            &              round_off(us2_m_global(n_m)),   &
+            &              round_off(up2_m_global(n_m)),   &
+            &              round_off(enst_m_global(n_m)),  &
+            &              round_off(temp2_m_global(n_m)), &
+            &              round_off(xi2_m_global(n_m))
          end do
          close(file_handle)
 
