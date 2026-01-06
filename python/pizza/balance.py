@@ -79,27 +79,27 @@ class PizzaBalance(PizzaSetup):
         logFiles = scanDir(pattern)
 
         if tag is not None:
-            pattern = os.path.join(datadir, 'vphi_bal.{}'.format(tag))
+            pattern = os.path.join(datadir, f'vphi_bal.{tag}')
             files = scanDir(pattern)
 
             #  Either the log.tag directly exists and the setup is easy
             #  to obtain
-            if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
+            if os.path.exists(os.path.join(datadir, f'log.{tag}')):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.{}'.format(tag))
+                                    nml=f'log.{tag}')
             #  Or the tag is a bit more complicated and we need to find
             #  the corresponding log file
             else:
                 mask = re.compile(r'{}/vphi_bal\.(.*)'.format(datadir))
                 if mask.match(files[-1]):
                     ending = mask.search(files[-1]).groups(0)[0]
-                    pattern = os.path.join(datadir, 'log.{}'.format(ending))
+                    pattern = os.path.join(datadir, f'log.{ending}')
                     if os.path.exists(pattern):
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.{}'.format(ending))
+                                            nml=f'log.{ending}')
 
             for k, file in enumerate(files):
-                print('reading {}'.format(file))
+                print(f'reading {file}')
                 if k == 0:
                     self.radius, self.time, self.vp, self.dvpdt, \
                         self.rey_stress, self.ek_pump, self.visc = \
@@ -114,15 +114,15 @@ class PizzaBalance(PizzaSetup):
         elif not all:
             if len(logFiles) != 0:
                 PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
-                name = 'vphi_bal.{}'.format(self.tag)
+                name = f'vphi_bal.{self.tag}'
                 filename = os.path.join(datadir, name)
-                print('reading {}'.format(filename))
+                print(f'reading {filename}')
                 self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
                     self.ek_pump, self.visc = self._read(filename, endian)
             else:
                 dat = scanDir('vphi_bal.*')
                 filename = dat[-1][1]
-                print('reading {}'.format(filename))
+                print(f'reading {filename}')
                 self.radius, self.time, self.vp, self.dvpdt, self.rey_stress, \
                     self.ek_pump, self.visc = self._read(filename, endian)
 
@@ -133,7 +133,7 @@ class PizzaBalance(PizzaSetup):
             pattern = os.path.join(datadir, 'vphi_bal.*')
             files = scanDir(pattern)
             for k, file in enumerate(files):
-                print('reading {}'.format(file))
+                print(f'reading {file}')
                 if k == 0:
                     self.radius, self.time, self.vp, self.dvpdt, \
                         self.rey_stress, self.ek_pump, self.visc = \
@@ -223,8 +223,8 @@ class PizzaBalance(PizzaSetup):
         # This is right now the only way to properly stack vphi_bal files that
         # have different radial resolution
         tag = filename.split('vphi_bal.')[-1]
-        if os.path.exists('log.{}'.format(tag)):
-            stp = PizzaSetup(nml='log.{}'.format(tag), quiet=True)
+        if os.path.exists(f'log.{tag}'):
+            stp = PizzaSetup(nml=f'log.{tag}', quiet=True)
             n_r_max = stp.n_r_max
         else:
             n_r_max = self.n_r_max
@@ -396,13 +396,13 @@ class PizzaVortBalance(PizzaSetup):
 
         if not all:
             if tag is not None:
-                pattern = os.path.join(datadir, '{}.{}'.format(self.name, tag))
+                pattern = os.path.join(datadir, f'{self.name}.{tag}')
                 files = scanDir(pattern)
                 # Either the log.tag directly exists and the setup is easy
                 # to obtain
-                if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
+                if os.path.exists(os.path.join(datadir, f'log.{tag}')):
                     PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                        nml='log.{}'.format(tag))
+                                        nml=f'log.{tag}')
                 # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
@@ -410,20 +410,17 @@ class PizzaVortBalance(PizzaSetup):
                                                             self.name))
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
-                        pattern = os.path.join(datadir,
-                                               'log.{}'.format(ending))
+                        pattern = os.path.join(datadir, f'log.{ending}')
                         if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir,
-                                                quiet=True,
-                                                nml='log.{}'.format(ending))
+                                                quiet=True, nml=f'log.{ending}')
 
                 # Sum the files that correspond to the tag
                 mask = re.compile(r'{}\.(.*)'.format(self.name))
                 for k, file in enumerate(files):
-                    print('reading {}'.format(file))
+                    print(f'reading {file}')
                     tag = mask.search(file).groups(0)[0]
-                    nml = PizzaSetup(nml='log.{}'.format(tag),
-                                     datadir=datadir, quiet=True)
+                    nml = PizzaSetup(nml=f'log.{tag}', datadir=datadir, quiet=True)
                     filename = file
                     if k == 0:
                         self.tstart = nml.start_time
@@ -436,33 +433,32 @@ class PizzaVortBalance(PizzaSetup):
                                             nml.start_time)
 
             else:
-                pattern = os.path.join(datadir, '{}*'.format(self.name))
+                pattern = os.path.join(datadir, f'{self.name}*')
                 files = scanDir(pattern)
                 filename = files[-1]
-                print('reading {}'.format(filename))
+                print(f'reading {filename}')
                 # Determine the setup
                 mask = re.compile(r'{}\.(.*)'.format(self.name))
                 ending = mask.search(files[-1]).groups(0)[0]
-                if os.path.exists('log.{}'.format(ending)):
+                if os.path.exists(f'log.{ending}'):
                     try:
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.{}'.foramt(ending))
+                                            nml=f'log.{ending}')
                     except AttributeError:
                         pass
 
                 data = self._read(filename, endian)
 
         else:  # if all is requested
-            pattern = os.path.join(datadir, '{}.*'.format(self.name))
+            pattern = os.path.join(datadir, f'{self.name}.*')
             files = scanDir(pattern)
 
             # Determine the setup
             mask = re.compile(r'{}\.(.*)'.format(self.name))
             for k, file in enumerate(files):
-                print('reading {}'.format(file))
+                print(f'reading {file}')
                 tag = mask.search(file).groups(0)[0]
-                nml = PizzaSetup(nml='log.{}'.format(tag), datadir=datadir,
-                                 quiet=True)
+                nml = PizzaSetup(nml=f'log.{tag}', datadir=datadir, quiet=True)
                 filename = file
                 if k == 0:
                     self.tstart = nml.start_time
@@ -474,14 +470,14 @@ class PizzaVortBalance(PizzaSetup):
                         data = self.add(data, tmp, nml.stop_time,
                                         nml.start_time)
             PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                nml='log.{}'.format(tag))
+                                nml=f'log.{tag}')
 
             # Determine the setup
             mask = re.compile(r'.*\.(.*)')
             ending = mask.search(files[-1]).groups(0)[0]
-            if os.path.exists(os.path.join(datadir, 'log.{}'.format(ending))):
+            if os.path.exists(os.path.join(datadir, f'log.{ending}')):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.{}'.format(ending))
+                                    nml=f'log.{ending}')
 
         self.assemble(data)
 

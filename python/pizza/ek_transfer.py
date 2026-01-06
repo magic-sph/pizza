@@ -28,35 +28,35 @@ class PizzaTransfer(PizzaSetup):
         logFiles = scanDir(pattern)
 
         if tag is not None:
-            pattern = os.path.join(datadir, 'energy_transfer.{}'.format(tag))
+            pattern = os.path.join(datadir, f'energy_transfer.{tag}')
             files = scanDir(pattern)
 
             #  Either the log.tag directly exists and the setup is easy
             #  to obtain
-            if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
+            if os.path.exists(os.path.join(datadir, f'log.{tag}')):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.{}'.format(tag))
+                                    nml=f'log.{tag}')
             #  Or the tag is a bit more complicated and we need to find
             #  the corresponding log file
             else:
                 mask = re.compile(r'{}/energy_transfer\.(.*)'.format(datadir))
                 if mask.match(files[-1]):
                     ending = mask.search(files[-1]).groups(0)[0]
-                    pattern = os.path.join(datadir, 'log.{}'.format(ending))
+                    pattern = os.path.join(datadir, f'log.{ending}')
                     if os.path.exists(pattern):
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.{}'.format(ending))
+                                            nml=f'log.{ending}')
             filename = files[-1]
         else:
             if len(logFiles) != 0:
                 PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
-                name = 'energy_transfer.{}'.format(self.tag)
+                name = f'energy_transfer.{self.tag}'
                 filename = os.path.join(datadir, name)
-                print('reading {}'.format(filename))
+                print(f'reading {filename}')
             else:
                 dat = scanDir('energy_transfer.*')
                 filename = dat[-1][1]
-                print('reading {}'.format(filename))
+                print(f'reading {filename}')
 
         self._read(filename, endian)
 

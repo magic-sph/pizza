@@ -39,27 +39,27 @@ class PizzaMelt(PizzaSetup):
         logFiles = scanDir(pattern)
 
         if tag is not None:
-            pattern = os.path.join(datadir, 'rmelt.{}'.format(tag))
+            pattern = os.path.join(datadir, f'rmelt.{tag}')
             files = scanDir(pattern)
 
             #  Either the log.tag directly exists and the setup is easy
             #  to obtain
-            if os.path.exists(os.path.join(datadir, 'log.{}'.format(tag))):
+            if os.path.exists(os.path.join(datadir, f'log.{tag}')):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.{}'.format(tag))
+                                    nml=f'log.{tag}')
             #  Or the tag is a bit more complicated and we need to find
             #  the corresponding log file
             else:
                 mask = re.compile(r'{}/rmelt\.(.*)'.format(datadir))
                 if mask.match(files[-1]):
                     ending = mask.search(files[-1]).groups(0)[0]
-                    pattern = os.path.join(datadir, 'log.{}'.format(ending))
+                    pattern = os.path.join(datadir, f'log.{ending}')
                     if os.path.exists(pattern):
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                            nml='log.{}'.format(ending))
+                                            nml=f'log.{ending}')
 
             for k, file in enumerate(files):
-                print('reading {}'.format(file))
+                print(f'reading {file}')
                 if k == 0:
                     self.phi, self.time, self.rmelt, self.dt_rmelt = \
                         self._read(file, endian)
@@ -71,15 +71,15 @@ class PizzaMelt(PizzaSetup):
         elif not all:
             if len(logFiles) != 0:
                 PizzaSetup.__init__(self, quiet=True, nml=logFiles[-1])
-                name = 'rmelt.{}'.format(self.tag)
+                name = f'rmelt.{self.tag}'
                 filename = os.path.join(datadir, name)
-                print('reading {}'.format(filename))
+                print(f'reading {filename}')
                 self.phi, self.time, self.rmelt, self.dt_rmelt = \
                     self._read(filename, endian)
             else:
                 dat = scanDir('rmelt.*')
                 filename = dat[-1][1]
-                print('reading {}'.format(filename))
+                print(f'reading {filename}')
                 self.phi, self.time, self.time, self.rmelt = \
                     self._read(filename, endian)
 
@@ -90,7 +90,7 @@ class PizzaMelt(PizzaSetup):
             pattern = os.path.join(datadir, 'rmelt.*')
             files = scanDir(pattern)
             for k, file in enumerate(files):
-                print('reading {}'.format(file))
+                print(f'reading {file}')
                 if k == 0:
                     self.phi, self.time, self.rmelt, self.dt_rmelt = \
                         self._read(file, endian)

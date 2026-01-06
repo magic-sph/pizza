@@ -237,30 +237,27 @@ class PizzaFields(PizzaSetup):
 
         if tag is not None:
             if ivar is not None:
-                file = '{}_{}.{}'.format(prefix, ivar, tag)
+                file = f'{prefix}_{ivar}.{tag}'
                 filename = os.path.join(datadir, file)
             else:
-                files = scanDir(os.path.join(datadir,
-                                             '{}_*{}'.format(prefix, tag)))
+                files = scanDir(os.path.join(datadir, f'{prefix}_*{tag}'))
                 if len(files) > 0:
                     filename = files[-1]
                 else:
                     return
 
-            if os.path.exists('log.{}'.format(tag)):
+            if os.path.exists(f'log.{tag}'):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.{}'.format(tag))
+                                    nml=f'log.{tag}')
         else:
             if ivar is not None:
-                files = scanDir(os.path.join(datadir,
-                                             '{}_{}.*'.format(prefix, ivar)))
+                files = scanDir(os.path.join(datadir, f'{prefix}_{ivar}.*'))
                 if len(files) > 0:
                     filename = files[-1]
                 else:
                     return
             else:
-                files = scanDir(os.path.join(datadir,
-                                             '{}_*'.format(prefix)))
+                files = scanDir(os.path.join(datadir, f'{prefix}_*'))
                 if len(files) > 0:
                     filename = files[-1]
                 else:
@@ -268,15 +265,15 @@ class PizzaFields(PizzaSetup):
             # Determine the setup
             mask = re.compile(r'.*\.(.*)')
             ending = mask.search(files[-1]).groups(0)[0]
-            if os.path.exists('log.{}'.format(ending)):
+            if os.path.exists(f'log.{ending}'):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                    nml='log.{}'.format(ending))
+                                    nml=f'log.{ending}')
 
         if not os.path.exists(filename):
             return
 
         if verbose:
-            print('read {}'.format(filename))
+            print(f'read {filename}')
 
         return filename
 

@@ -58,9 +58,9 @@ class PizzaMovie:
 
         # Determine the file name pattern
         if tag is not None:
-            pattern = 'frame_{}_*.{}'.format(st, tag)
+            pattern = f'frame_{st}_*.{tag}'
         else:
-            pattern = 'frame_{}_*'.format(st)
+            pattern = f'frame_{st}_*'
         pattern = os.path.join(datadir, pattern)
 
         # Assemble a list of files that match the pattern
@@ -76,7 +76,7 @@ class PizzaMovie:
 
         for k, file in enumerate(files):
             if png:
-                filename = 'movie/img{:05d}.png'.format(k)
+                filename = f'movie/img{k:05d}.png'
                 if os.path.exists(filename) and k != 0:
                     continue
             f = Frame(file, endian=endian)
@@ -183,8 +183,8 @@ class PizzaMovie:
                 man.canvas.draw()
 
             if png:
-                filename = 'movie/img{:05d}.png'.format(k)
-                print('write {}'.format(filename))
+                filename = f'movie/img{k:05d}.png'
+                print(f'write {filename}')
                 # st = 'echo {}'.format(ivar) + ' > movie/imgmax'
                 if bgcolor is not None:
                     fig.savefig(filename, facecolor=bgcolor, dpi=dpi)

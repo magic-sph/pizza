@@ -34,7 +34,7 @@ class PizzaAverages:
                 tstart = float(st)
         elif tstart is not None:
             with open('tInitAvg', 'w') as file:
-                file.write('{}'.format(tstart))
+                file.write(f'{tstart}')
 
         if os.path.exists('tstartHeat') and tstartHeat is None:
             with open('tstartHeat', 'r') as file:
@@ -44,7 +44,7 @@ class PizzaAverages:
             if tstartHeat is None:
                 tstartHeat = tstart
             with open('tstartHeat', 'w') as file:
-                file.write('{}'.format(tstartHeat))
+                file.write(f'{tstartHeat}')
 
         print(tstart, tstartHeat)
 
