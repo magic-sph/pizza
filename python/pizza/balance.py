@@ -304,8 +304,7 @@ class PizzaBalance(PizzaSetup):
         :param nstep: time interval (by default 1)
         :type nstep: int
         """
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
         dvpdtm, dvpdtstd = avg_std(self.time[::nstep], self.dvpdt[::nstep])
         ax.fill_between(self.radius, dvpdtm-dvpdtstd, dvpdtm+dvpdtstd,
                         alpha=0.1)
@@ -331,8 +330,7 @@ class PizzaBalance(PizzaSetup):
         ax.set_ylabel('Forces')
         fig.tight_layout()
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
         vpm = self.vp[::nstep].mean(axis=0)
         vpstd = self.vp[::nstep].std(axis=0)
         vpm_p = vpm + vpstd
@@ -346,8 +344,7 @@ class PizzaBalance(PizzaSetup):
         ax.set_ylabel('up')
         fig.tight_layout()
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
         vmax = abs(self.vp[::nstep]).max()
         cs = np.linspace(-vmax, vmax, 65)
         ax.contourf(self.time[::nstep], self.radius, self.vp[::nstep].T, cs,
@@ -612,8 +609,7 @@ class PizzaVortBalance(PizzaSetup):
         idx = np.where(abs(self.radius-r) == abs(self.radius-r).min(), 1, 0)
         idx = np.nonzero(idx)[0][0]
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, ax = plt.subplots()
 
         if hasattr(self, 'buo_std'):
             sd = self.buo_std[1:, idx]/np.sqrt(self.buo_mean[1:, idx])/2.
