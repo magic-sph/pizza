@@ -157,52 +157,56 @@ class PizzaSpectrum(PizzaSetup):
         self.index = data[:, 0]
 
         if self.name == 'vort_terms_avg':
-            self.buo_mean = data[:, 1]
-            self.buo_std = data[:, 2]
-            self.cor_mean = data[:, 3]
-            self.cor_std = data[:, 4]
-            self.adv_mean = data[:, 5]
+            self.buo_m = data[:, 1]
+            self.buo_m_SD = data[:, 2]
+            self.cor_m = data[:, 3]
+            self.cor_m_SD = data[:, 4]
+            self.adv_m = data[:, 5]
             self.adv_std = data[:, 6]
-            self.domdt_mean = data[:, 7]
-            self.domdt_std = data[:, 8]
-            self.visc_mean = data[:, 9]
-            self.visc_std = data[:, 10]
-            self.pump_mean = data[:, 11]
-            self.pump_std = data[:, 12]
-            self.thwind_mean = data[:, 13]
-            self.thwind_std = data[:, 14]
-            self.iner_mean = data[:, 15]
-            self.iner_std = data[:, 16]
-            self.cia_mean = data[:, 17]
-            self.cia_std = data[:, 18]
+            self.domdt_m = data[:, 7]
+            self.domdt_m_SD = data[:, 8]
+            self.visc_m = data[:, 9]
+            self.visc_m_SD = data[:, 10]
+            self.pump_m = data[:, 11]
+            self.pump_m_SD = data[:, 12]
+            self.thwind_m = data[:, 13]
+            self.thwind_m_SD = data[:, 14]
+            self.iner_m = data[:, 15]
+            self.iner_m_SD = data[:, 16]
+            self.cia_m = data[:, 17]
+            self.cia_m_SD = data[:, 18]
         else:
             if not self.ave:
-                self.us2 = data[:, 1]
-                self.up2 = data[:, 2]
-                self.enst = data[:, 3]
+                self.us2_m = data[:, 1]
+                self.up2_m = data[:, 2]
+                self.enst_m = data[:, 3]
                 if data.shape[1] > 4:
-                    self.temp2 = data[:, 4]
-                    self.xi2 = data[:, 5]
+                    self.temp2_m = data[:, 4]
+                    self.xi2_m = data[:, 5]
                 else:
-                    self.temp2 = np.zeros_like(self.us2)
-                    self.xi2 = np.zeros_like(self.us2)
+                    self.temp2_m = np.zeros_like(self.us2_m)
+                    self.xi2_m = np.zeros_like(self.us2_m)
             else:
-                self.us2_mean = data[:, 1]
-                self.us2_std = data[:, 2]
-                self.up2_mean = data[:, 3]
-                self.up2_std = data[:, 4]
-                self.enst_mean = data[:, 5]
+                self.us2_m = data[:, 1]
+                self.us2_m_SD = data[:, 2]
+                self.up2_m = data[:, 3]
+                self.up2_m_SD = data[:, 4]
+                self.enst_m = data[:, 5]
                 self.enst_std = data[:, 6]
                 if data.shape[1] > 7:
-                    self.temp2_mean = data[:, 7]
-                    self.temp2_std = data[:, 8]
-                    self.xi2_mean = data[:, 9]
-                    self.xi2_std = data[:, 10]
+                    self.temp2_m = data[:, 7]
+                    self.temp2_m_SD = data[:, 8]
+                    self.xi2_m = data[:, 9]
+                    self.xi2_m_SD = data[:, 10]
                 else:
-                    self.temp2_mean = np.zeros_like(self.us2_mean)
-                    self.temp2_std = np.zeros_like(self.us2_mean)
-                    self.xi2_mean = np.zeros_like(self.us2_mean)
-                    self.xi2_std = np.zeros_like(self.us2_mean)
+                    self.temp2_m = np.zeros_like(self.us2_m)
+                    self.temp2_m_SD = np.zeros_like(self.us2_m)
+                    self.xi2_m = np.zeros_like(self.us2_m)
+                    self.xi2_m_SD = np.zeros_like(self.us2_m)
+
+            self.ekin_m = self.us2_m + self.up2_m
+            if ave:
+                self.ekin_m_SD = np.sqrt(self.us2_m_SD**2+self.up2_m_SD**2)
 
         if iplot:
             self.plot()
@@ -250,30 +254,30 @@ class PizzaSpectrum(PizzaSetup):
         """
         if self.name == 'vort_terms_avg':
             fig, ax = plt.subplots()
-            sd = self.buo_std/np.sqrt(self.buo_mean)/2.
-            ax.fill_between(self.index, np.sqrt(self.buo_mean)-sd,
-                            np.sqrt(self.buo_mean)+sd, alpha=0.1)
-            ax.plot(self.index, np.sqrt(self.buo_mean), label='Buoyancy')
+            sd = self.buo_m_SD/np.sqrt(self.buo_m)/2.
+            ax.fill_between(self.index, np.sqrt(self.buo_m)-sd,
+                            np.sqrt(self.buo_m)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.buo_m), label='Buoyancy')
 
-            sd = self.cor_std/np.sqrt(self.cor_mean)/2.
-            ax.fill_between(self.index, np.sqrt(self.cor_mean)-sd,
-                            np.sqrt(self.cor_mean)+sd, alpha=0.1)
-            ax.plot(self.index, np.sqrt(self.cor_mean), label='Coriolis')
+            sd = self.cor_m_SD/np.sqrt(self.cor_m)/2.
+            ax.fill_between(self.index, np.sqrt(self.cor_m)-sd,
+                            np.sqrt(self.cor_m)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.cor_m), label='Coriolis')
 
-            sd = self.iner_std/np.sqrt(self.iner_mean)/2.
-            ax.fill_between(self.index, np.sqrt(self.iner_mean)-sd,
-                            np.sqrt(self.iner_mean)+sd, alpha=0.1)
-            ax.plot(self.index, np.sqrt(self.iner_mean), label='Inertia')
+            sd = self.iner_m_SD/np.sqrt(self.iner_m)/2.
+            ax.fill_between(self.index, np.sqrt(self.iner_m)-sd,
+                            np.sqrt(self.iner_m)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.iner_m), label='Inertia')
 
-            sd = self.visc_std/np.sqrt(self.visc_mean)/2.
-            ax.fill_between(self.index, np.sqrt(self.visc_mean)-sd,
-                            np.sqrt(self.visc_mean)+sd, alpha=0.1)
-            ax.plot(self.index, np.sqrt(self.visc_mean), label='Viscosity')
+            sd = self.visc_m_SD/np.sqrt(self.visc_m)/2.
+            ax.fill_between(self.index, np.sqrt(self.visc_m)-sd,
+                            np.sqrt(self.visc_m)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.visc_m), label='Viscosity')
 
-            sd = self.pump_std/np.sqrt(self.pump_mean)/2.
-            ax.fill_between(self.index, np.sqrt(self.pump_mean)-sd,
-                            np.sqrt(self.pump_mean)+sd, alpha=0.1)
-            ax.plot(self.index, np.sqrt(self.pump_mean), label='Ekman pumping')
+            sd = self.pump_m_SD/np.sqrt(self.pump_m)/2.
+            ax.fill_between(self.index, np.sqrt(self.pump_m)-sd,
+                            np.sqrt(self.pump_m)+sd, alpha=0.1)
+            ax.plot(self.index, np.sqrt(self.pump_m), label='Ekman pumping')
 
             ax.set_yscale('log')
             ax.set_xscale('log')
@@ -286,25 +290,25 @@ class PizzaSpectrum(PizzaSetup):
         else:
             if not self.ave:
                 fig, ax = plt.subplots()
-                if abs(self.up2[0]) > 0.:
-                    ax.loglog(self.index[1:]+1, self.us2[1:], label='us**2')
-                    ax.loglog(self.index+1, self.up2, label='up**2')
-                    ax.loglog(self.index+1, self.enst, label='omega**2')
+                if abs(self.up2_m[0]) > 0.:
+                    ax.loglog(self.index[1:]+1, self.us2_m[1:], label='us**2')
+                    ax.loglog(self.index+1, self.up2_m, label='up**2')
+                    ax.loglog(self.index+1, self.enst_m, label='omega**2')
                 else:
-                    ax.loglog(self.index[1:]+1, self.us2[1:], label='us**2')
-                    ax.loglog(self.index[1:]+1, self.up2[1:], label='up**2')
-                    ax.loglog(self.index[1:]+1, self.enst[1:],
+                    ax.loglog(self.index[1:]+1, self.us2_m[1:], label='us**2')
+                    ax.loglog(self.index[1:]+1, self.up2_m[1:], label='up**2')
+                    ax.loglog(self.index[1:]+1, self.enst_m[1:],
                               label='omega**2')
                 ax.set_xlabel('m+1')
                 ax.set_xlim(1, self.index[-1])
                 ax.legend(loc='best', frameon=False)
                 fig.tight_layout()
-                if abs(self.temp2).max() > 0 or abs(self.xi2).max() > 0:
+                if abs(self.temp2_m).max() > 0 or abs(self.xi2_m).max() > 0:
                     fig1, ax1 = plt.subplots()
-                    if abs(self.temp2).max() > 0:
-                        ax1.loglog(self.index[1:], self.temp2[1:], label='T**2')
-                    if abs(self.xi2).max() > 0:
-                        ax1.loglog(self.index[1:], self.xi2[1:], label='xi**2')
+                    if abs(self.temp2_m).max() > 0:
+                        ax1.loglog(self.index[1:], self.temp2_m[1:], label='T**2')
+                    if abs(self.xi2_m).max() > 0:
+                        ax1.loglog(self.index[1:], self.xi2_m[1:], label='xi**2')
                     ax1.set_xlabel('m')
                     ax1.set_xlim(1, self.index[-1])
                     ax1.legend(loc='best', frameon=False)
@@ -312,38 +316,38 @@ class PizzaSpectrum(PizzaSetup):
             else:
                 fig, ax = plt.subplots()
 
-                if abs(self.up2_mean[0]) > 0.:
+                if abs(self.up2_m[0]) > 0.:
                     ax.fill_between(self.index[1:]+1,
-                                    self.us2_mean[1:]-self.us2_std[1:],
-                                    self.us2_mean[1:]+self.us2_std[1:],
+                                    self.us2_m[1:]-self.us2_m_SD[1:],
+                                    self.us2_m[1:]+self.us2_m_SD[1:],
                                     alpha=0.1)
-                    ax.plot(self.index[1:]+1, self.us2_mean[1:], label='us**2')
+                    ax.plot(self.index[1:]+1, self.us2_m[1:], label='us**2')
 
-                    ax.fill_between(self.index+1, self.up2_mean-self.up2_std,
-                                    self.up2_mean+self.up2_std, alpha=0.1)
-                    ax.plot(self.index+1, self.up2_mean, label='up**2')
+                    ax.fill_between(self.index+1, self.up2_m-self.up2_m_SD,
+                                    self.up2_m+self.up2_m_SD, alpha=0.1)
+                    ax.plot(self.index+1, self.up2_m, label='up**2')
 
-                    ax.fill_between(self.index+1, self.enst_mean-self.enst_std,
-                                    self.enst_mean+self.enst_std, alpha=0.1)
-                    ax.plot(self.index+1, self.enst_mean, label='omega**2')
+                    ax.fill_between(self.index+1, self.enst_m-self.enst_std,
+                                    self.enst_m+self.enst_std, alpha=0.1)
+                    ax.plot(self.index+1, self.enst_m, label='omega**2')
                 else:
                     ax.fill_between(self.index[1:]+1,
-                                    self.us2_mean[1:]-self.us2_std[1:],
-                                    self.us2_mean[1:]+self.us2_std[1:],
+                                    self.us2_m[1:]-self.us2_m_SD[1:],
+                                    self.us2_m[1:]+self.us2_m_SD[1:],
                                     alpha=0.1)
-                    ax.plot(self.index[1:]+1, self.us2_mean[1:], label='us**2')
+                    ax.plot(self.index[1:]+1, self.us2_m[1:], label='us**2')
 
                     ax.fill_between(self.index[1:]+1,
-                                    self.up2_mean[1:]-self.up2_std[1:],
-                                    self.up2_mean[1:]+self.up2_std[1:],
+                                    self.up2_m[1:]-self.up2_m_SD[1:],
+                                    self.up2_m[1:]+self.up2_m_SD[1:],
                                     alpha=0.1)
-                    ax.plot(self.index[1:]+1, self.up2_mean[1:], label='up**2')
+                    ax.plot(self.index[1:]+1, self.up2_m[1:], label='up**2')
 
                     ax.fill_between(self.index[1:]+1,
-                                    self.enst_mean[1:]-self.enst_std[1:],
-                                    self.enst_mean[1:]+self.enst_std[1:],
+                                    self.enst_m[1:]-self.enst_std[1:],
+                                    self.enst_m[1:]+self.enst_std[1:],
                                     alpha=0.1)
-                    ax.plot(self.index[1:]+1, self.enst_mean[1:],
+                    ax.plot(self.index[1:]+1, self.enst_m[1:],
                             label='omega**2')
 
                 ax.set_yscale('log')
@@ -353,20 +357,20 @@ class PizzaSpectrum(PizzaSetup):
                 ax.legend(loc='best', frameon=False)
                 fig.tight_layout()
 
-                if abs(self.temp2_mean).max() > 0 or abs(self.xi2_mean).max() > 0:
+                if abs(self.temp2_m).max() > 0 or abs(self.xi2_m).max() > 0:
                     fig1, ax1 = plt.subplots()
-                    if abs(self.temp2_mean).max() > 0:
+                    if abs(self.temp2_m).max() > 0:
                         ax1.fill_between(self.index[1:],
-                                         self.temp2_mean[1:]-self.temp2_std[1:],
-                                         self.temp2_mean[1:]+self.temp2_std[1:],
+                                         self.temp2_m[1:]-self.temp2_m_SD[1:],
+                                         self.temp2_m[1:]+self.temp2_m_SD[1:],
                                          alpha=0.1)
-                        ax1.plot(self.index[1:], self.temp2_mean[1:], label='temp**2')
-                    if abs(self.xi2_mean).max() > 0:
+                        ax1.plot(self.index[1:], self.temp2_m[1:], label='temp**2')
+                    if abs(self.xi2_m).max() > 0:
                         ax1.fill_between(self.index[1:],
-                                        self.xi2_mean[1:]-self.xi2_std[1:],
-                                        self.xi2_mean[1:]+self.xi2_std[1:],
+                                        self.xi2_m[1:]-self.xi2_m_SD[1:],
+                                        self.xi2_m[1:]+self.xi2_m_SD[1:],
                                         alpha=0.1)
-                        ax1.plot(self.index[1:], self.xi2_mean[1:], label='xi**2')
+                        ax1.plot(self.index[1:], self.xi2_m[1:], label='xi**2')
 
                     ax1.set_yscale('log')
                     ax1.set_xscale('log')
@@ -571,20 +575,20 @@ class Pizza2DSpectrum(PizzaSetup):
         :type data: numpy.ndarray
         """
         if data.shape[0] == 3:
-            self.us2_mean = data[0, ...].T
-            self.up2_mean = data[1, ...].T
-            self.enst_mean = data[2, ...].T
+            self.us2_m = data[0, ...].T
+            self.up2_m = data[1, ...].T
+            self.enst_m = data[2, ...].T
         elif data.shape[0] == 6:
-            self.us2_mean = data[0, ...].T
-            self.us2_std = data[1, ...].T
-            self.up2_mean = data[2, ...].T
-            self.up2_std = data[3, ...].T
-            self.enst_mean = data[4, ...].T
+            self.us2_m = data[0, ...].T
+            self.us2_m_SD = data[1, ...].T
+            self.up2_m = data[2, ...].T
+            self.up2_m_SD = data[3, ...].T
+            self.enst_m = data[4, ...].T
             self.enst_std = data[4, ...].T
 
-        self.ekin_mean = self.us2_mean+self.up2_mean
+        self.ekin_m = self.us2_m+self.up2_m
 
-        ind = self.us2_mean[:, 1:-1].argmax(axis=0)
+        ind = self.us2_m[:, 1:-1].argmax(axis=0)
         self.peaks = np.zeros_like(ind)
         for k, idx in enumerate(ind):
             self.peaks[k] = self.idx2m[idx]
@@ -601,22 +605,22 @@ class Pizza2DSpectrum(PizzaSetup):
         idx = np.nonzero(idx)[0][0]
 
         fig, ax = plt.subplots()
-        # if hasattr(self, 'us2_std'):
-        #     sd = self.us2_std[1:,idx]
-        #     ax.fill_between(self.idx2m[1:]+1, self.us2_mean[1:,idx]-sd, \
-        #                     self.us2_mean[1:,idx]+sd, alpha=0.1)
-        ax.plot(self.idx2m[1:]+1, self.us2_mean[1:, idx], label='us2')
-        # if hasattr(self, 'up2_std'):
-        #     sd = self.up2_std[:,idx]
-        #     ax.fill_between(self.idx2m+1, self.up2_mean[:,idx]-sd, \
-        #                     self.up2_mean[:,idx]+sd, alpha=0.1)
-        ax.plot(self.idx2m+1, self.up2_mean[:, idx], label='up2')
-        ax.plot(self.idx2m+1, self.ekin_mean[:, idx], label='Ekin')
+        # if hasattr(self, 'us2_m_SD'):
+        #     sd = self.us2_m_SD[1:,idx]
+        #     ax.fill_between(self.idx2m[1:]+1, self.us2_m[1:,idx]-sd, \
+        #                     self.us2_m[1:,idx]+sd, alpha=0.1)
+        ax.plot(self.idx2m[1:]+1, self.us2_m[1:, idx], label='us2')
+        # if hasattr(self, 'up2_m_SD'):
+        #     sd = self.up2_m_SD[:,idx]
+        #     ax.fill_between(self.idx2m+1, self.up2_m[:,idx]-sd, \
+        #                     self.up2_m[:,idx]+sd, alpha=0.1)
+        ax.plot(self.idx2m+1, self.up2_m[:, idx], label='up2')
+        ax.plot(self.idx2m+1, self.ekin_m[:, idx], label='Ekin')
         # if hasattr(self, 'enst_std'):
         #     sd = self.enst_std[1:,idx]
-        #     ax.fill_between(self.idx2m[1:], self.enst_mean[1:,idx]-sd, \
-        #                     self.enst_mean[1:,idx]+sd, alpha=0.1)
-        ax.plot(self.idx2m+1, self.enst_mean[:, idx], label='Enst')
+        #     ax.fill_between(self.idx2m[1:], self.enst_m[1:,idx]-sd, \
+        #                     self.enst_m[1:,idx]+sd, alpha=0.1)
+        ax.plot(self.idx2m+1, self.enst_m[:, idx], label='Enst')
 
         ax.set_xscale('log')
         ax.set_yscale('log')
@@ -645,17 +649,17 @@ class Pizza2DSpectrum(PizzaSetup):
         :type log_yscale: bool
         """
 
-        vmax = cut*np.log10(self.us2_mean[1:, :]+1e-34).max()
-        vmin = cut*np.log10(self.us2_mean[self.us2_mean > 1e-15]).min()
+        vmax = cut*np.log10(self.us2_m[1:, :]+1e-34).max()
+        vmin = cut*np.log10(self.us2_m[self.us2_m > 1e-15]).min()
         levs = np.linspace(vmin, vmax, levels)
 
         fig, ax1 = plt.subplots()
         im = ax1.contourf(self.radius[1:-1], self.idx2m[1:],
-                          np.log10(self.us2_mean[1:, 1:-1]+1e-20),
+                          np.log10(self.us2_m[1:, 1:-1]+1e-20),
                           levs, extend='both', cmap=plt.get_cmap(cm))
         if solid_contour:
             ax1.contour(self.radius[1:-1], self.idx2m[1:],
-                        np.log10(self.us2_mean[1:, 1:-1]+1e-20), levs,
+                        np.log10(self.us2_m[1:, 1:-1]+1e-20), levs,
                         extend='both', linestyles=['-'], colors=['k'],
                         linewidths=[0.5])
         ax1.plot(self.radius[1:-1], self.peaks, ls='--')
@@ -665,16 +669,16 @@ class Pizza2DSpectrum(PizzaSetup):
         ax1.set_xlabel('Radius')
         ax1.set_ylabel('m')
 
-        # vmax = cut*np.log10(self.enst[1:,:]+1e-34).max()
-        # vmin = cut*np.log10(self.enst[self.enst>1e-15]).min()
+        # vmax = cut*np.log10(self.enst_m[1:,:]+1e-34).max()
+        # vmin = cut*np.log10(self.enst_m[self.enst_m>1e-15]).min()
         # levs = np.linspace(vmin, vmax, levels)
         # ax2 = fig.add_subplot(122, sharey=ax1, sharex=ax1)
         # im = ax2.contourf(self.radius, self.idx2m[1:],
-        #                   np.log10(self.enst[1:]+1e-20),
+        #                   np.log10(self.enst_m[1:]+1e-20),
         #                   levs, extend='both', cmap=plt.get_cmap(cm))
         # if solid_contour:
         #     ax2.contour(self.radius, self.idx2m[1:],
-        #                 np.log10(self.enst[1:]+1e-20), levs,
+        #                 np.log10(self.enst_m[1:]+1e-20), levs,
         #                 extend='both', linestyles=['-'], colors=['k'],
         #                 linewidths=[0.5])
         # ax2.set_title(r'Enstrophy')
