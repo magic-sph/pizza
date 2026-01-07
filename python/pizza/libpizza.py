@@ -113,20 +113,30 @@ def avgField(time, field, tstart=None, tstop=None, std=False):
     """
     if tstart is not None:
         mask = np.where(abs(time-tstart) == min(abs(time-tstart)), 1, 0)
-        ind = np.nonzero(mask)[0][0]
+        ind1 = np.nonzero(mask)[0][0]
     else:  # the whole input array is taken!
-        ind = 0
+        ind1 = 0
     if tstop is not None:
         mask = np.where(abs(time-tstop) == min(abs(time-tstop)), 1, 0)
-        ind1 = np.nonzero(mask)[0][0]+1
+        ind2 = np.nonzero(mask)[0][0]
     else:  # the whole input array is taken!
-        ind1 = len(time)
-    fac = 1./(time[ind1-1]-time[ind])
-    avgField = fac*np.trapz(field[ind:ind1], time[ind:ind1])
+        ind2 = len(time)-1
+
+    if time[ind1:ind2+1].shape[0] == 1: # Only one entry in the array
+        avgField = field[ind1]
+        stdField = 0
+    else:
+        if time[ind1] == time[ind2]: # Same time: this can happen for timestep.TAG
+            avgField = field[-1]
+            stdField = 0
+        else:
+            fac = 1./(time[ind2]-time[ind1])
+            avgField = fac*np.trapz(field[ind1:ind2+1], time[ind1:ind2+1])
+            if std:
+                stdField = np.sqrt(fac*np.trapz((field[ind1:ind2+1]-avgField)**2,
+                                   time[ind1:ind2+1]))
 
     if std:
-        stdField = np.sqrt(fac*np.trapz((field[ind:ind1]-avgField)**2,
-                           time[ind:ind1]))
         return avgField, stdField
     else:
         return avgField
