@@ -101,8 +101,7 @@ def cmake(args, startdir, execDir):
         mkl_opt = '-DUSE_LAPACKLIB=LAPACK'
 
     # Compilation
-    cmd = 'cmake {}/.. {} {} {}'.format(startdir, build_type,
-                                        precond_opt, mkl_opt)
+    cmd = f'cmake {startdir}/.. {build_type} {precond_opt} {mkl_opt}'
     print('  '+cmd)
     print('\n')
     sp.call(cmd, shell=True, stdout=open(os.devnull, 'wb'))
@@ -132,11 +131,11 @@ def get_env(args):
     else:
         c_comp = 'CC is not defined. Default C compiler will be used!'
 
-    print('  FC        : {}'.format(fortran_comp))
-    print('  CC        : {}'.format(c_comp))
-    print('  nranks    : {:d}'.format(args.nranks))
-    print('  mpi exec  : {}'.format(args.mpicmd))
-    print('  MKL       : {}'.format(args.use_mkl))
+    print(f'  FC        : {fortran_comp}')
+    print(f'  CC        : {c_comp}')
+    print(f'  nranks    : {args.nranks:d}')
+    print(f'  mpi exec  : {args.mpicmd}')
+    print(f'  MKL       : {args.use_mkl}')
     print('\n')
 
 
@@ -144,11 +143,11 @@ def get_exec_cmd(args, execDir):
     """
     Determine execution command
     """
-    pizzaExec = '{}/pizza.exe'.format(execDir)
+    pizzaExec = f'{execDir}/pizza.exe'
 
     os.environ['I_MPI_PIN_PROCESSOR_LIST'] = 'allcores'
 
-    execCmd = '{} -n {} {}'.format(args.mpicmd, args.nranks, pizzaExec)
+    execCmd = f'{args.mpicmd} -n {args.nranks} {pizzaExec}'
 
     return execCmd
 
@@ -170,62 +169,62 @@ def getSuite(startdir, cmd, precision, args):
         # Non-rotating annulus convection
         suite.addTest(NonRotRa2e3.unitTest.NonRotRa2e3(
                       'outputFileDiff',
-                      '{}/NonRotRa2e3'.format(startdir),
+                      f'{startdir}/NonRotRa2e3',
                       execCmd=cmd, precision=precision))
         # QG case with Ekman pumping
         suite.addTest(RotE1e3EkPump.unitTest.RotE1e3EkPump(
                       'outputFileDiff',
-                      '{}/RotE1e3EkPump'.format(startdir),
+                      f'{startdir}/RotE1e3EkPump',
                       execCmd=cmd, precision=precision))
         # Fingering convection
         suite.addTest(FingConv.unitTest.FingConv(
                       'outputFileDiff',
-                      '{}/FingConv'.format(startdir),
+                      f'{startdir}/FingConv',
                       execCmd=cmd, precision=precision))
         # Phase field
         suite.addTest(PhaseField.unitTest.PhaseField(
                       'outputFileDiff',
-                      '{}/PhaseField'.format(startdir),
+                      f'{startdir}/PhaseField',
                       execCmd=cmd, precision=precision))
         # QG case with Cheb integration method
         suite.addTest(RotInteg.unitTest.RotInteg(
                       'outputFileDiff',
-                      '{}/RotInteg'.format(startdir),
+                      f'{startdir}/RotInteg',
                       execCmd=cmd, precision=precision))
         # Inhomogeneous heat flux at the outer Boundary
         suite.addTest(InhomogeneousHeatFlux.unitTest.InhomogeneousHeatFlux(
                       'outputFileDiff',
-                      '{}/InhomogeneousHeatFlux'.format(startdir),
+                      f'{startdir}/InhomogeneousHeatFlux',
                       execCmd=cmd, precision=precision))
         # Test restart from a checkpoint
         suite.addTest(TestRestart.unitTest.TestRestart(
                       'outputFileDiff',
-                      '{}/TestRestart'.format(startdir),
+                      f'{startdir}/TestRestart',
                       execCmd=cmd, precision=precision))
         # Test restart from a checkpoint and remap to a cheb grid
         suite.addTest(TestChebMap.unitTest.TestChebMap(
                       'outputFileDiff',
-                      '{}/TestChebMap'.format(startdir),
+                      f'{startdir}/TestChebMap',
                       execCmd=cmd, precision=precision))
         # Test several multistep schemes
         suite.addTest(MultistepSchemes.unitTest.TestMultistepSchemes(
                       'outputFileDiff',
-                      '{}/MultistepSchemes'.format(startdir),
+                      f'{startdir}/MultistepSchemes',
                       execCmd=cmd, precision=precision))
         # Test several DIRK schemes
         suite.addTest(DIRKSchemes.unitTest.TestDIRKSchemes(
                       'outputFileDiff',
-                      '{}/DIRKSchemes'.format(startdir),
+                      f'{startdir}/DIRKSchemes',
                       execCmd=cmd, precision=precision))
         # Test a timestep change
         suite.addTest(TimeStepChange.unitTest.TimeStepChange(
                       'outputFileDiff',
-                      '{}/TimeStepChange'.format(startdir),
+                      f'{startdir}/TimeStepChange',
                       execCmd=cmd, precision=precision))
         # Test several Galerkin Bases
         suite.addTest(GalerkinBases.unitTest.TestGalerkinBases(
                       'outputFileDiff',
-                      '{}/GalerkinBases'.format(startdir),
+                      f'{startdir}/GalerkinBases',
                       execCmd=cmd, precision=precision))
 
     return suite
@@ -234,7 +233,7 @@ def getSuite(startdir, cmd, precision, args):
 if __name__ == '__main__':
     precision = 1e-8  # relative tolerance between expected and actual result
     startdir = os.getcwd()
-    execDir = '{}/tmp'.format(startdir)  # where pizza will be built
+    execDir = f'{startdir}/tmp'  # where pizza will be built
 
     parser = getParser()
     args = parser.parse_args()
