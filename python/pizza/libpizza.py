@@ -517,8 +517,7 @@ def progressbar(it, prefix="", size=60):
     count = len(it)
     def _show(_i):
         x = int(size*_i/count)
-        sys.stdout.write("{}[{}{}] {}/{}\r".format(prefix, "#"*x, "."*(size-x),
-                                                   _i, count))
+        sys.stdout.write(f'{prefix}[{"#"*x}{"."*(size-x)}] {_i}/{count}\r')
         sys.stdout.flush()
 
     _show(0)

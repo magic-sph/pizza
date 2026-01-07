@@ -135,7 +135,7 @@ class Frame:
         point_data[name] = dat
 
         gridToVTK(filename, X, Y, Z, pointData=point_data)
-        print('Store {}.vts'.format(filename))
+        print(f'Store {filename}.vts')
 
 
 
