@@ -39,7 +39,7 @@ class PizzaTransfer(PizzaSetup):
             #  Or the tag is a bit more complicated and we need to find
             #  the corresponding log file
             else:
-                mask = re.compile(r'{}/energy_transfer\.(.*)'.format(datadir))
+                mask = re.compile(fr'{datadir}/energy_transfer\.(.*)')
                 if mask.match(files[-1]):
                     ending = mask.search(files[-1]).groups(0)[0]
                     pattern = os.path.join(datadir, f'log.{ending}')

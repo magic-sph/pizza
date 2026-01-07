@@ -90,7 +90,7 @@ class PizzaBalance(PizzaSetup):
             #  Or the tag is a bit more complicated and we need to find
             #  the corresponding log file
             else:
-                mask = re.compile(r'{}/vphi_bal\.(.*)'.format(datadir))
+                mask = re.compile(fr'{datadir}/vphi_bal\.(.*)')
                 if mask.match(files[-1]):
                     ending = mask.search(files[-1]).groups(0)[0]
                     pattern = os.path.join(datadir, f'log.{ending}')
@@ -406,8 +406,7 @@ class PizzaVortBalance(PizzaSetup):
                 # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'{}/{}\.(.*)'.format(datadir,
-                                                            self.name))
+                    mask = re.compile(fr'{datadir}/{self.name}\.(.*)')
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
                         pattern = os.path.join(datadir, f'log.{ending}')
@@ -416,7 +415,7 @@ class PizzaVortBalance(PizzaSetup):
                                                 quiet=True, nml=f'log.{ending}')
 
                 # Sum the files that correspond to the tag
-                mask = re.compile(r'{}\.(.*)'.format(self.name))
+                mask = re.compile(fr'{self.name}\.(.*)')
                 for k, file in enumerate(files):
                     print(f'reading {file}')
                     tag = mask.search(file).groups(0)[0]
@@ -438,7 +437,7 @@ class PizzaVortBalance(PizzaSetup):
                 filename = files[-1]
                 print(f'reading {filename}')
                 # Determine the setup
-                mask = re.compile(r'{}\.(.*)'.format(self.name))
+                mask = re.compile(fr'{self.name}\.(.*)')
                 ending = mask.search(files[-1]).groups(0)[0]
                 if os.path.exists(f'log.{ending}'):
                     try:
@@ -454,7 +453,7 @@ class PizzaVortBalance(PizzaSetup):
             files = scanDir(pattern)
 
             # Determine the setup
-            mask = re.compile(r'{}\.(.*)'.format(self.name))
+            mask = re.compile(fr'{self.name}\.(.*)')
             for k, file in enumerate(files):
                 print(f'reading {file}')
                 tag = mask.search(file).groups(0)[0]

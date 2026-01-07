@@ -173,41 +173,36 @@ class PizzaAverages:
         """
         st_std = ''
         if self.l_3D:
-            st = '{:.3e}{:9.2e}{:9.2e}{:9.2e}{:12.5e}{:12.5e}{:12.5e}{:12.5e}'.format(
-                 self.ra, self.ek, self.pr, self.radratio, self.us2_avg,
-                 self.up2_avg, self.uz2_avg, self.up2_axi_avg)
+            st = f'{self.ra:.3e}{self.ek:9.2e}{self.pr:9.2e}{self.radratio:9.2e}'
+            st += f'{self.us2_avg:12.5e}{self.up2_avg:12.5e}{self.uz2_avg:12.5e}'
+            st += f'{self.up2_axi_avg:12.5e}'
         else:
-            st = '{:.3e}{:9.2e}{:9.2e}{:12.5e}{:12.5e}{:12.5e}'.format(
-                 self.ra, self.pr, self.radratio, self.us2_avg,
-                 self.up2_avg, self.up2_axi_avg)
+            st = f'{self.ra:.3e}{self.pr:9.2e}{self.radratio:9.2e}'
+            st += f'{self.us2_avg:12.5e}{self.up2_avg:12.5e}{self.up2_axi_avg:12.5e}'
         if self.std:
-            st_std = '{:12.5e}{:12.5e}{:12.5e}{:12.5e}'.format(
-                 self.us2_std, self.up2_std, self.uz2_std, self.up2_axi_avg)
+            st_std = f'{self.us2_std:12.5e}{self.up2_std:12.5e}'
+            st_std += f'{self.uz2_std:12.5e}{self.up2_axi_avg:12.5e}'
 
-        st += '{:10.3e}{:10.3e}{:10.3e}'.format(self.rey_avg, self.rey_zon_avg,
-                                                self.rey_fluct_avg)
-
-        if self.std:
-            st_std += '{:10.3e}{:10.3e}{:10.3e}'.format(
-                 self.rey_std, self.rey_zon_std, self.rey_fluct_std)
-        st += '{:10.3e}{:10.3e}{:10.3e}{:10.3e}'.format(
-                 self.nu_top_avg, self.nu_bot_avg, self.nu_vol_avg,
-                 self.nu_shell_avg)
-        if self.std:
-            st_std += '{:10.3e}{:10.3e}{:10.3e}{:10.3e}'.format(
-                 self.nu_top_std, self.nu_bot_std, self.nu_vol_std,
-                 self.nu_shell_std)
-
-        st += '{:12.5e}{:12.5e}'.format(self.power_avg, self.visc_avg)
-        if self.std:
-            st_std += '{:12.5e}{:12.5e}'.format(self.power_std, self.visc_std)
-
-        st += '{:10.3e}{:10.3e}{:10.3e}'.format(self.lpeak_avg, self.lint_avg,
-                                                self.ldiss_avg)
+        st += f'{self.rey_avg:10.3e}{self.rey_zon_avg:10.3e}'
+        st += f'{self.rey_fluct_avg:10.3e}'
 
         if self.std:
-            st_std += '{:10.3e}{:10.3e}{:10.3e}'.format(
-                 self.lpeak_std, self.lint_std, self.ldiss_std)
+            st_std += f'{self.rey_std:10.3e}{self.rey_zon_std:10.3e}'
+            st_std += f'{self.rey_fluct_std:10.3e}'
+        st += f'{self.nu_top_avg:10.3e}{self.nu_bot_avg:10.3e}'
+        st += f'{self.nu_vol_avg:10.3e}{self.nu_shell_avg:10.3e}'
+        if self.std:
+            st_std += f'{self.nu_top_std:10.3e}{self.nu_bot_std:10.3e}'
+            st_std += f'{self.nu_vol_std:10.3e}{self.nu_shell_std:10.3e}'
+
+        st += f'{self.power_avg:12.5e}{self.visc_avg:12.5e}'
+        if self.std:
+            st_std += f'{self.power_std:12.5e}{self.visc_std:12.5e}'
+
+        st += f'{self.lpeak_avg:10.3e}{self.lint_avg:10.3e}{self.ldiss_avg:10.3e}'
+        if self.std:
+            st_std += f'{self.lpeak_std:10.3e}{self.lint_std:10.3e}'
+            st_std += f'{self.ldiss_std:10.3e}'
         st += st_std
         st += '\n'
 

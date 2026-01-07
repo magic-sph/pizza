@@ -73,8 +73,7 @@ class PizzaSpectrum(PizzaSetup):
                 # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'{}/{}\.(.*)'.format(datadir,
-                                                            self.name))
+                    mask = re.compile(fr'{datadir}/{self.name}\.(.*)')
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
                         pattern = os.path.join(datadir, f'log.{ending}')
@@ -83,7 +82,7 @@ class PizzaSpectrum(PizzaSetup):
                                                 quiet=True, nml=f'log.{ending}')
 
                 # Sum the files that correspond to the tag
-                mask = re.compile(r'{}\.(.*)'.format(self.name))
+                mask = re.compile(fr'{self.name}\.(.*)')
                 for k, file in enumerate(files):
                     print(f'reading {file}')
                     tag = mask.search(file).groups(0)[0]
@@ -110,10 +109,10 @@ class PizzaSpectrum(PizzaSetup):
                 print(f'reading {filename}')
                 # Determine the setup
                 if ispec is not None:
-                    mask = re.compile(r'{}{}\.(.*)'.format(self.name, ispec))
+                    mask = re.compile(fr'{self.name}{ispec}\.(.*)')
 
                 else:
-                    mask = re.compile(r'{}\.(.*)'.format(self.name))
+                    mask = re.compile(fr'{self.name}\.(.*)')
                 ending = mask.search(files[-1]).groups(0)[0]
                 if os.path.exists(f'log.{ending}'):
                     try:
@@ -129,7 +128,7 @@ class PizzaSpectrum(PizzaSetup):
             files = scanDir(pattern)
 
             # Determine the setup
-            mask = re.compile(r'{}\.(.*)'.format(self.name))
+            mask = re.compile(fr'{self.name}\.(.*)')
             for k, file in enumerate(files):
                 print(f'reading {file}')
                 tag = mask.search(file).groups(0)[0]
@@ -419,8 +418,7 @@ class Pizza2DSpectrum(PizzaSetup):
                 # Or the tag is a bit more complicated and we need to find
                 # the corresponding log file
                 else:
-                    mask = re.compile(r'{}/{}\.(.*)'.format(datadir,
-                                                            self.name))
+                    mask = re.compile(fr'{datadir}/{self.name}\.(.*)')
                     if mask.match(files[-1]):
                         ending = mask.search(files[-1]).groups(0)[0]
                         pattern = os.path.join(datadir, f'log.{ending}')
@@ -429,7 +427,7 @@ class Pizza2DSpectrum(PizzaSetup):
                                                 quiet=True, nml=f'log.{ending}')
 
                 # Sum the files that correspond to the tag
-                mask = re.compile(r'{}\.(.*)'.format(self.name))
+                mask = re.compile(fr'{self.name}\.(.*)')
                 for k, file in enumerate(files):
                     print(f'reading {file}')
                     tag = mask.search(file).groups(0)[0]
@@ -451,7 +449,7 @@ class Pizza2DSpectrum(PizzaSetup):
                 filename = files[-1]
                 print(f'reading {filename}')
                 # Determine the setup
-                mask = re.compile(r'{}\.(.*)'.format(self.name))
+                mask = re.compile(fr'{self.name}\.(.*)')
                 ending = mask.search(files[-1]).groups(0)[0]
                 if os.path.exists(f'log.{ending}'):
                     try:
@@ -467,7 +465,7 @@ class Pizza2DSpectrum(PizzaSetup):
             files = scanDir(pattern)
 
             # Determine the setup
-            mask = re.compile(r'{}\.(.*)'.format(self.name))
+            mask = re.compile(fr'{self.name}\.(.*)')
             for k, file in enumerate(files):
                 print(f'reading {file}')
                 tag = mask.search(file).groups(0)[0]
