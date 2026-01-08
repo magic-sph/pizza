@@ -1,0 +1,12 @@
+{
+"num_params": ["n_r_max", "m_max", "radial_scheme", "time_scheme"],
+"phys_params": ["ra", "ek", "pr", "radratio"],
+"time_series":
+  {
+    "e_kin": ["us2", "up2", "ekin", "up2_axi"],
+    "heat": ["topnuss"],
+    "timestep": ["dt"]
+  },
+"spectra": ["us2_m", "up2_m"],
+"radial_profiles": ["temp_r", "uphi_r"]
+}

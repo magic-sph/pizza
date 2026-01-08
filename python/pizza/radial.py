@@ -28,7 +28,8 @@ class PizzaRadial(PizzaSetup):
     >>> rad = PizzaRadial() # display the content of radial_profiles.tag
     """
 
-    def __init__(self, datadir='.', iplot=True, tag=None, all=False, quiet=False):
+    def __init__(self, datadir='.', iplot=True, tag=None, all=False,
+                 quiet=False):
         """
         :param datadir: working directory
         :type datadir: str
@@ -67,7 +68,8 @@ class PizzaRadial(PizzaSetup):
                         pattern = os.path.join(datadir, f'log.{ending}')
                         if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir,
-                                                quiet=True, nml=f'log.{ending}')
+                                                quiet=True,
+                                                nml=f'log.{ending}')
 
                 # Sum the files that correspond to the tag
                 mask = re.compile(fr'{name}\.(.*)')
@@ -104,7 +106,8 @@ class PizzaRadial(PizzaSetup):
                         pass
 
                 data = fast_read(filename, skiplines=0)
-                self._radlut = RadLookUpTable(data, self.start_time, self.stop_time)
+                self._radlut = RadLookUpTable(data, self.start_time,
+                                              self.stop_time)
 
         else:
             pattern = os.path.join(datadir, f'{name}.*')

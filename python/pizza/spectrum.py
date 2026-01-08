@@ -83,7 +83,8 @@ class PizzaSpectrum(PizzaSetup):
                         pattern = os.path.join(datadir, f'log.{ending}')
                         if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir,
-                                                quiet=True, nml=f'log.{ending}')
+                                                quiet=True,
+                                                nml=f'log.{ending}')
 
                 # Sum the files that correspond to the tag
                 mask = re.compile(fr'{self.name}\.(.*)')
@@ -132,7 +133,8 @@ class PizzaSpectrum(PizzaSetup):
                 if not hasattr(self, 'stop_time'):
                     self.stop_time = None
                 data = fast_read(filename, skiplines=0)
-                self._speclut = SpecLookUpTable(data, self.name, self.start_time,
+                self._speclut = SpecLookUpTable(data, self.name,
+                                                self.start_time,
                                                 self.stop_time)
 
         else:  # if all is requested
@@ -144,7 +146,8 @@ class PizzaSpectrum(PizzaSetup):
 
                 mask = re.compile(fr'{self.name}\.(.*)')
                 ending = mask.search(files[-1]).groups(0)[0]
-                nml = PizzaSetup(nml=f'log.{ending}', datadir=datadir, quiet=True)
+                nml = PizzaSetup(nml=f'log.{ending}', datadir=datadir,
+                                 quiet=True)
                 data = fast_read(file)
                 if k == 0:
                     self._speclut = SpecLookUpTable(data, self.name,
@@ -218,6 +221,7 @@ class PizzaSpectrum(PizzaSetup):
             fig.tight_layout()
 
         else:
+
             if not self.ave:
                 fig, ax = plt.subplots()
                 if abs(self.up2_m[0]) > 0.:
@@ -236,9 +240,11 @@ class PizzaSpectrum(PizzaSetup):
                 if abs(self.temp2_m).max() > 0 or abs(self.xi2_m).max() > 0:
                     fig1, ax1 = plt.subplots()
                     if abs(self.temp2_m).max() > 0:
-                        ax1.loglog(self.index[1:], self.temp2_m[1:], label='T**2')
+                        ax1.loglog(self.index[1:], self.temp2_m[1:],
+                                   label='T**2')
                     if abs(self.xi2_m).max() > 0:
-                        ax1.loglog(self.index[1:], self.xi2_m[1:], label='xi**2')
+                        ax1.loglog(self.index[1:], self.xi2_m[1:],
+                                   label='xi**2')
                     ax1.set_xlabel('m')
                     ax1.set_xlim(1, self.index[-1])
                     ax1.legend(loc='best', frameon=False)
@@ -294,12 +300,13 @@ class PizzaSpectrum(PizzaSetup):
                                          self.temp2_m[1:]-self.temp2_m_SD[1:],
                                          self.temp2_m[1:]+self.temp2_m_SD[1:],
                                          alpha=0.1)
-                        ax1.plot(self.index[1:], self.temp2_m[1:], label='temp**2')
+                        ax1.plot(self.index[1:], self.temp2_m[1:],
+                                 label='temp**2')
                     if abs(self.xi2_m).max() > 0:
                         ax1.fill_between(self.index[1:],
-                                        self.xi2_m[1:]-self.xi2_m_SD[1:],
-                                        self.xi2_m[1:]+self.xi2_m_SD[1:],
-                                        alpha=0.1)
+                                         self.xi2_m[1:]-self.xi2_m_SD[1:],
+                                         self.xi2_m[1:]+self.xi2_m_SD[1:],
+                                         alpha=0.1)
                         ax1.plot(self.index[1:], self.xi2_m[1:], label='xi**2')
 
                     ax1.set_yscale('log')
@@ -506,7 +513,8 @@ class Pizza2DSpectrum(PizzaSetup):
                         pattern = os.path.join(datadir, f'log.{ending}')
                         if os.path.exists(pattern):
                             PizzaSetup.__init__(self, datadir=datadir,
-                                                quiet=True, nml=f'log.{ending}')
+                                                quiet=True,
+                                                nml=f'log.{ending}')
 
                 # Sum the files that correspond to the tag
                 mask = re.compile(fr'{self.name}\.(.*)')
