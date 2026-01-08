@@ -21,7 +21,7 @@ class PizzaSpectrum(PizzaSetup):
     """
 
     def __init__(self, field='spec', datadir='.', iplot=True, ispec=None,
-                 ave=True, tag=None, all=False):
+                 ave=True, tag=None, all=False, quiet=False):
         """
         :param field: a string to decide which spectra one wants to load
                       and plot
@@ -42,6 +42,8 @@ class PizzaSpectrum(PizzaSetup):
                     by stacking all the corresponding files from the working
                     directory (False by default)
         :type all: bool
+        :param quiet: when set to True, makes the output silent (default False)
+        :type quiet: bool
         """
 
         if ispec is not None:
@@ -58,6 +60,8 @@ class PizzaSpectrum(PizzaSetup):
                 self.name = 'spec_avg'
             else:
                 self.name = 'spec_'
+
+        self._speclut = None # None by default: to be filled later
 
         if not all:
             if tag is not None:
@@ -84,21 +88,22 @@ class PizzaSpectrum(PizzaSetup):
                 # Sum the files that correspond to the tag
                 mask = re.compile(fr'{self.name}\.(.*)')
                 for k, file in enumerate(files):
-                    print(f'reading {file}')
+                    if not quiet:
+                        print(f'reading {file}')
                     tag = mask.search(file).groups(0)[0]
                     nml = PizzaSetup(nml=f'log.{tag}', datadir=datadir,
                                      quiet=True)
                     filename = file
-                    if k == 0:
-                        self.tstart = nml.start_time
-                        self.tstop = nml.stop_time  # will be replaced later
-                        data = fast_read(filename)
-                    else:
-                        if os.path.exists(filename):
-                            tmp = fast_read(filename)
-                            data = self.add(data, tmp, nml.stop_time,
-                                            nml.start_time)
+                    data = fast_read(filename)
 
+                    if k == 0:
+                        self._speclut = SpecLookUpTable(data, self.name,
+                                                        nml.start_time,
+                                                        nml.stop_time)
+                    else:
+                        self._speclut += SpecLookUpTable(data, self.name,
+                                                         nml.start_time,
+                                                         nml.stop_time)
             else:
                 if ispec is not None:
                     pattern = os.path.join(datadir, f'{self.name}{ispec}*')
@@ -106,7 +111,8 @@ class PizzaSpectrum(PizzaSetup):
                     pattern = os.path.join(datadir, f'{self.name}*')
                 files = scanDir(pattern)
                 filename = files[-1]
-                print(f'reading {filename}')
+                if not quiet:
+                    print(f'reading {filename}')
                 # Determine the setup
                 if ispec is not None:
                     mask = re.compile(fr'{self.name}{ispec}\.(.*)')
@@ -119,132 +125,56 @@ class PizzaSpectrum(PizzaSetup):
                         PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                             nml=f'log.{ending}')
                     except AttributeError:
+                        self.start_time = None
+                        self.stop_time = None
                         pass
 
+                if not hasattr(self, 'stop_time'):
+                    self.stop_time = None
                 data = fast_read(filename, skiplines=0)
+                self._speclut = SpecLookUpTable(data, self.name, self.start_time,
+                                                self.stop_time)
 
         else:  # if all is requested
             pattern = os.path.join(datadir, f'{self.name}.*')
             files = scanDir(pattern)
-
-            # Determine the setup
-            mask = re.compile(fr'{self.name}\.(.*)')
             for k, file in enumerate(files):
-                print(f'reading {file}')
-                tag = mask.search(file).groups(0)[0]
-                nml = PizzaSetup(nml=f'log.{tag}', datadir=datadir,
-                                 quiet=True)
-                filename = file
-                if k == 0:
-                    self.tstart = nml.start_time
-                    self.tstop = nml.stop_time  # will be replaced later
-                    data = fast_read(filename)
-                else:
-                    if os.path.exists(filename):
-                        tmp = fast_read(filename)
-                        data = self.add(data, tmp, nml.stop_time,
-                                        nml.start_time)
-            PizzaSetup.__init__(self, datadir=datadir, quiet=True,
-                                nml=f'log.{tag}')
+                if not quiet:
+                    print(f'reading {file}')
 
-            # Determine the setup
-            mask = re.compile(r'.*\.(.*)')
-            ending = mask.search(files[-1]).groups(0)[0]
+                mask = re.compile(fr'{self.name}\.(.*)')
+                ending = mask.search(files[-1]).groups(0)[0]
+                nml = PizzaSetup(nml=f'log.{ending}', datadir=datadir, quiet=True)
+                data = fast_read(file)
+                if k == 0:
+                    self._speclut = SpecLookUpTable(data, self.name,
+                                                    nml.start_time,
+                                                    nml.stop_time)
+                else:
+                    self._speclut += SpecLookUpTable(data, self.name,
+                                                     nml.start_time,
+                                                     nml.stop_time)
             if os.path.exists(os.path.join(datadir, f'log.{ending}')):
                 PizzaSetup.__init__(self, datadir=datadir, quiet=True,
                                     nml=f'log.{ending}')
 
-        self.index = data[:, 0]
-
-        if self.name == 'vort_terms_avg':
-            self.buo_m = data[:, 1]
-            self.buo_m_SD = data[:, 2]
-            self.cor_m = data[:, 3]
-            self.cor_m_SD = data[:, 4]
-            self.adv_m = data[:, 5]
-            self.adv_std = data[:, 6]
-            self.domdt_m = data[:, 7]
-            self.domdt_m_SD = data[:, 8]
-            self.visc_m = data[:, 9]
-            self.visc_m_SD = data[:, 10]
-            self.pump_m = data[:, 11]
-            self.pump_m_SD = data[:, 12]
-            self.thwind_m = data[:, 13]
-            self.thwind_m_SD = data[:, 14]
-            self.iner_m = data[:, 15]
-            self.iner_m_SD = data[:, 16]
-            self.cia_m = data[:, 17]
-            self.cia_m_SD = data[:, 18]
-        else:
-            if not self.ave:
-                self.us2_m = data[:, 1]
-                self.up2_m = data[:, 2]
-                self.enst_m = data[:, 3]
-                if data.shape[1] > 4:
-                    self.temp2_m = data[:, 4]
-                    self.xi2_m = data[:, 5]
-                else:
-                    self.temp2_m = np.zeros_like(self.us2_m)
-                    self.xi2_m = np.zeros_like(self.us2_m)
-            else:
-                self.us2_m = data[:, 1]
-                self.us2_m_SD = data[:, 2]
-                self.up2_m = data[:, 3]
-                self.up2_m_SD = data[:, 4]
-                self.enst_m = data[:, 5]
-                self.enst_std = data[:, 6]
-                if data.shape[1] > 7:
-                    self.temp2_m = data[:, 7]
-                    self.temp2_m_SD = data[:, 8]
-                    self.xi2_m = data[:, 9]
-                    self.xi2_m_SD = data[:, 10]
-                else:
-                    self.temp2_m = np.zeros_like(self.us2_m)
-                    self.temp2_m_SD = np.zeros_like(self.us2_m)
-                    self.xi2_m = np.zeros_like(self.us2_m)
-                    self.xi2_m_SD = np.zeros_like(self.us2_m)
-
-            self.ekin_m = self.us2_m + self.up2_m
-            if ave:
-                self.ekin_m_SD = np.sqrt(self.us2_m_SD**2+self.up2_m_SD**2)
+        # Copy look-up table arguments into MagicSpectrum object
+        if self._speclut is not None:
+            for attr in self._speclut.__dict__:
+                setattr(self, attr, self._speclut.__dict__[attr])
 
         if iplot:
             self.plot()
 
-    def add(self, data, tmp, stop_time, start_time):
+    def __add__(self, new):
         """
         Clean way to stack data
         """
-        out = copy.deepcopy(data)
-        out[:, 0] = tmp[:, 0]
+        out = copy.deepcopy(new)
 
-        nm_new = len(tmp[:, 0])
-        nm_old = len(data[:, 0])
-
-        fac_old = self.tstop-self.tstart
-        fac_new = stop_time-start_time
-        self.tstop = stop_time
-        fac_tot = self.tstop-self.tstart
-
-        if nm_new == nm_old:  # Same grid before and after
-            if self.name == 'vort_terms_avg':
-                for j in [1, 3, 5, 7, 9, 11, 13, 15, 17]:
-                    out[:, j] = (fac_old*data[:, j]+fac_new*tmp[:, j])/fac_tot
-                for j in [2, 4, 6, 8, 10, 12, 14, 16]:
-                    out[:, j] = np.sqrt((fac_old*data[:, j]**2 +
-                                         fac_new*tmp[:, j]**2) / fac_tot)
-            else:
-                if not self.ave:
-                    out[:, 1:] = 0.5*(data[:, 1:]+tmp[:, 1:])
-                else:
-                    for j in [1, 3, 5]:
-                        out[:, j] = (fac_old*data[:, j]+fac_new*tmp[:, j]) / \
-                                     fac_tot
-                    for j in [2, 4, 6]:
-                        out[:, j] = np.sqrt((fac_old*data[:, j]**2 +
-                                             fac_new*tmp[:, j]**2) / fac_tot)
-        else:
-            print('Not implemented yet ...')
+        out._speclut += self._speclut
+        for attr in out._speclut.__dict__:
+            setattr(out, attr, out._speclut.__dict__[attr])
 
         return out
 
@@ -378,6 +308,154 @@ class PizzaSpectrum(PizzaSetup):
                     ax1.set_xlim(1, self.index[-1])
                     ax1.legend(loc='best', frameon=False)
                     fig1.tight_layout()
+
+
+class SpecLookUpTable:
+    """
+    The purpose of this class is to create a lookup table between the numpy
+    array that comes from the reading of the spec files and the corresponding
+    columns.
+    """
+
+    def __init__(self, data, name, tstart=None, tstop=None):
+        """
+        :param data: numpy array that contains the data
+        :type data: numpy.ndarray
+        :param name: name of the field
+        :type name: str
+        :param tstart: starting time that was used to compute the time average
+        :type tstart: float
+        :param tstop: stop time that was used to compute the time average
+        :type tstop: float
+        """
+
+        self.name = name
+        self.start_time = tstart
+        self.stop_time = tstop
+
+        self.index = data[:, 0]
+
+        if self.name == 'vort_terms_avg':
+            self.buo_m = data[:, 1]
+            self.buo_m_SD = data[:, 2]
+            self.cor_m = data[:, 3]
+            self.cor_m_SD = data[:, 4]
+            self.adv_m = data[:, 5]
+            self.adv_std = data[:, 6]
+            self.domdt_m = data[:, 7]
+            self.domdt_m_SD = data[:, 8]
+            self.visc_m = data[:, 9]
+            self.visc_m_SD = data[:, 10]
+            self.pump_m = data[:, 11]
+            self.pump_m_SD = data[:, 12]
+            self.thwind_m = data[:, 13]
+            self.thwind_m_SD = data[:, 14]
+            self.iner_m = data[:, 15]
+            self.iner_m_SD = data[:, 16]
+            self.cia_m = data[:, 17]
+            self.cia_m_SD = data[:, 18]
+        elif self.name == 'spec_avg':
+            self.us2_m = data[:, 1]
+            self.us2_m_SD = data[:, 2]
+            self.up2_m = data[:, 3]
+            self.up2_m_SD = data[:, 4]
+            self.enst_m = data[:, 5]
+            self.enst_std = data[:, 6]
+            if data.shape[1] > 7:
+                self.temp2_m = data[:, 7]
+                self.temp2_m_SD = data[:, 8]
+                self.xi2_m = data[:, 9]
+                self.xi2_m_SD = data[:, 10]
+            else:
+                self.temp2_m = np.zeros_like(self.us2_m)
+                self.temp2_m_SD = np.zeros_like(self.us2_m)
+                self.xi2_m = np.zeros_like(self.us2_m)
+                self.xi2_m_SD = np.zeros_like(self.us2_m)
+            self.ekin_m = self.us2_m + self.up2_m
+            self.ekin_m_SD = np.sqrt(self.us2_m_SD**2+self.up2_m_SD**2)
+        else:
+            self.us2_m = data[:, 1]
+            self.up2_m = data[:, 2]
+            self.enst_m = data[:, 3]
+            if data.shape[1] > 4:
+                self.temp2_m = data[:, 4]
+                self.xi2_m = data[:, 5]
+            else:
+                self.temp2_m = np.zeros_like(self.us2_m)
+                self.xi2_m = np.zeros_like(self.us2_m)
+            self.ekin_m = self.us2_m + self.up2_m
+
+    def __add__(self, new):
+        """
+        This is a python built-in method to stack two look-up tables.
+        """
+
+        out = copy.deepcopy(new)
+        if self.start_time is not None:
+            fac_old = self.stop_time-self.start_time
+            out.start_time = self.start_time
+        else:
+            fac_old = 0.
+        if new.stop_time is not None:
+            fac_new = new.stop_time-new.start_time
+            out.stop_time = new.stop_time
+        else:
+            fac_new = 0.
+        if fac_old != 0 or fac_new != 0:
+            fac_tot = fac_new+fac_old
+        else:
+            fac_tot = 1.
+
+        idx_old_max = len(self.index)
+        idx_new_max = len(new.index)
+
+        if idx_old_max == idx_new_max:
+            for attr in new.__dict__.keys():
+                if attr not in ['index', 'name', 'start_time', 'stop_time']:
+                    # Only stack if both new and old have the attribute available
+                    if attr in self.__dict__:
+                        # Standard deviation
+                        if attr.endswith('SD'):
+                            if abs(self.__dict__[attr]).max() > 0.:
+                                out.__dict__[attr] = np.sqrt(( \
+                                                  fac_new*new.__dict__[attr]**2 + \
+                                                  fac_old*self.__dict__[attr]**2) / \
+                                                  fac_tot)
+                            else:
+                                out.__dict__[attr] = new.__dict__[attr]
+                        # Regular field
+                        else:
+                            if abs(self.__dict__[attr]).max() > 0.:
+                                out.__dict__[attr] = (fac_new*new.__dict__[attr] + \
+                                                      fac_old*self.__dict__[attr]) / \
+                                                      fac_tot
+                            else:
+                                out.__dict__[attr] = new.__dict__[attr]
+        else: # Different truncations
+            idx_min = min(idx_old_max, idx_new_max)
+            for attr in new.__dict__.keys():
+                if attr not in ['index', 'name', 'start_time', 'stop_time']:
+                    # Only stack if both new and old have the attribute available
+                    if attr in self.__dict__:
+                        # Standard deviation
+                        if attr.endswith('SD'):
+                            if abs(self.__dict__[attr]).max() > 0.:
+                                out.__dict__[attr][:idx_min] = \
+                                   np.sqrt((fac_new*new.__dict__[attr][:idx_min]**2+\
+                                            fac_old*self.__dict__[attr][:idx_min]**2)\
+                                            /fac_tot)
+                            else:
+                                out.__dict__[attr] = new.__dict__[attr]
+                        # Regular field
+                        else:
+                            if abs(self.__dict__[attr]).max() > 0.:
+                                out.__dict__[attr][:idx_min] = \
+                                   (fac_new*new.__dict__[attr][:idx_min] + \
+                                    fac_old*self.__dict__[attr][:idx_min]) / fac_tot
+                            else:
+                                out.__dict__[attr] = new.__dict__[attr]
+
+        return out
 
 
 class Pizza2DSpectrum(PizzaSetup):
