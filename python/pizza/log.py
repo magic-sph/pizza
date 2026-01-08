@@ -30,8 +30,8 @@ class PizzaSetup:
         valueTrue = re.compile(r"(\.(true|t)\.)", re.I)
         valueNone = re.compile(r"(NONE)", re.I)
         filename = os.path.join(datadir, nml)
-        file = open(filename, 'r')
-        tab = file.readlines()
+        with open(filename, 'r') as file:
+            tab = file.readlines()
         tab2 = []
         for i in tab:
             if re.search('=', i) is not None:
