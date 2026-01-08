@@ -412,7 +412,7 @@ class PizzaAvgStack:
             startdir = os.getcwd()
             for k, dir in enumerate(dirs):
                 if not dir.startswith('#'):
-                    print(f"In dir {dir.rstrip('\n')}")
+                    print("In dir {}".format(dir.rstrip('\n')))
                     os.chdir(os.path.join(datadir, dir.rstrip('\n')))
                     if recompute:
                         PizzaAvg(model=model, std=std)
