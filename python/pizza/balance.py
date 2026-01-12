@@ -495,7 +495,7 @@ class PizzaVortBalance(PizzaSetup):
         with open(filename, 'rb') as file:
             self.version = np.fromfile(file, dtype=np.int32, count=1)[0]
             self.ra, self.pr, self.raxi, self.sc, self.ek, self.radratio = \
-                np.fromfile(file, dtype=np.float4, count=6)
+                np.fromfile(file, dtype=np.float64, count=6)
             self.n_r_max, self.n_m_max, self.m_max, self.minc = \
                 np.fromfile(file, dtype=np.int32, count=4)
 
