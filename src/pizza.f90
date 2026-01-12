@@ -96,7 +96,7 @@ program pizza
          call date_and_time(values=values)
          write(date, '(i4,''/'',i0.2,''/'',i0.2,'' '', i0.2,'':'',i0.2,'':'',i0.2)') &
          &     values(1), values(2), values(3), values(5), values(6), values(7)
-         write(n_out, *) '!  Start time:  ', date
+         write(n_out, '(A,A)') '!  Start date:  ', date
       end do
    end if
 
