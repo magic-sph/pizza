@@ -228,11 +228,11 @@ contains
       call update_psi_FD(us_Rloc, up_Rloc, om_Rloc, dpsidt, tscheme, vp_bal, &
            &             vort_bal)
 
-      if ( vp_bal%l_calc .and. tscheme%istage==tscheme%nstages ) then
+      if ( vp_bal%l_calc .and. tscheme%istage==tscheme%nstages .and. (.not. tscheme%l_assembly) ) then
          call vp_bal%finalize_dvpdt(up_Rloc, tscheme)
       end if
 
-      if ( vort_bal%l_calc .and. tscheme%istage==tscheme%nstages ) then
+      if ( vort_bal%l_calc .and. tscheme%istage==tscheme%nstages .and. (.not. tscheme%l_assembly) ) then
          call vort_bal%finalize_domdt(om_Rloc, tscheme)
       end if
 
@@ -267,6 +267,9 @@ contains
       if ( l_chem ) call assemble_xi_Rdist(xi_Rloc, dxi_Rloc, dxidt, tscheme)
       call assemble_psi_Rloc(block_sze, nblocks, us_Rloc, up_Rloc, om_Rloc, dpsidt, &
            &                 tscheme, vp_bal, vort_bal)
+
+      if ( vp_bal%l_calc ) call vp_bal%finalize_dvpdt(up_Rloc, tscheme)
+      if ( vort_bal%l_calc ) call vort_bal%finalize_domdt(om_Rloc, tscheme)
 
    end subroutine assemble_stage_Rdist
 !------------------------------------------------------------------------------------

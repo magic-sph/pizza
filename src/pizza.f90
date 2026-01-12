@@ -1,10 +1,11 @@
 program pizza
 
-   use iso_fortran_env, only: output_unit
+   use iso_fortran_env
    use parallel_mod
    use precision_mod
    use mem_alloc
    use step_time, only: time_loop
+   use char_manip, only: write_long_string
    use courant_mod, only: initialize_courant, finalize_courant
    use radial_der, only: initialize_der_arrays, finalize_der_arrays
    use init_fields, only: get_start_fields
@@ -52,6 +53,12 @@ program pizza
    integer :: values(8)
    integer :: n, n_out
    character(len=72) :: date
+#ifdef COMP_OPT
+   character(len=:), allocatable :: long_str
+#endif
+   integer :: mpi_ver, mpi_subver
+   character(len=14) :: str
+   character(len=MPI_MAX_LIBRARY_VERSION_STRING) :: lib_mpi
 
    !-- Initialize MPI
    call initialize_mpi()
@@ -94,9 +101,32 @@ program pizza
          write(n_out,*)
          write(n_out,*) '!--- Program pizza  ---!'
          call date_and_time(values=values)
+#if defined(GIT_VERSION)
+         write(n_out, '(A,A)') ' !  Git version:  ', GIT_VERSION
+#else
+         write(n_out, '(A)') ' !  Git version: unknown'
+#endif
+#if defined(BUILD_DATE)
+         write(n_out, '(A,A)') ' !  Build date:  ', BUILD_DATE
+#else
+         write(n_out, '(A)') ' !  Build date: unknown'
+#endif
+#ifdef COMP_OPT
+         long_str = trim(compiler_version())
+         call write_long_string(' !  Compiler version: ', long_str, n_out)
+         long_str = trim(compiler_options())
+         call write_long_string(' !  Compiler options: ', long_str, n_out)
+#endif
+         call MPI_Get_version(mpi_ver, mpi_subver, ierr)
+         write(str,'(I0,A1,I0)') mpi_ver,'.', mpi_subver
+         call write_long_string(' !  MPI version:        ', trim(str), n_out)
+
+         call MPI_Get_Library_version(lib_mpi, mpi_ver, ierr)
+         call write_long_string(' !  MPI implementation: ', trim(lib_mpi), n_out)
+
          write(date, '(i4,''/'',i0.2,''/'',i0.2,'' '', i0.2,'':'',i0.2,'':'',i0.2)') &
          &     values(1), values(2), values(3), values(5), values(6), values(7)
-         write(n_out, '(A,A)') '!  Start date:  ', date
+         write(n_out, '(A,A)') ' !  Start date:  ', date
       end do
    end if
 

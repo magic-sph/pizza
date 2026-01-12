@@ -323,16 +323,15 @@ contains
                   &        ( d3beta(nR)+two*d2beta(nR)*or1(nR)-dbeta(nR)*or2(nR) +   &
                   &          beta(nR)*or3(nR)-dm2*or2(nR)*(four*or2(nR)+beta(nR)*    &
                   &          or1(nR)+dbeta(nR)-dm2*or2(nR) ) ) *       psig(n_m,nR) )
+                  if ( vort_bal%l_calc ) then
+                     vort_bal%visc(n_m,nR)=dpsidt%impl(n_m,nR,istage)
+                  end if
 
                   if ( l_coriolis_imp .and. (.not. l_non_rot) ) then
                      dpsidt%impl(n_m,nR,istage)=dpsidt%impl(n_m,nR,istage)+CorFac* &
                      &                          beta(nR)*ci*real(m,cp)*or1(nR)*    &
                      &                          psig(n_m,nR)
-                  end if
-
-                  if ( vort_bal%l_calc ) then
-                     vort_bal%visc(n_m,nR)=dpsidt%impl(n_m,nR,istage)
-                     if ( .not. l_non_rot ) then
+                     if ( vort_bal%l_calc ) then
                         vort_bal%cor(n_m,nR)=CorFac*beta(nR)*ci*real(m,cp)*or1(nR)* &
                         &                    psig(n_m,nR)
                      end if
