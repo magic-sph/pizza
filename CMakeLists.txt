@@ -2,6 +2,12 @@ cmake_minimum_required (VERSION 3.5)
 project (pizza)
 enable_language (Fortran)
 
+# generate a Git version string
+execute_process(COMMAND git describe --abbrev=7 --always --tags OUTPUT_VARIABLE GIT_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+# build date
+execute_process(COMMAND date "+%Y/%m/%d %H:%M:%S" OUTPUT_VARIABLE BUILD_DATE OUTPUT_STRIP_TRAILING_WHITESPACE)
+
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 set(CMAKE_Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/modules)
 # Location of the binary output
@@ -18,7 +24,6 @@ set(USE_LAPACKLIB "MKL"  CACHE STRING "Use the Math Kernel Library for lapack ca
 set(USE_MPI       "yes"  CACHE STRING "Use MPI parallelization")
 set(USE_OMP       "no"   CACHE STRING "Use OpenMP")
 set(USE_PRECOND   "yes"  CACHE STRING "Use matrix preconditioning")
-find_package(SSE)
 
 # Specific compiler options
 if(CMAKE_Fortran_COMPILER_ID MATCHES Intel)
@@ -41,11 +46,7 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES GNU)
    set(FFLAG_WARN_ALL  "-Wall -Wno-maybe-uninitialized")
    set(FFLAG_CHECK_ALL "-fcheck=all")
    set(FFLAG_FPE       "-ffpe-trap=invalid,zero,overflow")
-   if(AVX2_FOUND)
-      set(FFLAG_OPT      "-march=core-avx2")
-   else(AVX2_FOUND)
-      set(FFLAG_OPT      "-march=native")
-   endif(AVX2_FOUND)
+   set(FFLAG_OPT       "-march=native")
 endif()
 if(CMAKE_Fortran_COMPILER_ID MATCHES Cray)
    set(FFLAG_ARCH      " ")
@@ -80,6 +81,10 @@ if (USE_PRECOND MATCHES yes)
    add_definitions(-DWITH_PRECOND_S)
 endif()
 
+# Git version
+add_definitions(-DGIT_VERSION="${GIT_VERSION}")
+# Build date
+add_definitions(-DBUILD_DATE="${BUILD_DATE}")
 # Precision of the calculations
 add_definitions(-Dsngl=1 -Ddble=2)
 add_definitions(-DDEFAULT_PRECISION=${PRECISION})
@@ -112,6 +117,26 @@ set(_MPI_XL_Fortran_COMPILER_NAMES         "mpxlf|mpixlf")
 string(REGEX MATCH "${_MPI_C_COMPILER_NAMES}|${_MPI_GNU_C_COMPILER_NAMES}|${_MPI_Intel_C_COMPILER_NAMES}|${_MPI_PGI_C_COMPILER_NAMES}|${_MPI_XL_C_COMPILER_NAMES}|${_MPI_Cray_C_COMPILER_NAMES}" MPICC_COMPILER "${CMAKE_C_COMPILER}")
 string(REGEX MATCH "${_MPI_Fortran_COMPILER_NAMES}|${_MPI_GNU_Fortran_COMPILER_NAMES}|${_MPI_Intel_Fortran_COMPILER_NAMES}|${_MPI_PGI_Fortran_COMPILER_NAMES}|${_MPI_XL_Fortran_COMPILER_NAMES}|${_MPI_Cray_Fortran_COMPILER_NAMES}" MPIFORTRAN_COMPILER "${CMAKE_Fortran_COMPILER}")
 
+# Check whether compiler_options() is available
+file(WRITE "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/testCompOpt.f90"
+"
+program TestCompOpt
+use iso_fortran_env
+print*, compiler_options()
+print*, compiler_version()
+end program TestCompOpt
+")
+try_compile(COMP_OPT_AV ${CMAKE_BINARY_DIR}
+   ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/testCompOpt.f90
+   COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
+   OUTPUT_VARIABLE OUTPUT)
+if(COMP_OPT_AV)
+   add_definitions(-DCOMP_OPT)
+   message(STATUS "Fortran 2008 compiler_options(), compiler_version() available")
+else()
+   message(STATUS "Fortran 2008 compiler_options(), compiler_version() not available")
+endif()
+
 # Look for MPI and add the required flags if found
 if(USE_MPI MATCHES yes)
    if("${MPICC_COMPILER}" STREQUAL "" AND "${MPIFORTRAN_COMPILER}" STREQUAL "")
@@ -138,6 +163,20 @@ if(USE_MPI MATCHES yes)
    endif()
 else()
       message(STATUS "No MPI: serial job")
+endif()
+
+# Check whether openMP can be used
+if (USE_MPI MATCHES yes)
+   if(MPI_WRAPPER_FOUND OR MPI_Fortran_FOUND)
+      if(USE_OMP MATCHES yes)
+         find_package(OpenMP_Fortran)
+         message(STATUS "Use OpenMP")
+         add_definitions(-DWITHOMP)
+         set(CMAKE_Fortran_FLAGS ${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS})
+      else()
+         message(STATUS "No OpenMP")
+      endif()
+   endif()
 endif()
 
 # Check whether openMP can be used
