@@ -234,13 +234,18 @@ class PizzaAvg:
 
         if len(params['spectra']) > 0:
             if file_exists:
-                for k, tag in enumerate(tags):
-                    if k == 0:
-                        sp = PizzaSpectrum(datadir=datadir, iplot=False,
-                                           tag=tag, quiet=True)
+                k = 0
+                for tag in tags:
+                    if os.path.exists(os.path.join(datadir, f'spec_avg.{tag}')):
+                        if k == 0:
+                            sp = PizzaSpectrum(datadir=datadir, iplot=False,
+                                               tag=tag, quiet=True)
+                        else:
+                            sp += PizzaSpectrum(datadir=datadir, iplot=False,
+                                                tag=tag, quiet=True)
+                        k += 1
                     else:
-                        sp += PizzaSpectrum(datadir=datadir, iplot=False,
-                                            tag=tag, quiet=True)
+                        pass
                 if hasattr(sp, 'index'):  # Manage to read file
                     self.lut['spectra']['index'] = sp.index
                     for field in params['spectra']:
@@ -260,13 +265,18 @@ class PizzaAvg:
         self.lut['radial_profiles'] = {}
         if len(params['spectra']) > 0:
             if file_exists:
-                for k, tag in enumerate(tags):
-                    if k == 0:
-                        rr = PizzaRadial(datadir=datadir, iplot=False,
-                                         tag=tag, quiet=True)
+                k = 0
+                for tag in tags:
+                    if os.path.exists(os.path.join(datadir, f'radial_profiles.{tag}')):
+                        if k == 0:
+                            rr = PizzaRadial(datadir=datadir, iplot=False,
+                                             tag=tag, quiet=True)
+                        else:
+                            rr += PizzaRadial(datadir=datadir, iplot=False,
+                                              tag=tag, quiet=True)
+                        k += 1
                     else:
-                        rr += PizzaRadial(datadir=datadir, iplot=False,
-                                          tag=tag, quiet=True)
+                        pass
                 if hasattr(rr, 'radius'):  # Manage to read file
                     self.lut['radial_profiles']['radius'] = rr.radius
                     for field in params['radial_profiles']:
