@@ -114,9 +114,12 @@ class PizzaTs(PizzaSetup):
                     else:
                         tslut += TsLookUpTable(data, self.field)
 
-        # Copy look-up table arguments into MagicTs object
-        for attr in tslut.__dict__:
-            setattr(self, attr, tslut.__dict__[attr])
+        try:
+            # Copy look-up table arguments into MagicTs object
+            for attr in tslut.__dict__:
+                setattr(self, attr, tslut.__dict__[attr])
+        except NameError:  # In case ts Look-up table cannot be defined
+            print(f'No file corresponding to field "{self.field}" found')
 
         if iplot:
             self.plot()
