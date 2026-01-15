@@ -136,7 +136,8 @@ class PizzaRadial(PizzaSetup):
             for attr in self._radlut.__dict__:
                 setattr(self, attr, self._radlut.__dict__[attr])
 
-        self.vortz_r = 1./self.radius * get_dr(self.radius*self.uphi_r)
+        self.vortz_r = 1./self.radius * get_dr(self.radius*self.uphi_r,
+                                               self.radius)
         h = np.sqrt(self.radius[0]**2-self.radius**2)
         self.qplan = np.zeros_like(h)
         self.qpot = np.zeros_like(h)

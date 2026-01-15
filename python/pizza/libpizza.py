@@ -142,66 +142,99 @@ def avgField(time, field, tstart=None, tstop=None, std=False):
         return avgField
 
 
-def get_dr(f):
+def get_dr(f, rad):
     """
     This routine calculates the first radial derivative of an input array using
-    Chebyshev recurrence relation.
+    Chebyshev recurrence relation or finit differences.
 
     :param f: the input array
     :type f: numpy.ndarray
+    :param rad: the radius
+    :type rad: numpy.ndarray
     :returns: the radial derivative of f
     :rtype: numpy.ndarray
     """
-    Nr = f.shape[-1]
-    fhat = costf(f)
+    r1 = rad[0]
+    r2 = rad[-1]
+    nr = f.shape[-1]
+    tol = 1e-6 # This is to determine whether Cheb der will be used
+    grid = chebgrid(nr-1, r1, r2)
+    diff = abs(grid-rad).max()
+    if diff > tol:
+        spectral = False
+    else:
+        spectral = True
 
-    # eps = np.finfo(1.0e0).eps
-    # valmin = 500. * eps*abs(fhat).max()
+    if spectral:
+        fhat = costf(f)
+        # eps = np.finfo(1.0e0).eps
+        # valmin = 500. * eps*abs(fhat).max()
+        df = np.zeros_like(fhat)
+        df[..., -1] = 0.
+        df[..., -2] = (nr-1)*fhat[..., -1]
 
-    df = np.zeros_like(fhat)
-    df[..., -1] = 0.
-    df[..., -2] = (Nr-1)*fhat[..., -1]
-
-    for i in range(Nr-3, -1, -1):
-        df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
-    df[..., :] = 2.*df[..., :]
-    df = costf(df)
+        for i in range(nr-3, -1, -1):
+            df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
+        df[..., :] = 2.*df[..., :]
+        df = costf(df)
+    else:
+        denom = np.roll(rad, -1) - np.roll(rad, 1)
+        denom[0] = rad[1]-rad[0]
+        denom[-1] = rad[-1]-rad[-2]
+        df = (np.roll(f, -1,  axis=-1)-np.roll(f, 1, axis=-1))/denom
+        df[..., 0] = (f[..., 1]-f[..., 0])/(rad[1]-rad[0])
+        df[..., -1] = (f[..., -1]-f[..., -2])/(rad[-1]-rad[-2])
 
     return df
 
 
-def get_ddr(f):
+def get_ddr(f, rad):
     """
     This routine calculates the first and the second radial derivatives of an
     input array using Chebyshev recurrence relation.
 
     :param f: the input array
     :type f: numpy.ndarray
+    :param rad: the radius
+    :type rad: numpy.ndarray
     :returns: the first and the second radial derivatives of f
     :rtype: numpy.ndarray
     """
-    Nr = f.shape[-1]
-    fhat = costf(f)
+    r1 = rad[0]
+    r2 = rad[-1]
+    nr = f.shape[-1]
+    tol = 1e-6 # This is to determine whether Cheb der will be used
+    grid = chebgrid(nr-1, r1, r2)
+    diff = abs(grid-rad).max()
+    if diff > tol:
+        spectral = False
+    else:
+        spectral = True
 
-    df = np.zeros_like(fhat)
-    ddf = np.zeros_like(fhat)
-    df[..., -1] = 0.
-    df[..., -2] = (Nr-1)*fhat[..., -1]
-    ddf[..., -1] = 0.
-    ddf[..., -2] = 0.
+    if spectral:
+        fhat = costf(f)
+        df = np.zeros_like(fhat)
+        ddf = np.zeros_like(fhat)
+        df[..., -1] = 0.
+        df[..., -2] = (nr-1)*fhat[..., -1]
+        ddf[..., -1] = 0.
+        ddf[..., -2] = 0.
 
-    for i in range(Nr-3, -1, -1):
-        df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
-        ddf[..., i] = ddf[..., i+2]+2.*(i+1)*df[..., i+1]
-    df[..., :] = 2.*df[..., :]
-    ddf[..., :] = 4.*ddf[..., :]
-    df = costf(df)
-    ddf = costf(ddf)
+        for i in range(nr-3, -1, -1):
+            df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
+            ddf[..., i] = ddf[..., i+2]+2.*(i+1)*df[..., i+1]
+        df[..., :] = 2.*df[..., :]
+        ddf[..., :] = 4.*ddf[..., :]
+        df = costf(df)
+        ddf = costf(ddf)
+    else:
+        df = get_dr(f, rad)
+        ddf = get_dr(df, rad)
 
     return df, ddf
 
 
-def get_dddr(f):
+def get_dddr(f, rad):
     """
     This routine calculates the first, the second and the third radial 
     derivatives of an input array using Chebyshev recurrence relation.
@@ -211,29 +244,44 @@ def get_dddr(f):
     :returns: the first, the second and the third radial derivatives of f
     :rtype: numpy.ndarray
     """
-    Nr = f.shape[-1]
-    fhat = costf(f)
+    r1 = rad[0]
+    r2 = rad[-1]
+    nr = f.shape[-1]
+    tol = 1e-6 # This is to determine whether Cheb der will be used
+    grid = chebgrid(nr-1, r1, r2)
+    diff = abs(grid-rad).max()
+    if diff > tol:
+        spectral = False
+    else:
+        spectral = True
 
-    df = np.zeros_like(fhat)
-    ddf = np.zeros_like(fhat)
-    dddf = np.zeros_like(fhat)
-    df[..., -1] = 0.
-    df[..., -2] = (Nr-1)*fhat[..., -1]
-    ddf[..., -1] = 0.
-    ddf[..., -2] = 0.
-    dddf[..., -1] = 0.
-    dddf[..., -2] = 0.
+    if spectral:
+        fhat = costf(f)
 
-    for i in range(Nr-3, -1, -1):
-        df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
-        ddf[..., i] = ddf[..., i+2]+2.*(i+1)*df[..., i+1]
-        dddf[..., i] = dddf[..., i+2]+2.*(i+1)*ddf[..., i+1]
-    df[..., :] = 2.*df[..., :]
-    ddf[..., :] = 4.*ddf[..., :]
-    dddf[..., :] = 8.*dddf[..., :]
-    df = costf(df)
-    ddf = costf(ddf)
-    dddf = costf(dddf)
+        df = np.zeros_like(fhat)
+        ddf = np.zeros_like(fhat)
+        dddf = np.zeros_like(fhat)
+        df[..., -1] = 0.
+        df[..., -2] = (nr-1)*fhat[..., -1]
+        ddf[..., -1] = 0.
+        ddf[..., -2] = 0.
+        dddf[..., -1] = 0.
+        dddf[..., -2] = 0.
+
+        for i in range(nr-3, -1, -1):
+            df[..., i] = df[..., i+2]+2.*(i+1)*fhat[..., i+1]
+            ddf[..., i] = ddf[..., i+2]+2.*(i+1)*df[..., i+1]
+            dddf[..., i] = dddf[..., i+2]+2.*(i+1)*ddf[..., i+1]
+        df[..., :] = 2.*df[..., :]
+        ddf[..., :] = 4.*ddf[..., :]
+        dddf[..., :] = 8.*dddf[..., :]
+        df = costf(df)
+        ddf = costf(ddf)
+        dddf = costf(dddf)
+    else:
+        df = get_dr(f, rad)
+        ddf = get_dr(df, rad)
+        dddf = get_dr(ddf, rad)
 
     return df, ddf, dddf
 

@@ -354,13 +354,13 @@ class PizzaBalance(PizzaSetup):
         ax.set_ylabel('Radius')
 
         """
-        omz = get_dr(self.vp*self.radius)/self.radius
+        omz = get_dr(self.vp*self.radius, self.radius)/self.radius
         #omz_filt = np.zeros_like(omz)
         #b, a = butter(3, 0.1)
         #for i in range(omz.shape[0]):
             #omz_filt[i, :] = filtfilt(b, a, omz[i, :])
         #omz = omz_filt
-        domz = get_dr(omz)
+        domz = get_dr(omz, self.radius)
         beta = np.zeros_like(self.radius)
         beta[1:] = -self.radius[1:]/(self.radius[0]**2-self.radius[1:]**2)
         crit = 2./self.ek*beta-domz
