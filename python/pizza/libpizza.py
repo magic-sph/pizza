@@ -6,6 +6,10 @@ import glob
 import os
 import re
 import sys
+try:
+    from scipy.integrate import simps
+except:
+    from scipy.integrate import simpson as simps
 
 
 def cc2real(f):
@@ -145,7 +149,7 @@ def avgField(time, field, tstart=None, tstop=None, std=False):
 def get_dr(f, rad):
     """
     This routine calculates the first radial derivative of an input array using
-    Chebyshev recurrence relation or finit differences.
+    either Chebyshev recurrence relation or finite differences.
 
     :param f: the input array
     :type f: numpy.ndarray
@@ -191,7 +195,8 @@ def get_dr(f, rad):
 def get_ddr(f, rad):
     """
     This routine calculates the first and the second radial derivatives of an
-    input array using Chebyshev recurrence relation.
+    input array using either Chebyshev recurrence relation or finite
+    differences.
 
     :param f: the input array
     :type f: numpy.ndarray
@@ -237,10 +242,13 @@ def get_ddr(f, rad):
 def get_dddr(f, rad):
     """
     This routine calculates the first, the second and the third radial 
-    derivatives of an input array using Chebyshev recurrence relation.
+    derivatives of an input array using either Chebyshev recurrence
+    relation or finite differences.
 
     :param f: the input array
     :type f: numpy.ndarray
+    :param rad: the radius
+    :type rad: numpy.ndarray
     :returns: the first, the second and the third radial derivatives of f
     :rtype: numpy.ndarray
     """
@@ -323,11 +331,44 @@ def fourier_cheb_spectra(f, r, weight, n_cheb_max):
 
     return Ekcheb
 
+def intrad(f, rad):
+    """
+    This routine computes an integration along radius. This uses a spectral
+    approach in case a Gauss-Lobatto grid is employed, simpson method
+    otherwise.
+
+    :param f: the input array
+    :type f: numpy.ndarray
+    :param rad: the radius
+    :type rad: numpy.ndarray
+    :returns: the integral of f between rint and rout
+    :rtype: numpy.ndarray
+    """
+    r1 = rad[0]
+    r2 = rad[-1]
+    nr = f.shape[-1]
+    tol = 1e-6 # This is to determine whether Cheb der will be used
+    grid = chebgrid(nr-1, r1, r2)
+    diff = abs(grid-rad).max()
+    if diff > tol:
+        spectral = False
+    else:
+        spectral = True
+
+    if spectral:
+        integ = intcheb(f)
+    else:
+        integ = simps(f, x=rad, axis=-1)
+        if r1 > r2: # Decreasing radius
+            integ *= -1
+
+    return integ
 
 def intcheb(f):
     """
     This routine computes an integration of a function along radius using
-    Chebyshev recurrence relation.
+    Chebyshev recurrence relation. This is only working for Gauss-Lobatto
+    grid.
 
     :param f: the input array
     :type f: numpy.ndarray
