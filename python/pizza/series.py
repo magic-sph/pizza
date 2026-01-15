@@ -255,6 +255,15 @@ class PizzaTs(PizzaSetup):
             ax.set_xlabel('Time')
             ax.set_ylabel('Correlation')
             fig.tight_layout()
+        elif self.field == 'vphi_power':
+            fig, ax = plt.subplots()
+            ax.plot(self.time, self.rey, label='Reynolds stress')
+            ax.plot(self.time, -self.pump, label='Ekman pumping')
+            ax.plot(self.time, -self.visc, label='viscosity')
+            ax.legend(loc='best', frameon=False)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Power (zonal flows)')
+            fig.tight_layout()
         elif self.field == 'timestep':
             fig, ax = plt.subplots()
             ax.step(self.time, self.dt)
@@ -377,6 +386,13 @@ class TsLookUpTable:
             self.time = data[:, 0]
             self.stress = data[:, 1]
             self.corr = data[:, 2]
+        elif self.field == 'vphi_power':
+            self.time = data[:, 0]
+            self.up2_axi = data[:, 1]
+            self.dup2dt = data[:, 2]
+            self.rey = data[:, 3]
+            self.pump = data[:, 4]
+            self.visc = data[:, 5]
 
     def __add__(self, new):
         """
