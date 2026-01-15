@@ -5,12 +5,14 @@ module vp_balance
    !
 
    use precision_mod
+   use constants, only: two, pi
    use time_schemes, only: type_tscheme
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_r_max, m2idx, n_m_max
    use blocking, only: nMstart, nMstop, l_rank_has_m0, nRstart, nRstop
    use namelists, only: ra, pr, ek, radratio, sc, raxi, tag, l_finite_diff
-   use radial_functions, only: r
+   use radial_functions, only: r, rscheme, height
+   use integration, only: rInt_R
    use communications, only: gather_from_Rloc
 
    implicit none
@@ -26,7 +28,7 @@ module vp_balance
       logical :: l_calc
       integer :: n_calls
       integer :: nRmin, nRmax, mMin, mMax
-      integer :: n_vphi_bal_file
+      integer :: n_vphi_bal_file, n_vphi_power_file
    contains
       procedure :: initialize
       procedure :: finalize
@@ -70,6 +72,9 @@ contains
          open(newunit=this%n_vphi_bal_file, file='vphi_bal.'//tag, &
          &    form='unformatted', status='new', access='stream')
 
+         open(newunit=this%n_vphi_power_file, file='vphi_power.'//tag, &
+         &    status='new')
+
          this%n_calls = 0
          this%l_calc = .false.
       end if
@@ -87,6 +92,7 @@ contains
          deallocate( this%pump, this%visc, this%dvpdt, this%rey_stress )
       end if
       if ( l_rank_has_m0 ) then
+         close(this%n_vphi_power_file)
          close(this%n_vphi_bal_file)
       end if
 
@@ -146,7 +152,8 @@ contains
 
       !-- Local variable
       real(cp) :: dvpdt_glob(n_r_max), rey_glob(n_r_max), pump_glob(n_r_max)
-      real(cp) :: visc_glob(n_r_max)
+      real(cp) :: visc_glob(n_r_max), vzon_glob(n_r_max), tmp(n_r_max)
+      real(cp) :: Ez, dEzdt, rey, pump, visc
       integer :: idx_m0
 
       this%n_calls = this%n_calls+1
@@ -167,16 +174,38 @@ contains
 
       if ( l_rank_has_m0 ) then
          idx_m0 = m2idx(0)
+         vzon_glob(:) = real(up_Mloc(idx_m0,:))
          if ( this%n_calls == 1 ) then
             write(this%n_vphi_bal_file) ra, ek, pr, radratio, raxi, sc
             write(this%n_vphi_bal_file) r
          end if
          write(this%n_vphi_bal_file) time
-         write(this%n_vphi_bal_file) real(up_Mloc(idx_m0,:))
+         write(this%n_vphi_bal_file) vzon_glob
          write(this%n_vphi_bal_file) dvpdt_glob
          write(this%n_vphi_bal_file) rey_glob
          write(this%n_vphi_bal_file) pump_glob
          write(this%n_vphi_bal_file) visc_glob
+
+         !-- Also write time series of the power file
+         tmp(:)=vzon_glob(:)*vzon_glob(:)*height(:)*r(:)
+         Ez=rInt_R(tmp, r, rscheme)
+         Ez=pi*Ez
+         tmp(:)=dvpdt_glob(:)*vzon_glob(:)*height(:)*r(:)
+         dEzdt=rInt_R(tmp, r, rscheme)
+         dEzdt=two*pi*dEzdt
+         tmp(:)=rey_glob(:)*vzon_glob(:)*height(:)*r(:)
+         rey=rInt_R(tmp, r, rscheme)
+         rey=two*pi*rey
+         tmp(:)=pump_glob(:)*vzon_glob(:)*height(:)*r(:)
+         pump=rInt_R(tmp, r, rscheme)
+         pump=two*pi*pump
+         tmp(:)=visc_glob(:)*vzon_glob(:)*height(:)*r(:)
+         visc=rInt_R(tmp, r, rscheme)
+         visc=two*pi*visc
+
+         write(this%n_vphi_power_file, '(1P,es20.12,5es16.8)') time, Ez, dEzdt, &
+         &                                                     rey, pump, visc
+
       end if
 
    end subroutine write_outputs
