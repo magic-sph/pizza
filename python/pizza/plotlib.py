@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 
+mplMaj, mplMin, _ = np.int32(matplotlib.__version__.split('.'))
 
 def cut(dat, vmax=None, vmin=None):
     """
@@ -207,10 +209,16 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
 
     #To avoid white lines on pdfs
     if not pcolor:
-        for c in ax.collections:
-            c.set_edgecolor('face')
-            if rasterized:
-                c.set_rasterized(True)
+        if mplMaj >= 3 and mplMin >= 8:
+            for c in im.collections:
+                c.set_edgecolor('face')
+                if rasterized:
+                    c.set_rasterized(True)
+        else:
+            for c in ax.collections:
+                c.set_edgecolor('face')
+                if rasterized:
+                    c.set_rasterized(True)
 
     return fig, xx, yy, im
 
