@@ -724,8 +724,7 @@ contains
       !-------
       !-- us uphi correlation
       !-------
-      if ( l_corr ) call get_corr(time, us_Mloc, up_Mloc, us2_r, up2_r)
-
+      if ( l_corr ) call get_corr(time, us_Mloc, up_Mloc)
 
       if ( l_rank_has_m0 .and. l_heat ) then
          !------
@@ -830,7 +829,7 @@ contains
 
    end subroutine get_time_series
 !------------------------------------------------------------------------------
-   subroutine get_corr(time, us_Mloc, up_Mloc, us2_r, up2_r)
+   subroutine get_corr(time, us_Mloc, up_Mloc)
       !
       ! This routine calculates the following u_s u_\phi correlations:
       !    - stress = [ <u_s u_\phi> ]
@@ -844,26 +843,33 @@ contains
       real(cp),    intent(in) :: time
       complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
       complex(cp), intent(in) :: up_Mloc(nMstart:nMstop,n_r_max)
-      real(cp),    intent(in) :: us2_r(n_r_max)
-      real(cp),    intent(in) :: up2_r(n_r_max)
 
       !-- Local variables:
       integer :: n_m, m, n_r
-      real(cp) :: tmp(n_r_max)
-      real(cp) :: corr, stress, den
-
+      real(cp) :: tmp(n_r_max), us2_r(n_r_max), up2_r(n_r_max)
+      real(cp) :: corr, stress, den, den1, den2
 
       do n_r=1,n_r_max
-         tmp(n_r)=0.0_cp
+         us2_r(n_r)=0.0_cp
+         up2_r(n_r)=0.0_cp
+         tmp(n_r)  =0.0_cp
          do n_m=nMstart,nMstop
             m = idx2m(n_m)
-            tmp(n_r)=tmp(n_r)+r(n_r)*height(n_r)*&
-            &        cc22real(us_Mloc(n_m,n_r),up_Mloc(n_m,n_r),m)
+            if ( m /= 0 ) then
+               tmp(n_r)=tmp(n_r)+r(n_r)*height(n_r)*     &
+               &        cc22real(us_Mloc(n_m,n_r),up_Mloc(n_m,n_r),m)
+               us2_r(n_r)=us2_r(n_r)+r(n_r)*height(n_r)* &
+               &          cc2real(us_Mloc(n_m,n_r),m)
+               up2_r(n_r)=up2_r(n_r)+r(n_r)*height(n_r)* &
+               &          cc2real(up_Mloc(n_m,n_r),m)
+            end if
          end do
       end do
 
       !-- MPI reduction
       call reduce_radial_on_rank(tmp, 0)
+      call reduce_radial_on_rank(us2_r, 0)
+      call reduce_radial_on_rank(up2_r, 0)
 
       if ( rank == 0 ) then
          !-- Radial integration
@@ -871,10 +877,11 @@ contains
          stress = two*pi*stress
 
          ! \int \sqrt{u_s^2*u_\phi^2} *h*s ds
-         tmp(:)=sqrt(us2_r(:)*up2_r(:)*oheight(:)*oheight(:)*or2(:))*&
-         &      r(:)*height(:)
-         den = rInt_R(tmp, r, rscheme)
-         den = two*pi*den
+         den1 = rInt_R(us2_r, r, rscheme)
+         den1 = two*pi*den1
+         den2 = rInt_R(up2_r, r, rscheme)
+         den2 = two*pi*den2
+         den = sqrt(den1)*sqrt(den2)
 
          if ( den > 0.0_cp ) then
             corr = stress/den
