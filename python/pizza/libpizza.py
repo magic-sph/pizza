@@ -331,7 +331,7 @@ def fourier_cheb_spectra(f, r, weight, n_cheb_max):
 
     return Ekcheb
 
-def intrad(f, rad):
+def radint(f, rad):
     """
     This routine computes an integration along radius. This uses a spectral
     approach in case a Gauss-Lobatto grid is employed, simpson method

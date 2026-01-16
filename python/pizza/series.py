@@ -365,7 +365,7 @@ class TsLookUpTable:
                 self.viscDiss = data[:, 3]
                 self.ekpump_zon = data[:, 4]
                 self.ekpump_tot = data[:, 5]
-            if data.shape[-1] == 5:
+            elif data.shape[-1] == 5:
                 self.chemPower = data[:, 2]
                 self.viscDiss = data[:, 3]
                 self.ekpump_zon = data[:, 4]
