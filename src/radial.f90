@@ -398,11 +398,13 @@ contains
                &                    r_cmb*f_top*log(r(:)/r_cmb))
                dtcond(:)=cond_fac*(f_top*r_cmb*or1(:)+half*epsc0*(       &
                &                   r_cmb**2*or1(:)-r(:)))
+               if ( rank == 0 ) then
+                  write(output_unit,*) &
+                  &   '! Warning: Sources introduced to balance surface heat flux'
+                  write(output_unit,'(''!      epsc0*pr='',ES16.6)') epsc0
+               end if
             endif
          end if
-         if (rank == 0) write(output_unit,*) &
-         &         '! Warning: Sources introduced to balance surface heat flux'
-         if (rank == 0) write(output_unit,'(''!      epsc0*pr='',ES16.6)') epsc0
       end if
 
 #ifdef WITH_DEBUG
