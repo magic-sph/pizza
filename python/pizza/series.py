@@ -257,7 +257,7 @@ class PizzaTs(PizzaSetup):
             fig.tight_layout()
         elif self.field == 'vphi_power':
             fig, ax = plt.subplots()
-            ax.plot(self.time, self.rey, label='Reynolds stress')
+            ax.plot(self.time, self.rey_stress, label='Reynolds stress')
             ax.plot(self.time, -self.pump, label='Ekman pumping')
             ax.plot(self.time, -self.visc, label='viscosity')
             ax.legend(loc='best', frameon=False)
@@ -384,13 +384,13 @@ class TsLookUpTable:
             self.ldiss = data[:, 5]
         elif self.field == 'corr':
             self.time = data[:, 0]
-            self.stress = data[:, 1]
+            self.rey_tens = data[:, 1]
             self.corr = data[:, 2]
         elif self.field == 'vphi_power':
             self.time = data[:, 0]
             self.up2_axi = data[:, 1]
             self.dup2dt = data[:, 2]
-            self.rey = data[:, 3]
+            self.rey_stress = data[:, 3]
             self.pump = data[:, 4]
             self.visc = data[:, 5]
 
