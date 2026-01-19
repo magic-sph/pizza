@@ -37,7 +37,7 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
                  cm='seismic', normed=None, vmax=None, vmin=None, cbar=True,
                  title=True, normRad=False, deminc=True, bounds=True,
                  lines=False, linewidths=0.5, pcolor=False, rasterized=False,
-                 fig=None, ax=None):
+                 fig=None, ax=None, shading='flat'):
     """
     Plot the equatorial cut of a given field
 
@@ -88,6 +88,8 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
     :type fig: matplotlib.figure.Figure
     :param ax: a pre-existing axis
     :type ax: matplotlib.axes._subplots.AxesSubplot
+    :param shading: shading if pcolormesh is employed (can be 'flat', 'gouraud')
+    :type shading: str
     """
 
     nphi, ntheta = data.shape
@@ -139,9 +141,11 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
         normed = False
         cs = np.linspace(vmin, vmax, levels)
         if pcolor:
+            if shading == 'flat':
+                data = data[:-1, :-1]
             im = ax.pcolormesh(xx, yy, data, cmap=cmap, antialiased=True,
-                               shading='gouraud', vmax=vmax, vmin=vmin,
-                               rasterized=rasterized)
+                               shading=shading, vmax=vmax, vmin=vmin,
+                               rasterized=rasterized, edgecolors='face')
         else:
             im = ax.contourf(xx, yy, data, cs, cmap=cmap, extend='both')
         if lines:
@@ -155,15 +159,18 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
             vmin = -vmax
             cs = np.linspace(vmin, vmax, levels)
         if pcolor:
+            if shading == 'flat':
+                data = data[:-1, :-1]
             if normed:
                 im = ax.pcolormesh(xx, yy, data, cmap=cmap, antialiased=True,
-                                   shading='gouraud', vmax=vmax, vmin=vmin,
-                                   rasterized=rasterized)
+                                   shading=shading, vmax=vmax, vmin=vmin,
+                                   rasterized=rasterized, edgecolors='face')
             else:
                 im = ax.pcolormesh(xx, yy, data, cmap=cmap, antialiased=True,
-                                   shading='gouraud', rasterized=rasterized)
+                                   shading=shading, rasterized=rasterized,
+                                   edgecolors='face')
         else:
-            im = ax.contourf(xx, yy, data, cs, cmap=cmap)
+            im = ax.contourf(xx, yy, data, cs, cmap=cmap, antialiased=True)
         if lines:
             ax.contour(xx, yy, data, cs, colors=['k'], linewidths=linewidths,
                        linestyles=['-'])
@@ -211,7 +218,7 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
     if not pcolor:
         for c in ax.collections:
             c.set_edgecolor('face')
-            if mplMaj >= 3 and mplMin >= 10:
+            if mplMaj >= 3 and mplMin < 9:
                 if rasterized:
                     c.set_rasterized(True)
 

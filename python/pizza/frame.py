@@ -280,7 +280,7 @@ class PizzaFields(PizzaSetup):
     def equat(self, field='vort', cm=None, levels=65, deminc=True,
               normed=True, vmax=None, vmin=None, normRad=False, stream=False,
               streamNorm='vel', streamDensity=1.5, cbar=True, label=None,
-              streamColor='k', pcolor=False, rasterized=True):
+              streamColor='k', pcolor=False, rasterized=True, shading='flat'):
         """
         Display an equatorial planform of a scalar quantity
 
@@ -320,6 +320,9 @@ class PizzaFields(PizzaSetup):
         :param rasterized: when set to True, the rasterization for vector graphics
                            is turned on
         :type rasterized: bool
+        :param shading: type of shading when pcolor is used (can be 'nearest',
+                        'gouraud', 'flat')
+        :type shading: :str
         """
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
@@ -386,7 +389,8 @@ class PizzaFields(PizzaSetup):
                                              normed=normed, vmax=vmax, vmin=vmin,
                                              normRad=normRad, cbar=cbar,
                                              label=label, pcolor=pcolor,
-                                             rasterized=rasterized)
+                                             rasterized=rasterized,
+                                             shading=shading)
 
         if stream:
             ax = self.fig.get_axes()[0]
