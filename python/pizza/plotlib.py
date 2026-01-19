@@ -209,14 +209,9 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
 
     #To avoid white lines on pdfs
     if not pcolor:
-        if mplMaj >= 3 and mplMin >= 8:
-            for c in im.collections:
-                c.set_edgecolor('face')
-                if rasterized:
-                    c.set_rasterized(True)
-        else:
-            for c in ax.collections:
-                c.set_edgecolor('face')
+        for c in ax.collections:
+            c.set_edgecolor('face')
+            if mplMaj >= 3 and mplMin >= 10:
                 if rasterized:
                     c.set_rasterized(True)
 
