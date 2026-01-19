@@ -280,7 +280,8 @@ class PizzaFields(PizzaSetup):
     def equat(self, field='vort', cm=None, levels=65, deminc=True,
               normed=True, vmax=None, vmin=None, normRad=False, stream=False,
               streamNorm='vel', streamDensity=1.5, cbar=True, label=None,
-              streamColor='k', pcolor=False, rasterized=True, shading='flat'):
+              streamColor='k', pcolor=False, rasterized=True, shading='flat',
+              lines=False, linewidths=0.5):
         """
         Display an equatorial planform of a scalar quantity
 
@@ -323,6 +324,11 @@ class PizzaFields(PizzaSetup):
         :param shading: type of shading when pcolor is used (can be 'nearest',
                         'gouraud', 'flat')
         :type shading: :str
+        :param lines: when set to True, over-plot solid lines to highlight
+                      the limits between two adjacent contour levels
+        :type lines: bool
+        :param linewidths: the thickness of the solid lines, whenever plotted
+        :type linewidths: float
         """
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
@@ -390,7 +396,8 @@ class PizzaFields(PizzaSetup):
                                              normRad=normRad, cbar=cbar,
                                              label=label, pcolor=pcolor,
                                              rasterized=rasterized,
-                                             shading=shading)
+                                             shading=shading, lines=lines,
+                                             linewidths=linewidths)
 
         if stream:
             ax = self.fig.get_axes()[0]

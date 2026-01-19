@@ -142,8 +142,10 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
         cs = np.linspace(vmin, vmax, levels)
         if pcolor:
             if shading == 'flat':
-                data = data[:-1, :-1]
-            im = ax.pcolormesh(xx, yy, data, cmap=cmap, antialiased=True,
+                view = data[:-1, :-1]
+            else:
+                view = data
+            im = ax.pcolormesh(xx, yy, view, cmap=cmap, antialiased=True,
                                shading=shading, vmax=vmax, vmin=vmin,
                                rasterized=rasterized, edgecolors='face')
         else:
@@ -160,13 +162,15 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
             cs = np.linspace(vmin, vmax, levels)
         if pcolor:
             if shading == 'flat':
-                data = data[:-1, :-1]
+                view = data[:-1, :-1]
+            else:
+                view = data
             if normed:
-                im = ax.pcolormesh(xx, yy, data, cmap=cmap, antialiased=True,
+                im = ax.pcolormesh(xx, yy, view, cmap=cmap, antialiased=True,
                                    shading=shading, vmax=vmax, vmin=vmin,
                                    rasterized=rasterized, edgecolors='face')
             else:
-                im = ax.pcolormesh(xx, yy, data, cmap=cmap, antialiased=True,
+                im = ax.pcolormesh(xx, yy, view, cmap=cmap, antialiased=True,
                                    shading=shading, rasterized=rasterized,
                                    edgecolors='face')
         else:
@@ -216,9 +220,9 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
 
     #To avoid white lines on pdfs
     if not pcolor:
-        for c in ax.collections:
-            c.set_edgecolor('face')
-            if mplMaj >= 3 and mplMin < 9:
+        im.set_edgecolor('face')
+        if mplMaj >= 3 and mplMin < 9:
+            for c in ax.collections:
                 if rasterized:
                     c.set_rasterized(True)
 
