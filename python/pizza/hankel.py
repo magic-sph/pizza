@@ -2,9 +2,10 @@ from scipy import optimize
 from scipy.special import jv, yn, hankel1
 from scipy.interpolate import interp1d
 from .libpizza import chebgrid, intcheb, progressbar
+from multiprocessing import Pool
 import numpy as np
 import time
-import os
+import os, sys, uuid
 import pickle
 try:
     from scipy.integrate import simps
@@ -12,6 +13,12 @@ except:
     from scipy.integrate import simpson as simps
 import matplotlib.pyplot as plt
 
+# For m > msafety, the roots of the annulus can be approximated
+# by only retaining the type I Bessel terms
+msafety = 200
+# This is the cut-off value (x*rin < safety*m) which allows to
+# truncate the expansion
+safety = 0.8
 
 def remap(fold, rold, rnew):
     """
@@ -21,13 +28,12 @@ def remap(fold, rold, rnew):
     ri = rold[-1]
 
     if ro > ri:
-        ir = interp1d(rold[::-1], fold[..., ::-1], axis=-1)
+        ir = interp1d(rold[::-1], fold[..., ::-1], axis=-1, kind='cubic')
     else:
-        ir = interp1d(rold, fold, axis=-1)
+        ir = interp1d(rold, fold, axis=-1, kind='cubic')
     fnew = ir(rnew)
 
     return fnew
-
 
 
 def jnyn_zeros_guess(rin, rout, m, zeros_m_minus_one, nroots):
@@ -44,7 +50,7 @@ def jnyn_zeros_guess(rin, rout, m, zeros_m_minus_one, nroots):
     :param zeros_m_minus_one: the zeros obtained at m-1
     :type zeros_m_minus_one: numpy.ndarray
     :param m: azimuthal wavenumber
-    :type m: integer
+    :type m: int
     :param nroots: nroots
     :type nroots: number of roots to be computed
     :returns: a numpy array which contains the roots
@@ -56,8 +62,11 @@ def jnyn_zeros_guess(rin, rout, m, zeros_m_minus_one, nroots):
             return jv(m, x)
     else:
         def f(x):
-            return (jv(m, x*rout)*yn(m, x*rin)-jv(m, x*rin)*yn(m, x*rout)) / \
-                    abs(hankel1(m, x*rin))
+            if m > msafety and x*rin < safety*m:
+                return -jv(m, x*rout)
+            else:
+                return (jv(m, x*rout)*yn(m, x*rin) - jv(m, x*rin)*yn(m, x*rout)) / \
+                        abs(hankel1(m, x*rin))
 
     len0 = len(zeros_m_minus_one)
 
@@ -68,9 +77,12 @@ def jnyn_zeros_guess(rin, rout, m, zeros_m_minus_one, nroots):
             return mp.besselj(m, x)
     else:
         def fmpmath(x):
-            return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) -
-                    mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
-                    abs(mp.hankel1(m, x*rin))
+            if m > msafety and x*rin < safety*m:
+                return -mp.besselj(m, x*rout)
+            else:
+                return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) -  \
+                        mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
+                        abs(mp.hankel1(m, x*rin))
 
     roots = np.zeros(nroots, np.float64)
     nroot = 0
@@ -117,7 +129,7 @@ def jnyn_zeros(rin, rout, m, nroots):
     :param rout: outer radius
     :type rout: float
     :param m: azimuthal wavenumber
-    :type m: integer
+    :type m: int
     :param nroots: nroots
     :type nroots: number of roots to be computed
     :returns: a numpy array which contains the roots
@@ -125,8 +137,17 @@ def jnyn_zeros(rin, rout, m, nroots):
     """
 
     def f(x):
-        return (jv(m, x*rout)*yn(m, x*rin)-jv(m, x*rin)*yn(m, x*rout)) / \
+        if m > msafety and x*rin < safety*m:
+            return -jv(m, x*rout)
+        else:
+            return (jv(m, x*rout)*yn(m, x*rin) - jv(m, x*rin)*yn(m, x*rout)) / \
+                    abs(hankel1(m, x*rin))
+
+    def full_annulus(x):
+        return (jv(m, x*rout)*yn(m, x*rin) - jv(m, x*rin)*yn(m, x*rout)) / \
                 abs(hankel1(m, x*rin))
+    def simplified_annulus(x):
+        return -jv(m, x*rout)
 
     if m <= 15:
         npoints = 1024
@@ -141,7 +162,13 @@ def jnyn_zeros(rin, rout, m, nroots):
         # Spacing between two m for first roots is like
         # lambda(m+1)-lambda(m)\sim0.65
         x = np.linspace(xmin, xmax, npoints)
-    y = f(x)
+    if m > msafety:
+        mask = (x*rin < safety*m)
+        y = np.zeros_like(x)
+        y[mask] = simplified_annulus(x[mask])
+        y[~mask] = full_annulus(x[~mask])
+    else:
+        y = full_annulus(x)
     mask = np.isnan(y)
     improve_prec = False
     if len(x[mask]) > 0:
@@ -153,9 +180,12 @@ def jnyn_zeros(rin, rout, m, nroots):
         import mpmath as mp
 
         def fmpmath(x):
-            return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) -
-                    mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
-                    abs(mp.hankel1(m, x*rin))
+            if m > msafety and x*rin < safety*m:
+                return -mp.besselj(m, x*rout)
+            else:
+                return (mp.besselj(m, x*rout)*mp.bessely(m, x*rin) -  \
+                        mp.besselj(m, x*rin)*mp.bessely(m, x*rout)) / \
+                        abs(mp.hankel1(m, x*rin))
 
         xmax = x[mask][-1]
         xmin = x[mask][0]
@@ -169,7 +199,7 @@ def jnyn_zeros(rin, rout, m, nroots):
         x = np.hstack((xprec, x[~mask]))
         npoints = len(x)
     else:
-        xmax = x[0]
+        xmax = x[-1]
 
     signs = np.sign(y)
     nroot = 0
@@ -238,7 +268,7 @@ def jn_zeros(m, nroots):
     when Dirichlet boundary conditions are considered in the full disk.
 
     :param m: azimuthal wavenumber
-    :type m: integer
+    :type m: int
     :param nroots: nroots
     :type nroots: number of roots to be computed
     :returns: a numpy array which contains the roots
@@ -288,7 +318,7 @@ class HankelDisk:
         :param rout: outer radius
         :type rout: float
         :param m: azimuthal wavenumber
-        :type m: integer
+        :type m: int
         :param nroots: nroots
         :type nroots: number of roots to be computed
         :param storage_dir: a directory when one case store the Hankel
@@ -433,7 +463,7 @@ class HankelDisk:
 
 class HankelAnnulus:
 
-    def __init__(self, rin, rout, m, nroots, storage_dir=None, grid_type='GL',
+    def __init__(self, rin, rout, m, ngrid_points, storage_dir=None,
                  verbose=False):
         """
         :param rin: inner radius
@@ -441,26 +471,20 @@ class HankelAnnulus:
         :param rout: outer radius
         :type rout: float
         :param m: azimuthal wavenumber
-        :type m: integer
-        :param nroots: nroots
-        :type nroots: number of roots to be computed
+        :type m: int
+        :param ngrid_points: number of grid_points
+        :type ngrid_points: int
         :param storage_dir: a directory when one case store the Hankel
                             transforms
         :type storage_dir: char
-        :param grid_type: a parameter to select the collocation grid: 'GL'
-                          stands for Gauss-Lobatto and allows a more accurate
-                          spectral integration. Possible alternatives are
-                          'EQUI' for an equidistant grid, and 'ZER' for a grid
-                          built upon zeros of the transcendental equation.
-        :type grid_type: char
         :param verbose: a boolean to trigger some printouts of infos
         :type verbose: bool
         """
-        self.grid_type = grid_type
         compute = True
         store = False
         if storage_dir is not None:
-            filename = f'WeberOrr_{rin/rout:.2f}_{nroots:04d}_{m:04d}.pickle'
+            nroots = ngrid_points // 2
+            filename = f'WeberOrr_{rin/rout:.2f}_{nroots:05d}_{m:05d}.npz'
             file = os.path.join(storage_dir, filename)
             if os.path.exists(file):
                 self._read(file, verbose)
@@ -472,68 +496,62 @@ class HankelAnnulus:
             self.rin = rin
             self.rout = rout
             self.m = m
-            self.nroots = nroots
+            # We use a Gauss-Lobatto grid to ensure a proper estimate
+            # of the integrals once the kernels have been evaluated
+            self.grid = chebgrid(ngrid_points-1, rout, rin)
+            # Number of wave numbers = half the number of grid points
+            self.nroots = ngrid_points // 2
 
             # Get the roots
             if storage_dir is not None:
                 filename = \
-                     f'WeberOrr_{rin/rout:.2f}_{nroots:04d}_{m-1:04d}.pickle'
+                     f'WeberOrr_{rin/rout:.2f}_{self.nroots:05d}_{m-1:05d}.npz'
                 file = os.path.join(storage_dir, filename)
                 if os.path.exists(file):
-                    with open(file, 'rb') as fi:
-                        tmp = pickle.load(fi)
-                        roots_m_minus_1, grid_m_minus_1, k_m_minus_1 = \
-                            pickle.load(fi)
+                    tmp = np.load(file)
+                    roots_m_minus_1 = tmp['roots']
                     self.roots = jnyn_zeros_guess(rin, rout, m,
                                                   roots_m_minus_1,
-                                                  nroots+1)
+                                                  self.nroots)
                 else:
-                    self.roots = jnyn_zeros(rin, rout, m, nroots+1)
+                    self.roots = jnyn_zeros(rin, rout, m, self.nroots)
             else:
-                self.roots = jnyn_zeros(rin, rout, m, nroots+1)
-            roots_last = self.roots[-1]
-            self.roots = self.roots[:-1]
+                self.roots = jnyn_zeros(rin, rout, m, self.nroots)
 
-            if self.grid_type == 'GL':
-                # Gauss-Lobatto grid
-                self.grid = chebgrid(nroots-1, rin, rout)
-            elif self.grid_type == 'EQUI':
-                # Equi-distant grid
-                self.grid = np.linspace(rin, rout, nroots+2)
-                self.grid = self.grid[1:-1]
-            else:
-                # Remap the roots between rin and rout
-                self.grid = self.roots/roots_last * (rout-rin) + rin
+            # No need to compute wavenumber beyond the max of kzero
+            # Take one extra beyond nroots to make the last bin works fine
+            self.kzero = jnyn_zeros(rin, rout, 0, self.nroots+1)
 
-            self.kr = self.roots  # / 2. / np.pi
+            self.kmax = self.kzero[-1]
+            self.kr = self.roots[self.roots <= self.kmax]
 
-            # compute the Hankel matrix
-            # self.hankel_mat()
-
-            # Inverse of Hankel matrix
-            # self.Ainv = np.linalg.inv(self.A)
-            # self.Ainv = np.zeros((self.nroots, self.nroots), np.float64)
-
-            self.compute_kernels()
+            self.compute_kernels(verbose=verbose)
 
             if store:
                 self._store(storage_dir)
 
     def _read(self, file, verbose):
         """
-        This routine is used to read the inverse matrix and the roots
+        This routine is used to read the kernels employed in the Weber-Orr
+        transform
 
-        :param file: the pickle file which contains the structure
+        :param file: the npz file which contains the structure
         :type file: char
         :param verbose: a boolean to trigger some printouts of infos
         :type verbose: bool
         """
-        with open(file, 'rb') as f:
-            if verbose:
-                print(f'Reading {file}')
-            self.rin,  self.rout, self.m, self.nroots = pickle.load(f)
-            self.roots, self.grid, self.kr = pickle.load(f)
-            self.kernels = pickle.load(f)[0]
+        if verbose:
+            print(f'Reading {file}')
+
+        data = np.load(file)
+        self.rin = data['rin']
+        self.rout = data['rout']
+        self.m = data['m']
+        self.nroots = data['nroots']
+        self.roots = data['roots']
+        self.grid = data['grid']
+        self.kr = data['kr']
+        self.kernels = data['kernels']
 
     def _store(self, dir):
         """
@@ -543,43 +561,42 @@ class HankelAnnulus:
         :type dir: char
         """
 
-        filename = f'WeberOrr_{self.rin/self.rout:.2f}_{self.nroots:04d}_{self.m:04d}.pickle'
+        filename = f'WeberOrr_{self.rin/self.rout:.2f}_{self.nroots:05d}_{self.m:05d}.npz'
         file = os.path.join(dir, filename)
 
-        with open(file, 'wb') as f:
-            pickle.dump([self.rin, self.rout, self.m, self.nroots], f)
-            pickle.dump([self.roots, self.grid, self.kr], f)
-            pickle.dump([self.kernels], f)
+        np.savez(file, rin=self.rin, rout=self.rout, m=self.m, nroots=self.nroots,
+                 grid=self.grid, roots=self.roots, kr=self.kr, kernels=self.kernels)
 
-    def compute_kernels(self):
+    def compute_kernels(self, verbose=False):
         """
         This routine is used to store the kernels employed in the inverse
         Weber-Orr transform.
+
+        :param verbose: display some messages if requested
+        :type verbose: bool
         """
-        self.kernels = np.zeros((len(self.grid), len(self.grid)), np.float64)
 
-        def f(root, grid):
-            return (jv(self.m, root*grid)*yn(self.m, root*self.rin) -
-                    jv(self.m, root*self.rin)*yn(self.m, root*grid)) / \
-                    abs(hankel1(self.m, root*self.rin))
+        out = np.outer(self.grid, self.kr)
+        if self.m > msafety:
+            mask_k = (self.kr*self.rin < safety*self.m)
+            k_yn = self.kr[~mask_k]
+            if verbose and len(k_yn) < len(self.kr):
+                ndiscards = len(self.kr)-len(k_yn)
+                print(f'For wavenumber m={self.m}, I approximate the first {ndiscards} modes')
+            self.kernels = np.zeros_like(out)
 
-        def fmpmath(root, grid):
-            import mpmath as mp
-            return (mp.besselj(self.m, root*grid)*mp.bessely(self.m, root*self.rin) -
-                    mp.besselj(self.m, root*self.rin)*mp.bessely(self.m, root*grid)) / \
-                    abs(mp.hankel1(self.m, root*self.rin))
+            self.kernels[:, mask_k] = -jv(self.m, out[:, mask_k])
+            self.kernels[:, ~mask_k] = (jv(self.m, out[:, ~mask_k]) * \
+                                        yn(self.m, self.rin*k_yn)  -  \
+                                        yn(self.m, out[:, ~mask_k]) * \
+                                        jv(self.m, self.rin*k_yn)) /  \
+                                        abs(hankel1(self.m, self.rin*k_yn))
+        else:
+            self.kernels = (jv(self.m, out)*yn(self.m, self.rin*self.kr)  -  \
+                            yn(self.m, out)*jv(self.m, self.rin*self.kr)) /  \
+                            abs(hankel1(self.m, self.rin*self.kr))
 
-        for k, root in enumerate(self.roots):
-            dat = f(root, self.grid)
-            mask = np.isnan(dat)
-            if len(dat[mask]) > 0:
-                vals = np.zeros(len(dat[mask]), np.float64)
-                for i in range(len(self.grid[mask])):
-                    gr = self.grid[mask][i]
-                    val = fmpmath(root, gr)
-                    vals[i] = val
-                dat[mask] = vals
-            self.kernels[k, :] = dat
+        self.kernels = self.kernels.T # Wavenumber first, grid second
 
     def hankel_mat(self):
         """
@@ -587,13 +604,13 @@ class HankelAnnulus:
         the collocation grid
         """
         self.A = np.zeros((len(self.grid), len(self.grid)), np.float64)
-        fac = self.roots**2 * jv(self.m, self.roots*self.rout)**2 / \
-              (jv(self.m, self.roots*self.rin)**2 - 
-               jv(self.m, self.roots*self.rout)**2)
-        norm = abs(hankel1(self.m, self.roots*self.rin))
+        fac = self.kr**2 * jv(self.m, self.kr*self.rout)**2 / \
+              (jv(self.m, self.kr*self.rin)**2 -
+               jv(self.m, self.kr*self.rout)**2)
+        norm = abs(hankel1(self.m, self.kr*self.rin))
         for k, rk in enumerate(self.grid):
-            kernel = jv(self.m, self.roots*rk)*yn(self.m, self.roots*self.rin) - \
-                     jv(self.m, self.roots*self.rin)*yn(self.m, self.roots*rk)
+            kernel = jv(self.m, self.kr*rk)*yn(self.m, self.kr*self.rin) - \
+                     jv(self.m, self.kr*self.rin)*yn(self.m, self.kr*rk)
             kernel *= norm
             self.A[k, :] = fac * kernel * np.pi**2 / 2.
 
@@ -604,37 +621,20 @@ class HankelAnnulus:
         :returns: the energy content as a function of the order
         :rtype: numpy.ndarray
         """
-        fac = np.zeros_like(self.roots)
-        for k, root in enumerate(self.roots):
-            vmin = jv(self.m, root*self.rout)**2
-            vmax = jv(self.m, root*self.rin)**2
+        vmin = jv(self.m, self.kr*self.rout)**2
+        vmax = jv(self.m, self.kr*self.rin)**2
 
-            if vmin > 1e-10:  # to prevent round-off errors
-                fac[k] = root**2 * vmax * abs(hankel1(self.m, root*self.rout))**2 / \
-                         (vmax - vmin)
-            else:
-                fac[k] = root**2 * abs(hankel1(self.m, root*self.rout))**2
-        En = 0.5 * np.pi**2 * fac * abs(fhat)**2
+        # To prevent round-off errors
+        fac = np.ones_like(self.kr)
+        mask = ( vmin > 1e-10 )
+        fac[mask] = vmax[mask] / (vmax[mask] - vmin[mask])
+        #fac[~mask] = np.ones_like(self.kr[~mask])
+        En = 0.5 * np.pi**2 * fac * self.kr**2 * abs(fhat)**2 * \
+             abs(hankel1(self.m, self.kr*self.rout))**2
 
         return En
 
     def HT(self, f):
-        """
-        :param f: the function defined in physical space
-        :type f: numpy.ndarray
-        :returns: the function in spectral space
-        :rtype: numpy.ndarray
-        """
-        # if self.m <= 10 and hasattr(self, 'Ainv'):
-        #     fhat = self.Ainv@f
-        # else:
-        fhat = self.HTsimps(f)
-        # from scipy.sparse.linalg import gmres
-        # fhat, info = gmres(self.A, f, x0=fhat_guess)
-
-        return fhat
-
-    def HTsimps(self, f):
         """
         This is a Hankel transform based on integration
 
@@ -643,14 +643,8 @@ class HankelAnnulus:
         :returns: the function in spectral space
         :rtype: numpy.ndarray
         """
-        fhat = np.zeros_like(f)
-        if self.grid_type == 'GL':
-            for k in range(self.nroots):
-                fhat[k] = intcheb(self.kernels[k, :] * f * self.grid)
-                # fhat[k] = simps(self.kernels[k, :] * f * self.grid, x=self.grid)
-        else:
-            for k in range(self.nroots):
-                fhat[k] = simps(self.kernels[k, :] * f * self.grid, x=self.grid)
+        assert f.shape[-1] == self.kernels.shape[-1]
+        fhat = intcheb(self.kernels * f * self.grid)
 
         return fhat
 
@@ -661,61 +655,22 @@ class HankelAnnulus:
         :returns: the function in physical space
         :rtype: numpy.ndarray
         """
-        # if hasattr(self, 'A'):
-        #     f = self.A@fhat
-        # else:
-        if self.m > 30:
-            import sys
-            sys.exit('Inverse transform is not accurate beyond m=30')
-        else:
-            f = self.iHTsum(fhat)
+        vmin = jv(self.m, self.kr*self.rout)**2
+        vmax = jv(self.m, self.kr*self.rin)**2
+        # To prevent round-off errors
+        fac = np.ones_like(self.kr)
+        mask = ( vmin > 1e-10 )
+        fac[mask] = vmax[mask] / (vmax[mask] - vmin[mask])
+        fac *= self.kr**2*abs(hankel1(self.m, self.kr*self.rout))**2
+        f = np.sum(fac*fhat*self.kernels.T, axis=1) * np.pi**2/2
 
         return f
 
-    def iHTsimps(self, fhat):
-        """
-        This is an inverse Hankel transform based on integrals (for debug only)
-
-        :param fhat: the function defined in spectral space
-        :type fhat: numpy.ndarray
-        :returns: the function in physical space
-        :rtype: numpy.ndarray
-        """
-        f = np.zeros_like(fhat)
-        norm = abs(hankel1(self.m, self.roots*self.rin))
-        for k, rk in enumerate(self.grid):
-            kernel = jv(self.m, self.roots*rk)*yn(self.m, self.roots*self.rin) - \
-                     jv(self.m, self.roots*self.rin)*yn(self.m, self.roots*rk)
-            kernel /= norm
-            f[k] = simps(kernel * fhat * self.roots, x=self.roots)
-
-        return f
-
-    def iHTsum(self, fhat):
-        """
-        :param fhat: the function defined in spectral space
-        :type fhat: numpy.ndarray
-        :returns: the function in physical space
-        :rtype: numpy.ndarray
-        """
-        f = np.zeros_like(fhat)
-        fac = self.roots**2 * jv(self.m, self.roots*self.rout)**2 / \
-                (jv(self.m, self.roots*self.rin)**2 -
-                 jv(self.m, self.roots*self.rout)**2)
-        norm = abs(hankel1(self.m, self.roots*self.rin))
-        for k, rk in enumerate(self.grid):
-            kernel = jv(self.m, self.roots*rk)*yn(self.m, self.roots*self.rin) - \
-                     jv(self.m, self.roots*self.rin)*yn(self.m, self.roots*rk)
-            kernel *= norm
-            f[k] = np.sum(fac*fhat*kernel) * np.pi**2/2.
-
-        return f
 
 def hankel_spectra(f, r, weight, idx2m, nroots, storage_dir=None, file_save=None):
     """
-    This routine computes the Hankel spectra on the full disk. 
+    This routine computes the Hankel spectra on the full disk.
     It takes a complex array of dimension (n_m_max, n_r) as an input.
-    
 
     :param f: a a complex input array (first dimension is m
     :type f: numpy.ndarray
@@ -726,7 +681,7 @@ def hankel_spectra(f, r, weight, idx2m, nroots, storage_dir=None, file_save=None
     :param idx2m: an array which convert the index to ms
     :type idx2m: numpy.ndarray
     :param nroots: the number of roots
-    :type nroots: integer
+    :type nroots: int
     :param storage_dir: the directory where the Hankel transform are stored
     :type storage_dir: char
     :param file_save: filename to save the computation once done
@@ -763,13 +718,136 @@ def hankel_spectra(f, r, weight, idx2m, nroots, storage_dir=None, file_save=None
 
     return K, Ek
 
+def globalize(func):
+    def result(*args, **kwargs):
+        return func(*args, **kwargs)
+    result.__name__ = result.__qualname__ = uuid.uuid4().hex
+    setattr(sys.modules[result.__module__], result.__name__, result)
+    return result
 
-def weber_orr_spectra(f, r, weight, idx2m, storage_dir=None, file_save=None):
+def weber_orr_dot_product(f, g, r, weight, idx2m, nranks=1,
+                          storage_dir=None, file_save=None):
+    """
+    This routine computes a spectra based on the dot product of two fields.
+
+    :param f: a complex input array (first dimension is m, second dimension
+              is r) or a list of complex-type arrays. In the latter case
+              the dot-product is computed over both directions.
+    :type f: numpy.ndarray
+    :param g: a complex input array (first dimension is m, second dimension
+              is r) or a list of complex-type arrays.
+    :type g: numpy.ndarray
+    :param r: the radius
+    :type f: numpy.ndarray
+    :param weight: a weighting function (typically the height of the container)
+    :type weight: numpy.ndarray
+    :param idx2m: an array which convert the index to ms
+    :type idx2m: numpy.ndarray
+    :param nranks: number of ranks to compute the spectra
+    :type nranks: int
+    :param storage_dir: the directory where the Hankel transform are stored
+    :type storage_dir: char
+    :param file_save: filename to save the computation once done
+    :type file_save: char
+    """
+    try:
+        assert type(f) == type(g)
+    except AssertionError:
+        print("Inputs 'f' and 'g' have to share the same type!")
+        print('Either numpy.ndarray or list')
+
+    rin = r.min()
+    rout = r.max()
+    if type(f) == np.ndarray:
+        nms = f.shape[0]
+    elif type(f) == list:
+        nms = f[0].shape[0]
+    nr = len(r)
+    # This is to determine whether data is already on cheb grid
+    grid = chebgrid(nr-1, r[0], r[-1])
+    diff = abs(grid-r).max()
+    if diff > 1e-6:
+        spectral = False
+        print('I will interpolate the data on a Gauss Lobatto grid')
+    else:
+        spectral = True
+        print('Data is already on a Gauss Lobatto grid')
+
+    if not spectral:
+        # Interpolate on half the number of points
+        rnew = chebgrid(nr//2, r[0], r[-1])
+        wnew = remap(weight, r, rnew)
+        if type(f) == np.ndarray:
+            fnew = remap(f, r, rnew)
+            gnew = remap(g, r, rnew)
+        elif type(f) == list:
+            fnew = []
+            gnew = []
+            for i in range(len(f)):
+                fnew.append(remap(f[i], r, rnew))
+                gnew.append(remap(g[i], r, rnew))
+    else:
+        fnew = f
+        gnew = g
+        rnew = r
+        wnew = weight
+
+    if file_save is not None and os.path.exists(file_save):
+        dat = np.load(file_save)
+        K = dat['K']
+        trans = dat['trans']
+    else:
+        @globalize
+        def _compute_nm(nm):
+            m = idx2m[nm]
+            h = HankelAnnulus(rin, rout, m, len(rnew), storage_dir=storage_dir)
+            if type(fnew) == np.ndarray:
+                fhat = h.HT(fnew[nm, :]*np.sqrt(wnew))
+                ghat = h.HT(gnew[nm, :]*np.sqrt(wnew))
+                tmp = fhat.conjugate()*ghat+fhat*ghat.conjugate()
+            elif type(fnew) == list:
+                tmp = 0
+                for i in range(len(fnew)):
+                    fhat = h.HT(fnew[i][nm, :]*np.sqrt(wnew))
+                    ghat = h.HT(gnew[i][nm, :]*np.sqrt(wnew))
+                    tmp += fhat.conjugate()*ghat+fhat*ghat.conjugate()
+            trans = np.zeros_like(h.roots)
+            fac = np.ones_like(h.kr)
+            vmin = jv(m, h.kr*h.rout)**2
+            vmax = jv(m, h.kr*h.rin)**2
+            mask = ( vmin > 1e-10 )
+            fac[mask] = vmax[mask]/(vmax[mask]-vmin[mask])
+            trans[:len(h.kr)] = np.pi**3 * fac * h.kr**2 * tmp.real * \
+                                abs(hankel1(m, h.kr*h.rout))**2
+            if m == 0:
+                trans *= 0.5
+            k_nm = h.roots
+
+            return k_nm, trans
+
+        import time
+        t1 = time.time()
+        with Pool(processes=nranks) as pool:
+            results = pool.map(_compute_nm, range(nms))
+        t2 = time.time()
+        print(f'Computing time: {t2-t1:.2e} s')
+
+        K = np.vstack([r[0] for r in results])
+        trans = np.vstack([r[1] for r in results])
+
+        if file_save is not None:
+            np.savez(file_save, K=K, trans=trans)
+
+    return K, trans
+
+def weber_orr_spectra(f, r, weight, idx2m, nranks=1,
+                      storage_dir=None, file_save=None):
     """
     This routine computes the Weber-Orr spectra. It takes a complex array
     of dimension (n_m_max, nroots) as input.
 
-    :param f: a a complex input array (first dimension is m
+    :param f: a complex input array (first dimension is m, second dimension
+              is r)
     :type f: numpy.ndarray
     :param r: the radius
     :type f: numpy.ndarray
@@ -777,119 +855,89 @@ def weber_orr_spectra(f, r, weight, idx2m, storage_dir=None, file_save=None):
     :type weight: numpy.ndarray
     :param idx2m: an array which convert the index to ms
     :type idx2m: numpy.ndarray
+    :param nranks: number of ranks to compute the spectra
+    :type nranks: int
     :param storage_dir: the directory where the Hankel transform are stored
     :type storage_dir: char
     :param file_save: filename to save the computation once done
     :type file_save: char
     """
+
     rin = r.min()
     rout = r.max()
-    nroots = len(r)
     nms = f.shape[0]
-    Ek = np.zeros((nms, nroots), np.float64)
-    K = np.zeros_like(Ek)
+    nr = len(r)
+    # This is to determine whether data is already on cheb grid
+    grid = chebgrid(nr-1, r[0], r[-1])
+    diff = abs(grid-r).max()
+    if diff > 1e-6:
+        spectral = False
+    else:
+        spectral = True
+
+    if not spectral:
+        # Interpolate on half the number of points
+        rnew = chebgrid(nr//2, r[0], r[-1])
+        fnew = remap(f, r, rnew)
+        wnew = remap(weight, r, rnew)
+    else:
+        fnew = f
+        rnew = r
+        wnew = weight
 
     if file_save is not None and os.path.exists(file_save):
-        with open(file_save, 'rb') as fi:
-            K, Ek = pickle.load(fi)
+        dat = np.load(file_save)
+        K = dat['K']
+        Ek = dat['Ek']
     else:
-        for idx in progressbar(range(nms)):
-            m = idx2m[idx]
-            if storage_dir is not None:
-                h = HankelAnnulus(rin, rout, m, nroots,
-                                  storage_dir=storage_dir)
-            else:
-                h = HankelAnnulus(rin, rout, m, nroots)
-            fhat = h.HT(f[idx, :]*np.sqrt(weight))
+        @globalize
+        def _compute_nm(nm):
+            m = idx2m[nm]
+            h = HankelAnnulus(rin, rout, m, len(rnew), storage_dir=storage_dir)
+            fhat = h.HT(fnew[nm, :]*np.sqrt(wnew))
+            Ek_nm = np.zeros_like(h.roots)
+            Ek_nm[:len(h.kr)] = 2 * np.pi * h.spectra(fhat)
             if m == 0:
-                Ek[idx, :] = np.pi * h.spectra(fhat)
-            else:
-                Ek[idx, :] = 2.*np.pi * h.spectra(fhat)
-            K[idx, :] = h.kr
+                Ek_nm *= 0.5
+            k_nm = h.roots
 
-    if file_save is not None:
-        with open(file_save, 'wb') as fi:
-            pickle.dump([K, Ek], fi)
+            return k_nm, Ek_nm
+
+        import time
+        t1 = time.time()
+        with Pool(processes=nranks) as pool:
+            results = pool.map(_compute_nm, range(nms))
+        t2 = time.time()
+        print(f'Computing time: {t2-t1:.2e} s')
+
+        K = np.vstack([r[0] for r in results])
+        Ek = np.vstack([r[1] for r in results])
+
+        if file_save is not None:
+            np.savez(file_save, K=K, Ek=Ek)
 
     return K, Ek
 
 
 if __name__ == '__main__':
-
     eta = 0.35
     ri = eta/(1.-eta)
     ro = 1./(1.-eta)
+    m = 11
 
-    nroots = 10
-    m = 61
-
-    def f(x):
-        return jv(m, x*ro)*yn(m, x*ri)-jv(m, x*ri)*yn(m, x*ro)
-
-    roots = np.zeros(768, np.float64)
-    for m in range(768):
-        ht = HankelAnnulus(ri, ro, m, 1)
-        roots[m] = ht.roots[0]
-
-    plt.plot(np.diff(roots))
-    plt.show()
-
-    ht = HankelAnnulus(ri, ro, m, nroots)
-
-    x = np.linspace(0.66*m, 5.66*m, 10*m)
-
-    fig, ax = plt.subplots()
-    ax.plot(x, f(x))
-    ax.plot(ht.roots, np.zeros_like(ht.roots), ls='None',
-            marker='o', mfc='None')
-    ax.set_xlabel('x')
-    ax.set_xlim(0.66*m, 5.66*m)
-    ax.set_ylim(-f(5.66*m)*10, f(5.66*m)*10)
-    fig.tight_layout()
-
-    nroots = 2048
-    m_max = 2049
-
-    for m in range(m_max):
-        ht = HankelAnnulus(ri, ro, m, nroots,
-                           storage_dir='/home/gastine/hankel_mats')
-
-    """
-    #f = np.sin(13*np.pi * (ht.grid-ht.rin)/ht.rin) * np.exp(-3*ht.grid)
+    ht = HankelAnnulus(ri, ro, m=11, ngrid_points=256)
     f = np.sin(13*np.pi * (ht.grid-ht.rin)) * np.exp(-3*ht.grid)
-
     t1 = time.time()
-    fhat = ht.HTsimps(f)
-    fhat1 = ht.HT(f)
+    fhat = ht.HT(f)
     t2 = time.time()
     print(f'Timing HT: {t2-t1:.2e}')
 
-
-    t1 = time.time()
-    fback = ht.iHTsimps(fhat1)
-    t2 = time.time()
-    print(f'Timing iHT (simps): {t2-t1:.2e}')
-    t1 = time.time()
-    fback1 = ht.iHTsum(fhat1)
-    t2 = time.time()
-    print(f'Timing iHT (series): {t2-t1:.2e}')
-    t1 = time.time()
-    fback2 = ht.iHT(fhat1)
-    t2 = time.time()
-    print(f'Timing iHT (dgem): {t2-t1:.2e}')
-
-    plt.plot(ht.grid, f, lw=2, label='orig')
-    plt.plot(ht.grid, fback, label='iHT integ')
-    print(abs(f-fback).max())
-    plt.plot(ht.grid, fback1, label='iHT sum')
-    print(abs(f-fback1).max())
-    plt.plot(ht.grid, fback2, label='iHT mat')
-    print(abs(f-fback2).max())
-    plt.ylim(f.min(), f.max())
-    plt.legend()
-    plt.show()
-
-    plt.loglog(ht.kr, ht.spectra(fhat))
-    plt.loglog(ht.kr, ht.spectra(fhat1))
-    """
+    fback = ht.iHT(fhat)
+    fig, ax = plt.subplots()
+    ax.plot(ht.grid, f, lw=2, label='orig')
+    ax.plot(ht.grid, fback, label='iHT')
+    err = abs(f-fback).max()
+    print(f'Err: {err:2e}')
+    ax.set_ylim(f.min(), f.max())
+    fig.legend()
     plt.show()
