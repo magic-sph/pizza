@@ -7,8 +7,10 @@ module rloop
    use namelists, only: ek, tadvz_fac, CorFac, l_heat, l_chem, n_rings,    &
        &                radratio, amp_forcing, radius_forcing, dx_forcing, &
        &                forcing_type, tag, l_full_disk, l_phase_field,     &
-       &                epsPhase, penaltyFac, phaseDiffFac, tmelt
-   use radial_functions, only: or1, r, beta, dtcond, ekpump, m_R, tcond
+       &                epsPhase, penaltyFac, phaseDiffFac, tmelt, l_sgs,  &
+       &                c_sgs
+   use radial_functions, only: or1, r, beta, dtcond, ekpump, m_R, tcond, delxr2, &
+       &                       delxh2
    use outputs_phase, only: calc_out_phase
    use blocking, only: nRstart, nRstop
    use truncation, only: n_m_max, n_phi_max, idx2m, m2idx, n_r_max
@@ -31,6 +33,10 @@ module rloop
    real(cp), allocatable :: usOm_grid(:), upOm_grid(:)
    complex(cp), allocatable :: forcing_Rloc(:,:)
    real(cp), public, allocatable :: amp_pump(:), x_pump(:), y_pump(:)
+
+   !-- Arrays on the grid needed for Leith/SGS model:
+   real(cp) :: nu_leith_mean
+   real(cp), allocatable :: domdr_grid(:), domdp_grid(:), nu_leith(:)
 
    public :: radial_loop, initialize_radial_loop, finalize_radial_loop
 
@@ -85,6 +91,14 @@ contains
       if ( l_phase_field ) then
          phi_grid(:)=0.0_cp
          phiTerms(:)=0.0_cp
+      end if
+
+      if ( l_sgs ) then
+         allocate( domdr_grid(n_phi_max), domdp_grid(n_phi_max), nu_leith(n_phi_max) )
+         domdr_grid(:)=0.0_cp
+         domdp_grid(:)=0.0_cp
+         nu_leith(:)  =0.0_cp
+         bytes_allocated = bytes_allocated+3*n_phi_max*SIZEOF_DEF_REAL
       end if
 
       if ( n_rings > 0 .or. dx_forcing > 0.0_cp ) then
@@ -206,6 +220,7 @@ contains
    subroutine finalize_radial_loop
 
       if ( n_rings > 0 ) deallocate( forcing_Rloc, x_pump, y_pump, amp_pump )
+      if ( l_sgs ) deallocate( domdr_grid, domdp_grid, nu_leith )
       if ( l_heat ) deallocate (usT_grid, upT_grid,  temp_grid )
       if ( l_chem ) deallocate (usXi_grid, upXi_grid,  xi_grid )
       if ( l_phase_field ) deallocate( phi_grid, phiTerms )
@@ -213,18 +228,19 @@ contains
 
    end subroutine finalize_radial_loop
 !------------------------------------------------------------------------------
-   subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc,   &
-              &           phi_Rloc, dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc,   &
-              &           dVsXi_Rloc, dphidt_Rloc, dpsidt_Rloc, dVsOm_Rloc,&
-              &           dtr_Rloc, dth_Rloc, timers, tscheme, l_log)
+   subroutine radial_loop(us_Rloc, up_Rloc, om_Rloc, dom_Rloc, temp_Rloc,  &
+              &           xi_Rloc, phi_Rloc, dtempdt_Rloc, dVsT_Rloc,      &
+              &           dxidt_Rloc, dVsXi_Rloc, dphidt_Rloc, dpsidt_Rloc,&
+              &           dVsOm_Rloc, dtr_Rloc, dth_Rloc, timers, tscheme, l_log)
 
       !-- Input variables
-      complex(cp),         intent(in) :: us_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp),         intent(in) :: up_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp),         intent(in) :: om_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp),         intent(in) :: temp_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp),         intent(in) :: phi_Rloc(n_m_max, nRstart:nRstop)
-      complex(cp),         intent(in) :: xi_Rloc(n_m_max, nRstart:nRstop)
+      complex(cp),         intent(in) :: us_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: up_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: om_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: dom_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: temp_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: phi_Rloc(n_m_max,nRstart:nRstop)
+      complex(cp),         intent(in) :: xi_Rloc(n_m_max,nRstart:nRstop)
       class(type_tscheme), intent(in) :: tscheme
       logical,             intent(in) :: l_log
 
@@ -243,9 +259,7 @@ contains
       !-- Local variables
       real(cp) :: usom, runStart, runStop, upPhi
       complex(cp) :: us_fluct
-      integer :: n_r, n_m, m, idx_m0
-
-      idx_m0 = m2idx(0)
+      integer :: n_r, n_m, m
 
       do n_r=nRstart,nRstop
 
@@ -300,12 +314,12 @@ contains
 
          !-- Get nonlinear products
          if ( l_heat ) then
-            usT_grid(:) =r(n_r)*us_grid(:)*temp_grid(:)
-            upT_grid(:) =       up_grid(:)*temp_grid(:)
+            usT_grid(:)=r(n_r)*us_grid(:)*temp_grid(:)
+            upT_grid(:)=       up_grid(:)*temp_grid(:)
          end if
          if ( l_chem ) then
-            usXi_grid(:) =r(n_r)*us_grid(:)*xi_grid(:)
-            upXi_grid(:) =       up_grid(:)*xi_grid(:)
+            usXi_grid(:)=r(n_r)*us_grid(:)*xi_grid(:)
+            upXi_grid(:)=       up_grid(:)*xi_grid(:)
          end if
          usOm_grid(:)=r(n_r)*us_grid(:)*om_grid(:)
          upOm_grid(:)=       up_grid(:)*om_grid(:)
@@ -322,6 +336,13 @@ contains
             &            epsPhase**2/penaltyFac**2
             upOm_grid(:)=upOm_grid(:)-us_grid(:)*phi_grid(:)/ &
             &            epsPhase**2/penaltyFac**2
+         end if
+
+         !-- Compute the sub-grid scale terms if needed
+         if ( l_sgs ) then
+            call compute_leith_sgs(n_r, tscheme%dt(1), om_Rloc(:,n_r), dom_Rloc(:,n_r))
+            usOm_grid(:)=usOm_grid(:)-nu_leith(:)*domdr_grid(:)*r(n_r)
+            upOm_grid(:)=upOm_grid(:)-nu_leith(:)*domdp_grid(:)
          end if
 
          !-- Bring data back on the spectral domain
@@ -344,41 +365,67 @@ contains
          end if
 
          if ( l_heat ) then
-            do n_m=1,n_m_max
-               m = idx2m(n_m)
-               dtempdt_Rloc(n_m,n_r)=-or1(n_r)*ci*m*dtempdt_Rloc(n_m,n_r) &
-               &                     -(one-tadvz_fac)*beta(n_r)*or1(n_r)* &
-               &                     dVsT_Rloc(n_m,n_r)
-            end do
+            dtempdt_Rloc(:,n_r)=-or1(n_r)*ci*idx2m(:)*dtempdt_Rloc(:,n_r) &
+            &                     -(one-tadvz_fac)*beta(n_r)*or1(n_r)*    &
+            &                     dVsT_Rloc(:,n_r)
          end if
          if ( l_chem ) then
-            do n_m=1,n_m_max
-               m = idx2m(n_m)
-               dxidt_Rloc(n_m,n_r)=-or1(n_r)*ci*m*dxidt_Rloc(n_m,n_r)
-            end do
+            dxidt_Rloc(:,n_r)=-or1(n_r)*ci*idx2m(:)*dxidt_Rloc(:,n_r)
          end if
-         do n_m=1,n_m_max
-            m = idx2m(n_m)
-            if ( m == 0 ) then
-               dpsidt_Rloc(n_m,n_r)=-usom
-               if ( l_phase_field ) then ! Penalty term for the <uphi> equation
-                  dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r)-upPhi / &
-                  &                    epsPhase**2/penaltyFac**2
-               end if
-            else
-               dpsidt_Rloc(n_m,n_r)=-or1(n_r)*ci*m*dpsidt_Rloc(n_m,n_r)
-            end if
-         end do
+
+         !- m = 0 term: us*omega
+         dpsidt_Rloc(1,n_r)=-usom
+         if ( l_sgs ) then !-- s*nu*d<uphi>/ds=s*nu*(<om_z>-<uphi>/s)
+            dVsOm_Rloc(1,n_r)=-r(n_r)*nu_leith_mean*( &
+            &                   om_Rloc(1,n_r)-up_Rloc(1,n_r)*or1(n_r))
+         end if
+         if ( l_phase_field ) then ! Penalty term for the <uphi> equation
+            dpsidt_Rloc(1,n_r)=dpsidt_Rloc(1,n_r)-upPhi/epsPhase**2/penaltyFac**2
+         end if
+         !- m /= 0 terms: take the phi-deriative to assemble the divergence
+         dpsidt_Rloc(2:,n_r)=-or1(n_r)*ci*idx2m(2:)*dpsidt_Rloc(2:,n_r)
 
          if ( amp_forcing > 0.0_cp ) then
-            do n_m=1,n_m_max
-               m = idx2m(n_m)
-               if ( m > 0 ) dpsidt_Rloc(n_m,n_r)=dpsidt_Rloc(n_m,n_r) + &
-               &                                 forcing_Rloc(n_m,n_r)
-            end do
+            dpsidt_Rloc(2:,n_r)=dpsidt_Rloc(2:,n_r)+forcing_Rloc(2:,n_r)
          end if
+
       end do
 
    end subroutine radial_loop
+!------------------------------------------------------------------------------
+   subroutine compute_leith_sgs(nR, dt, om, dom)
+
+      integer,     intent(in) :: nR ! Radial level
+      real(cp),    intent(in) :: dt ! time step size
+      complex(cp), intent(in) :: om(n_m_max) ! z-vorticity at nR
+      complex(cp), intent(in) :: dom(n_m_max) ! Radial derivative of z-vorticity at nR
+
+      !-- Local variables
+      real(cp), parameter :: c_cfl=0.25_cp
+      real(cp) :: delta, nu_max
+      !real(cp) :: tmp_real(n_phi_max)
+      complex(cp) :: tmp(n_m_max)
+
+      !-- Phi-derivative of vorticity (Fourier space)
+      tmp(:)=ci*idx2m(:)*or1(nR)*om(:)
+      !-- Grid spacing is chosen as the smallest of (\delta s, s\delta\phi)
+      delta = min(sqrt(delxr2(nR)), sqrt(delxh2(nR)))
+
+      !-- d\omega_z/ds on the grid
+      call ifft(dom, domdr_grid, m_R(nR))
+      !-- 1/s*d\omega_z/d\phi on the grid
+      call ifft(tmp, domdp_grid, m_R(nR))
+
+      !-- Leith's (1996) viscosity: (c\Delta/\pi)^3 * |\nabla \omega|
+      nu_leith(:)= (c_sgs*delta/pi)**3 * sqrt(domdr_grid(:)**2+domdp_grid(:)**2)
+      nu_leith_mean = sum(nu_leith)/n_phi_max
+
+      !-- Viscosity limiter: ceiling value based on time-step size
+      nu_max=c_cfl*delta**2/dt
+      where ( nu_leith > nu_max )
+         nu_leith=nu_max
+      end where
+
+   end subroutine compute_leith_sgs
 !------------------------------------------------------------------------------
 end module rloop

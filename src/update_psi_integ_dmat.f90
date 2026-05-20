@@ -6,7 +6,7 @@ module update_psi_integ_dmat
    use constants, only: one, zero, ci, half
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, ek, l_buo_imp, BuoFac, ChemFac,   &
-       &                l_heat, l_chem, l_full_disk
+       &                l_heat, l_chem, l_full_disk, l_sgs
    use horizontal, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, ekp_us, r, rgrav, &
        &                       ekp_up, ekp_dusdp
@@ -519,7 +519,7 @@ contains
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
-            if ( m /= 0 ) then
+            if ( m /= 0 .or. l_sgs ) then
                dom_exp_last(n_m,n_r)=      dom_exp_last(n_m,n_r)-   &
                &                     or1(n_r)*work_Mloc(n_m,n_r)
 

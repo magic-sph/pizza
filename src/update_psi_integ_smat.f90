@@ -6,7 +6,8 @@ module update_psi_integ_smat
    use constants, only: one, zero, ci, half
    use namelists, only: kbotv, ktopv, alpha, r_cmb, r_icb, l_non_rot, CorFac, &
        &                l_ek_pump, ViscFac, l_coriolis_imp, ek, l_buo_imp,    &
-       &                l_galerkin, BuoFac, ChemFac, l_heat, l_chem, l_full_disk
+       &                l_galerkin, BuoFac, ChemFac, l_heat, l_chem,          &
+       &                l_full_disk, l_sgs
    use horizontal, only: hdif_V
    use radial_functions, only: rscheme, or1, or2, beta, ekpump, ekp_us, r, &
        &                       rgrav, ekp_up, ekp_dusdp
@@ -839,7 +840,7 @@ contains
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
-            if ( m /= 0 ) then
+            if ( m /= 0 .or. l_sgs ) then
                dpsi_exp_last(n_m,n_r)=r(n_r)*dpsi_exp_last(n_m,n_r)
 
                if ( vort_bal%l_calc ) then

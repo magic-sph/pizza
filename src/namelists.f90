@@ -60,6 +60,7 @@ module namelists
    real(cp), public :: rcut_m ! Radius for variable m
 
    !-- For the nonlinear mapping)
+   real(cp), public :: c_sgs ! subgrid scale viscosity
    real(cp), public :: alph1  ! Input parameter for non-linear map to define degree of spacing (0.0:2.0)
    real(cp), public :: alph2  ! Input parameter for non-linear map to define central point of different spacing (-1.0:1.0)
    character(len=72), public :: map_function ! Mapping family: either tangent or arcsin
@@ -113,6 +114,7 @@ module namelists
    integer,  public :: n_specs
    integer,  public :: n_spec_step
    logical,  public :: l_galerkin
+   logical,  public :: l_sgs             ! Subgrid scale model
    logical,  public :: l_full_disk       ! Is it a full disk or not?
    logical,  public :: l_var_m           ! Does m varies with radius?
    logical,  public :: l_vphi_balance    ! Calculate the vphi force balance
@@ -165,7 +167,8 @@ contains
       &                n_fft_optim_lev,time_scheme,cheb_method,     &
       &                l_rerror_fix, rerror_fac, time_scale,        &
       &                matrix_solve,corio_term,buo_term,bc_method,  &
-      &                mpi_transp,l_packed_transp,radial_scheme
+      &                mpi_transp,l_packed_transp,radial_scheme,    &
+      &                c_sgs
       namelist/hdif/hdif_temp,hdif_vel,hdif_exp,hdif_m,hdif_comp
       namelist/phys_param/ra,ek,pr,raxi,sc,stef,radratio,g0,g1,g2,  &
       &                   ktopt,kbott,ktopv,kbotv,l_ek_pump,        &
@@ -263,6 +266,13 @@ contains
          end if
          close(input_handle)
 
+      end if
+
+      !-- Determine whether subgrid-scale models is employed
+      if ( c_sgs > 0.0_cp ) then
+         l_sgs = .true.
+      else
+         l_sgs = .false.
       end if
 
       !--- Stuff for the radial non-linear mapping
@@ -542,6 +552,7 @@ contains
       !----- Non-linear mapping parameters (Bayliss, 1992):
       alpha            =half
       l_newmap         =.false.
+      c_sgs            =0.0_cp
       alph1            =0.8_cp
       alph2            =0.0_cp
       map_function     ='arcsin' ! By default Kosloff and Tal-Ezer mapping when l_newmap=.true.
@@ -705,6 +716,7 @@ contains
       write(n_out,'(''  l_newmap        ='',l3,'','')') l_newmap
       length=length_to_blank(map_function)
       write(n_out,*) " map_function    = """,map_function(1:length),""","
+      write(n_out,'(''  c_sgs           ='',ES14.6,'','')') c_sgs
       write(n_out,'(''  alph1           ='',ES14.6,'','')') alph1
       write(n_out,'(''  alph2           ='',ES14.6,'','')') alph2
       write(n_out,'(''  dtMax           ='',ES14.6,'','')') dtMax

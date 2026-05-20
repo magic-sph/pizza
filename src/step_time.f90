@@ -10,18 +10,18 @@ module step_time
        &             dom_Mloc, temp_hat_Mloc, psi_hat_Mloc, xi_Mloc,        &
        &             xi_Rloc, dxi_Mloc, xi_hat_Mloc, fields_Mloc_container, &
        &             fields_Rloc_container, dtemp_Rloc, dxi_Rloc, phi_Rloc, &
-       &             phi_Mloc, phi_hat_Mloc
+       &             phi_Mloc, phi_hat_Mloc, dom_Rloc
    use fieldsLast, only: dpsidt_Rloc, dtempdt_Rloc, dVsT_Rloc, dVsT_Mloc,    &
        &                 dVsOm_Rloc, dVsOm_Mloc, dpsidt, dTdt, dxidt,        &
        &                 dVsXi_Mloc, dVsXi_Rloc, dxidt_Rloc, dphidt,         &
        &                 dt_fields_Rloc_container, dt_fields_Mloc_container, &
        &                 dphidt_Rloc
-   use truncation, only: n_m_max, idx2m
+   use truncation, only: n_m_max, idx2m, n_r_max
    use courant_mod, only: dt_courant
-   use radial_der, only: exch_ghosts, bulk_to_ghost
+   use radial_der, only: exch_ghosts, bulk_to_ghost, get_dr_Rloc
    use blocking, only: nRstart, nRstop
    use constants, only: half, one, ci
-   use radial_functions, only: r
+   use radial_functions, only: r, rscheme
    use update_temp_coll, only: get_temp_rhs_imp_coll
    use update_xi_coll, only: get_xi_rhs_imp_coll
    use update_phi_coll, only: get_phi_rhs_imp_coll
@@ -47,7 +47,7 @@ module step_time
        &                n_spec_step, n_specs, l_vphi_balance, l_AB1,      &
        &                l_cheb_coll, l_direct_solve, l_vort_balance,      &
        &                l_heat, l_chem, l_packed_transp, l_finite_diff,   &
-       &                l_phase_field
+       &                l_phase_field, l_sgs
    use outputs, only: n_log_file, write_outputs, vp_bal, vort_bal, &
        &              read_signal_file, spec
    use useful, only: logWrite, abortRun, formatTime, l_correct_step
@@ -226,17 +226,17 @@ contains
                !-------------------
                runStart = MPI_Wtime()
                if ( l_finite_diff ) then
-                  call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc, &
-                       &            phi_Rloc, dTdt%expl(:,:,tscheme%istage),       &
-                       &            dVsT_Rloc, dxidt%expl(:,:,tscheme%istage),     &
-                       &            dVsXi_Rloc, dphidt%expl(:,:,tscheme%istage),   &
-                       &            dpsidt%expl(:,:,tscheme%istage), dVsOm_Rloc,   &
+                  call radial_loop( us_Rloc, up_Rloc, om_Rloc, dom_Rloc, temp_Rloc,  &
+                       &            xi_Rloc, phi_Rloc, dTdt%expl(:,:,tscheme%istage),&
+                       &            dVsT_Rloc, dxidt%expl(:,:,tscheme%istage),       &
+                       &            dVsXi_Rloc, dphidt%expl(:,:,tscheme%istage),     &
+                       &            dpsidt%expl(:,:,tscheme%istage), dVsOm_Rloc,     &
                        &            dtr_Rloc, dth_Rloc, timers, tscheme, l_log )
                else
-                  call radial_loop( us_Rloc, up_Rloc, om_Rloc, temp_Rloc, xi_Rloc, &
-                       &            phi_Rloc, dtempdt_Rloc, dVsT_Rloc, dxidt_Rloc, &
-                       &            dVsXi_Rloc, dphidt_Rloc, dpsidt_Rloc,          &
-                       &            dVsOm_Rloc, dtr_Rloc, dth_Rloc, timers,        &
+                  call radial_loop( us_Rloc, up_Rloc, om_Rloc, dom_Rloc, temp_Rloc,   &
+                       &            xi_Rloc, phi_Rloc, dtempdt_Rloc, dVsT_Rloc,       &
+                       &            dxidt_Rloc, dVsXi_Rloc, dphidt_Rloc, dpsidt_Rloc, &
+                       &            dVsOm_Rloc, dtr_Rloc, dth_Rloc, timers,           &
                        &            tscheme, l_log )
                end if
                runStop = MPI_Wtime()
@@ -317,6 +317,10 @@ contains
                        &           phi_Rloc, om_Rloc, us_Rloc, up_Rloc, dTdt, &
                        &           dxidt, dphidt, dpsidt, vp_bal, vort_bal,   &
                        &           tscheme, lMat, timers)
+                  if ( l_sgs ) then
+                     call get_dr_Rloc(om_Rloc, dom_Rloc, n_m_max, nRstart, nRstop, &
+                          &           n_r_max, rscheme)
+                  end if
                else
                   call mloop(temp_hat_Mloc, xi_hat_Mloc, phi_hat_Mloc, temp_Mloc,   &
                        &     dtemp_Mloc, xi_Mloc, dxi_Mloc, phi_Mloc, psi_hat_Mloc, &
@@ -352,6 +356,10 @@ contains
                     &                    phi_Rloc, us_Rloc, up_Rloc, om_Rloc, dTdt,&
                     &                    dxidt, dphidt, dpsidt, tscheme, vp_bal,   &
                     &                    vort_bal)
+               if ( l_sgs ) then
+                  call get_dr_Rloc(om_Rloc, dom_Rloc, n_m_max, nRstart, nRstop, &
+                       &           n_r_max, rscheme)
+               end if
             else
                call assemble_stage(temp_hat_Mloc, xi_hat_Mloc, phi_hat_Mloc,     &
                     &              temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc,     &
@@ -564,6 +572,8 @@ contains
             if ( l_chem ) call m2r_single%transp_m2r(xi_Mloc, xi_Rloc)
             if ( l_phase_field ) call m2r_single%transp_m2r(phi_Mloc, phi_Rloc)
          end if
+
+         if ( l_sgs ) call m2r_single%transp_m2r(dom_Mloc, dom_Rloc)
 
          if ( l_phase_field .and. l_log ) call m2r_single%transp_m2r(dtemp_Mloc, dtemp_Rloc)
       end if

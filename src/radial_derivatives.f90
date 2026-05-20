@@ -746,7 +746,7 @@ contains
          end do
       end if
 
-      if ( rank == n_procs -1 ) then
+      if ( rank == n_procs-1 ) then
          do n_m=start_m,stop_m
             df_Rloc(n_m,n_r_max)=zero
             do od=0,r_scheme%order_boundary

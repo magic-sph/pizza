@@ -6,7 +6,8 @@ module update_psi_coll_dmat
    use constants, only: one, zero, ci, half
    use horizontal, only: hdif_V
    use namelists, only: kbotv, ktopv, alpha, r_cmb, CorFac, ViscFac, BuoFac, ChemFac, &
-       &                l_non_rot, l_ek_pump, l_buo_imp, l_heat, l_chem, l_full_disk
+       &                l_non_rot, l_ek_pump, l_buo_imp, l_heat, l_chem, l_full_disk, &
+       &                l_sgs
    use radial_functions, only: rscheme, or1, or2, beta, dbeta, ekpump, &
        &                       rgrav, ekp_up, ekp_us, ekp_dusdp
    use blocking, only: nMstart, nMstop, l_rank_has_m0
@@ -491,7 +492,7 @@ contains
       do n_r=1,n_r_max
          do n_m=nMstart, nMstop
             m = idx2m(n_m)
-            if ( m /= 0 ) then
+            if ( m /= 0 .or. l_sgs ) then
                dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-&
                &                        or1(n_r)*work_Mloc(n_m,n_r)
 

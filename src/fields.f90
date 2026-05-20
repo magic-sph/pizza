@@ -5,7 +5,8 @@ module fields
    !
    use precision_mod
    use constants, only: zero
-   use namelists, only: l_cheb_coll, l_heat, l_chem, l_finite_diff, l_phase_field
+   use namelists, only: l_cheb_coll, l_heat, l_chem, l_finite_diff, l_phase_field, &
+       &                l_sgs
    use mem_alloc, only: bytes_allocated
    use truncation, only: n_m_max, n_r_max
    use blocking, only: nMstart, nMstop, nRstart, nRstop
@@ -32,6 +33,7 @@ module fields
    complex(cp), allocatable, public :: xi_hat_Mloc(:,:)
 
    complex(cp), allocatable, public :: phi_hat_Mloc(:,:)
+   complex(cp), allocatable, public :: dom_Rloc(:,:)
 
    public :: initialize_fields, finalize_fields
 
@@ -224,6 +226,15 @@ contains
          allocate( dxi_Rloc(1,1) )
       end if
 
+      if ( l_sgs ) then
+         allocate( dom_Rloc(n_m_max,nRstart:nRstop) )
+         bytes_allocated = bytes_allocated+n_m_max*(nRstop-nRstart+1)* &
+         &                 SIZEOF_DEF_COMPLEX
+         dom_Rloc(:,:)=zero
+      else
+         allocate(dom_Rloc(1,1))
+      end if
+
    end subroutine initialize_fields
 !----------------------------------------------------------------------------
    subroutine finalize_fields
@@ -242,6 +253,7 @@ contains
 
       deallocate(fields_Rloc_container, fields_Mloc_container)
       deallocate( dtemp_Rloc, dxi_Rloc )
+      deallocate( dom_Rloc )
 
    end subroutine finalize_fields
 !----------------------------------------------------------------------------

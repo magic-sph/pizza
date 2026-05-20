@@ -14,7 +14,7 @@ module init_fields
        &                radratio, r_cmb, r_icb, l_cheb_coll, l_non_rot,    &
        &                l_reset_t, l_chem, l_heat, amp_xi, init_xi,        &
        &                l_direct_solve, l_finite_diff, tmelt, init_phi,    &
-       &                l_phase_field, epsPhase
+       &                l_phase_field, epsPhase, l_sgs
    use outputs, only: n_log_file, vp_bal, vort_bal
    use blocking, only: nMstart, nMstop, nM_per_rank
    use truncation, only: m_max, n_r_max, minc, m2idx, idx2m, n_phi_max, n_m_max
@@ -183,6 +183,10 @@ contains
                &                    or1(n_r)*ci*real(m,cp)*us_Rloc(n_m,n_r)
             end do
          end do
+
+         !-- If subgrid-scale modelling is used, the radial derivative of omega is needed:
+         if ( l_sgs ) call get_dr_Rloc(om_Rloc, dom_Rloc, n_m_max, nRstart, nRstop, &
+                           &           n_r_max, rscheme)
 
       else ! Chebyshev polynomials are used for the radial representation
 

@@ -12,7 +12,7 @@ module update_psi_fd_mod
    use time_array, only: type_tarray
    use namelists, only: kbotv, ktopv, BuoFac, ChemFac, l_chem, l_heat, CorFac, &
        &                l_coriolis_imp, ViscFac, r_cmb, l_ek_pump, l_non_rot,  &
-       &                l_full_disk
+       &                l_full_disk, l_sgs
    use radial_functions, only: or1, rgrav, rscheme, beta, ekpump, or2, r, dbeta, &
        &                       d2beta, d3beta, or3, ekp_up, ekp_us, ekp_dusdp
    use radial_der, only: get_dr_Rloc, get_ddddr_ghost, get_ddr_ghost, exch_ghosts, &
@@ -432,6 +432,9 @@ contains
             if ( m == 0 ) then
                if ( vp_bal%l_calc .and. tscheme%istage==1 ) then
                   vp_bal%rey_stress(n_r)=real(dpsi_exp_last(n_m,n_r))
+               end if
+               if ( l_sgs ) then
+                  dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-or1(n_r)*work_Rloc(n_m,n_r)
                end if
             else
                dpsi_exp_last(n_m,n_r)=dpsi_exp_last(n_m,n_r)-or1(n_r)*work_Rloc(n_m,n_r)

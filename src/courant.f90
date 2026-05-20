@@ -52,32 +52,23 @@ contains
       real(cp), intent(in) :: up(n_phi_max)   ! azimuthal velocity
       real(cp), intent(in) :: courfac         ! Courant factor
 
-
       !-- Output:
       real(cp), intent(out) :: dtrkc    ! Courant step (based on radial advection)
                                         ! for the range of points covered
       real(cp), intent(out) :: dthkc    ! Courant step based on horizontal advection
 
-      integer :: n_phi
-      real(cp) :: vr2max,vh2max
-      real(cp) :: vflr2,vflh2
-      real(cp) :: cf2
+      !-- Local variables
+      real(cp) :: vr2max,vh2max,tmp(n_phi_max)
 
       vr2max=0.0_cp
       vh2max=0.0_cp
       dtrkc =1.0e10_cp
       dthkc =1.0e10_cp
-      cf2=courfac*courfac
 
-      do n_phi=1,n_phi_max
-
-         vflr2 =ur(n_phi)*ur(n_phi)
-         vr2max=max(vr2max,cf2*vflr2)
-
-         vflh2 =up(n_phi)*up(n_phi)
-         vh2max=max(vh2max,cf2*vflh2)
-
-      end do
+      tmp(:)=ur(:)**2
+      vr2max = courfac**2*maxval(tmp)
+      tmp(:)=up(:)**2
+      vh2max = courfac**2*maxval(tmp)
 
       if ( vr2max /= 0.0_cp ) dtrkc=min(dtrkc,sqrt(delxr2(n_r)/vr2max))
       if ( vh2max /= 0.0_cp ) dthkc=min(dthkc,sqrt(delxh2(n_r)/vh2max))
