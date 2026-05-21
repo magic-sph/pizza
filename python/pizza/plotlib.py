@@ -37,7 +37,7 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
                  cm='seismic', normed=None, vmax=None, vmin=None, cbar=True,
                  title=True, normRad=False, deminc=True, bounds=True,
                  lines=False, linewidths=0.5, pcolor=False, rasterized=False,
-                 fig=None, ax=None, shading='flat'):
+                 fig=None, ax=None, shading='flat', extract_slice=1):
     """
     Plot the equatorial cut of a given field
 
@@ -90,8 +90,16 @@ def equatContour(data, radius, minc=1, label=None, levels=64,
     :type ax: matplotlib.axes._subplots.AxesSubplot
     :param shading: shading if pcolormesh is employed (can be 'flat', 'gouraud')
     :type shading: str
+    :param extract_slice: an integer to plot only a slice of the equatorial
+                          cut, when set to 2 plot half, when set to 4 plot
+                          one quarter, ...
+    :type extract_slice: int
     """
 
+    if extract_slice > 1:
+        minc = extract_slice
+        data = data[:data.shape[0]//minc, :]
+        deminc = False
     nphi, ntheta = data.shape
 
     if deminc:

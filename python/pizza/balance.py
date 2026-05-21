@@ -60,7 +60,7 @@ class PizzaBalance(PizzaSetup):
     """
 
     def __init__(self, datadir='.', tag=None, endian='l', iplot=False,
-                 all=False):
+                 all=False, pcolor=False):
         """
         :param datadir: working directory
         :type datadir: str
@@ -74,6 +74,8 @@ class PizzaBalance(PizzaSetup):
                     by stacking all the corresponding files from the working
                     directory (False by default)
         :type all: bool
+        :param pcolor: a boolean to use pcolormesh instead of contourf
+        :type pcolor: bool
         """
         pattern = os.path.join(datadir, 'log.*')
         logFiles = scanDir(pattern)
@@ -145,7 +147,7 @@ class PizzaBalance(PizzaSetup):
                              visc)
 
         if iplot:
-            self.plot()
+            self.plot(pcolor=pcolor)
 
     def __add__(self, new):
         """
@@ -297,12 +299,14 @@ class PizzaBalance(PizzaSetup):
                 self.ek_pump[i, :].tofile(out)
                 self.visc[i, :].tofile(out)
 
-    def plot(self, nstep=1):
+    def plot(self, nstep=1, pcolor=False):
         """
         Display when ``iplot = True``
 
         :param nstep: time interval (by default 1)
         :type nstep: int
+        :param pcolor: a boolean to use pcolormesh instead of contourf
+        :type pcolor: bool
         """
         fig, ax = plt.subplots()
         dvpdtm, dvpdtstd = avg_std(self.time[::nstep], self.dvpdt[::nstep])
@@ -347,8 +351,15 @@ class PizzaBalance(PizzaSetup):
         fig, ax = plt.subplots()
         vmax = abs(self.vp[::nstep]).max()
         cs = np.linspace(-vmax, vmax, 65)
-        ax.contourf(self.time[::nstep], self.radius, self.vp[::nstep].T, cs,
-                    cmap=plt.get_cmap('seismic'), extend='both')
+        if pcolor:
+            im =  ax.pcolormesh(self.time[::nstep], self.radius, self.vp[::nstep].T,
+                                vmin=-vmax, vmax=vmax, cmap=plt.get_cmap('seismic'),
+                                antialiased=True)
+        else:
+            im =  ax.contourf(self.time[::nstep], self.radius, self.vp[::nstep].T, cs,
+                              cmap=plt.get_cmap('seismic'), extend='both')
+            im.set_edgecolor('face')
+        fig.colorbar(im)
 
         ax.set_xlabel('Time')
         ax.set_ylabel('Radius')

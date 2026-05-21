@@ -281,7 +281,7 @@ class PizzaFields(PizzaSetup):
               normed=True, vmax=None, vmin=None, normRad=False, stream=False,
               streamNorm='vel', streamDensity=1.5, cbar=True, label=None,
               streamColor='k', pcolor=False, rasterized=True, shading='flat',
-              lines=False, linewidths=0.5):
+              lines=False, linewidths=0.5, extract_slice=1):
         """
         Display an equatorial planform of a scalar quantity
 
@@ -329,6 +329,10 @@ class PizzaFields(PizzaSetup):
         :type lines: bool
         :param linewidths: the thickness of the solid lines, whenever plotted
         :type linewidths: float
+        :param extract_slice: an integer to plot only a slice of the equatorial
+                              cut, when set to 2 plot half, when set to 4 plot
+                              one quarter, ...
+        :type extract_slice: int
         """
 
         if field in ('om', 'vortz', 'vort', 'omega', 'Vorticity', 'Omega'):
@@ -397,7 +401,8 @@ class PizzaFields(PizzaSetup):
                                              label=label, pcolor=pcolor,
                                              rasterized=rasterized,
                                              shading=shading, lines=lines,
-                                             linewidths=linewidths)
+                                             linewidths=linewidths,
+                                             extract_slice=extract_slice)
 
         if stream:
             ax = self.fig.get_axes()[0]
