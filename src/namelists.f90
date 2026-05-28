@@ -761,11 +761,11 @@ contains
       write(n_out,'(''  amp_forcing     ='',ES14.6,'','')') amp_forcing
       write(n_out,'(''  dx_forcing      ='',ES14.6,'','')') dx_forcing
       write(n_out,'(''  radius_forcing  ='',ES14.6,'','')') radius_forcing
+      length=length_to_blank(forcing_type)
+      write(n_out,*) " forcing_type    = """,forcing_type(1:length),""","
       write(n_out,'(''  epsPhase        ='',ES14.6,'','')') epsPhase
       write(n_out,'(''  penaltyFac      ='',ES14.6,'','')') penaltyFac
       write(n_out,'(''  phaseDiffFac    ='',ES14.6,'','')') phaseDiffFac
-      length=length_to_blank(forcing_type)
-      write(n_out,*) " forcing_type    = """,forcing_type(1:length),""","
       write(n_out,'(''  g0              ='',ES14.6,'','')') g0
       write(n_out,'(''  g1              ='',ES14.6,'','')') g1
       write(n_out,'(''  g2              ='',ES14.6,'','')') g2
