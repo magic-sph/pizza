@@ -50,7 +50,8 @@ contains
       !-- Local variable:
       real(cp), allocatable :: r_rings(:), phi_ring(:)
       real(cp) :: force(n_phi_max)
-      real(cp) :: ricb, rcmb, dr, dphi, xgrid, ygrid, phi, dy_forcing, rad
+      real(cp) :: ricb, rcmb, dr, dphi, xgrid, ygrid, phi, dy_forcing, rad, phi0
+      real(cp) :: del1, del2
       integer, allocatable :: n_phi_ring(:)
       integer :: n_nphi_arrays, nr, np, Ntot, npump, Npumps, i, j, Nx, Ny
 
@@ -122,18 +123,28 @@ contains
             do nr=1,n_rings
                n_phi_ring(nr) = int(r_rings(nr)*two*pi/dr)
                !-- Make sure we get an even number per ring
-               if ( mod(n_phi_ring(nr),2)/=0 ) n_phi_ring(nr)=n_phi_ring(nr)+(-1)**(nr-1)
+               if ( mod(n_phi_ring(nr),2)/=0 ) then
+                  !-- Take the closest to dr
+                  del1=abs(two*pi*r_rings(nr)/(n_phi_ring(nr)+1)-dr)
+                  del2=abs(two*pi*r_rings(nr)/(n_phi_ring(nr)-1)-dr)
+                  if ( del1 <= del2 ) then
+                     n_phi_ring(nr)=n_phi_ring(nr)+1
+                  else
+                     n_phi_ring(nr)=n_phi_ring(nr)-1
+                  end if
+               end if
                Ntot = Ntot + n_phi_ring(nr)
             end do
 
-            !-- Get the coordinates
+            !-- Get the Cartesian coordinates
             allocate(x_pump(Ntot), y_pump(Ntot), amp_pump(Ntot))
             Npumps=0
             do nr=1,n_rings
                allocate(phi_ring(n_phi_ring(nr)))
-               dphi = two*pi/n_phi_ring(nr)
+               dphi=two*pi/n_phi_ring(nr)
+               phi0=(-1)**nr*0.5_cp*dphi
                do np=1,n_phi_ring(nr)
-                  phi_ring(np)=(np-1)*dphi
+                  phi_ring(np)=phi0+(np-1)*dphi
                end do
                x_pump(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*cos(phi_ring(:))
                y_pump(Npumps+1:Npumps+n_phi_ring(nr))=r_rings(nr)*sin(phi_ring(:))
@@ -410,6 +421,8 @@ contains
       tmp(:)=ci*idx2m(:)*or1(nR)*om(:)
       !-- Grid spacing is chosen as the smallest of (\delta s, s\delta\phi)
       delta = min(sqrt(delxr2(nR)), sqrt(delxh2(nR)))
+      !-- Grid spacing is chosen at the geometric mean of (\delta s, s\delta\phi)
+      !delta = sqrt(sqrt(delxr2(nR))*sqrt(delxh2(nR)))
 
       !-- d\omega_z/ds on the grid
       call ifft(dom, domdr_grid, m_R(nR))
