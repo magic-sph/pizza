@@ -667,7 +667,8 @@ class HankelAnnulus:
         return f
 
 
-def hankel_spectra(f, r, weight, idx2m, nroots, storage_dir=None, file_save=None):
+def hankel_spectra(f, r, weight, idx2m, nroots, nranks=1,
+                   storage_dir=None, file_save=None):
     """
     This routine computes the Hankel spectra on the full disk.
     It takes a complex array of dimension (n_m_max, n_r) as an input.
@@ -682,6 +683,8 @@ def hankel_spectra(f, r, weight, idx2m, nroots, storage_dir=None, file_save=None
     :type idx2m: numpy.ndarray
     :param nroots: the number of roots
     :type nroots: int
+    :param nranks: number of ranks to compute the spectra
+    :type nranks: int
     :param storage_dir: the directory where the Hankel transform are stored
     :type storage_dir: char
     :param file_save: filename to save the computation once done
@@ -696,25 +699,39 @@ def hankel_spectra(f, r, weight, idx2m, nroots, storage_dir=None, file_save=None
         with open(file_save, 'rb') as fi:
             K, Ek = pickle.load(fi)
     else:
-        for idx in progressbar(range(nms)):
-            m = idx2m[idx]
+        @globalize
+        def _compute_nm(nm):
+            m = idx2m[nm]
             if storage_dir is not None:
                 h = HankelDisk(rout, m, nroots, storage_dir=storage_dir)
             else:
                 h = HankelDisk(rout, m, nroots)
 
-            fnew = remap(f[idx, :], r, h.grid)
+            fnew = remap(f[nm, :], r, h.grid)
             weight_new = remap(weight, r, h.grid)
             fhat = h.HT(fnew*np.sqrt(weight_new))
             if m == 0:
-                Ek[idx, :] = np.pi * h.spectra(fhat)
+                Ek_nm = np.pi * h.spectra(fhat)
             else:
-                Ek[idx, :] = 2.*np.pi * h.spectra(fhat)
-            K[idx, :] = h.kr
+                Ek_nm = 2.*np.pi * h.spectra(fhat)
+            knm = h.kr
+
+            return knm, Ek_nm
+
+        import time
+        t1 = time.time()
+        with Pool(processes=nranks) as pool:
+            results = pool.map(_compute_nm, range(nms))
+        t2 = time.time()
+        print(f'Computing time: {t2-t1:.2e} s')
+
+        K = np.vstack([r[0] for r in results])
+        Ek = np.vstack([r[1] for r in results])
 
     if file_save is not None:
         with open(file_save, 'wb') as fi:
             pickle.dump([K, Ek], fi)
+
 
     return K, Ek
 
