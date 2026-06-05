@@ -120,7 +120,7 @@ contains
       integer :: n_r, file_handle
       character(len=100) :: file_name
       real(cp) :: ratio1, ratio2, delmin
-      real(cp) :: ek_pump_fac, fac, Lin, Lout
+      real(cp) :: ek_pump_fac, fac, Lin, Lout, hmin
 
       if ( l_ek_pump .and. (.not. l_non_rot)) then
          ek_pump_fac = one
@@ -215,31 +215,27 @@ contains
                d3beta(1) = 0.0_cp
                ekpump(1) = ek_pump_fac*0.0e0_cp
                oheight(1)= 0.0e0_cp
-               do n_r=2,n_r_max
-                  height(n_r) = two * sqrt(r_cmb**2-r(n_r)**2)
-                  oheight(n_r)= half/sqrt(r_cmb**2-r(n_r)**2)
-                  beta(n_r)   = -r(n_r)/(r_cmb**2-r(n_r)**2)
-                  dbeta(n_r)  = -(r_cmb**2+r(n_r)**2)/(r_cmb**2-r(n_r)**2)**2
-                  d2beta(n_r) = -128.0_cp*r(n_r)*(three*r_cmb**2+r(n_r)**2)/height(n_r)**6
-                  d3beta(n_r) = -1536.0_cp*(r_cmb**4+r(n_r)**4+6.0_cp*r(n_r)**2*r_cmb**2)/&
-                  &             height(n_r)**8
-                  ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
-                  &             (r_cmb**2-r(n_r)**2)**0.75_cp
-               end do
+               height(2:) = two * sqrt(r_cmb**2-r(2:)**2)
+               oheight(2:)= half/sqrt(r_cmb**2-r(2:)**2)
+               beta(2:)   = -r(2:)/(r_cmb**2-r(2:)**2)
+               dbeta(2:)  = -(r_cmb**2+r(2:)**2)/(r_cmb**2-r(2:)**2)**2
+               d2beta(2:) = -128.0_cp*r(2:)*(three*r_cmb**2+r(2:)**2)/height(2:)**6
+               d3beta(2:) = -1536.0_cp*(r_cmb**4+r(2:)**4+6.0_cp*r(2:)**2*r_cmb**2)/&
+               &             height(2:)**8
+               ekpump(2:) = half*ek_pump_fac*sqrt(ek*r_cmb)/ &
+               &            (r_cmb**2-r(2:)**2)**0.75_cp
             else
-               do n_r=1,n_r_max
-                  height(n_r) = two * sqrt((r_cmb+beta_shift)**2-r(n_r)**2)
-                  oheight(n_r)= half/sqrt((r_cmb+beta_shift)**2-r(n_r)**2)
-                  beta(n_r)   = -r(n_r)/((r_cmb+beta_shift)**2-r(n_r)**2)
-                  dbeta(n_r)  = -((r_cmb+beta_shift)**2+r(n_r)**2)/   &
-                  &              ((r_cmb+beta_shift)**2-r(n_r)**2)**2
-                  d2beta(n_r) = -two*r(n_r)*(three*(r_cmb+beta_shift)**2+r(n_r)**2)/ &
-                  &              height(n_r)**6
-                  d3beta(n_r) = -6.0_cp*((r_cmb+beta_shift)**4+r(n_r)**4+6.0_cp* &
-                  &              r(n_r)**2*(r_cmb+beta_shift)**2)/height(n_r)**8
-                  ekpump(n_r) = half*ek_pump_fac*sqrt(ek*r_cmb)/      &
-                  &             ((r_cmb+beta_shift)**2-r(n_r)**2)**0.75_cp
-               end do
+               height(:) = two * sqrt((r_cmb+beta_shift)**2-r(:)**2)
+               oheight(:)= half/sqrt((r_cmb+beta_shift)**2-r(:)**2)
+               beta(:)   = -r(:)/((r_cmb+beta_shift)**2-r(:)**2)
+               dbeta(:)  = -((r_cmb+beta_shift)**2+r(:)**2)/   &
+               &            ((r_cmb+beta_shift)**2-r(:)**2)**2
+               d2beta(:) = -128.0_cp*r(:)*(three*(r_cmb+beta_shift)**2+r(:)**2)/ &
+               &            height(:)**6
+               d3beta(:) = -1536.0_cp*((r_cmb+beta_shift)**4+r(:)**4+6.0_cp* &
+               &            r(:)**2*(r_cmb+beta_shift)**2)/height(:)**8
+               ekpump(:) = half*ek_pump_fac*sqrt(ek*r_cmb)/      &
+               &           ((r_cmb+beta_shift)**2-r(:)**2)**0.75_cp
             end if
             ekp_up(:)   =-half*beta(:)
             ekp_us(:)   =-5.0_cp*r_cmb*beta(:)*oheight(:)
@@ -261,6 +257,40 @@ contains
             ekp_dusdp(:)=-fac**2*height**2*or1(:)
             height(:)   =two*exp(-fac*r(:)) ! twice for total height afterwards
             oheight(:)  =one/height(:)
+         else if ( index(container, 'FLATEXP') == 1 ) then
+            !-- Free expontential surface surface at the top, flat at the bottom
+            fac=beta_fac/r_cmb ! container with L=exp(-fac * r)
+            hmin = 0.2_cp ! Minimum dimensionless height in Daphne's paper
+            height(:) =hmin*exp(-fac*r(:))
+            beta(:)   =-fac
+            dbeta(:)  =0.0_cp
+            d2beta(:) =0.0_cp
+            d3beta(:) =0.0_cp
+            !-- Ekman pumping only comes from the flat bottom plate
+            ekpump(:)   =ek_pump_fac * sqrt(ek) / height(:)
+            ekp_up(:)   =0.0_cp
+            ekp_us(:)   =0.0_cp
+            ekp_dusdp(:)=0.0_cp
+            oheight(:)  =one/height(:)
+         else if ( index(container, 'FLATPARA') == 1 ) then
+            !-- Free parabolic surface at the top, flat at the bottom
+            hmin = 0.2_cp
+            height(:) =beta_fac*r(:)**2 + hmin
+            oheight(:)=one/height(:)
+            beta(:)   =2.0_cp*beta_fac*r(:)*oheight(:)
+            dbeta(:)  =-4.0_cp*beta_fac**2*r(:)**2*oheight(:)**2 + &
+            &           2.0_cp*beta_fac*oheight(:)
+            d2beta(:) =16.0_cp*beta_fac**3*r(:)**3*oheight(:)**3 - &
+            &          12.0_cp*beta_fac**2*r(:)*oheight(:)**2
+            d3beta(:) =-96.0_cp*beta_fac**4*r(:)**4*oheight(:)**4+ &
+            &           96.0_cp*beta_fac**3*r(:)**2*oheight(:)**3- &
+            &           12.0_cp*beta_fac**2*oheight(:)**2
+            !-- Ekman pumping only comes from the flat bottom plate
+            ekpump(:)   =ek_pump_fac * sqrt(ek) / height(:)
+            ekp_up(:)   =0.0_cp
+            ekp_us(:)   =0.0_cp
+            ekp_dusdp(:)=0.0_cp
+            oheight(:)  =one/height(:)
          else if ( index(container, 'BUSSE') == 1 ) then
             Lin =one ! Normalised at one in full disks
             Lout=beta_fac
@@ -276,6 +306,15 @@ contains
             ekp_dusdp(:)=-fac**2*or1(:)
             height(:) =two*(fac*r(:)+Lin) ! twice for total height afterwards
             oheight(:)=one/height(:)
+         end if
+
+         if ( rank == 0 ) then
+            open(newunit=file_handle, file='beta.'//tag, status='unknown')
+            do n_r=1,n_r_max
+               write(file_handle, '(5es16.8)') r(n_r),beta(n_r),dbeta(n_r), &
+               &                               d2beta(n_r),d3beta(n_r)
+            end do
+            close(file_handle)
          end if
       end if
 
