@@ -19,6 +19,7 @@ class PizzaTs(PizzaSetup):
        * Chemical composition: composition.TAG
        * Power budget: power.TAG
        * Length scales: length_scales.TAG
+       * Double diffusion: double_diff.TAG
 
     Here are a couple of examples of how to use this function.
 
@@ -189,6 +190,34 @@ class PizzaTs(PizzaSetup):
             ax.set_xlabel('Time')
             ax.set_ylabel('Sherwood number')
             fig.tight_layout()
+        elif self.field == 'double_diff':
+            fig, ax = plt.subplots()
+            if hasattr(self, 'sc'):
+                Lewis = self.sc/self.pr
+                Rrho = abs(self.ra/self.raxi)*Lewis
+                if Rrho < 1.:
+                    ax.plot(self.time, 1./self.flux_ratio, label=r'$\gamma^{-1}$')
+                    ax.plot(self.time, 1./self.density_ratio/Lewis,
+                            label=r'$1/R_\rho^*/Le$')
+                else:
+                    ax.plot(self.time, self.flux_ratio_turb, label=r'$\gamma_{turb}$')
+                    ax.plot(self.time, self.density_ratio/Lewis,
+                            label=r'$R_\rho^*/Le$')
+            ax.legend(loc='best', frameon=False)
+            ax.set_ylim(0., 1.)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Flux ratio')
+            fig.tight_layout()
+
+            fig1, ax1 = plt.subplots()
+            Nu = 1.+self.fconv_temp/self.fcond_temp
+            Sh = 1.+self.fconv_xi/self.fcond_xi
+            ax1.plot(self.time, Nu, label=r'$\mathcal{N}u$')
+            ax1.plot(self.time, Sh, label=r'$\mathcal{S}h$')
+            ax1.legend(loc='best', frameon=False)
+            ax1.set_xlabel('Time')
+            ax1.set_ylabel('Fluxes')
+            fig1.tight_layout()
         elif self.field == 'power':
             fig, ax = plt.subplots()
             if abs(self.buoPower).max() > 0.:
@@ -339,6 +368,17 @@ class TsLookUpTable:
             self.ekinL = data[:, 7]
             self.phase_min = data[:, 8]
             self.phase_max = data[:, 9]
+        elif self.field == 'double_diff':
+            self.time = data[:, 0]
+            self.density_ratio = data[:, 1]
+            self.flux_ratio = data[:, 2]
+            self.flux_ratio_turb = data[:, 3]
+            self.fcond_temp = data[:, 4]
+            self.fconv_temp = data[:, 5]
+            self.fcond_xi = data[:, 6]
+            self.fconv_xi = data[:, 7]
+            self.ftot_temp = self.fcond_temp+self.fconv_temp
+            self.ftot_xi = self.fcond_xi+self.fconv_xi
         elif self.field == 'power':
             self.time = data[:, 0]
             self.buoPower = data[:, 1]
