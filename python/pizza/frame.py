@@ -371,6 +371,16 @@ class PizzaFields(PizzaSetup):
                     cm = 'viridis'
             data = self.xi
             normed = False
+        elif field in ('density', 'Density', 'rho', 'Rho'):
+            if cm is None:
+                try:
+                    import cmocean.cm as cmo
+                    cm = cmo.dense
+                except ModuleNotFoundError:
+                    cm = 'cividis'
+            Rinv = self.raxi/self.ra*self.pr/self.sc
+            data = -self.temp-Rinv*self.xi
+            normed = False
         elif field in ('tfluct', 'tempfluct'):
             data = self.temp-self.temp_m[0, :].real
             cm = 'PuOr'

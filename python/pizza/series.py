@@ -433,6 +433,24 @@ class TsLookUpTable:
             self.rey_stress = data[:, 3]
             self.pump = data[:, 4]
             self.visc = data[:, 5]
+        elif self.field == 'enst_power':
+            self.time = data[:, 0]
+            self.enst_power = data[:, 1]
+            self.enst_pump = data[:, 2]
+            self.enst_visc = data[:, 3]
+            if data.shape[-1] == 5:
+                self.enst_cor = data[:, 4]
+            else:
+                self.enst_cor = np.zeros_like(self.time)
+        elif self.field == 'enst_power_3D':
+            self.time = data[:, 0]
+            self.enst_power = data[:, 1]
+            self.enst_pump = data[:, 2]
+            self.enst_visc = data[:, 3]
+            if data.shape[-1] == 5:
+                self.enst_cor = data[:, 4]
+            else:
+                self.enst_cor = np.zeros_like(self.time)
 
     def __add__(self, new):
         """

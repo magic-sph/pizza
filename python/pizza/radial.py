@@ -138,7 +138,11 @@ class PizzaRadial(PizzaSetup):
 
         self.vortz_r = 1./self.radius * get_dr(self.radius*self.uphi_r,
                                                self.radius)
-        h = np.sqrt(self.radius[0]**2-self.radius**2)
+        if self.container == 'SPHERE' or self.container == 'HEMISPHERE':
+            h = np.sqrt(self.radius[0]**2-self.radius**2)
+        elif self.container == 'EXP' or self.container == 'FLATEXP':
+            h = np.exp(-self.beta_fac*self.radius/self.radius[0])
+        
         self.qplan = np.zeros_like(h)
         self.qpot = np.zeros_like(h)
         self.qplan[1:] = 2./self.ek/h[1:]
