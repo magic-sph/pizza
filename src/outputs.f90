@@ -50,7 +50,7 @@ module outputs
    integer, public :: n_log_file
    integer :: n_rey_file_2D, n_heat_file, n_kin_file_2D, n_power_file_2D
    integer :: n_lscale_file, n_sig_file, n_corr_file, n_chem_file
-   integer :: n_rey_file_3D, n_power_file_3D, n_kin_file_3D
+   integer :: n_rey_file_3D, n_power_file_3D, n_kin_file_3D, n_DD_file
    character(len=144), public :: log_file
 
    type(mean_sd_type) :: uphiR, us2R, up2R, enstrophyR, tempR, fluxR, xiR
@@ -97,6 +97,11 @@ contains
          if ( l_chem ) then
             file_name = 'composition.'//tag
             open(newunit=n_chem_file, file=file_name, status='new')
+         end if
+
+         if ( l_heat .and. l_chem ) then
+            file_name = 'double_diff.'//tag
+            open(newunit=n_DD_file, file=file_name, status='new')
          end if
 
          if ( .not. l_non_rot ) then
@@ -176,6 +181,7 @@ contains
             close(n_power_file_3D)
             close(n_kin_file_3D)
          end if
+         if ( l_chem .and. l_heat ) close(n_DD_file)
          if ( l_chem ) close(n_chem_file)
          if ( l_heat ) close(n_heat_file)
          close(n_lscale_file)
@@ -317,6 +323,11 @@ contains
               &               dtemp_Mloc, xi_Mloc, dxi_Mloc, us2_m_Mloc,   &
               &               up2_m_Mloc, enst_m_Mloc, us2_r, up2_r,       &
               &               enstrophy_r, flux_r)
+
+         if ( l_chem .and. l_heat ) then
+            call get_DD_diags(time, us_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, &
+                 &            dxi_Mloc)
+         end if
 
          call get_radial_averages(timeAvg_rad, l_stop_time, up_Mloc, temp_Mloc, &
               &                   xi_Mloc, us2_r, up2_r, enstrophy_r, flux_r)
@@ -828,6 +839,81 @@ contains
       end if
 
    end subroutine get_time_series
+!------------------------------------------------------------------------------
+   subroutine get_DD_diags(time, us_Mloc, temp_Mloc, dtemp_Mloc, xi_Mloc, dxi_Mloc)
+      !
+      ! This subroutine computes some diagnostics relevant to double diffusive
+      ! convection, like fluxes, density and flux ratios
+      !
+
+      !-- Input variables
+      real(cp),    intent(in) :: time
+      complex(cp), intent(in) :: us_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: temp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: dtemp_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: xi_Mloc(nMstart:nMstop,n_r_max)
+      complex(cp), intent(in) :: dxi_Mloc(nMstart:nMstop,n_r_max)
+
+      !-- Local variables
+      integer :: n_r, n_m, m, n_m0
+      real(cp) :: fconvT(n_r_max), fconvX(n_r_max)
+      real(cp) :: fcondT(n_r_max), fcondX(n_r_max)
+      real(cp) :: Rrho, Rrho_star, fcondT_tot, fcondX_tot, fconvT_tot, fconvX_tot
+      real(cp) :: flux_ratio, flux_ratio_turb, xiTop, xiBot, tTop, tBot
+
+      do n_r=1,n_r_max
+         fconvT(n_r)=0.0_cp
+         fconvX(n_r)=0.0_cp
+         do n_m=nMstart,nMstop
+            m = idx2m(n_m)
+            fconvT(n_r)=fconvT(n_r)+cc22real(us_Mloc(n_m,n_r),temp_Mloc(n_m,n_r), m)
+            fconvX(n_r)=fconvX(n_r)+cc22real(us_Mloc(n_m,n_r),xi_Mloc(n_m,n_r), m)
+         end do
+      end do
+
+      !-- MPI reductions to get the s-profiles on rank==0
+      call reduce_radial_on_rank(fconvT, 0)
+      call reduce_radial_on_rank(fconvX, 0)
+
+      if ( l_rank_has_m0 .and. l_heat ) then
+         !-- Top and bottom temperatures
+         n_m0 = m2idx(0)
+         tTop = real(temp_Mloc(n_m0,1))+tcond(1)
+         tBot = real(temp_Mloc(n_m0,n_r_max))+tcond(n_r_max)
+         !-- Top and bottom compositions
+         xiTop = real(xi_Mloc(n_m0,1))+xicond(1)
+         xiBot = real(xi_Mloc(n_m0,n_r_max))+xicond(n_r_max)
+         Rrho = abs(ra/raxi)*sc/pr
+         Rrho_star = Rrho*abs((tBot-tTop)/(xiBot-xiTop))
+
+         !-- Conductive fluxes
+         fcondT(:)=-two*pi*r(:)*(real(dtemp_Mloc(n_m0,:))+dtcond(:))/pr
+         fcondX(:)=-two*pi*r(:)*(real(dxi_Mloc(n_m0,:))+dxicond(:))/sc
+         fcondT_tot=rInt_R(fcondT, r, rscheme)
+         fcondX_tot=rInt_R(fcondX, r, rscheme)
+
+         !-- Convective fluxes
+         fconvT(:)=two*pi*r(:)*fconvT(:)
+         fconvX(:)=two*pi*r(:)*fconvX(:)
+         fconvT_tot=rInt_R(fconvT, r, rscheme)
+         fconvX_tot=rInt_R(fconvX, r, rscheme)
+
+         !-- Flux ratio
+         flux_ratio =abs((fconvT_tot+fcondT_tot)/(fcondX_tot+fconvX_tot))*Rrho
+         if ( abs(fconvX_tot) == 0.0_cp ) then
+            flux_ratio_turb=one
+         else
+            flux_ratio_turb=abs(fconvT_tot/fconvX_tot)*Rrho
+         end if
+
+         !-- Write outputs
+         write(n_DD_file, '(1P, ES20.12, 7ES16.8)') time, Rrho_star, flux_ratio,   &
+         &                                          flux_ratio_turb, fcondT_tot,   &
+         &                                          fconvT_tot, fcondX_tot,        &
+         &                                          fconvX_tot
+      end if
+
+   end subroutine get_DD_diags
 !------------------------------------------------------------------------------
    subroutine get_corr(time, us_Mloc, up_Mloc)
       !
